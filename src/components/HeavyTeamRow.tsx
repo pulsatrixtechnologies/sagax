@@ -14,7 +14,7 @@ import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import {
-  AGENT_COLORS, agentPreview, expertName, heavyAutoText, heavyHeader, heavyIsRunning, heavyOutcomeText, leaderNow, leaderStepText, orbitMerged,
+  AGENT_COLORS, agentPreview, expertName, heavyAutoText, heavyHeader, heavyIsRunning, heavyOutcomeText, leaderNow, leaderStepText, orbitMerged, refusalText,
 } from "@/lib/heavy-team";
 import { toggleThoughts, useOpenThoughts } from "@/lib/thoughts-panel";
 import type { Message } from "@/state/store";
@@ -69,6 +69,11 @@ export function HeavyTeamRow({ message, busy = false }: { message: Message; busy
             {outcome && <span data-heavy-outcome="" className="whitespace-nowrap text-ink-tertiary">· {outcome}</span>}
             <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 text-ink-tertiary transition-transform group-hover:text-ink-secondary", open && "rotate-180")} />
           </button>
+          {(line.refusals?.length ?? 0) > 0 && (
+            <ul data-heavy-refusals="" className="ml-1.5 flex max-w-[620px] flex-col text-[13px] leading-5 text-ink-secondary">
+              {line.refusals!.map((refusal, at) => <li key={at} data-heavy-refusal={refusal.cause}>{refusalText(refusal)}</li>)}
+            </ul>
+          )}
           {working && line.agents.length > 0 && (
             <ul data-heavy-preview="" aria-label={t("heavy.panel.team")} className="ml-1.5 mt-0.5 flex flex-col gap-1 border-l border-hairline/60 pl-3">
               {line.agents.map((agent) => (

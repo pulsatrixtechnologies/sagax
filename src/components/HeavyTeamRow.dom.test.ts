@@ -206,6 +206,51 @@ describe("the Thoughts panel", () => {
     expect($("[data-thoughts-agent='2'] [data-thoughts-preview]")!.textContent).toBe("engine refused");
   });
 
+  // M-20261123-040: the capture read "failed (HTTP 403)" and "Did not finish"
+  const refused = (): HeavyTeamLine => line({
+    phase: "done",
+    agents: line().agents.map((agent, index) => ({ ...agent, status: "done" as const, live: undefined, speaking: undefined, messages: ["A plan."], ...(index === 1 ? { engineLabel: "OpenRouter", modelLabel: "Nemotron 3 Ultra" } : {}) })),
+    refusals: [
+      { n: 2, persona: "Security", engineLabel: "OpenRouter", modelLabel: "Qwen3-Coder", cause: "access", status: 403, detail: "This model is not available on your plan", replacedBy: { engineLabel: "OpenRouter", modelLabel: "Nemotron 3 Ultra" } },
+      { n: 4, persona: "Cost", engineLabel: "Cline", modelLabel: "Kimi K3", cause: "credits" },
+    ],
+  });
+
+  it("says which model refused, the real cause, and the seat its expert took, in the person's language", () => {
+    render(createElement(ThoughtsPanel, { line: refused(), running: false, onClose: () => {} }));
+    expect($$("[data-thoughts-refusal]").map((row) => row.textContent)).toEqual([
+      "Qwen3-Coder on OpenRouter refused: this account may not use it (HTTP 403). Expert 2 · Security went on with Nemotron 3 Ultra.OpenRouter says: “This model is not available on your plan”",
+      "Kimi K3 on Cline refused: the account is out of credits. No other model was free, so Expert 4 · Cost left the team.",
+    ]);
+    // the expert that moved is one of the team, on its new seat, and did finish
+    expect($("[data-thoughts-agent='2'] [data-thoughts-status]")!.textContent).toBe("Done");
+    expect($("[data-thoughts-agent='2']")!.textContent).toContain("Nemotron 3 Ultra · OpenRouter");
+    setLocale("fr");
+    render(createElement(ThoughtsPanel, { line: refused(), running: false, onClose: () => {} }));
+    expect($$("[data-thoughts-refusal]").map((row) => row.textContent)).toEqual([
+      "Qwen3-Coder sur OpenRouter a refusé : ce compte n'y a pas accès (HTTP 403). Expert 2 · Security a continué avec Nemotron 3 Ultra.OpenRouter dit : « This model is not available on your plan »",
+      "Kimi K3 sur Cline a refusé : le compte n'a plus de crédits. Aucun autre modèle n'était libre : Expert 4 · Cost a quitté l'équipe.",
+    ]);
+  });
+
+  it("the row itself says it, without opening the panel", () => {
+    render(createElement(HeavyTeamRow, { message: message(refused()), busy: false }));
+    expect($$("[data-heavy-refusal]").map((row) => row.textContent)).toEqual([
+      "Qwen3-Coder on OpenRouter refused: this account may not use it (HTTP 403). Expert 2 · Security went on with Nemotron 3 Ultra.",
+      "Kimi K3 on Cline refused: the account is out of credits. No other model was free, so Expert 4 · Cost left the team.",
+    ]);
+    render(createElement(HeavyTeamRow, { message: message(line()), busy: true }));
+    expect($("[data-heavy-refusals]")).toBeNull();
+  });
+
+  it("an expert that got no answer in time says so, never only that it did not finish", () => {
+    const late = line({ agents: line().agents.map((agent, index) => (index === 1 ? { ...agent, status: "failed" as const, messages: [], cause: "timeout" as const } : agent)) });
+    render(createElement(ThoughtsPanel, { line: late, running: false, onClose: () => {} }));
+    expect($("[data-thoughts-agent='2'] [data-thoughts-status]")!.textContent).toBe("No answer in time");
+    // the state is said once, by the status: the preview does not repeat it
+    expect($("[data-thoughts-agent='2'] [data-thoughts-preview]")!.textContent).toBe("Did not finish");
+  });
+
   it("closes from its button", () => {
     const onClose = vi.fn();
     render(createElement(ThoughtsPanel, { line: line(), running: true, onClose }));

@@ -9,11 +9,12 @@
 import type { ModeModel } from "../shared/model-mode.ts";
 import {
   HEAVY_MAX_EXPERTS, HEAVY_MAX_ROUNDS, HEAVY_MESSAGES_PER_AGENT, HEAVY_MESSAGE_CHARS, HEAVY_MIN_EXPERTS,
-  type HeavyAgentLine, type HeavyAgentStatus, type HeavyLeaderStepKind, type HeavyTeamLine,
+  type HeavyAgentLine, type HeavyAgentStatus, type HeavyLeaderStepKind, type HeavyRefusalCause, type HeavyRefusalLine, type HeavyTeamLine,
 } from "../shared/heavy-team.ts";
 import type { ToolScope } from "../shared/tool-scope.ts";
 import { READ_ONLY_AGENT_TOOL_NAMES } from "./tools/agent-tool-policy.ts";
 import { PERSPICAX_READ_ONLY_TOOLS } from "./drivers/acp/grok-read-only-tools.ts";
+import { engineFailureKind, httpStatusOf, providerReason } from "./drivers/engine-errors.ts";
 
 /** The hidden threads of the experts working now. They are the one turn's own work, not threads the
  * person opened: they do not count toward the bot's limit of parallel threads (the leader's turn and
@@ -121,6 +122,9 @@ export const DEFAULT_EXPERTS: readonly ExpertBrief[] = [
   { persona: "Pragmatist", focus: "The simplest plan that gets it done, step by step, and what to do first." },
 ];
 
+/** A row keeps this many refusals: every seat of a run could refuse once. */
+const HEAVY_MAX_REFUSALS = 12;
+
 const clip = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
 
 /** What the leader is asked first: how big a team this task needs, and who. */
@@ -186,6 +190,118 @@ export function assignSeats(pool: readonly ModeModel[], count: number): ModeMode
   }
   for (let at = 0; out.length < count; at += 1) out.push(pool[at % pool.length]!);
   return out;
+}
+
+// ── a seat that refuses (M-20261123-040) ──────────────────────────────────
+
+/** What a seat's refusal is, read from the failed turn's words (the engine's
+ * own error, engine-errors.ts): the cause the person reads in their
+ * language, the provider's HTTP status and its own short reason. */
+export interface SeatRefusal {
+  cause: HeavyRefusalCause;
+  status?: number;
+  detail?: string;
+}
+
+const MODEL_GONE = /\bmodel\b[^.\n]{0,80}\b(?:not found|does not exist|not supported|unsupported|unavailable|not available)\b|\bmodel_not_found\b|\bno such model\b/i;
+
+export function readRefusal(text: string): SeatRefusal {
+  const status = httpStatusOf(text);
+  const kind = engineFailureKind(text, status);
+  const detail = providerReason(text);
+  const cause: HeavyRefusalCause =
+    kind === "access" ? "access"
+      : kind === "credits" ? "credits"
+        : kind === "usage_limit" || kind === "rate_limit" ? "limit"
+          : kind === "overloaded" || kind === "server" ? "unavailable"
+            : status === 401 || status === 403 ? "access"
+              : status === 404 || MODEL_GONE.test(text) ? "model"
+                : "other";
+  return { cause, ...(status ? { status } : {}), ...(detail ? { detail } : {}) };
+}
+
+/** A refusal that another try will not change soon: the account may not use
+ * the model, it has no credit left, or the provider does not serve it. Such
+ * a seat is not offered again for a while (Auto's memory of refused models);
+ * a limit or an outage is the limit failover's and the health checks' own. */
+export function refusalLasts(refusal: SeatRefusal): boolean {
+  return refusal.cause === "access" || refusal.cause === "credits" || refusal.cause === "model";
+}
+
+const seatKey = (seat: Pick<ModeModel, "instanceId" | "model">): string => `${seat.instanceId}\u0000${seat.model}`;
+
+/** The seats a run may still sit an expert on. AGENT'S CHOICE (not an owner
+ * decision) for which seat replaces one that refused: among the pool's
+ * seats, then the leader's own (it answered the plan), that did not refuse
+ * in this run, the one the fewest experts hold now, the pool's order
+ * (strongest first) between equals. None left: the expert leaves the team. */
+export class SeatBench {
+  private readonly seats: ModeModel[] = [];
+  private readonly refused = new Set<string>();
+
+  constructor(pool: readonly ModeModel[], leader?: ModeModel) {
+    for (const seat of [...pool, ...(leader ? [leader] : [])]) {
+      if (!this.seats.some((known) => seatKey(known) === seatKey(seat))) this.seats.push(seat);
+    }
+  }
+
+  refuse(seat: Pick<ModeModel, "instanceId" | "model">): void {
+    this.refused.add(seatKey(seat));
+  }
+
+  hasRefused(seat: Pick<ModeModel, "instanceId" | "model">): boolean {
+    return this.refused.has(seatKey(seat));
+  }
+
+  /** The next seat, given the seats the experts hold now. */
+  next(held: ReadonlyArray<Pick<ModeModel, "instanceId" | "model">>): ModeModel | null {
+    const load = (seat: ModeModel) => held.filter((taken) => seatKey(taken) === seatKey(seat)).length;
+    const open = this.seats.filter((seat) => !this.refused.has(seatKey(seat)));
+    return open.toSorted((a, b) => load(a) - load(b))[0] ?? null;
+  }
+}
+
+/** One expert's turn of one round, on its seat; a seat that refuses is
+ * replaced by the bench's next one and the same round is asked again there
+ * (`fresh`: the round's prompt for a conversation that starts on the new
+ * seat). With no seat left the outcome is "refused": the expert leaves the
+ * team instead of counting as an expert that failed. A turn that got no
+ * answer in time is not a refusal: it keeps its seat and fails as before. */
+export async function askOnSeats(input: {
+  expert: ExpertSeat;
+  prompt: string;
+  fresh: () => string;
+  bench: SeatBench;
+  /** The seats the experts hold now. */
+  held: () => ReadonlyArray<ModeModel>;
+  ask: (seat: ModeModel, prompt: string, moved: boolean) => Promise<HeavyAgentOutcome>;
+  /** A seat refused: `to` is where the expert goes on, null when none is left. `refusal` is null
+   * when the seat had already refused another expert of this run (told once, not asked again). */
+  onRefusal: (from: ModeModel, refusal: SeatRefusal | null, to: ModeModel | null) => void;
+  cancelled?: () => boolean;
+}): Promise<HeavyAgentOutcome> {
+  const { expert, bench } = input;
+  // a seat another expert already saw refuse in this run is not asked again
+  let moved = false;
+  if (bench.hasRefused(expert.seat)) {
+    const to = bench.next(input.held());
+    input.onRefusal(expert.seat, null, to);
+    if (!to) return { status: "refused", text: "" };
+    expert.seat = to;
+    moved = true;
+  }
+  let outcome = await input.ask(expert.seat, moved ? input.fresh() : input.prompt, moved);
+  while ((outcome.status === "failed" || outcome.status === "error") && !input.cancelled?.()) {
+    const from = expert.seat;
+    const refusal = readRefusal(outcome.text);
+    bench.refuse(from);
+    const to = bench.next(input.held());
+    input.onRefusal(from, refusal, to);
+    if (!to) return { status: "refused", text: outcome.text };
+    expert.seat = to;
+    outcome = await input.ask(to, input.fresh(), true);
+  }
+  return outcome;
 }
 
 // ── what each expert is asked ─────────────────────────────────────────────
@@ -254,8 +370,9 @@ export function conversationContext(messages: ReadonlyArray<{ role: string; kind
 
 // ── the rounds ────────────────────────────────────────────────────────────
 
-/** What an expert's turn came to: askBotAndWait's outcome in words the row keeps. */
-export type HeavyAgentOutcome = { status: "reply" | "failed" | "error" | "timeout"; text: string };
+/** What an expert's turn came to: askBotAndWait's outcome in words the row
+ * keeps. "refused": every seat it could sit on refused (askOnSeats). */
+export type HeavyAgentOutcome = { status: "reply" | "failed" | "error" | "timeout" | "refused"; text: string };
 
 export interface RoundsResult {
   /** How many rounds ran (1 to maxRounds). */
@@ -263,6 +380,8 @@ export interface RoundsResult {
   agreed: boolean;
   /** Each expert's last usable words, its verdict line removed. */
   finals: Array<{ n: number; persona: string; modelLabel: string; text: string; ok: boolean }>;
+  /** The experts no seat would take (M-20261123-040): they left the team and are not in `finals`. */
+  unseated: number[];
   /** The points still disputed after the last round (not agreed). */
   disagreements: string[];
 }
@@ -271,29 +390,40 @@ export interface RoundsResult {
  * critiques, round after round, until every expert still answering agrees
  * or `maxRounds` ran. The leader stops at the first round of agreement. An
  * expert that fails leaves the team; with fewer than two left the rounds
- * stop (nothing to critique). */
+ * stop (nothing to critique). `ask` receives, after the round's prompt, the
+ * same round written for a conversation that starts now (an expert moved to
+ * another seat has none of its own history there). */
 export async function runRounds(input: {
   experts: readonly ExpertSeat[];
   tracker: HeavyTeamTracker;
   maxRounds?: number;
   request: string;
   context?: string;
-  ask: (expert: ExpertSeat, prompt: string, hooks: { onDelta: (text: string) => void; onMessage: (text: string) => void }) => Promise<HeavyAgentOutcome>;
+  ask: (expert: ExpertSeat, prompt: string, hooks: { onDelta: (text: string) => void; onMessage: (text: string) => void }, fresh: () => string) => Promise<HeavyAgentOutcome>;
   cancelled?: () => boolean;
 }): Promise<RoundsResult> {
   const max = Math.max(1, Math.min(HEAVY_MAX_ROUNDS, input.maxRounds ?? HEAVY_MAX_ROUNDS));
   const { tracker, experts } = input;
   const latest = new Map<number, string>();
   const alive = new Set(experts.map((expert) => expert.n));
+  const unseated = new Set<number>();
   let lastVerdicts = new Map<number, Verdict>();
   let rounds = 0;
   let agreed = false;
-  const turn = async (expert: ExpertSeat, prompt: string): Promise<string | null> => {
+  const turn = async (expert: ExpertSeat, prompt: string, fresh: () => string): Promise<string | null> => {
     tracker.speaking(expert.n, true);
     try {
-      const outcome = await input.ask(expert, prompt, { onDelta: (text) => tracker.delta(expert.n, text), onMessage: (text) => tracker.message(expert.n, text) });
+      const outcome = await input.ask(expert, prompt, { onDelta: (text) => tracker.delta(expert.n, text), onMessage: (text) => tracker.message(expert.n, text) }, fresh);
+      if (outcome.status === "refused") {
+        // no seat would take it: it leaves the team, it is not an expert that failed
+        tracker.unseat(expert.n);
+        alive.delete(expert.n);
+        unseated.add(expert.n);
+        return null;
+      }
       if (outcome.status !== "reply" || !outcome.text.trim()) {
-        tracker.finish(expert.n, "failed", outcome.text || outcome.status);
+        if (outcome.status === "timeout") tracker.finish(expert.n, "failed", undefined, "timeout");
+        else tracker.finish(expert.n, "failed", outcome.text || outcome.status);
         alive.delete(expert.n);
         return null;
       }
@@ -315,13 +445,16 @@ export async function runRounds(input: {
     const speakers = experts.filter((expert) => alive.has(expert.n));
     tracker.roundStart(round, kind);
     const replies = await Promise.all(speakers.map(async (expert) => {
-      const prompt = round === 1
-        ? proposePrompt({ expert, count: experts.length, request: input.request, ...(input.context ? { context: input.context } : {}) })
-        : critiquePrompt({
-          round, maxRounds: max,
-          others: speakers.filter((other) => other.n !== expert.n && latest.has(other.n)).map((other) => ({ n: other.n, persona: other.persona, text: latest.get(other.n)! })),
-        });
-      return [expert, await turn(expert, prompt)] as const;
+      const propose = () => proposePrompt({ expert, count: experts.length, request: input.request, ...(input.context ? { context: input.context } : {}) });
+      if (round === 1) return [expert, await turn(expert, propose(), propose)] as const;
+      const critique = critiquePrompt({
+        round, maxRounds: max,
+        others: speakers.filter((other) => other.n !== expert.n && latest.has(other.n)).map((other) => ({ n: other.n, persona: other.persona, text: latest.get(other.n)! })),
+      });
+      // on a new seat the expert has no history: who it is, the request, its own plan so far, then the round
+      const own = latest.get(expert.n);
+      const fresh = () => [propose(), ...(own ? [`Your own plan so far:\n${clip(own, PEER_NOTE_CHARS)}`] : []), critique].join("\n\n");
+      return [expert, await turn(expert, critique, fresh)] as const;
     }));
     const verdicts = new Map<number, Verdict>();
     for (const [expert, text] of replies) {
@@ -346,7 +479,8 @@ export async function runRounds(input: {
     rounds,
     agreed,
     disagreements,
-    finals: experts.map((expert) => ({ n: expert.n, persona: expert.persona, modelLabel: expert.seat.modelLabel, text: latest.get(expert.n) ?? "", ok: latest.has(expert.n) })),
+    finals: experts.filter((expert) => !unseated.has(expert.n)).map((expert) => ({ n: expert.n, persona: expert.persona, modelLabel: expert.seat.modelLabel, text: latest.get(expert.n) ?? "", ok: latest.has(expert.n) })),
+    unseated: [...unseated],
   };
 }
 
@@ -360,6 +494,9 @@ const NOTES_CHARS = 24_000;
 export function leaderNotes(result: RoundsResult): string {
   const usable = result.finals.filter((final) => final.ok && final.text.trim());
   const head = "\n## Team of Experts (Heavy mode)\n";
+  if (!result.finals.length) {
+    return `${head}The person chose Heavy, but no expert could run: every model the team could sit on refused (the person reads why in the conversation). Answer and act on the request yourself, with your full strength.\n`;
+  }
   if (!usable.length) {
     return `${head}The person chose Heavy. A team of ${result.finals.length} experts worked on this request first and none of them came back with anything usable. Answer and act on the request yourself, with your full strength, and do not mention the team.\n`;
   }
@@ -482,7 +619,7 @@ export class HeavyTeamTracker {
     this.touch();
   }
 
-  finish(n: number, status: Exclude<HeavyAgentStatus, "working">, error?: string): void {
+  finish(n: number, status: Exclude<HeavyAgentStatus, "working">, error?: string, cause?: HeavyRefusalCause): void {
     const agent = this.agent(n);
     if (!agent || agent.status !== "working") return;
     delete agent.live;
@@ -490,7 +627,36 @@ export class HeavyTeamTracker {
     agent.status = status;
     agent.endedAt = this.now();
     if (error) agent.error = clip(error, 200);
+    if (cause) agent.cause = cause;
     this.touch();
+  }
+
+  /** M-20261123-040: a seat refused its expert. The row keeps who refused
+   * and why; the expert goes on on `to` (its line names the new seat), or,
+   * with none left, leaves the team (unseat). */
+  refused(n: number, from: Pick<ModeModel, "engineLabel" | "modelLabel">, refusal: SeatRefusal | null, to: Pick<ModeModel, "engineLabel" | "modelLabel"> | null): void {
+    const agent = this.agent(n);
+    // a seat is told once: an expert moved off a seat that already refused another adds no line
+    if (refusal && !this.line.refusals?.some((told) => told.engineLabel === from.engineLabel && told.modelLabel === from.modelLabel)) {
+      const line: HeavyRefusalLine = {
+        n, ...(agent?.persona ? { persona: agent.persona } : {}), engineLabel: from.engineLabel, modelLabel: from.modelLabel, cause: refusal.cause,
+        ...(refusal.status ? { status: refusal.status } : {}), ...(refusal.detail ? { detail: clip(refusal.detail, 200) } : {}),
+        ...(to ? { replacedBy: { engineLabel: to.engineLabel, modelLabel: to.modelLabel } } : {}),
+      };
+      this.line.refusals = [...(this.line.refusals ?? []), line].slice(-HEAVY_MAX_REFUSALS);
+    }
+    if (agent && to) {
+      agent.engineLabel = to.engineLabel;
+      agent.modelLabel = to.modelLabel;
+      delete agent.live;
+    }
+    this.flush();
+  }
+
+  /** No seat would take this expert: it is not one of the team. */
+  unseat(n: number): void {
+    this.line.agents = this.line.agents.filter((agent) => agent.n !== n);
+    this.flush();
   }
 
   /** The rounds are over: the leader writes. Without agreement it decides. */

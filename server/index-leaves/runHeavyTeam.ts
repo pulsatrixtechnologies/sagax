@@ -1,4 +1,3 @@
-// @ts-nocheck
 /** runHeavyTeam (#4901, rebuilt by #5089, owner 2026-11-19, M-20261119-077,
  * D-20261119-084, D-20261119-085): the experts of a Heavy turn. Before the
  * turn's own model (the leader, Expert's pick) acts:
@@ -24,13 +23,19 @@
  * (shared/heavy-team.ts), patched while it works. What the experts spent is
  * carried onto the leader's turn (heavyUsage).
  *
+ * A seat whose engine or model refuses its expert (M-20261123-040) is
+ * replaced by the next one (server/heavy-team.ts SeatBench, askOnSeats): the
+ * expert goes on there, the row says who refused and why, and a refusal that
+ * will last (no access, no credit, a model the provider does not serve)
+ * leaves Heavy's and Auto's offer for this person for a while.
+ *
  * Never fails the turn: an expert that fails leaves the team, a team that
  * returns nothing leaves the leader to act alone. Stopping the turn stops
  * the experts. */
 import { HEAVY_MAX_EXPERTS, HEAVY_TEAM_TOOL_NAME } from "../../shared/heavy-team.ts";
 import {
-  HeavyTeamTracker, assignSeats, conversationContext, expertToolScope, heavyAgentThreads, heavyUsage, leaderNotes,
-  parseTeamPlan, planPrompt, runRounds, sumUsage,
+  HeavyTeamTracker, SeatBench, askOnSeats, assignSeats, conversationContext, expertToolScope, heavyAgentThreads, heavyUsage, leaderNotes,
+  parseTeamPlan, planPrompt, refusalLasts, runRounds, sumUsage,
 } from "../heavy-team.ts";
 import { agentEffort } from "../models/model-mode.ts";
 import { reportBackgroundError } from "../background-error.ts";
@@ -69,7 +74,7 @@ async function runHeavyTeam(state: any): Promise<void> {
   state.heavyTracker = tracker;
 
   const request = String(state.userMessage?.text ?? state.text ?? "");
-  const context = conversationContext(host.store.messagesFor(state.threadId).filter((message) => message.id !== state.userMessage?.id));
+  const context = conversationContext(host.store.messagesFor(state.threadId).filter((message: { id?: string }) => message.id !== state.userMessage?.id));
   const waitMs = Math.max(5_000, Number(process.env.SAGAX_HEAVY_AGENT_WAIT_MS) || AGENT_WAIT_MS);
   const threads: string[] = [];
   let cancelled = false;
@@ -105,7 +110,7 @@ async function runHeavyTeam(state: any): Promise<void> {
   /** One turn of one hidden conversation: the same thread each round, so the expert keeps its own context. */
   const askOn = async (threadId: string, prompt: string, hooks?: { onDelta: (text: string) => void; onMessage: (text: string) => void }, timeoutMs = waitMs) => {
     if (cancelled) return { status: "error", text: "stopped" };
-    const unsubscribe = hooks ? host.bus.subscribe((event) => {
+    const unsubscribe = hooks ? host.bus.subscribe((event: { threadId?: string; type?: string; streamKind?: string; itemType?: string; delta: string; text: string }) => {
       if (event.threadId !== threadId) return;
       if (event.type === "content.delta" && event.streamKind === "assistant_text") hooks.onDelta(event.delta);
       else if (event.type === "item.completed" && event.itemType === "assistant_text") hooks.onMessage(event.text);
@@ -135,16 +140,31 @@ async function runHeavyTeam(state: any): Promise<void> {
     tracker.setTeam(experts);
     const expertThread = new Map<number, string | null>();
     for (const expert of experts) expertThread.set(expert.n, openExpert(expert.seat, `Expert ${expert.n}`));
+    // M-20261123-040: a seat that refuses is replaced by the next one
+    const bench = new SeatBench(pool, leaderSeat);
+    const payer = host.autoPayerKey(bot, state.speaker);
 
     // 3. the rounds
     const result = await runRounds({
       experts, tracker, request, context,
       cancelled: () => cancelled,
-      ask: async (expert, prompt, hooks) => {
-        const threadId = expertThread.get(expert.n);
-        if (!threadId) return { status: "error", text: "could not open a read-only thread for this expert" };
-        return askOn(threadId, prompt, hooks);
-      },
+      ask: (expert, prompt, hooks, fresh) => askOnSeats({
+        expert, prompt, fresh, bench,
+        held: () => experts.filter((other) => other.n !== expert.n && tracker.line.agents.some((agent) => agent.n === other.n && agent.status === "working")).map((other) => other.seat),
+        cancelled: () => cancelled,
+        ask: async (seat, text, moved) => {
+          // on another seat the expert starts a conversation of its own there
+          if (moved) expertThread.set(expert.n, openExpert(seat, `Expert ${expert.n}`));
+          const threadId = expertThread.get(expert.n);
+          if (!threadId) return { status: "error", text: "could not open a read-only thread for this expert" };
+          return askOn(threadId, text, hooks);
+        },
+        onRefusal: (from, refusal, to) => {
+          tracker.refused(expert.n, from, refusal, to);
+          // what will refuse again is not offered again for a while (Auto's memory of refused models)
+          if (refusal && refusalLasts(refusal)) host.rememberAutoRefusal(payer, { instanceId: from.instanceId, model: from.model });
+        },
+      }),
     });
     if (cancelled) throw new host.DirectTurnSetupCancelled("turn stopped while the team worked");
     tracker.agentsDone(result);

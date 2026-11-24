@@ -46,6 +46,31 @@ export interface HeavyAgentLine {
   endedAt?: number;
   /** Why a failed expert failed, in a few words. */
   error?: string;
+  /** Why it failed, as a cause the reader words in the person's language. */
+  cause?: HeavyRefusalCause;
+}
+
+/** Why a seat gave no answer (M-20261123-040), as a cause the reader words
+ * in the person's language: access (the account may not use this model or
+ * engine: HTTP 401, 403), credits, limit (a usage or rate limit), model (the
+ * provider does not serve it), unavailable (the provider is down or
+ * overloaded), timeout (no answer in the time a round gets), other. */
+export type HeavyRefusalCause = "access" | "credits" | "limit" | "model" | "unavailable" | "timeout" | "other";
+
+/** A seat that refused its expert. The expert moved to `replacedBy`; with
+ * no seat left it left the team (and is not one of `agents`). */
+export interface HeavyRefusalLine {
+  /** The expert that sat there. */
+  n: number;
+  persona?: string;
+  engineLabel: string;
+  modelLabel: string;
+  cause: HeavyRefusalCause;
+  /** The provider's HTTP status, when it gave one. */
+  status?: number;
+  /** The provider's own short reason, in its words. */
+  detail?: string;
+  replacedBy?: { engineLabel: string; modelLabel: string };
 }
 
 /** The leader's steps, as codes the reader translates. */
@@ -89,6 +114,8 @@ export interface HeavyTeamLine {
   disagreements?: string[];
   /** D-20261119-086: plain Auto chose Heavy for this request: a big task or a risky one. */
   auto?: "big" | "risky";
+  /** M-20261123-040: the seats that refused, each with its real cause. */
+  refusals?: HeavyRefusalLine[];
   leader: { engineLabel: string; modelLabel: string; steps: HeavyLeaderStep[] };
 }
 

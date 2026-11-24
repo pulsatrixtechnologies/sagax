@@ -1983,6 +1983,13 @@ Rules that hold at every width:
   column, centred, at most 960px of content inside a 16px gutter on each
   side (Settings > Appearance > Chat width "Wide" and "Full" stay the
   person's own choice).
+- Under the composer: 48px between the field and the window's bottom edge
+  (#5158: a click in the field stays clear of an auto-hidden Dock or
+  taskbar). The person may choose another step in Settings > Appearance >
+  Conversation, "Space under the composer": Small (16px), Standard (48px,
+  the default) or Large (80px); the transcript's end follows the dock's
+  height by itself (owner, 2026-11-23, #5238; the steps are an agent's
+  choice).
 - Bubbles: 15px text on a 22px line (owner's configuration; default 14/20),
   7px by 12px padding, 18px corners; a
   bubble of text is at most min(80%, 560px, column minus 82px), the person's

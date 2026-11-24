@@ -10,6 +10,7 @@ import {
   chatRoomFitClass,
 } from "./chat-bubble-width";
 import { CHAT_WIDTHS, parseChatWidth } from "./chat-width-preference";
+import { composerBottomSpaceChoice, composerBottomSpacePx } from "./composer-bottom-space";
 
 describe("chatBubbleWidth", () => {
   it("picks the column for a live terminal, else wide or fit", () => {
@@ -50,12 +51,15 @@ describe("chat width mapping (#2004)", () => {
     expect(chatComposerShellClass("reading")).toContain("max(16px,");
     expect(chatComposerShellClass("wide")).toContain("max(16px,");
     expect(chatComposerShellClass("full")).not.toContain("960px");
-    // #5158: 48px under the field (pb-12), at every width, so a click does
-    // not meet an auto-hidden Dock or taskbar. pb-4 was about 16px.
+    // #5158: 48px under the field by default, at every width, so a click
+    // does not meet an auto-hidden Dock or taskbar. pb-4 was about 16px. The
+    // person may choose another step (#5238): the class reads the variable
+    // and falls back to the same 48px.
     for (const width of ["reading", "wide", "full"] as const) {
-      expect(chatComposerShellClass(width)).toContain("pb-12");
+      expect(chatComposerShellClass(width)).toContain("pb-[var(--composer-bottom-space,48px)]");
       expect(chatComposerShellClass(width)).not.toMatch(/\bpb-4\b/);
     }
+    expect(composerBottomSpacePx(composerBottomSpaceChoice.get())).toBe(48);
 
     const reading = chatBubbleWidthClasses("reading");
     const wide = chatBubbleWidthClasses("wide");

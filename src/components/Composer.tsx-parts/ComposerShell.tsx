@@ -1,5 +1,6 @@
 import { t } from "@/lib/i18n";
 import { useChatComposerShellClass } from "@/lib/chat-bubble-width";
+import { useComposerBottomSpaceStyle } from "@/lib/composer-bottom-space";
 import { fixSendBlock } from "@/lib/send-state";
 import { effectivePlace } from "@/lib/place";
 import { changeDraftAttachmentPending } from "@/lib/drafts";
@@ -123,8 +124,9 @@ export function ComposerShell({
   };
 
   const composerShellClass = useChatComposerShellClass();
+  const composerBottomSpaceStyle = useComposerBottomSpaceStyle();
   return (
-    <div className={composerShellClass}>
+    <div className={composerShellClass} style={composerBottomSpaceStyle}>
       {/* No fill or hairline on this wrapper — those were the black frame
           in the pill's top corners. The dock overlays the transcript. */}
       <ComposerNotices

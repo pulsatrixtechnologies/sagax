@@ -28,6 +28,7 @@ import { FRESH_TOPIC_AFTER_CHOICES, useFreshTopicAfter, writeFreshTopicAfter, ty
 import { parseSidebarDensity, setSidebarDensity, SIDEBAR_DENSITIES, useSidebarDensity, type SidebarDensity } from "@/lib/sidebar-preferences";
 import { setStreamReplies, useStreamReplies } from "@/lib/stream-replies-preference";
 import { CHAT_WIDTHS, parseChatWidth, setChatWidth, useChatWidth, type ChatWidth } from "@/lib/chat-width-preference";
+import { COMPOSER_BOTTOM_SPACES, parseComposerBottomSpace, setComposerBottomSpace, useComposerBottomSpace, type ComposerBottomSpace } from "@/lib/composer-bottom-space";
 import { parseSendKey, SEND_KEYS, sendKeyLabel, setSendKey, useSendKey } from "@/lib/send-key";
 import { setShowSidebarLogo, useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
 import { setSidebarPeopleApart, useSidebarPeopleApart } from "@/lib/sidebar-people-apart-preference";
@@ -165,6 +166,29 @@ function ChatWidthRow() {
               : option === "full"
                 ? "settings.chatWidth.full"
                 : "settings.chatWidth.reading",
+          ),
+        }))}
+      />
+    </CompactRow>
+  );
+}
+
+function ComposerBottomSpaceRow() {
+  const space = useComposerBottomSpace();
+  return (
+    <CompactRow label={t("settings.composerBottomSpace.title")} rowId="composerBottomSpace">
+      <PillSelect<ComposerBottomSpace>
+        value={space}
+        ariaLabel={t("settings.composerBottomSpace.chooseAria")}
+        onChange={(next) => setComposerBottomSpace(parseComposerBottomSpace(next))}
+        options={COMPOSER_BOTTOM_SPACES.map((option) => ({
+          value: option,
+          label: t(
+            option === "small"
+              ? "settings.composerBottomSpace.small"
+              : option === "large"
+                ? "settings.composerBottomSpace.large"
+                : "settings.composerBottomSpace.standard",
           ),
         }))}
       />
@@ -553,6 +577,7 @@ export function AppearanceSettings() {
       </div>
       <SettingsGroup title={t("settings.group.conversation")} groupId="conversation">
         <ChatWidthRow />
+        <ComposerBottomSpaceRow />
         <SwitchLine label={t("settings.botReplyBubbles.title")} checked={replyBubbles} onChange={(on) => botReplyBubbles.set(on ? "on" : "off")} rowId="botReplyBubbles" />
         <SwitchLine label={t("settings.botBubbleAccent.title")} checked={bubbleAccent} onChange={(on) => botBubbleAccent.set(on ? "1" : "0")} rowId="botBubbleAccent" />
         <ThreadsViewRow />

@@ -29,6 +29,7 @@ import { parseSidebarDensity, setSidebarDensity, SIDEBAR_DENSITIES, useSidebarDe
 import { setStreamReplies, useStreamReplies } from "@/lib/stream-replies-preference";
 import { CHAT_WIDTHS, parseChatWidth, setChatWidth, useChatWidth, type ChatWidth } from "@/lib/chat-width-preference";
 import { COMPOSER_BOTTOM_SPACES, parseComposerBottomSpace, setComposerBottomSpace, useComposerBottomSpace, type ComposerBottomSpace } from "@/lib/composer-bottom-space";
+import { CONVERSATION_HEADERS, parseConversationHeader, setConversationHeader, useConversationHeader, type ConversationHeader } from "@/lib/conversation-header";
 import { parseSendKey, SEND_KEYS, sendKeyLabel, setSendKey, useSendKey } from "@/lib/send-key";
 import { setShowSidebarLogo, useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
 import { sidebarBotThreads, useSidebarBotThreads } from "@/lib/sidebar-bot-threads";
@@ -191,6 +192,23 @@ function ComposerBottomSpaceRow() {
                 ? "settings.composerBottomSpace.large"
                 : "settings.composerBottomSpace.standard",
           ),
+        }))}
+      />
+    </CompactRow>
+  );
+}
+
+function ConversationHeaderRow() {
+  const header = useConversationHeader();
+  return (
+    <CompactRow label={t("settings.conversationHeader.title")} rowId="conversationHeader">
+      <PillSelect<ConversationHeader>
+        value={header}
+        ariaLabel={t("settings.conversationHeader.chooseAria")}
+        onChange={(next) => setConversationHeader(parseConversationHeader(next))}
+        options={CONVERSATION_HEADERS.map((option) => ({
+          value: option,
+          label: t(option === "title" ? "settings.conversationHeader.titleLeft" : "settings.conversationHeader.pill"),
         }))}
       />
     </CompactRow>
@@ -580,6 +598,7 @@ export function AppearanceSettings() {
       <SettingsGroup title={t("settings.group.conversation")} groupId="conversation">
         <ChatWidthRow />
         <ComposerBottomSpaceRow />
+        <ConversationHeaderRow />
         <SwitchLine label={t("settings.botReplyBubbles.title")} checked={replyBubbles} onChange={(on) => botReplyBubbles.set(on ? "on" : "off")} rowId="botReplyBubbles" />
         <SwitchLine label={t("settings.botBubbleAccent.title")} checked={bubbleAccent} onChange={(on) => botBubbleAccent.set(on ? "1" : "0")} rowId="botBubbleAccent" />
         <ThreadsViewRow />

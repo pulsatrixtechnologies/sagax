@@ -36,7 +36,7 @@ export function ChatHeaderBar({
   start?: ReactNode;
   /** The title. Centered on the column, or at the left when align is start. */
   center?: ReactNode;
-  /** #4536: the bot conversation's title sits at the top left, on the bar, and does not float over the messages. */
+  /** #4536: "start" puts the bot conversation's title at the top left, on the bar, where it does not float over the messages (the person's choice, src/lib/conversation-header.ts). */
   align?: "center" | "start";
   /** Controls at the right end. */
   children?: ReactNode;

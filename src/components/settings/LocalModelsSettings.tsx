@@ -51,6 +51,14 @@ export function sharedWithSummary(recipients: LocalModelRecipients): string {
   return parts.length ? parts.join(" · ") : t("localModels.shareWithNone");
 }
 
+/** Who can use the computer's models, as the line under the organization
+ * switch says it: each state of the share reads true (#5266 review). The
+ * whole organization covers the chosen people and teams. */
+export function sharingStateText(share: boolean, recipients: LocalModelRecipients): string {
+  if (share) return t("localModels.shareState.all");
+  return recipients.people.length + recipients.teams.length > 0 ? t("localModels.shareState.chosen") : t("localModels.shareState.none");
+}
+
 /** The one-line summary of the folded list: "8 local servers · DwarfStar, Ollama, …". */
 export function endpointsSummary(endpoints: Endpoint[]): string {
   const count = cardCount("servers", endpoints.length);
@@ -203,7 +211,7 @@ export function LocalModelsSettings({ bare = false }: { bare?: boolean } = {}) {
         <DescribedRow label={t("localModels.expose")} description={t("localModels.exposeHelp")} rowId="localModels.expose">
           <Switch checked={settings.expose} aria-label={t("localModels.expose")} onClick={() => save({ expose: !settings.expose })} />
         </DescribedRow>
-        <DescribedRow label={t("localModels.share")} description={t("localModels.shareHelp")} rowId="localModels.share">
+        <DescribedRow label={t("localModels.share")} description={sharingStateText(settings.share, recipients)} rowId="localModels.share">
           <Switch checked={settings.share} aria-label={t("localModels.share")} onClick={() => save({ share: !settings.share })} />
         </DescribedRow>
         {organization && (

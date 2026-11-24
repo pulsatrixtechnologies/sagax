@@ -29,7 +29,9 @@ export const DESKTOP_MODEL_WRONG_ENGINE = "This engine cannot run a model from y
 export const DESKTOP_MODEL_NO_ANTHROPIC = "This local server did not answer the Anthropic protocol (/v1/messages) at its last check, so Claude Code cannot use it. If it is busy, try again in a moment; otherwise pick this model on an engine that takes an OpenAI-compatible endpoint.";
 /** The proxy's answer to a request outside its allowlist. The engine shows it
  * as is ("API Error: 400 ..."), so it says what happened and what to do. */
-/** M-20261123-040: the computer's own server did not finish its answer in the time the bridge gives one request. */
+/** M-20261123-040: the computer's own server did not finish its answer in the
+ * time the bridge gives one request. Said only once that time really ran out
+ * (COMPLETION_SECONDS): a request stopped earlier gives the computer's own words. */
 export const DESKTOP_MODEL_TIMED_OUT = "The local model on your computer did not finish its answer in 10 minutes, so this request was stopped. Ask for a shorter answer, lower the reasoning effort, or try again.";
 /** One chat completion's time on the person's computer: the desktop bridge's own ceiling (electron/local-models.mjs). */
 const COMPLETION_SECONDS = 600;
@@ -244,6 +246,7 @@ export class DesktopLocalModels {
   private bridges: BridgeClient;
   private ownerName: (person: string) => string;
   private teamsOf: (person: string) => readonly string[];
+  private now: () => number;
   private people = new Map<string, PersonSettings>();
   private published = new Map<string, { endpoints: PublishedEndpoint[] }>();
   // Per-endpoint probe outcomes for the Settings panel. In memory only, like
@@ -254,9 +257,10 @@ export class DesktopLocalModels {
   private port = 0;
   private loaded = false;
 
-  constructor(dataDir: string, bridges: BridgeClient, ownerName: (person: string) => string = () => "", teamsOf: (person: string) => readonly string[] = () => []) {
+  constructor(dataDir: string, bridges: BridgeClient, ownerName: (person: string) => string = () => "", teamsOf: (person: string) => readonly string[] = () => [], now: () => number = Date.now) {
     this.ownerName = ownerName;
     this.teamsOf = teamsOf;
+    this.now = now;
     this.file = join(dataDir, "desktop-local-models.json");
     this.bridges = bridges;
   }
@@ -630,6 +634,8 @@ export class DesktopLocalModels {
     // buffered up to the body cap and the bridge job timeout. There is no
     // second channel.
     let result: unknown;
+    const ceiling = httpPath === "/models" ? 30 : COMPLETION_SECONDS;
+    const started = this.now();
     try {
       result = await this.bridges.request(meta.person, {
         action: "local_model",
@@ -637,7 +643,7 @@ export class DesktopLocalModels {
         http_method: method,
         http_path: httpPath,
         ...(method === "POST" ? { json } : {}),
-        timeout_seconds: httpPath === "/models" ? 30 : COMPLETION_SECONDS,
+        timeout_seconds: ceiling,
       }, () => true);
     } catch {
       res.writeHead(503, textHeaders);
@@ -652,7 +658,10 @@ export class DesktopLocalModels {
       // answer that ran out of time is not "the request failed".
       const first = Array.isArray(record?.content) ? record.content[0] as { text?: unknown } | undefined : undefined;
       const why = typeof first?.text === "string" ? first.text.replace(/[\p{Cc}]+/gu, " ").trim().slice(0, 300) : "";
-      if (/\baborted\b|\btimed? ?out\b/i.test(why)) {
+      // "10 minutes" is true only when the request ran its whole time; an
+      // earlier stop falls through to the computer's own words
+      const ranOut = ceiling === COMPLETION_SECONDS && this.now() - started >= COMPLETION_SECONDS * 1000;
+      if (ranOut && /\baborted\b|\btimed? ?out\b/i.test(why)) {
         res.writeHead(504, textHeaders);
         res.end(DESKTOP_MODEL_TIMED_OUT);
         return;

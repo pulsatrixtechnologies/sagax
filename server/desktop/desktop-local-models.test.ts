@@ -39,6 +39,8 @@ async function start() {
   dirs.push(dir);
   const calls: { person: string | null; operation: DesktopBridgeOperation }[] = [];
   const online = new Set<string>();
+  // the service's clock, moved by a test that lets a request run long
+  const clock = { now: 1_000_000 };
   const bridge = {
     calls,
     online,
@@ -49,10 +51,10 @@ async function start() {
       return { localModel: { status: 200, contentType: "application/json", body: "{\"ok\":true}" } };
     },
   };
-  const service = new DesktopLocalModels(dir, bridge, (person) => ({ pr_owner: "Camille Tremblay" })[person] ?? "", (person) => ({ pr_teammate: ["team_support"] })[person] ?? []);
+  const service = new DesktopLocalModels(dir, bridge, (person) => ({ pr_owner: "Camille Tremblay" })[person] ?? "", (person) => ({ pr_teammate: ["team_support"] })[person] ?? [], () => clock.now);
   services.push(service);
   await service.listen();
-  return { service, bridge };
+  return { service, bridge, clock };
 }
 
 async function post(port: number, hostId: string, token: string, path = "/chat/completions") {
@@ -198,8 +200,8 @@ describe("desktop local models", () => {
   });
 
   // M-20261123-040: the owner's bridge log read "The operation was aborted" at exactly 240 s
-  it("gives a long local answer the bridge's full time, and says so when the computer did not finish", async () => {
-    const { service, bridge } = await start();
+  it("gives a long local answer the bridge's full time, and names the 10 minutes only when they really ran out", async () => {
+    const { service, bridge, clock } = await start();
     const owner = "pr_owner";
     bridge.online.add(owner);
     expect(service.update(owner, { expose: true }).ok).toBe(true);
@@ -207,11 +209,27 @@ describe("desktop local models", () => {
     const hostId = injectHostId(owner, "desk8002");
     expect((await post(service.portNumber(), hostId, grant(owner))).status).toBe(200);
     expect(bridge.calls[0]?.operation.timeout_seconds).toBe(600);
-    bridge.request = async () => ({ isError: true, content: [{ type: "text", text: "The operation was aborted" }] }) as never;
+    const stopsAfter = (seconds: number, text: string) => {
+      bridge.request = async () => {
+        clock.now += seconds * 1000;
+        return { isError: true, content: [{ type: "text", text }] } as never;
+      };
+    };
+    // the ceiling reached: the request ran its 600 s
+    stopsAfter(600, "The operation was aborted");
     const late = await post(service.portNumber(), hostId, grant(owner));
     expect(late.status).toBe(504);
     expect(await late.text()).toBe(DESKTOP_MODEL_TIMED_OUT);
-    bridge.request = async () => ({ isError: true, content: [{ type: "text", text: "connect ECONNREFUSED 127.0.0.1:8002" }] }) as never;
+    // #5266 review: stopped before the ceiling, the answer never says "10 minutes": it gives the computer's own words
+    for (const words of ["The operation was aborted", "Request timed out"]) {
+      stopsAfter(45, words);
+      const early = await post(service.portNumber(), hostId, grant(owner));
+      expect(early.status).toBe(502);
+      const said = await early.text();
+      expect(said).toBe(`The local model request failed on your computer: ${words}`);
+      expect(said).not.toContain("10 minutes");
+    }
+    stopsAfter(1, "connect ECONNREFUSED 127.0.0.1:8002");
     const down = await post(service.portNumber(), hostId, grant(owner));
     expect(down.status).toBe(502);
     expect(await down.text()).toContain("ECONNREFUSED");

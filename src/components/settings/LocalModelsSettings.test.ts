@@ -8,7 +8,7 @@ import type { DesktopBridgeStatus } from "@/lib/desktop-bridge";
 import { DEFAULT_BOT_WORKPLACE } from "../../../shared/bot-workplace";
 
 import { activityLine, BotWorkplaceSettings } from "./BotWorkplaceSettings";
-import { EndpointKeyEditor, endpointName, endpointsSummary, endpointStatus, sharedWithSummary } from "./LocalModelsSettings";
+import { EndpointKeyEditor, endpointName, endpointsSummary, endpointStatus, sharedWithSummary, sharingStateText } from "./LocalModelsSettings";
 import { LocalModelSharing } from "./LocalModelSharing";
 
 const row = (label: string, port: number) => ({ id: label, label, baseUrl: `http://127.0.0.1:${port}/v1` });
@@ -119,12 +119,28 @@ describe("who the computer's models are shared with", () => {
     expect(html).toContain("Support");
     expect(html).toContain('aria-label="Remove Ada Lovelace"');
     expect(html).toContain('aria-label="Remove Support"');
-    expect(html).toContain("Add people or groups");
+    // one word for a team in this block, the one its title uses
+    expect(html).toContain("Search people and teams");
+    expect(html).not.toMatch(/groups?\b/i);
+  });
+
+  // #5266 review: the line under the switch read "only you see them" beside chosen people and teams
+  it("says who can use the models in each state of the share: nobody, chosen people and teams, the whole organization", () => {
+    const nobody = { people: [], teams: [] };
+    const chosen = { people: ["pr_ada"], teams: ["team_support"] };
+    expect(sharingStateText(false, nobody)).toBe("Only you can use them.");
+    expect(sharingStateText(false, chosen)).toBe("Besides you, only the people and teams chosen below can use them.");
+    expect(sharingStateText(false, { people: [], teams: ["team_support"] })).toBe(sharingStateText(false, chosen));
+    expect(sharingStateText(true, nobody)).toBe("Everyone in the organization can use them, but they cannot edit this list.");
+    expect(sharingStateText(true, chosen)).toBe(sharingStateText(true, nobody));
+    expect(sharingStateText(false, chosen)).not.toMatch(/only you (see|can)/i);
   });
 
   it("a recipient the directory no longer lists stays removable", () => {
     const html = renderToStaticMarkup(createElement(LocalModelSharing, { directory: null, viewerId: null, value: { people: ["pr_gone"], teams: [] }, onChange: () => {} }));
     expect(html).toContain('data-local-models-recipient="pr_gone"');
     expect(html).toContain("A person of your organization");
+    const team = renderToStaticMarkup(createElement(LocalModelSharing, { directory: null, viewerId: null, value: { people: [], teams: ["team_gone"] }, onChange: () => {} }));
+    expect(team).toContain("A team of your organization");
   });
 });

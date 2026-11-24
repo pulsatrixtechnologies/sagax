@@ -21,9 +21,10 @@ const outDir = resolve(arg("--out", join(root, "docs", "screenshots", "local-mod
 const port = Number(arg("--port", "5392"));
 const skins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }];
 const shots = [
+  { name: "local-models-shared-none", query: "case=none", recipients: "0" },
   { name: "local-models-shared-chosen", query: "case=chosen", recipients: "3" },
   { name: "local-models-shared-org", query: "case=org", recipients: "3" },
-  { name: "local-models-search", query: "case=none", recipients: "0", search: "a" },
+  { name: "local-models-search", query: "case=none", recipients: "0", search: "p" },
 ];
 
 async function waitForServer(url, ms = 120_000) {
@@ -65,6 +66,8 @@ try {
         await page.fill("[data-local-models-recipients] input[type=search]", shot.search);
         await page.waitForSelector("[data-local-models-recipients] [role=option]");
       }
+      // the line under the organization switch, as the person reads it in this state
+      console.log(`${shot.name}: ${await page.locator('[data-settings-row="localModels.share"]').innerText().catch(() => "(row text not read)")}`);
       await page.mouse.move(2, 2);
       await page.waitForTimeout(250);
       const file = join(outDir, `${shot.name}-${label}.png`);

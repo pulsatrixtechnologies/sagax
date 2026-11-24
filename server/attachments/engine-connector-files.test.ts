@@ -79,8 +79,9 @@ describe("engineBlobPaths", () => {
 
   it("reads a folder with a space in it", () => {
     const folder = projectBlobFolder("/srv/Sagax Data/claude", "/tmp/sagax-claude-connector-Ab12");
-    expect(folder.root).toBe("/srv/Sagax Data/claude/projects/-tmp-sagax-claude-connector-Ab12");
-    const path = `${folder.root}/${SESSION}/tool-results/mcp-claude_ai_X-blob-9-zz.pdf`;
+    // join, as the product does: the platform's own separator
+    expect(folder.root).toBe(join("/srv/Sagax Data/claude", "projects", "-tmp-sagax-claude-connector-Ab12"));
+    const path = join(folder.root, SESSION, "tool-results", "mcp-claude_ai_X-blob-9-zz.pdf");
     expect(engineBlobPaths(`Binary content saved to ${path}`, folder)).toEqual([path]);
   });
 });

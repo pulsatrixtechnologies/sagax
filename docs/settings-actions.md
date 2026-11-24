@@ -364,6 +364,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Accent on bot reply bubbles (1 on, 0 off, the default: the reference grey; the phone follows the same choice) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.botBubbleAccent` | simple |
 | Show replies as they are written (on, the default; off shows each reply once it is finished) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.streamReplies` | simple |
 | Chat width (reading 960px, the default; wide ~1280px; full fills the pane) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.chatWidth` | simple |
+| Space under the composer (small 16px; standard 48px, the default; large 80px) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.composerBottomSpace` | simple |
 
 ### Notifications et confidentialité
 

@@ -110,6 +110,10 @@ export const USER_PREFERENCE_KEYS = [
   "sagax.botReplyBubbles.v1",
   // Settings > Appearance > Conversation: reading (960), wide (1280) or full (#2004)
   "sagax.chatWidth.v1",
+  // Settings > Appearance > Conversation: the space under the composer,
+  // small (16px), standard (48px, absent) or large (80px)
+  // (src/lib/composer-bottom-space.ts, #5238)
+  "sagax.composerBottomSpace.v1",
   // single stream: hours away or quiet before a return opens a fresh topic
   // (shared/fresh-topic.ts; "0" never)
   "sagax.freshTopicAfter.v1",

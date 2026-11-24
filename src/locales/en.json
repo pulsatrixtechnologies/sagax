@@ -8256,6 +8256,8 @@
   "voiceMode.keyAction.orgKey": "Ask an admin, or add your own xAI key in Settings > Providers.",
   "voiceMode.keyAction.serverKey": "Add credits to that xAI account, or change the key in Settings > Providers.",
   "voiceMode.keyAction.grokAccount": "Add credits on the connected Grok account.",
+  "voiceMode.key.orgAccount": "the organization's Grok account{tail}",
+  "voiceMode.keyAction.orgAccount": "Ask an admin to check the organization's Grok account, or connect your own Grok account in Settings > Providers.",
   "voiceMode.provider.quota.named": "xAI has no credits left for {key}. {action} The answers stay in the chat.",
   "voiceMode.provider.key.named": "xAI rejected {key}: invalid, revoked, or without voice permission. {action} The answers stay in the chat.",
   "voiceMode.provider.busy.named": "xAI is rate-limiting {key}. It comes back by itself; the answers stay in the chat.",

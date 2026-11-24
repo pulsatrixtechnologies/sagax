@@ -299,14 +299,16 @@ export const ELEVENLABS_VOICE_SERVER_ENGINE = "elevenlabsVoice";
 export const FISH_VOICE_SERVER_ENGINE = "fishVoice";
 
 /** Who pays for the voice: the person's own xAI key (in Perspicax), the
- * organization's key (Settings > Connections), or, on a solo server, the
- * server's key. */
+ * organization (its Grok account or its key, Settings > Connections), or,
+ * on a solo server, the server's key. */
 export type VoiceModeVia = "speaker-key" | "org-key" | "server";
 
 /** Where a key comes from (server/voice/voice-keys.ts, 2026-10-28): the person's
  * connected Grok account, their own voice key saved in Sagax (My voice keys),
- * their own xAI key in Perspicax, the organization's key, or a solo server's key. */
-export type VoiceKeySource = "grok-account" | "voice-key" | "perspicax-key" | "org-key" | "server";
+ * their own xAI key in Perspicax, the organization's Grok account (#5200:
+ * the team sign-in the organization named in Perspicax), the organization's
+ * key, or a solo server's key. */
+export type VoiceKeySource = "grok-account" | "voice-key" | "perspicax-key" | "org-account" | "org-key" | "server";
 
 /** Why xAI failed a voice request, as the server sorted it
  * (server/tts/grok.ts grokVoiceFailure): the key was rejected (`key`), no

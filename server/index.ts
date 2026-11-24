@@ -926,6 +926,7 @@ import { createCaptureMailer, createMailer, type Mailer } from "./mail/mailer.ts
 import { createMailSettingsRoutes } from "./mail/mail-routes.ts";
 import { createVoiceModeRoutes, isVoiceSocketPath, resolveVoiceKey, resolveVoiceKeys, type VoiceModeDeps, type VoiceSpeaker } from "./voice/voice-mode.ts";
 import { soloGrokVoiceToken } from "./voice/grok-account-voice.ts";
+import { orgGrokAccess, type OrgGrokAccess } from "./voice/org-grok-account.ts";
 import { botSpeech, VOICE_MODE_STORAGE_KEY, VOICE_SERVER_ENGINE } from "../shared/voice-mode.ts";
 import { keyLast4 } from "./voice/voice-keys.ts";
 import { IMAGE_SERVER_ENGINE } from "../shared/image-generation.ts";
@@ -32039,6 +32040,33 @@ function grokAccountTokenOf(person: { principalId?: string | null; disabled?: bo
   return personGrokAccountToken(person, { organization: IDENTITY.kind === "perspicax", liveAccess: grokLiveAccessOf, solo: soloGrokVoiceToken });
 }
 
+/** The person a Perspicax user id names on this organization server, by
+ * its issuer, with the activity rule of bot email and the bot phone; null
+ * when unknown here or on a solo server. */
+function orgPersonBySub(sub: string): { principalId: string; active: boolean } | null {
+  if (IDENTITY.kind !== "perspicax") return null;
+  const person = principals.bySubject(IDENTITY.issuer, sub);
+  if (!person) return null;
+  return { principalId: person.id, active: personActive(perspicaxDirectory?.directory(), person, sub) };
+}
+
+/** #5200: the organization's Grok account for one live use
+ * (server/voice/org-grok-account.ts): the team sign-in of the person the
+ * organization named in Perspicax, read and renewed like any sign-in of
+ * theirs. The value is never logged. */
+function orgGrokAccountAccess(candidate?: string): Promise<OrgGrokAccess> {
+  return orgGrokAccess({
+    designated: () => (IDENTITY.kind === "perspicax" ? perspicaxDirectory?.voiceOrgAccount() : undefined),
+    person: orgPersonBySub,
+    accountKind: (principalId) => {
+      if (!engineLogins) return null;
+      const instanceId = folderInstance("grokAgent", engineLogins.preferredAccount(principalId, "grokAgent") ?? DEFAULT_ACCOUNT);
+      return instanceId ? engineLogins.grokAccountIdentity(principalId, "primary", instanceId)?.kind ?? null : null;
+    },
+    grokSignIn: grokLiveAccessOf,
+  }, candidate);
+}
+
 const voiceModeDeps: VoiceModeDeps = {
   organization: IDENTITY.kind === "perspicax",
   notice: (threadId, message) => publishVoiceNotice(threadId, message),
@@ -32072,6 +32100,13 @@ const voiceModeDeps: VoiceModeDeps = {
   credentialPolicy: (speaker, threadId) => ({ ...credentialPolicyFor(threadId, speaker), aspect: "voice" }),
   auditCredential: (decision, speaker, threadId) => auditCredentialDecisionFor(threadId, undefined, decision, speaker),
   grokAccount: grokAccountTokenOf,
+  // #5200: the organization's Grok account, after everything of the
+  // person's and before the organization's key.
+  orgAccount: async () => {
+    if (IDENTITY.kind !== "perspicax") return undefined;
+    const access = await orgGrokAccountAccess();
+    return access.ok ? access.accessToken : undefined;
+  },
   resolveOwnKey: (sub) => {
     const person = IDENTITY.kind === "perspicax" ? principals.bySubject(IDENTITY.issuer, sub) : null;
     const owner = providerAccountOwner(person?.id);
@@ -34376,13 +34411,10 @@ const orgLink = createOrgLinkRoutes({
   // #4192: the voice service's live call on the line owner's own Grok
   // sign-in; the person is the one Perspicax names, by this organization's
   // issuer, with the same activity rule as bot email and the bot phone
-  person: (sub) => {
-    if (IDENTITY.kind !== "perspicax") return null;
-    const person = principals.bySubject(IDENTITY.issuer, sub);
-    if (!person) return null;
-    return { principalId: person.id, active: personActive(perspicaxDirectory?.directory(), person, sub) };
-  },
+  person: orgPersonBySub,
   grokSignIn: (principalId) => grokLiveAccessOf(principalId),
+  // #5200: the organization's own Grok account, for what names no person
+  orgAccount: orgGrokAccountAccess,
   // The owner's decision of 2026-11-19: a phone line speaks on the keys the
   // app's own voice would use for the person who owns it. The same function
   // as every voice route of the app, called for that person: the same order,

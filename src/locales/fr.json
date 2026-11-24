@@ -5736,6 +5736,8 @@
   "voiceMode.keyAction.orgKey": "Demande à un admin, ou ajoute ta propre clé xAI dans Réglages > Fournisseurs.",
   "voiceMode.keyAction.serverKey": "Ajoute des crédits à ce compte xAI, ou change la clé dans Réglages > Fournisseurs.",
   "voiceMode.keyAction.grokAccount": "Ajoute du crédit au compte Grok connecté.",
+  "voiceMode.key.orgAccount": "le compte Grok de l'organisation{tail}",
+  "voiceMode.keyAction.orgAccount": "Demande à un admin de vérifier le compte Grok de l'organisation, ou connecte ton propre compte Grok dans Réglages > Fournisseurs.",
   "voiceMode.provider.quota.named": "xAI n'a plus de crédits pour {key}. {action} Les réponses restent dans le chat.",
   "voiceMode.provider.key.named": "xAI a refusé {key} : invalide, révoquée ou sans permission pour la voix. {action} Les réponses restent dans le chat.",
   "voiceMode.provider.busy.named": "xAI limite le débit de {key}. Ça revient tout seul; les réponses restent dans le chat.",

@@ -278,7 +278,7 @@ describe("POST /api/org/link/grok-sign-in with org_account: the organization's o
       scheduler: { request: () => "started" },
       person: () => null,
       grokSignIn: async () => ({ ok: false, error: "no_sign_in" }),
-      orgAccount: async () => ({ ok: true, accessToken: ORG_ACCESS, expiresAt: EXPIRES, principalId: "pr_ada" }),
+      orgAccount: async () => ({ ok: true, accessToken: ORG_ACCESS, expiresAt: EXPIRES, principalId: "pr_ada", kind: "team" }),
       log: (line) => lines.push(line),
       ...patch,
     });
@@ -314,9 +314,13 @@ describe("POST /api/org/link/grok-sign-in with org_account: the organization's o
     const h = await start();
     const answer = await h.call({ org_account: "test" });
     expect(answer.status).toBe(200);
-    expect(answer.body).toEqual({ provider: "xai", state: "ok", expires_at: "2026-11-23T20:00:00.000Z" });
+    expect(answer.body).toEqual({ provider: "xai", state: "ok", account_kind: "team", expires_at: "2026-11-23T20:00:00.000Z" });
     expect(JSON.stringify(answer.body)).not.toContain(ORG_ACCESS);
-    for (const error of ["no_org_account", "unknown_person", "user_inactive", "not_team_account", "no_sign_in", "sign_in_refused"] as const) {
+    // a personal account serves like a team's: its kind is told beside the state, never a refusal
+    const personal = await start({ orgAccount: async () => ({ ok: true, accessToken: ORG_ACCESS, expiresAt: EXPIRES, principalId: "pr_ada", kind: "personal" }) });
+    expect((await personal.call({ org_account: "test" })).body).toEqual({ provider: "xai", state: "ok", account_kind: "personal", expires_at: "2026-11-23T20:00:00.000Z" });
+    expect((await personal.call({ org_account: true })).body).toEqual({ provider: "xai", access_token: ORG_ACCESS, expires_at: "2026-11-23T20:00:00.000Z" });
+    for (const error of ["no_org_account", "unknown_person", "user_inactive", "no_sign_in", "sign_in_refused"] as const) {
       const failing = await start({ orgAccount: async () => ({ ok: false, error }) });
       expect((await failing.call({ org_account: "test" })).body).toEqual({ provider: "xai", state: error });
     }
@@ -324,8 +328,8 @@ describe("POST /api/org/link/grok-sign-in with org_account: the organization's o
 
   it("tests a person about to be named, and still never answers a value for a named person", async () => {
     const asked: Array<string | undefined> = [];
-    const h = await start({ orgAccount: async (candidate) => { asked.push(candidate); return { ok: true, accessToken: ORG_ACCESS, expiresAt: null, principalId: "pr_ada" }; } });
-    expect((await h.call({ org_account: "test", sub: "sub-ada" })).body).toEqual({ provider: "xai", state: "ok" });
+    const h = await start({ orgAccount: async (candidate) => { asked.push(candidate); return { ok: true, accessToken: ORG_ACCESS, expiresAt: null, principalId: "pr_ada", kind: "team" }; } });
+    expect((await h.call({ org_account: "test", sub: "sub-ada" })).body).toEqual({ provider: "xai", state: "ok", account_kind: "team" });
     expect(asked).toEqual(["sub-ada"]);
     // `true` with a person is the person's own sign-in route, as before: the account is not read
     const person = await h.call({ org_account: true, sub: "sub-ada" });
@@ -335,7 +339,7 @@ describe("POST /api/org/link/grok-sign-in with org_account: the organization's o
   });
 
   it("answers a stable code when there is none, or it cannot serve", async () => {
-    const codes = { no_org_account: 404, unknown_person: 404, no_sign_in: 404, user_inactive: 409, not_team_account: 409, sign_in_refused: 409 } as const;
+    const codes = { no_org_account: 404, unknown_person: 404, no_sign_in: 404, user_inactive: 409, sign_in_refused: 409 } as const;
     for (const [error, status] of Object.entries(codes)) {
       const h = await start({ orgAccount: async () => ({ ok: false, error: error as keyof typeof codes }) });
       const answer = await h.call({ org_account: true });

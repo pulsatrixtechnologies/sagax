@@ -88,7 +88,8 @@
 //
 // The same route, asked with `"org_account"` and no `sub` (#5200): the
 // organization's own Grok account (server/voice/org-grok-account.ts), the
-// team sign-in of the person the organization named in Perspicax. In a
+// sign-in of the person the organization named in Perspicax, a team's
+// account or a personal one. In a
 // person's `voice_keys` it already comes at its place, as `org-account`
 // (`auth: "grok-account"`); this request is for what names no person:
 //
@@ -96,14 +97,14 @@
 //     call no line owns). 200 `{provider: "xai", access_token, expires_at}`,
 //     renewed first like a person's;
 //   - `{"org_account": "test"}`: the console's test. 200 `{provider: "xai",
-//     state, expires_at?}`, `state` `ok` or one of the codes below: the
-//     value is never answered, only whether it serves. With a `sub`, the
+//     state, account_kind?, expires_at?}`, `state` `ok` or one of the codes
+//     below: the value is never answered, only whether it serves, and what
+//     the account is when it does (`account_kind`: `team`, `personal` or
+//     `unknown`, an information for the screen). With a `sub`, the
 //     same judgment of a person about to be named, before Perspicax names
 //     them (a test never answers a value, so it may name a person);
 //   - 404 `{error}` for `no_org_account` (none named), `unknown_person`,
-//     `no_sign_in`; 409 `{error}` for `user_inactive`, `not_team_account`
-//     (a personal Grok account is never the organization's),
-//     `sign_in_refused`;
+//     `no_sign_in`; 409 `{error}` for `user_inactive`, `sign_in_refused`;
 //   - the same caller check; nothing logged but the outcome code; a server
 //     without the account answers 400 `invalid_request` (no `sub`).
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -301,7 +302,7 @@ export function createOrgLinkRoutes(options: OrgLinkRoutesOptions) {
     }
     log(`org link: the organization's Grok account (${test ? "test: " : ""}${access.ok ? "ok" : access.error})`);
     const expires = access.ok && access.expiresAt !== null ? new Date(access.expiresAt).toISOString() : null;
-    if (test) return send(res, 200, { provider: "xai", state: access.ok ? "ok" : access.error, ...(expires ? { expires_at: expires } : {}) });
+    if (test) return send(res, 200, { provider: "xai", state: access.ok ? "ok" : access.error, ...(access.ok ? { account_kind: access.kind } : {}), ...(expires ? { expires_at: expires } : {}) });
     if (!access.ok) {
       const missing = access.error === "no_org_account" || access.error === "unknown_person" || access.error === "no_sign_in";
       return send(res, missing ? 404 : 409, { error: access.error });

@@ -1367,8 +1367,9 @@ Content-Type: application/json
   the line reports its calls to Perspicax only.
 
 **The organization's Grok account (#5200).** The same route with
-`"org_account"` and no person: the team sign-in of the person the
-organization named in Perspicax (`voice_org_account` of the directory).
+`"org_account"` and no person: the Grok sign-in of the person the
+organization named in Perspicax (`voice_org_account` of the directory), a
+team's account or a personal one.
 
 ```
 POST /api/org/link/grok-sign-in
@@ -1382,11 +1383,12 @@ Content-Type: application/json
   "expires_at": "..."}`, for the voice service's own use (its probe, a call
   no line owns), renewed first like a person's.
 - `{"org_account": "test"}`: `200 {"provider": "xai", "state": "ok",
-  "expires_at": "..."}` or `state` one of the codes below. Never the value.
+  "account_kind": "team", "expires_at": "..."}` or `state` one of the codes
+  below. Never the value. `account_kind` (`team`, `personal` or `unknown`)
+  says what the account is when it serves: an information, never a refusal.
   With `"sub"`, the same judgment of a person about to be named.
 - `404` for `no_org_account` (none named), `unknown_person`, `no_sign_in`;
-  `409` for `user_inactive`, `not_team_account` (a personal Grok account is
-  never the organization's), `sign_in_refused`.
+  `409` for `user_inactive`, `sign_in_refused`.
 - Nothing is logged but the outcome code. A Sagax older than this answers
   `400 invalid_request` (it knows persons only).
 

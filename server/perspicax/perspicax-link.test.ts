@@ -382,7 +382,7 @@ describe("PerspicaxDirectory, slice 4: teams and owner keys", () => {
     expect("integrationRights" in h.sync).toBe(false);
   });
 
-  it("reads the organization's Grok account: the person whose team sign-in serves everyone's voice (#5200)", async () => {
+  it("reads the organization's Grok account: the person whose sign-in serves everyone's voice (#5200)", async () => {
     const h = harness({ ...withTeams([person("ALICE")], []), voice_org_account: { sub: "ALICE" } });
     expect(h.sync.voiceOrgAccount()).toBeUndefined();
     await h.sync.refresh();

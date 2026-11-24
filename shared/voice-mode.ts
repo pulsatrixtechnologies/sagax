@@ -306,7 +306,7 @@ export type VoiceModeVia = "speaker-key" | "org-key" | "server";
 /** Where a key comes from (server/voice/voice-keys.ts, 2026-10-28): the person's
  * connected Grok account, their own voice key saved in Sagax (My voice keys),
  * their own xAI key in Perspicax, the organization's Grok account (#5200:
- * the team sign-in the organization named in Perspicax), the organization's
+ * the sign-in the organization named in Perspicax), the organization's
  * key, or a solo server's key. */
 export type VoiceKeySource = "grok-account" | "voice-key" | "perspicax-key" | "org-account" | "org-key" | "server";
 

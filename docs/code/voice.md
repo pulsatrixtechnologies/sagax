@@ -231,11 +231,12 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   the fourth form of that one order, source `org-account`, after everything
   of the person's and before `org-key`, under the same grant
   (`serverKeyAllowed`), presented like the person's account
-  (`voiceKeyAuth`). It is the team sign-in (`principal_type: Team`) of the
-  one person the organization named in Perspicax (`voice_org_account` of the
-  directory), read through that person's own `grokLiveAccess`, so it renews
-  like any sign-in and no token is stored anywhere else. A personal account
-  is never served as the organization's. The organization pays
+  (`voiceKeyAuth`). It is the Grok sign-in of the one person the
+  organization named in Perspicax (`voice_org_account` of the directory),
+  read through that person's own `grokLiveAccess`, so it renews like any
+  sign-in and no token is stored anywhere else. It serves whatever its
+  kind, a team's account or a personal one; the kind is told by the test
+  (`account_kind`), never a refusal. The organization pays
   (`via: "org-key"`) and it shows no last four. For what names no person,
   the link route answers it with `{"org_account": true}`, and its state
   alone with `{"org_account": "test"}` (`docs/org-admin-api.md`).

@@ -2,10 +2,8 @@
 // voice, beside the person's account, the person's keys and the
 // organization's key.
 //
-// An organization's Grok account is a TEAM sign-in, the identity the Grok
-// login file already names (`principal_type: Team`, read by
-// server/engines/principal-engine-logins.ts readGrokAccountIdentity). An
-// admin names, in Perspicax, the person whose team sign-in on this server is
+// An organization's Grok account is a Grok sign-in the organization named.
+// An admin names, in Perspicax, the person whose sign-in on this server is
 // the organization's; the directory carries that one name
 // (`voice_org_account`, server/perspicax/perspicax-link.ts). Nothing else is
 // stored: the sign-in stays the one file in that person's login folder,
@@ -13,8 +11,10 @@
 // organization's account never expires for want of a renewal and no token
 // is ever copied, pasted or kept anywhere else.
 //
-// A personal Grok account (`User`) is never served as the organization's:
-// it is that person's own subscription, and naming them changes nothing.
+// The account named serves whatever its kind, a team's (`principal_type:
+// Team`) or a personal one (`User`): the kind the Grok login file names
+// (server/engines/principal-engine-logins.ts readGrokAccountIdentity) is
+// told beside the answer, for the screen that shows it, and never refuses.
 //
 // Pure of HTTP and of the store: server/index.ts wires it to the directory,
 // the people and the logins. The value is never logged.
@@ -27,15 +27,13 @@ export type OrgGrokAccountError =
   | "unknown_person"
   /** the person it named is turned off, or not active in the directory */
   | "user_inactive"
-  /** their Grok sign-in is a personal account, not a team's */
-  | "not_team_account"
   /** they have no Grok sign-in on this server */
   | "no_sign_in"
   /** the provider refused the sign-in and the engine could not renew it */
   | "sign_in_refused";
 
 export type OrgGrokAccess =
-  | { ok: true; accessToken: string; expiresAt: number | null; principalId: string }
+  | { ok: true; accessToken: string; expiresAt: number | null; principalId: string; kind: GrokAccountKind }
   | { ok: false; error: OrgGrokAccountError };
 
 export interface OrgGrokAccountDeps {
@@ -61,7 +59,6 @@ export async function orgGrokAccess(deps: OrgGrokAccountDeps, candidate?: string
   if (!person.active) return { ok: false, error: "user_inactive" };
   const kind = deps.accountKind(person.principalId);
   if (!kind) return { ok: false, error: "no_sign_in" };
-  if (kind !== "team") return { ok: false, error: "not_team_account" };
   let access: GrokLiveAccess;
   try {
     access = await deps.grokSignIn(person.principalId);
@@ -69,5 +66,5 @@ export async function orgGrokAccess(deps: OrgGrokAccountDeps, candidate?: string
     access = { ok: false, error: "sign_in_refused" };
   }
   if (!access.ok) return access;
-  return { ok: true, accessToken: access.accessToken, expiresAt: access.expiresAt, principalId: person.principalId };
+  return { ok: true, accessToken: access.accessToken, expiresAt: access.expiresAt, principalId: person.principalId, kind };
 }

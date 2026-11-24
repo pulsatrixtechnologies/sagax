@@ -32051,9 +32051,9 @@ function orgPersonBySub(sub: string): { principalId: string; active: boolean } |
 }
 
 /** #5200: the organization's Grok account for one live use
- * (server/voice/org-grok-account.ts): the team sign-in of the person the
- * organization named in Perspicax, read and renewed like any sign-in of
- * theirs. The value is never logged. */
+ * (server/voice/org-grok-account.ts): the sign-in of the person the
+ * organization named in Perspicax, a team's or a personal one, read and
+ * renewed like any sign-in of theirs. The value is never logged. */
 function orgGrokAccountAccess(candidate?: string): Promise<OrgGrokAccess> {
   return orgGrokAccess({
     designated: () => (IDENTITY.kind === "perspicax" ? perspicaxDirectory?.voiceOrgAccount() : undefined),

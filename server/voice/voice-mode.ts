@@ -246,7 +246,7 @@ export interface VoiceModeDeps {
    * The token is never logged. */
   grokAccount?(speaker: VoiceSpeaker): Promise<string | undefined> | string | undefined;
   /** Organization server, #5200: the organization's Grok account
-   * (server/voice/org-grok-account.ts), the team sign-in the organization
+   * (server/voice/org-grok-account.ts), the sign-in the organization
    * named. It comes after everything of the person's and before the
    * organization's key, for the people that key may serve. Absent or
    * nothing: the order is as before. The token is never logged. */
@@ -439,7 +439,9 @@ export async function resolveVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, thr
   if (keys.length) return governVoiceKeys(deps, speaker, threadId, { ok: true, keys });
   // Perspicax could not say: their key there may well exist
   if (perspicax) return { ok: false, cause: perspicax };
-  // nothing of the organization's exists, or it exists and was not given to them
+  // nothing of the organization's exists, or it exists and was not given to
+  // them. The account is read once per resolution: above when it was given,
+  // here when it was not (the test counts the reads).
   if (!serverKey && (orgAllowed || !(await deps.orgAccount?.(speaker))?.trim())) return { ok: false, cause: "no_credentials" };
   return { ok: false, cause: "server_engine_not_allowed" };
 }

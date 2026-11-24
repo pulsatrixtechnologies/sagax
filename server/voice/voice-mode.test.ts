@@ -671,6 +671,19 @@ describe("voice mode uses the key that has funds (2026-10-28)", () => {
     expect(out.ok && out.keys.map((key) => key.source)).toEqual(["grok-account", "org-key"]);
   });
 
+  it("reads the organization's Grok account once per resolution, given or refused (#5200)", async () => {
+    const base = { organization: true, hasOwnKey: () => false, resolveOwnKey: async () => ({ ok: false as const, error: "no_key" as const }) };
+    for (const serverKey of [() => ORG_KEY, () => undefined]) {
+      for (const allowed of [true, false]) {
+        for (const value of [ORG_ACCOUNT, undefined]) {
+          const orgAccount = vi.fn(async () => value);
+          await resolveVoiceKeys({ ...base, serverKey, serverKeyAllowed: () => allowed, orgAccount }, { principalId: "p-ada" });
+          expect([allowed, value, orgAccount.mock.calls.length <= 1]).toEqual([allowed, value, true]);
+        }
+      }
+    }
+  });
+
   it("a disabled person and a solo server get no organization account (#5200)", async () => {
     const base = { serverKey: () => ORG_KEY, hasOwnKey: () => false, resolveOwnKey: async () => ({ ok: false as const, error: "no_key" as const }), orgAccount: vi.fn(async () => ORG_ACCOUNT) };
     expect(await resolveVoiceKeys({ ...base, organization: true }, { principalId: "p-ada", disabled: true })).toEqual({ ok: false, cause: "payer_disabled" });

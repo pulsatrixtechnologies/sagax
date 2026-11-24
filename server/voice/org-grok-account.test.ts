@@ -17,9 +17,9 @@ function deps(patch: Partial<OrgGrokAccountDeps> = {}): OrgGrokAccountDeps {
 }
 
 describe("the organization's Grok account (#5200)", () => {
-  it("is the team sign-in of the person the organization named, read through that person's own renewal", async () => {
+  it("is the sign-in of the person the organization named, read through that person's own renewal", async () => {
     const grokSignIn = vi.fn(async () => ({ ok: true as const, accessToken: ACCESS, expiresAt: EXPIRES }));
-    expect(await orgGrokAccess(deps({ grokSignIn }))).toEqual({ ok: true, accessToken: ACCESS, expiresAt: EXPIRES, principalId: "pr_ada" });
+    expect(await orgGrokAccess(deps({ grokSignIn }))).toEqual({ ok: true, accessToken: ACCESS, expiresAt: EXPIRES, principalId: "pr_ada", kind: "team" });
     expect(grokSignIn).toHaveBeenCalledWith("pr_ada");
   });
 
@@ -32,16 +32,16 @@ describe("the organization's Grok account (#5200)", () => {
 
   it("judges a person about to be named by the same rules, before the organization names them", async () => {
     const none = deps({ designated: () => undefined });
-    expect(await orgGrokAccess(none, "sub-ada")).toEqual({ ok: true, accessToken: ACCESS, expiresAt: EXPIRES, principalId: "pr_ada" });
+    expect(await orgGrokAccess(none, "sub-ada")).toEqual({ ok: true, accessToken: ACCESS, expiresAt: EXPIRES, principalId: "pr_ada", kind: "team" });
     expect(await orgGrokAccess(none, "sub-ghost")).toEqual({ ok: false, error: "unknown_person" });
-    expect(await orgGrokAccess(deps({ designated: () => undefined, accountKind: () => "personal" }), "sub-ada")).toEqual({ ok: false, error: "not_team_account" });
+    expect(await orgGrokAccess(deps({ designated: () => undefined, accountKind: () => "personal" }), "sub-ada")).toEqual({ ok: true, accessToken: ACCESS, expiresAt: EXPIRES, principalId: "pr_ada", kind: "personal" });
   });
 
-  it("never serves a personal Grok account as the organization's: only a team sign-in", async () => {
+  it("serves the account the organization named whatever its kind, a team's or a personal one: the kind is told, never refused", async () => {
     const grokSignIn = vi.fn(async () => ({ ok: true as const, accessToken: ACCESS, expiresAt: EXPIRES }));
-    expect(await orgGrokAccess(deps({ accountKind: () => "personal", grokSignIn }))).toEqual({ ok: false, error: "not_team_account" });
-    expect(await orgGrokAccess(deps({ accountKind: () => "unknown", grokSignIn }))).toEqual({ ok: false, error: "not_team_account" });
-    expect(grokSignIn).not.toHaveBeenCalled();
+    expect(await orgGrokAccess(deps({ accountKind: () => "personal", grokSignIn }))).toEqual({ ok: true, accessToken: ACCESS, expiresAt: EXPIRES, principalId: "pr_ada", kind: "personal" });
+    expect(await orgGrokAccess(deps({ accountKind: () => "unknown", grokSignIn }))).toEqual({ ok: true, accessToken: ACCESS, expiresAt: EXPIRES, principalId: "pr_ada", kind: "unknown" });
+    expect(grokSignIn).toHaveBeenCalledTimes(2);
   });
 
   it("answers a stable code for an unknown or inactive person, no sign-in, and a refused one", async () => {

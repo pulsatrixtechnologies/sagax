@@ -1965,16 +1965,12 @@ export function BotListItem({
   // quiet rows drop the last-message preview but keep a line that reports
   // something happening now; an idle bot is just its name
   const statusLine = deleting || lineWorking || waiting || teammateWait || queued;
-  // The viewer's own Primary Bot wears the orange star at the avatar's
-  // bottom-right corner; a status dot then sits at the top-right instead.
   const primary = isViewersPrimaryBot(bot, orgViewerId({ config }));
-  // A bot shared with the viewer wears its sharer's face at the bottom-right
-  // (as in Browse Bots), so the status dot moves up, like beside the star.
   const sharer = botSharer(bot, orgViewerId({ config }), useOrgPeople());
   // #2615: the viewer's own bot that reaches someone else, marked after its
   // name ("Shared with others", or "Partially shared" through a group).
   const share = useStoreSelector((current) => botShareState(bot, current.groups, orgViewerId({ config })), sameBotShareState);
-  const dotCorner = primary || sharer ? "-top-0.5" : "-bottom-0.5";
+  const activityDotPosition = "absolute -bottom-0.5 -left-0.5";
   // Grok Bot marks an unread bot with a blue dot at the row's end, the name
   // keeps its weight.
   const trailingDot = !iconOnly && unread && !renaming && !deleting && !selection?.active;
@@ -1998,11 +1994,11 @@ export function BotListItem({
             green while the bot is working, ringed in the row's ground so it
             reads on both a photo and the mascot. Also the only activity
             signal in icons-only density, where the text is hidden. */}
-        {working && <StatusDot tone="success" testId="working-dot" className={cn("absolute -right-0.5", dotCorner)} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
-        {waiting && <StatusDot tone="warning" testId="waiting-dot" role="status" label={t("sidebar.preview.waiting")} className={cn("absolute -right-0.5", dotCorner)} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
+        {working && <StatusDot tone="success" testId="working-dot" className={activityDotPosition} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
+        {waiting && <StatusDot tone="warning" testId="waiting-dot" role="status" label={t("sidebar.preview.waiting")} className={activityDotPosition} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
         {sharer && !primary && <SidebarSharerBadge sharer={sharer} avatarSize={avatarSize} />}
-        {teammateWait && <StatusDot tone="accent" testId="teammate-wait-dot" role="status" label={teammateWaitLine(bot)} className={cn("absolute -right-0.5", dotCorner)} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
-        {!teammateWait && !waiting && !working && queued && <StatusDot tone="queued" testId="queued-dot" role="status" label={t("task.queued")} className={cn("absolute -right-0.5", dotCorner)} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
+        {teammateWait && <StatusDot tone="accent" testId="teammate-wait-dot" role="status" label={teammateWaitLine(bot)} className={activityDotPosition} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
+        {!teammateWait && !waiting && !working && queued && <StatusDot tone="queued" testId="queued-dot" role="status" label={t("task.queued")} className={activityDotPosition} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
       </span>
       <div data-sidebar-row-name className={cn("flex min-w-0 flex-1 flex-col gap-px", iconOnly && "hidden", trailingDot && "mr-4 group-hover:mr-0 group-focus-within:mr-0 max-sm:mr-0 touch:mr-0")}>
         <div data-sidebar-bot-title className="flex min-w-0 items-center gap-1">

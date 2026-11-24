@@ -1880,6 +1880,9 @@ and `sidebar-logo-preferences.test.ts`:
   (`--color-primary-badge`, a deeper orange on the light rails, its disc
   held to 3:1 on the rail in `scripts/check-skin-contrast.mjs`), never the
   skin accent (#188 had made it grey or navy in some skins).
+- Sidebar bot rows keep the activity dot at the bottom left of every avatar.
+  The Primary Bot star and the shared bot owner’s portrait keep the bottom right.
+  Working bots show the same dots below their title (#5232).
 - Section headers (group titles, #4093, measured on the reference in the
   owner's configuration, see "Shell by window width"): the name
   first, in sentence case, 13/18 regular in the secondary ink, 30px tall (8px

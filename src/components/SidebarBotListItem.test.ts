@@ -206,12 +206,12 @@ describe("BotListItem", () => {
     expect(renderRow(bot({ chiefOfStaff: true, ownerUserId: "someone-else" }))).not.toContain("primary-bot-badge");
   });
 
-  it("moves a status dot to the top-right while the star holds the bottom-right", () => {
-    const working = renderRow(bot({ chiefOfStaff: true, busy: true }));
-    expect(working).toMatch(/data-testid="working-dot" class="[^"]*-top-0\.5/);
-    expect(renderRow(bot({ busy: true }))).toMatch(/data-testid="working-dot" class="[^"]*-bottom-0\.5/);
+  it.each([true, false])("places working dots below the title and activity at bottom-left (primary %s)", (chiefOfStaff) => {
+    const markup = renderRow(bot({ chiefOfStaff, busy: true, title: "Developer" }));
+    expect(markup).toMatch(/data-testid="working-dot" class="[^"]*-bottom-0\.5 -left-0\.5/);
+    expect(markup).toContain("data-sidebar-working");
+    expect(markup.indexOf("data-sidebar-working")).toBeGreaterThan(markup.indexOf("data-bot-role-tag"));
   });
-
 
   // The reference design's row (owner, 2026-10-15): the role (Bot settings > Title) is a
   // pill right after the name, in the same line.

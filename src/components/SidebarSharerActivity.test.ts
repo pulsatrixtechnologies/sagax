@@ -46,11 +46,11 @@ describe("a bot shared with the viewer", () => {
     expect(row(bot({ ownerUserId: "pr_stranger" }))).not.toContain("data-sidebar-sharer");
   });
 
-  it("keeps the activity dot visible at the avatar's top-right, off the face, in every density", () => {
+  it("keeps the activity dot visible at the avatar's bottom-left, off the face, in every density", () => {
     for (const density of ["comfortable", "compact", "icons"] as const) {
       const markup = row(bot({ ownerUserId: "pr_ada", busy: true }), density);
       expect(markup, density).toContain("data-sidebar-sharer");
-      expect(markup, density).toMatch(/data-testid="working-dot"[^>]*class="[^"]*-top-0\.5/);
+      expect(markup, density).toMatch(/data-testid="working-dot"[^>]*class="[^"]*-bottom-0\.5 -left-0\.5/);
     }
   });
 

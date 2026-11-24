@@ -92,7 +92,7 @@ describe("every refusal reason the server computes is said in the person's langu
       "No call was placed: your xAI key in Perspicax is out of credits. Add credits to that xAI account, or change the key in Perspicax (Providers > Grok), then call back.",
     );
     expect(realtimeKeyRefusedCallReason([TRIED("voice-key", "key")], "fr")).toBe(
-      `Aucun appel : ta clé vocale a été refusée. Ajoute des crédits à ce compte xAI, ou change la clé dans ${FRENCH_PATH}, puis rappelle.`,
+      `Aucun appel : ta clé vocale a été refusée. Change ta clé vocale dans ${FRENCH_PATH}, puis rappelle.`,
     );
     expect(realtimeKeyRefusedCallReason([TRIED("grok-account", "quota")], "fr")).toBe(
       "Aucun appel : ton compte Grok connecté n'a plus de crédits. Ajoute du crédit au compte Grok connecté, puis rappelle.",
@@ -132,7 +132,7 @@ describe("every refusal reason the server computes is said in the person's langu
   it("both sides dry at once: each says who fixes what", () => {
     const french = realtimeKeyRefusedCallReason([TRIED("voice-key", "quota"), TRIED("org-key", "quota")], "fr");
     expect(french).toBe(
-      `Aucun appel : ta clé vocale n'a plus de crédits, et la clé xAI de ton organisation n'a plus de crédits. Ajoute des crédits à ce compte xAI, ou change la clé dans ${FRENCH_PATH}, puis rappelle. Pour la clé que tu as reçue, demande à un administrateur de ton organisation.`,
+      `Aucun appel : ta clé vocale n'a plus de crédits, et la clé xAI de ton organisation n'a plus de crédits. Ajoute des crédits au compte xAI associé à ta clé vocale, ou change ta clé vocale dans ${FRENCH_PATH}, puis rappelle. Pour la clé que tu as reçue, demande à un administrateur de ton organisation.`,
     );
     expect(french).toContain("demande à un administrateur de ton organisation");
     expect(realtimeKeyRefusedCallReason([TRIED("voice-key", "key"), TRIED("org-key", "key")], "en"))
@@ -190,10 +190,10 @@ describe("every refusal reason the server computes is said in the person's langu
 
   it("a key of the person's own and the organization's account: the person fixes the key, an administrator the account", () => {
     expect(realtimeKeyRefusedCallReason([TRIED("voice-key", "key"), TRIED("org-account", "quota")], "fr")).toBe(
-      `Aucun appel : ta clé vocale a été refusée, et le compte Grok de ton organisation n'a plus de crédits. Ajoute des crédits à ce compte xAI, ou change la clé dans ${FRENCH_PATH}, puis rappelle. Pour ce qui vient de ton organisation, demande à un de ses administrateurs.`,
+      `Aucun appel : ta clé vocale a été refusée, et le compte Grok de ton organisation n'a plus de crédits. Change ta clé vocale dans ${FRENCH_PATH}, puis rappelle. Pour ce qui vient de ton organisation, demande à un de ses administrateurs.`,
     );
     expect(realtimeKeyRefusedCallReason([TRIED("voice-key", "key"), TRIED("org-account", "quota")], "en")).toBe(
-      `No call was placed: your voice key was refused, and your organization's Grok account is out of credits. Add credits to that xAI account, or change the key in ${ENGLISH_PATH}, then call back. For what your organization provides, ask one of its administrators.`,
+      `No call was placed: your voice key was refused, and your organization's Grok account is out of credits. Change your voice key in ${ENGLISH_PATH}, then call back. For what your organization provides, ask one of its administrators.`,
     );
   });
 

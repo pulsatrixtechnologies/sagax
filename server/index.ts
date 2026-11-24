@@ -8906,7 +8906,9 @@ const turnModelSwitches = new Map<string, { botId: string; requested: ModelSelec
 const roomTurnRuns = new Map<string, { botId: string; run: TurnRun }>();
 /** #1154: the pick a direct turn left (speakerTurnSelection), for its reply's line. */
 const turnModelRequested = new Map<string, ModelSelection>();
-const desktopLocalModels = new DesktopLocalModels(DATA_DIR, desktopBridges, (person) => personDisplayName(principals.byId(person)) || "");
+const desktopLocalModels = new DesktopLocalModels(DATA_DIR, desktopBridges, (person) => personDisplayName(principals.byId(person)) || "",
+  // D-20261123-023: a person's Perspicax teams, for a share that names teams
+  (person) => (principals.byId(person)?.teams ?? []).map((team) => team.id));
 setDesktopInjectModels(() => desktopLocalModels.modelsFor(null));
 const desktopTunnels = new DesktopTunnels(liveSessionPerson, (person) => {
   const key = workplacePreference(person).networkDevice;

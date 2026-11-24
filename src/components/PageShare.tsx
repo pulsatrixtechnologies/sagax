@@ -17,18 +17,18 @@
 // person shares their own page without an admin; the server checks every
 // rule again (server/routes/published-pages.ts).
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ExternalLink, Globe, Link2, Loader2, Lock, Users, X, XCircle } from "lucide-react";
+import { Check, ExternalLink, Globe, Link2, Loader2, Lock, Users, XCircle } from "lucide-react";
 
 import { copyText } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
-import { usePerspicaxOrg, type OrgDirectoryPerson } from "@/lib/perspicax-org";
-import { groupPeopleCandidates } from "@/lib/private-threads";
+import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { api, useStore } from "@/state/store";
 import type { PageAccess, PublishedPageSummary } from "../../shared/published-pages";
 import { viewerActorId } from "@/lib/viewer";
-import { initialsOf, needsLinkConfirm, pageReadingUrl, sharePlan, showBotLibraryChoice, teamCandidates, withInvite, type ShareChange } from "@/lib/page-share-plan";
+import { needsLinkConfirm, pageReadingUrl, sharePlan, showBotLibraryChoice, withInvite, type ShareChange } from "@/lib/page-share-plan";
 import { ExpirySelect, openReadingLink, pageErrorText } from "./page-controls";
 import { useOrgDirectory } from "./GroupPeoplePicker";
+import { ShareAvatar, ShareRecipientRows, ShareRecipientSearch } from "./ShareRecipients";
 
 export { sharePlan, teamCandidates, withInvite, type ShareChange, type ShareStep } from "@/lib/page-share-plan";
 
@@ -37,15 +37,6 @@ const ACCESS_ROWS: Array<{ access: PageAccess; icon: typeof Lock; label: "pages.
   { access: "org", icon: Users, label: "pages.share.org", hint: "pages.access.orgHint" },
   { access: "link", icon: Globe, label: "pages.access.link", hint: "pages.access.linkHint" },
 ];
-
-function Avatar({ name, url, team }: { name: string; url?: string; team?: boolean }) {
-  if (url) return <img src={url} alt="" className="size-7 shrink-0 rounded-full object-cover" />;
-  return (
-    <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-full bg-raised text-[11px] font-semibold text-ink-secondary">
-      {team ? <Users size={13} /> : initialsOf(name)}
-    </span>
-  );
-}
 
 export function PageSharePopover({ page, version, linkOff, onChange, onClose, className }: {
   page: PublishedPageSummary;
@@ -60,7 +51,6 @@ export function PageSharePopover({ page, version, linkOff, onChange, onClose, cl
   const { state } = useStore();
   const organization = usePerspicaxOrg() !== null;
   const directory = useOrgDirectory(organization);
-  const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [pendingLink, setPendingLink] = useState(false);
@@ -111,16 +101,10 @@ export function PageSharePopover({ page, version, linkOff, onChange, onClose, cl
   const viewerId = state.config?.viewer?.principalId ?? null;
   const botChoice = showBotLibraryChoice({ page, org: organization, viewerId: viewerActorId(state.config), bot: state.bots.find((candidate) => candidate.id === page.botId) });
   const people = useMemo(() => new Map((directory?.people ?? []).map((person) => [person.principalId.toLowerCase(), person])), [directory]);
-  const teams = useMemo(() => new Map((directory?.teams ?? []).map((team) => [team.id.toLowerCase(), team])), [directory]);
-  const personCandidates = organization && query.trim()
-    ? groupPeopleCandidates((directory?.people ?? []).filter((person) => !person.service), { taken: [...invites.people, ...(viewerId ? [viewerId] : [])], query, limit: 6 })
-    : [];
-  const groupCandidates = organization && query.trim() ? teamCandidates(directory?.teams ?? [], invites.teams, query, 4) : [];
   const shared = page.status === "published";
   const access = shared ? page.access : "private";
 
   const invite = (entry: { kind: "person" | "team"; id: string }, add: boolean) => {
-    setQuery("");
     void run({ kind: "invites", invites: withInvite(invites, entry, add) });
   };
   const choose = (next: PageAccess) => {
@@ -146,72 +130,21 @@ export function PageSharePopover({ page, version, linkOff, onChange, onClose, cl
       </div>
 
       {organization && (
-        <div className="relative mb-3">
-          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} maxLength={200}
-            placeholder={t("pages.share.add")} aria-label={t("pages.share.add")} data-page-share-search
-            className="w-full rounded-xl border border-hairline/50 bg-inset px-3 py-2 text-[13px] placeholder:text-ink-tertiary focus:border-accent/60 focus:outline-none" />
-          {query.trim() && (
-            <ul role="listbox" aria-label={t("pages.share.add")} className="absolute inset-x-0 top-full z-[1] mt-1 max-h-64 overflow-y-auto rounded-xl border border-hairline/50 bg-elevated p-1 shadow-xl">
-              {personCandidates.map((person: OrgDirectoryPerson) => (
-                <li key={person.principalId}>
-                  <button type="button" role="option" aria-selected="false" disabled={busy} onClick={() => invite({ kind: "person", id: person.principalId }, true)}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-hover disabled:opacity-40">
-                    <Avatar name={person.name || person.login} {...(person.avatarUrl ? { url: person.avatarUrl } : {})} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px]">{person.name || person.login}</span>
-                      {person.email && <span className="block truncate text-[11.5px] text-ink-secondary">{person.email}</span>}
-                    </span>
-                  </button>
-                </li>
-              ))}
-              {groupCandidates.map((team) => (
-                <li key={team.id}>
-                  <button type="button" role="option" aria-selected="false" disabled={busy} onClick={() => invite({ kind: "team", id: team.id }, true)}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-hover disabled:opacity-40">
-                    <Avatar name={team.name} team />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px]">{team.name}</span>
-                      <span className="block truncate text-[11.5px] text-ink-secondary">{t("pages.share.group", { count: String(new Set([...team.members, ...team.managers]).size) })}</span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-              {directory && personCandidates.length === 0 && groupCandidates.length === 0 && <li className="px-2 py-1.5 text-[12.5px] text-ink-secondary">{t("pages.share.noMatch")}</li>}
-            </ul>
-          )}
-        </div>
+        <ShareRecipientSearch directory={directory} value={invites} viewerId={viewerId} disabled={busy} className="mb-3"
+          label={t("pages.share.add")} teamLine={(count) => t("pages.share.group", { count: String(count) })}
+          onAdd={(entry) => invite(entry, true)} inputProps={{ "data-page-share-search": "" }}
+          inputClassName="w-full rounded-xl border border-hairline/50 bg-inset px-3 py-2 text-[13px] placeholder:text-ink-tertiary focus:border-accent/60 focus:outline-none"
+          menuClassName="rounded-xl border border-hairline/50" />
       )}
 
       <ul aria-label={t("pages.share.people")} className="mb-3 flex flex-col gap-1.5">
         <li className="flex items-center gap-2.5">
-          <Avatar name={ownerName} {...(viewerId && people.get(viewerId.toLowerCase())?.avatarUrl ? { url: people.get(viewerId.toLowerCase())!.avatarUrl! } : {})} />
+          <ShareAvatar name={ownerName} {...(viewerId && people.get(viewerId.toLowerCase())?.avatarUrl ? { url: people.get(viewerId.toLowerCase())!.avatarUrl! } : {})} />
           <span className="min-w-0 flex-1 truncate text-[13px]">{ownerName}</span>
           <span className="text-[12px] text-ink-secondary">{t("pages.share.owner")}</span>
         </li>
-        {invites.people.map((id) => {
-          const person = people.get(id.toLowerCase());
-          const name = person?.name || person?.login || t("pages.share.someone");
-          return (
-            <li key={`p:${id}`} data-page-invite={id} className="flex items-center gap-2.5">
-              <Avatar name={name} {...(person?.avatarUrl ? { url: person.avatarUrl } : {})} />
-              <span className="min-w-0 flex-1 truncate text-[13px]" title={person?.email}>{name}</span>
-              <button type="button" disabled={busy} aria-label={t("pages.share.remove", { name })} title={t("pages.share.remove", { name })} onClick={() => invite({ kind: "person", id }, false)}
-                className="rounded-full p-1 text-ink-secondary hover:bg-hover hover:text-ink disabled:opacity-40"><X size={13} /></button>
-            </li>
-          );
-        })}
-        {invites.teams.map((id) => {
-          const team = teams.get(id.toLowerCase());
-          const name = team?.name || t("pages.share.someGroup");
-          return (
-            <li key={`t:${id}`} data-page-invite={id} className="flex items-center gap-2.5">
-              <Avatar name={name} team />
-              <span className="min-w-0 flex-1 truncate text-[13px]">{name}</span>
-              <button type="button" disabled={busy} aria-label={t("pages.share.remove", { name })} title={t("pages.share.remove", { name })} onClick={() => invite({ kind: "team", id }, false)}
-                className="rounded-full p-1 text-ink-secondary hover:bg-hover hover:text-ink disabled:opacity-40"><X size={13} /></button>
-            </li>
-          );
-        })}
+        <ShareRecipientRows directory={directory} value={invites} disabled={busy} unknownTeam={t("pages.share.someGroup")} rowAttribute="data-page-invite"
+          onRemove={(entry) => invite(entry, false)} />
       </ul>
 
       <fieldset className="mb-3" disabled={busy}>

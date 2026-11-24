@@ -77,7 +77,7 @@ export function SwitchRow({
   );
 }
 
-type CountKey = "servers" | "people" | "devices" | "backups" | "turns" | "computers" | "entries" | "workspaces" | "profiles" | "ready" | "models";
+type CountKey = "servers" | "people" | "teams" | "devices" | "backups" | "turns" | "computers" | "entries" | "workspaces" | "profiles" | "ready" | "models";
 
 /** "1 person" / "3 people" for a collapsed card's summary, by the active
  * language's plural rule (French says "0 personne"). */

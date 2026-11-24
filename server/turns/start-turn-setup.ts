@@ -38,7 +38,6 @@ export function createSetupStartTurn(host: StartTurnHost) {
     engineRead,
     expandLearnTurnText,
     expandNativeSkillCommand,
-    expandSetupTurnText,
     expandSkillCommandTurnText,
     forgetThreadEngineSessions,
     listNativeSkillsForTurn,
@@ -283,17 +282,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     state.sessionConfig = (soul: string | undefined) =>
       createHash("sha256").update(JSON.stringify([...persistentConfig, soul])).digest("hex").slice(0, 16);
     state.plannedConfig = state.sessionConfig(state.bot.soul);
-    // Agent-tool gate shared by skill authoring, the /setup turn-text rewrite,
-    // the setup prompt block, and the peer-comms integration below: a driver
-    // that never mounts agent tools (or a turn already at the comms-depth cap)
-    // must not be steered into — or told about — tools it cannot call.
     state.skillAuthoring = personalFeatureOn("skillAuthoring", skillAuthoringEnabled(cfg), vaultPrincipalForThread(state.threadId)) && state.peerToolsMounted;
-    // Setup mode's turn-text rewrite (parseSetupCommand/expandSetupTurnText)
-    // must not run ahead of a system prompt that can't explain it: a driver
-    // without agent tools sees the user's literal "/setup ..." message. The
-    // gate on whether the coaching block itself is active — setupModeActive,
-    // which also depends on the bot's soul/description — is decided below,
-    // from the same bot snapshot the prompt's soul is built from.
     // A `/name` turn for one of the bot's enabled skills reads as a plain
     // request to follow that SKILL.md (shared/skill-command.ts). An engine
     // with workspace files is pointed at the file. An API engine (or any
@@ -321,9 +310,8 @@ export function createSetupStartTurn(host: StartTurnHost) {
         listNativeSkillsForTurn(state.bot, state.threadId, state.instance).filter((skill: { name: string }) =>
           !resolveBotSkills(state.bot.id, assignedForTurn).some((entry: { name: string; enabled: boolean }) => entry.name === skill.name && !entry.enabled)),
       );
-    const setupText = state.peerToolsMounted ? expandSetupTurnText(skillCommandText) : skillCommandText;
     const repliedText = promptWithReply(
-      state.skillAuthoring ? expandLearnTurnText(setupText) : setupText,
+      state.skillAuthoring ? expandLearnTurnText(skillCommandText) : skillCommandText,
       state.opts?.replyTo,
       botUserName(state.bot),
     );

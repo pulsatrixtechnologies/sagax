@@ -64,7 +64,6 @@ export function createComputerMountStartTurn(host: StartTurnHost) {
     runLifecycleEvent,
     sameOwnerRosterMember,
     savedSteps,
-    setupModeActive,
     shouldMountLocalComputer,
     store,
     surfaceOfComputerKind,
@@ -329,17 +328,7 @@ export function createComputerMountStartTurn(host: StartTurnHost) {
     // Mint the browser bearer at the last possible moment. The desktop
     // registration is asynchronous, so validate this exact setup claim
     // again inside browserIntegration before the capability is published.
-    // Also the one bot snapshot setupModeActive and the prompt's soul
-    // (below) share, so a soul saved mid-dispatch is seen by both instead
-    // of the two disagreeing about whether setup mode is still active.
     state.liveBot = store.bot(state.bot.id);
-    state.setupMode =
-      state.peerToolsMounted &&
-      setupModeActive({
-        soul: state.liveBot?.soul ?? state.bot.soul,
-        description: state.liveBot?.description ?? state.bot.description,
-        text: state.providerText
-      });
     if (state.liveBot && state.instance.adapter.capabilities.dataMcp === true) {
       const data = dataIntegration(state.bot.id, { threadId: state.threadId, generation: state.dispatchClaimId });
       if (data) state.integrations.data = data;

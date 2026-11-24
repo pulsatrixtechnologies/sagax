@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync 
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import type { ModelCatalog } from "../../contracts.ts";
+import type { ModelCatalog, TurnAccessInput } from "../../contracts.ts";
 import { resolveCli } from "../../procs.ts";
 import { createAcpDriver, type AcpConfig, type AcpSupport } from "./core.ts";
 import { clineFallbackCatalog, clineCatalogFromSession, clineTurnModel } from "./cline-models.ts";
@@ -134,7 +134,10 @@ export const ClineAgentDriver = {
       });
       const instance = await driver.create(input);
       Object.defineProperty(instance, "models", { enumerable: true, get: () => catalogs.get(undefined) ?? MODELS });
-      instance.modelsForAccess = async (access) => catalogs.get(access.identity) ?? MODELS;
+      Object.defineProperty(instance, "modelsForAccess", {
+        enumerable: true,
+        value: async (access: TurnAccessInput) => catalogs.get(access.identity) ?? MODELS,
+      });
       const dispose = instance.dispose;
       instance.dispose = async () => {
         try { await dispose(); } finally { cleanup(); }

@@ -22,6 +22,14 @@ vi.mock("@/lib/use-side-transcript", () => ({
   useSideTranscript: () => ({ ...transcript, activeLeafId: null, loaded: true, hasMore: false, loadingOlder: false, loadOlder: () => {} }),
 }));
 
+// The store, when a case gives one (#5233): the sheet reads the teammate's
+// live thread from it and stops its turn through it.
+const fixture = vi.hoisted(() => ({ store: undefined as undefined | { state: { bots: unknown[]; config: null }; dispatch: (action: unknown) => void } }));
+vi.mock("@/state/store", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/state/store")>(),
+  useStoreOptional: () => fixture.store,
+}));
+
 const bot = (id: string, name: string, color: Bot["color"], title = ""): Bot => ({
   id, name, threadId: `${id}-main`, title, description: "", color, unread: false, notifications: true,
   messages: [], modelSelection: { instanceId: "fake", model: "test" }, tasks: [],
@@ -71,6 +79,60 @@ describe("TeammateExchangeSheet", () => {
     expect(close.textContent).toBe("Close Chat");
     await act(async () => close.click());
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  // #5233: the person can stop the teammate's turn from the exchange view.
+  describe("Stop while the teammate's turn runs", () => {
+    const owner = bot("boss", "Boss", "blue");
+    const working = (state: Partial<NonNullable<Bot["tasks"]>[number]>): Bot => ({
+      ...bot("orla", "Orla", "orange"),
+      tasks: [{ threadId: "orla-work", title: "Work", createdAt: now, ...state } as NonNullable<Bot["tasks"]>[number]],
+    });
+    const open = async (teammate: Bot, footer?: ReturnType<typeof createElement>) => {
+      const dispatch = vi.fn();
+      fixture.store = { state: { bots: [owner, teammate], config: null }, dispatch };
+      await act(async () => {
+        root.render(createElement(TeammateExchangeSheet, {
+          owner, teammate: { id: "orla", name: "Orla", color: "orange" }, threadId: "orla-work",
+          bots: [owner, teammate], footer, onClose: () => {},
+        }));
+      });
+      return { sheet: host.querySelector<HTMLElement>("[data-testid=bot-exchange-sheet]")!, dispatch };
+    };
+    afterEach(() => {
+      fixture.store = undefined;
+    });
+
+    it("shows Stop beside Close Chat and stops that thread's turn, not the bot's other work", async () => {
+      const { sheet, dispatch } = await open(working({ busy: true, activity: "working" }));
+      const stop = sheet.querySelector<HTMLButtonElement>("[data-testid=bot-exchange-stop]")!;
+      expect(stop.textContent).toBe("Stop");
+      // in the footer row, before Close Chat
+      const row = sheet.querySelector("[data-exchange-footer]")!;
+      const pills = [...row.querySelectorAll("button")].map((button) => button.getAttribute("data-testid"));
+      expect(pills).toEqual(["bot-exchange-stop", "bot-exchange-close"]);
+      await act(async () => stop.click());
+      expect(dispatch).toHaveBeenCalledExactlyOnceWith({ type: "interrupt", botId: "orla", threadId: "orla-work" });
+    });
+
+    it("keeps the row's other actions (older and newer requests) beside Stop", async () => {
+      const { sheet } = await open(working({ busy: true }), createElement("button", { type: "button", "data-testid": "older" }, "Older request"));
+      const pills = [...sheet.querySelector("[data-exchange-footer]")!.querySelectorAll("button")].map((button) => button.getAttribute("data-testid"));
+      expect(pills).toEqual(["bot-exchange-stop", "older", "bot-exchange-close"]);
+    });
+
+    it("shows no Stop once the turn is over, when another thread of the bot works, or without the store", async () => {
+      expect((await open(working({ busy: false, activity: "idle" }))).sheet.querySelector("[data-testid=bot-exchange-stop]")).toBeNull();
+      const elsewhere: Bot = { ...bot("orla", "Orla", "orange"), busy: true, tasks: [{ threadId: "orla-other", title: "Other", createdAt: now, busy: true } as NonNullable<Bot["tasks"]>[number]] };
+      expect((await open(elsewhere)).sheet.querySelector("[data-testid=bot-exchange-stop]")).toBeNull();
+      fixture.store = undefined;
+      await act(async () => {
+        root.render(createElement(TeammateExchangeSheet, {
+          owner, teammate: { id: "orla", name: "Orla", color: "orange" }, threadId: "orla-work", bots: [owner, working({ busy: true })], onClose: () => {},
+        }));
+      });
+      expect(host.querySelector("[data-testid=bot-exchange-stop]")).toBeNull();
+    });
   });
 
   // #4043: a page-long subject used to fill the sheet and hide the lines.

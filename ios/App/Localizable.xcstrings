@@ -56011,6 +56011,28 @@
         }
       }
     },
+    "Show Bot threads": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Bot threads"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher les fils entre bots"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar conversas entre bots"
+          }
+        }
+      }
+    },
     "Show a path": {
       "localizations": {
         "en": {

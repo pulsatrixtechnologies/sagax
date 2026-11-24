@@ -236,6 +236,29 @@ final class SidebarPrefsTests: XCTestCase {
         return state
     }
 
+    func testBotThreadSectionFollowsDesktopPreference() throws {
+        var state = try layoutState()
+        var chat = try XCTUnwrap(state.rooms.first)
+        chat.id = "bot-chat"
+        chat.dm = true
+        state.rooms.append(chat)
+
+        let key = "sagax.sidebarBotThreads.v1"
+        var written = SidebarPrefs()
+        written.setShowBotThreads(true)
+        XCTAssertEqual(written.values[key], "on")
+        written.setShowBotThreads(false)
+        XCTAssertEqual(written.values[key], "off")
+
+        for value in [nil, "off", "on", "invalid"] as [String?] {
+            let prefs = SidebarPrefs(values: value.map { [key: $0] } ?? [:])
+            let layout = state.sidebarLayout(prefs: prefs, personal: nil, viewerId: "me")
+            XCTAssertEqual(layout.botChats.map(\.id), value == "on" ? ["bot-chat"] : [])
+            XCTAssertEqual(layout.sectionIds.contains(SidebarSectionID.botChats), value == "on")
+            XCTAssertEqual(layout.unsectionedChannels.map(\.id), ["r"])
+        }
+    }
+
     func testAPinnedPrimaryBotJoinsThePinnedSection() throws {
         var state = try layoutState()
         state.bots[2].chiefOfStaff = true

@@ -365,6 +365,11 @@ struct DesktopAppearanceSettings: View {
                     prefs.setShowSuggestions(session, !prefs.showSuggestions)
                 }
             }
+            DesktopCompactRow(Text("Show Bot threads"), identifier: "sidebarBotThreads") {
+                DesktopSwitch(isOn: prefs.prefs.showBotThreads, label: Text("Show Bot threads"), identifier: "desktop-settings.show-bot-threads") {
+                    prefs.update(session) { $0.setShowBotThreads(!$0.showBotThreads) }
+                }
+            }
             DesktopSidebarHiddenFold()
         }
         DesktopSettingsGroup(Text("Mascots"), identifier: "mascots") {

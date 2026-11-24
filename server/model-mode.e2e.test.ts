@@ -28,7 +28,7 @@ it("stores a mode, names what each mode runs, and runs the turn on it", () => fi
 
   const preview = await f.api(`/api/bots/${f.bot.id}/auto-model`, undefined, "GET");
   expect(Object.keys(preview.modes)).toEqual(["auto", "fast", "expert", "heavy", "build"]);
-  expect(preview.modes.build).toMatchObject({ mode: "build", pick: { model: expect.any(String) } });
+  expect(preview.modes.build).toMatchObject({ mode: "build", pick: { model: "claude-sonnet-5-5" } });
   expect(preview.modes.fast).toMatchObject({ pick: { model: "claude-haiku-5-5" } });
   expect(preview.modes.expert.pick.model).toBe("claude-fable-5-2");
   // #5089: one account here: Heavy seats its two strongest models

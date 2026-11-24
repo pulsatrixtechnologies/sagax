@@ -16,13 +16,13 @@ describe("MiniMax live model list", () => {
       object: "list",
       data: [
         { id: "MiniMax-M3", object: "model", owned_by: "minimax" },
-        { id: "MiniMax-M3.1-Flash", object: "model" },
+        { id: "MiniMax-Future-Fixture", object: "model" },
         { id: "  ", object: "model" },
       ],
     }, FALLBACK);
-    expect(options?.map((option) => option.id)).toEqual(["MiniMax-M3", "MiniMax-M3.1-Flash"]);
+    expect(options?.map((option) => option.id)).toEqual(["MiniMax-M3", "MiniMax-Future-Fixture"]);
     expect(options?.[0]).toMatchObject({ contextWindow: 1_000_000, custom: true });
-    expect(options?.[1]).toMatchObject({ id: "MiniMax-M3.1-Flash", label: "MiniMax-M3.1-Flash", custom: true });
+    expect(options?.[1]).toMatchObject({ id: "MiniMax-Future-Fixture", label: "MiniMax-Future-Fixture", custom: true });
   });
 
   it("fetches GET {base}/models, caches it, and keeps the written list when the read fails", async () => {

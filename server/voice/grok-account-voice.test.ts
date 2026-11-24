@@ -144,6 +144,80 @@ describe("every refusal reason the server computes is said in the person's langu
       .toContain("your voice key and your xAI key in Perspicax are out of credits");
   });
 
+  // The organization's Grok account (source `org-account`) is given by the
+  // organization, like its key: the person is never told it is their own key,
+  // nor asked to add credits to it or to change a key in their settings.
+  it("the organization's Grok account is named as the organization's, never as the person's key", () => {
+    expect(realtimeKeyRefusedCallReason([TRIED("org-account", "quota")], "fr")).toBe(
+      `Aucun appel : le compte Grok de ton organisation n'a plus de crédits. Ce compte n'est pas le tien : demande à un administrateur de ton organisation de le vérifier. Tu peux aussi connecter ton propre compte Grok dans ${FRENCH_PATH}, puis rappeler.`,
+    );
+    expect(realtimeKeyRefusedCallReason([TRIED("org-account", "key")], "fr")).toBe(
+      `Aucun appel : le compte Grok de ton organisation a été refusé. Ce compte n'est pas le tien : demande à un administrateur de ton organisation de le vérifier. Tu peux aussi connecter ton propre compte Grok dans ${FRENCH_PATH}, puis rappeler.`,
+    );
+    expect(realtimeKeyRefusedCallReason([TRIED("org-account", "quota")], "en")).toBe(
+      `No call was placed: your organization's Grok account is out of credits. That account is not yours to fix: ask an administrator of your organization to check it. You can also connect your own Grok account in ${ENGLISH_PATH}, then call back.`,
+    );
+    expect(realtimeKeyRefusedCallReason([TRIED("org-account", "key")], "en")).toBe(
+      `No call was placed: your organization's Grok account was refused. That account is not yours to fix: ask an administrator of your organization to check it. You can also connect your own Grok account in ${ENGLISH_PATH}, then call back.`,
+    );
+    for (const language of ["fr", "en"] as const) {
+      for (const rows of [
+        [TRIED("org-account", "quota")],
+        [TRIED("org-account", "key")],
+        [TRIED("org-account", "key"), TRIED("org-key", "quota")],
+        [TRIED("org-account", "quota"), TRIED("org-key", "quota")],
+      ]) {
+        const said = realtimeKeyRefusedCallReason(rows, language);
+        // never the person's own key, never a gesture on a credential that is not theirs
+        expect(said, JSON.stringify(rows)).not.toMatch(/ta clé xAI (a|n'a)|your xAI key (is|was)|Ajoute des crédits|Add credits|change la clé|change the key|Ce n'est pas ta clé|refusée\. Ce compte/);
+        expect(said, JSON.stringify(rows)).toMatch(/administrateur de ton organisation|administrator of your organization/);
+      }
+    }
+  });
+
+  it("the organization's account and its key both tried: each named with its own state and agreement", () => {
+    expect(realtimeKeyRefusedCallReason([TRIED("org-account", "key"), TRIED("org-key", "quota")], "fr")).toBe(
+      `Aucun appel : le compte Grok de ton organisation a été refusé, et la clé xAI de ton organisation n'a plus de crédits. Ni l'un ni l'autre n'est à toi : demande à un administrateur de ton organisation. Tu peux aussi connecter ton propre compte Grok ou ajouter ta propre clé xAI dans ${FRENCH_PATH}, puis rappeler.`,
+    );
+    expect(realtimeKeyRefusedCallReason([TRIED("org-account", "quota"), TRIED("org-key", "quota")], "fr"))
+      .toContain("le compte Grok de ton organisation et la clé xAI de ton organisation n'ont plus de crédits.");
+    expect(realtimeKeyRefusedCallReason([TRIED("org-account", "key"), TRIED("org-key", "key")], "fr"))
+      .toContain("le compte Grok de ton organisation et la clé xAI de ton organisation ont été refusés.");
+    expect(realtimeKeyRefusedCallReason([TRIED("org-account", "key"), TRIED("org-key", "quota")], "en")).toBe(
+      `No call was placed: your organization's Grok account was refused, and your organization's xAI key is out of credits. Neither is yours to fix: ask an administrator of your organization. You can also connect your own Grok account or add your own xAI key in ${ENGLISH_PATH}, then call back.`,
+    );
+  });
+
+  it("a key of the person's own and the organization's account: the person fixes the key, an administrator the account", () => {
+    expect(realtimeKeyRefusedCallReason([TRIED("voice-key", "key"), TRIED("org-account", "quota")], "fr")).toBe(
+      `Aucun appel : ta clé vocale a été refusée, et le compte Grok de ton organisation n'a plus de crédits. Ajoute des crédits à ce compte xAI, ou change la clé dans ${FRENCH_PATH}, puis rappelle. Pour ce qui vient de ton organisation, demande à un de ses administrateurs.`,
+    );
+    expect(realtimeKeyRefusedCallReason([TRIED("voice-key", "key"), TRIED("org-account", "quota")], "en")).toBe(
+      `No call was placed: your voice key was refused, and your organization's Grok account is out of credits. Add credits to that xAI account, or change the key in ${ENGLISH_PATH}, then call back. For what your organization provides, ask one of its administrators.`,
+    );
+  });
+
+  it("a key of the person's own, then the organization's account and key in two states: one list, a single \"et\"", () => {
+    const rows = [TRIED("voice-key", "key"), TRIED("org-account", "key"), TRIED("org-key", "quota")];
+    expect(realtimeKeyRefusedCallReason(rows, "fr")).toContain(
+      "Aucun appel : ta clé vocale a été refusée, le compte Grok de ton organisation a été refusé, et la clé xAI de ton organisation n'a plus de crédits. ",
+    );
+    expect(realtimeKeyRefusedCallReason(rows, "en")).toContain(
+      "No call was placed: your voice key was refused, your organization's Grok account was refused, and your organization's xAI key is out of credits. ",
+    );
+  });
+
+  it("the person's account tried, then the organization's: the second half names that account, never an API key", () => {
+    expect(noCallReason([TRIED("grok-account", "quota"), TRIED("org-account", "quota")], "fr"))
+      .toBe("Aucun appel : le compte Grok connecté n'a plus de crédit, le compte Grok de ton organisation n'a plus de crédit, et il n'y a pas de clé API xAI.");
+    expect(noCallReason([TRIED("grok-account", "key"), TRIED("org-account", "quota"), TRIED("org-key", "key")], "fr"))
+      .toBe("Aucun appel : le compte Grok connecté a été refusé, le compte Grok de ton organisation n'a plus de crédit, et la clé API xAI a été refusée.");
+    expect(noCallReason([TRIED("grok-account", "quota"), TRIED("org-account", "key")], "en"))
+      .toBe("No call was placed: the connected Grok account is out of credits, your organization's Grok account was refused, and there is no xAI API key.");
+    expect(noCallReason([TRIED("grok-account", "quota"), TRIED("org-account", "quota"), TRIED("org-key", "quota")], "en"))
+      .toBe("No call was placed: the connected Grok account is out of credits, your organization's Grok account is out of credits, and the xAI API key is out of credits.");
+  });
+
   it("a French sentence never carries an English menu path", () => {
     const sentences = [
       realtimeNotOnServerCallReason("fr"),

@@ -629,6 +629,83 @@ describe("voice mode uses the key that has funds (2026-10-28)", () => {
     expect(out.ok && out.keys[0]).toMatchObject({ via: "speaker-key", source: "grok-account", last4: "c4Dd", payerPrincipalId: "p-ada" });
   });
 
+  const ORG_ACCOUNT = "grk-ORGACCOUNTfake5Ee6Ff7Gg8Hh";
+
+  it("places the organization's Grok account after the person's own forms and before the organization's key (#5200)", async () => {
+    const out = await resolveVoiceKeys({
+      organization: true, serverKey: () => ORG_KEY, hasOwnKey: () => true,
+      resolveOwnKey: async () => ({ ok: true, key: OWN_KEY, fingerprint: "fp" }), personalKey: () => MINE_KEY,
+      grokAccount: async () => ACCOUNT, orgAccount: async () => ORG_ACCOUNT,
+    }, { principalId: "p-ada", sub: "sub-ada" });
+    expect(out.ok && out.keys.map((key) => key.source)).toEqual(["grok-account", "voice-key", "perspicax-key", "org-account", "org-key"]);
+    // the organization pays, and a sign-in that renews has no last four to show
+    expect(out.ok && out.keys[3]).toEqual({ key: ORG_ACCOUNT, via: "org-key", source: "org-account", last4: null });
+  });
+
+  it("serves a person who has nothing of their own on the organization's Grok account, with no API key at all (#5200)", async () => {
+    const { call, xai } = harness({ serverKey: () => undefined, orgAccount: async () => ORG_ACCOUNT });
+    const status = await call({ method: "GET", path: "/api/bots/b-quasar/voice/status" });
+    expect(status.body).toMatchObject({ available: true, via: "org-key", key: { source: "org-account", last4: null }, keys: [{ source: "org-account", last4: null }] });
+    const out = await call({ method: "POST", path: "/api/bots/b-quasar/voice/speak", body: { text: "Bonjour." } });
+    expect(out.status).toBe(200);
+    expect(xai.synthesize.mock.calls.map((args) => args[2])).toEqual([ORG_ACCOUNT]);
+    expect(JSON.stringify([status.body, out.body ?? null])).not.toContain(ORG_ACCOUNT);
+  });
+
+  it("gives the organization's Grok account only to the people the organization's voice was given to, like its key (#5200)", async () => {
+    const base = { organization: true, serverKey: () => ORG_KEY, hasOwnKey: () => false, resolveOwnKey: async () => ({ ok: false as const, error: "no_key" as const }), orgAccount: async () => ORG_ACCOUNT };
+    const refused = await resolveVoiceKeys({ ...base, serverKeyAllowed: () => false }, { principalId: "p-ada" });
+    expect(refused).toEqual({ ok: false, cause: "server_engine_not_allowed" });
+    // the account alone, refused the same way: never "no credentials" when one exists
+    const accountOnly = await resolveVoiceKeys({ ...base, serverKey: () => undefined, serverKeyAllowed: () => false }, { principalId: "p-ada" });
+    expect(accountOnly).toEqual({ ok: false, cause: "server_engine_not_allowed" });
+    const given = await resolveVoiceKeys({ ...base, serverKeyAllowed: () => true }, { principalId: "p-ada" });
+    expect(given.ok && given.keys.map((key) => key.source)).toEqual(["org-account", "org-key"]);
+  });
+
+  it("never lists the same sign-in twice when the person's own account is the organization's (#5200)", async () => {
+    const out = await resolveVoiceKeys({
+      organization: true, serverKey: () => ORG_KEY, hasOwnKey: () => false, resolveOwnKey: async () => ({ ok: false as const, error: "no_key" as const }),
+      grokAccount: async () => ACCOUNT, orgAccount: async () => ACCOUNT,
+    }, { principalId: "p-ada" });
+    expect(out.ok && out.keys.map((key) => key.source)).toEqual(["grok-account", "org-key"]);
+  });
+
+  it("reads the organization's Grok account once per resolution, given or refused (#5200)", async () => {
+    const base = { organization: true, hasOwnKey: () => false, resolveOwnKey: async () => ({ ok: false as const, error: "no_key" as const }) };
+    for (const serverKey of [() => ORG_KEY, () => undefined]) {
+      for (const allowed of [true, false]) {
+        for (const value of [ORG_ACCOUNT, undefined]) {
+          const orgAccount = vi.fn(async () => value);
+          await resolveVoiceKeys({ ...base, serverKey, serverKeyAllowed: () => allowed, orgAccount }, { principalId: "p-ada" });
+          expect([allowed, value, orgAccount.mock.calls.length <= 1]).toEqual([allowed, value, true]);
+        }
+      }
+    }
+  });
+
+  it("a disabled person and a solo server get no organization account (#5200)", async () => {
+    const base = { serverKey: () => ORG_KEY, hasOwnKey: () => false, resolveOwnKey: async () => ({ ok: false as const, error: "no_key" as const }), orgAccount: vi.fn(async () => ORG_ACCOUNT) };
+    expect(await resolveVoiceKeys({ ...base, organization: true }, { principalId: "p-ada", disabled: true })).toEqual({ ok: false, cause: "payer_disabled" });
+    const solo = await resolveVoiceKeys({ ...base, organization: false }, { principalId: "" });
+    expect(solo.ok && solo.keys.map((key) => key.source)).toEqual(["server"]);
+    expect(base.orgAccount).not.toHaveBeenCalled();
+  });
+
+  it("under a policy, moves from the person's account to the organization's account without asking, and asks only before the paid key (#5200)", async () => {
+    const policy = { aspect: "voice" as const, personalKeysEnabled: true, allowPersonalWhenActingAs: false, paidKeyConfirmed: false };
+    const base = { organization: true, serverKey: () => ORG_KEY, hasOwnKey: () => false, resolveOwnKey: async () => ({ ok: false as const, error: "no_key" as const }), orgAccount: async () => ORG_ACCOUNT };
+    const both = await resolveVoiceKeys({ ...base, grokAccount: async () => ACCOUNT, credentialPolicy: () => policy }, { principalId: "p-ada" });
+    expect(both.ok && both.keys.map((key) => key.source)).toEqual(["grok-account", "org-account"]);
+    expect(both).toMatchObject({ confirm: { from: "personal-account", to: "org-key", form: "org-key", via: "org-key", aspect: "voice" } });
+    const alone = await resolveVoiceKeys({ ...base, credentialPolicy: () => policy }, { principalId: "p-ada" });
+    expect(alone.ok && alone.keys.map((key) => key.source)).toEqual(["org-account"]);
+    expect(alone).toMatchObject({ confirm: { from: "org-account", to: "org-key" } });
+    // Act as may not use the person's own account: the organization's still serves
+    const acting = await resolveVoiceKeys({ ...base, grokAccount: async () => ACCOUNT, credentialPolicy: () => ({ ...policy, actingAs: "service-desk" }) }, { principalId: "p-ada" });
+    expect(acting.ok && acting.keys.map((key) => key.source)).toEqual(["org-account"]);
+  });
+
   it("speaks on the API key when the connected account is out of credits", async () => {
     const { call, xai } = harness({ grokAccount: async () => ACCOUNT, ownKeys: { "sub-ada": OWN_KEY } });
     xai.synthesize.mockImplementation(async (_text, _voice, key) => {

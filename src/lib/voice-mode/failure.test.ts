@@ -185,8 +185,13 @@ describe("the key a voice failure is about (2026-10-28)", () => {
       .toBe("your xAI key in Perspicax ···c0Je was refused (key rejected). The voice now runs on the organization's xAI key.");
   });
 
+  it("names the organization's Grok account as its own source, never as a key (#5200)", () => {
+    expect(voiceKeyLabelKey("org-account")).toBe("voiceMode.key.orgAccount");
+    expect(voiceKeyActionKey("org-account")).toBe("voiceMode.keyAction.orgAccount");
+  });
+
   it("every key line exists in every language pack that has the family", () => {
-    for (const source of ["grok-account", "voice-key", "perspicax-key", "org-key", "server"] as const) {
+    for (const source of ["grok-account", "voice-key", "perspicax-key", "org-account", "org-key", "server"] as const) {
       expect(en).toHaveProperty(voiceKeyLabelKey(source));
       expect(fr).toHaveProperty(voiceKeyLabelKey(source));
       expect(en).toHaveProperty(voiceKeyActionKey(source));

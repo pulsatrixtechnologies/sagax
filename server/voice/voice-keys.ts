@@ -7,6 +7,9 @@
 //      voice keys, server/voice/person-voice-keys.ts): `voice-key`
 //   2. their own xAI key in Perspicax (Providers > Grok): `perspicax-key`
 //   3. the organization's key, when it was given to them: `org-key`
+// and two accounts, which are sign-ins and never keys: their own connected
+// Grok account first of all (`grok-account`), and the organization's Grok
+// account just before the organization's key (`org-account`, #5200).
 // A solo server has the server's key only: `server`.
 //
 // Every voice request starts with the first key. When xAI refuses it for
@@ -61,14 +64,14 @@ export function keyLast4(key: string): string | null {
   return key.length >= 12 ? key.slice(-4) : null;
 }
 
-/** How a credential is presented to xAI: a connected Grok account speaks
- * through the CLI voice host with its token header, every other source is
- * an API key on api.x.ai (server/tts/grok.ts withVoiceAuth). One rule for
- * the app's own voice and for the keys a phone line is given
- * (server/org/org-link-routes.ts). */
+/** How a credential is presented to xAI: a connected Grok account, the
+ * person's or the organization's, speaks through the CLI voice host with its
+ * token header, every other source is an API key on api.x.ai
+ * (server/tts/grok.ts withVoiceAuth). One rule for the app's own voice and
+ * for the keys a phone line is given (server/org/org-link-routes.ts). */
 export type VoiceKeyAuth = "grok-account" | "api-key";
 export function voiceKeyAuth(candidate: { source: string }): VoiceKeyAuth {
-  return candidate.source === "grok-account" ? "grok-account" : "api-key";
+  return candidate.source === "grok-account" || candidate.source === "org-account" ? "grok-account" : "api-key";
 }
 
 /** A refusal xAI gave one key, remembered for a while. */
@@ -283,7 +286,8 @@ export function describeVoiceKey(candidate: VoiceKeyRef): string {
   const name = candidate.source === "grok-account" ? "connected Grok account"
     : candidate.source === "voice-key" ? "person's voice key"
       : candidate.source === "perspicax-key" ? "person's Perspicax key"
-        : candidate.source === "org-key" ? "organization's key" : "server's key";
+        : candidate.source === "org-account" ? "organization's Grok account"
+          : candidate.source === "org-key" ? "organization's key" : "server's key";
   const named = candidateProvider(candidate) === "xai" ? name : `${name} (${providerName(candidate)})`;
   return candidate.last4 ? `${named} ···${candidate.last4}` : named;
 }

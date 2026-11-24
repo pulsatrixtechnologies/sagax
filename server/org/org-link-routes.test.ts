@@ -262,6 +262,103 @@ describe("POST /api/org/link/grok-sign-in (#4192)", () => {
 // app's own voice would use for the person who owns it. The route answers
 // what `resolveVoiceKeys` gives for that person: the function every voice
 // route of the app calls, here with fake keys of two people.
+describe("POST /api/org/link/grok-sign-in with org_account: the organization's own Grok account (#5200)", () => {
+  const ORG_ACCESS = `fake-org-grok-access-${"6".repeat(24)}`;
+  const EXPIRES = Date.parse("2026-11-23T20:00:00.000Z");
+  const servers: Server[] = [];
+  afterEach(async () => {
+    await Promise.all(servers.splice(0).map((server) => new Promise((resolve) => server.close(resolve))));
+  });
+
+  async function start(patch: Partial<OrgLinkRoutesOptions> = {}) {
+    const lines: string[] = [];
+    const routes = createOrgLinkRoutes({
+      linked: () => true,
+      linkTokenMatches: (token) => token === TOKEN,
+      scheduler: { request: () => "started" },
+      person: () => null,
+      grokSignIn: async () => ({ ok: false, error: "no_sign_in" }),
+      orgAccount: async () => ({ ok: true, accessToken: ORG_ACCESS, expiresAt: EXPIRES, principalId: "pr_ada", kind: "team" }),
+      log: (line) => lines.push(line),
+      ...patch,
+    });
+    const server = createServer((req, res) => {
+      void routes(req, res, new URL(req.url ?? "/", "http://localhost")).then((answered) => {
+        if (!answered) { res.writeHead(418); res.end(); }
+      });
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const call = async (body: unknown, token = TOKEN) => {
+      const response = await fetch(`${base}${GROK_SIGN_IN_PATH}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      return { status: response.status, body: await response.json().catch(() => null) as Record<string, unknown> | null, headers: response.headers };
+    };
+    return { lines, call };
+  }
+
+  it("answers the organization's account for the voice service's own use, with no person named", async () => {
+    const h = await start();
+    const answer = await h.call({ org_account: true });
+    expect(answer.status).toBe(200);
+    expect(answer.headers.get("cache-control")).toBe("no-store");
+    expect(answer.body).toEqual({ provider: "xai", access_token: ORG_ACCESS, expires_at: "2026-11-23T20:00:00.000Z" });
+    expect(h.lines).toEqual(["org link: the organization's Grok account (ok)"]);
+  });
+
+  it("tests it without ever answering the value: the state and the expiry only", async () => {
+    const h = await start();
+    const answer = await h.call({ org_account: "test" });
+    expect(answer.status).toBe(200);
+    expect(answer.body).toEqual({ provider: "xai", state: "ok", account_kind: "team", expires_at: "2026-11-23T20:00:00.000Z" });
+    expect(JSON.stringify(answer.body)).not.toContain(ORG_ACCESS);
+    // a personal account serves like a team's: its kind is told beside the state, never a refusal
+    const personal = await start({ orgAccount: async () => ({ ok: true, accessToken: ORG_ACCESS, expiresAt: EXPIRES, principalId: "pr_ada", kind: "personal" }) });
+    expect((await personal.call({ org_account: "test" })).body).toEqual({ provider: "xai", state: "ok", account_kind: "personal", expires_at: "2026-11-23T20:00:00.000Z" });
+    expect((await personal.call({ org_account: true })).body).toEqual({ provider: "xai", access_token: ORG_ACCESS, expires_at: "2026-11-23T20:00:00.000Z" });
+    for (const error of ["no_org_account", "unknown_person", "user_inactive", "no_sign_in", "sign_in_refused"] as const) {
+      const failing = await start({ orgAccount: async () => ({ ok: false, error }) });
+      expect((await failing.call({ org_account: "test" })).body).toEqual({ provider: "xai", state: error });
+    }
+  });
+
+  it("tests a person about to be named, and still never answers a value for a named person", async () => {
+    const asked: Array<string | undefined> = [];
+    const h = await start({ orgAccount: async (candidate) => { asked.push(candidate); return { ok: true, accessToken: ORG_ACCESS, expiresAt: null, principalId: "pr_ada", kind: "team" }; } });
+    expect((await h.call({ org_account: "test", sub: "sub-ada" })).body).toEqual({ provider: "xai", state: "ok", account_kind: "team" });
+    expect(asked).toEqual(["sub-ada"]);
+    // `true` with a person is the person's own sign-in route, as before: the account is not read
+    const person = await h.call({ org_account: true, sub: "sub-ada" });
+    expect([person.status, person.body]).toEqual([404, { error: "unknown_person" }]);
+    expect(asked).toEqual(["sub-ada"]);
+    expect((await h.call({ org_account: "test", sub: 7 })).status).toBe(400);
+  });
+
+  it("answers a stable code when there is none, or it cannot serve", async () => {
+    const codes = { no_org_account: 404, unknown_person: 404, no_sign_in: 404, user_inactive: 409, sign_in_refused: 409 } as const;
+    for (const [error, status] of Object.entries(codes)) {
+      const h = await start({ orgAccount: async () => ({ ok: false, error: error as keyof typeof codes }) });
+      const answer = await h.call({ org_account: true });
+      expect([error, answer.status, answer.body]).toEqual([error, status, { error }]);
+    }
+    const thrown = await start({ orgAccount: async () => { throw new Error(`boom ${ORG_ACCESS}`); } });
+    const answer = await thrown.call({ org_account: true });
+    expect([answer.status, answer.body]).toEqual([409, { error: "sign_in_refused" }]);
+    expect(thrown.lines.join("\n")).not.toContain(ORG_ACCESS);
+  });
+
+  it("takes the link token only, and an older server without the account keeps asking for a person", async () => {
+    const h = await start();
+    expect((await h.call({ org_account: true }, "wrong")).status).toBe(401);
+    const older = await start({ orgAccount: undefined });
+    expect([(await older.call({ org_account: true })).status, (await older.call({ org_account: true })).body]).toEqual([400, { error: "invalid_request" }]);
+  });
+});
+
 describe("POST /api/org/link/grok-sign-in with voice_keys: the app's own order for a phone line", () => {
   const ORG_KEY = "xai-ORGfake7Lm2Pq9Wz4Rt6Yb";
   const ADA_PERSPICAX = "xai-ADAfake3Kd8Hs1Vn5Xc0Je";
@@ -282,6 +379,8 @@ describe("POST /api/org/link/grok-sign-in with voice_keys: the app's own order f
     /** the people the organization's xAI voice was given to */
     orgVoice: Set<string>;
     orgKey: string | undefined;
+    /** the organization's Grok account, when it has one */
+    orgAccount?: string;
     perspicaxDown?: boolean;
     disabled?: Set<string>;
   }
@@ -322,6 +421,7 @@ describe("POST /api/org/link/grok-sign-in with voice_keys: the app's own order f
           serverKeyAllowed: (speaker) => w.orgVoice.has(speaker.principalId),
           personalKey: (speaker) => w.voiceKeys[speaker.principalId],
           grokAccount: (speaker) => w.grok[speaker.principalId],
+          orgAccount: () => w.orgAccount,
         }, speakerOf(principalId));
       },
       log: (line) => lines.push(line),
@@ -369,6 +469,24 @@ describe("POST /api/org/link/grok-sign-in with voice_keys: the app's own order f
       { source: "perspicax-key", auth: "api-key", key: ADA_PERSPICAX },
       { source: "org-key", auth: "api-key", key: ORG_KEY },
     ]);
+  });
+
+  it("hands a phone line the organization's Grok account as an account, before the organization's key (#5200)", async () => {
+    const ORG_GROK = "fake-org-grok-access-55556666";
+    const h = await start(world({ orgAccount: ORG_GROK, perspicaxKeys: {} }));
+    const answer = await h.call({ sub: "sub-ada", voice_keys: true });
+    expect(answer.body).toEqual({
+      provider: "xai",
+      voice_keys: [
+        { source: "org-account", auth: "grok-account", key: ORG_GROK },
+        { source: "org-key", auth: "api-key", key: ORG_KEY },
+      ],
+    });
+    expect(h.lines.join("\n")).toContain("org-account, org-key");
+    expect(h.lines.join("\n")).not.toContain(ORG_GROK);
+    // the same grant as the organization's key
+    const refused = await start(world({ orgAccount: ORG_GROK, perspicaxKeys: {}, orgVoice: new Set() }));
+    expect((await refused.call({ sub: "sub-ada", voice_keys: true })).body).toEqual({ provider: "xai", voice_keys: [], cause: "server_engine_not_allowed" });
   });
 
   it("keeps the app's rights: the organization's key only for a person it was given to", async () => {

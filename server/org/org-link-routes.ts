@@ -63,17 +63,19 @@
 // the app's rights. The answer is then what `resolveVoiceKeys`
 // (server/voice/voice-mode.ts) gives for that person, the function behind
 // every voice route of the app: their connected Grok account, their own
-// voice key, their own xAI key in Perspicax, then the organization's xAI key
-// when it was given to them. One order, written once, here.
+// voice key, their own xAI key in Perspicax, then the organization's Grok
+// account and the organization's xAI key when they were given to them. One
+// order, written once, here.
 //
 //   - request: JSON `{"sub": "<Perspicax user id>", "voice_keys": true}`;
 //     the same caller check, the same person rules (404 `unknown_person`,
 //     409 `user_inactive`);
 //   - 200 `{provider: "xai", voice_keys: [{source, auth, key}]}`, in the
 //     order to try them: `source` as the app names it (`grok-account`,
-//     `voice-key`, `perspicax-key`, `org-key`, `server`), `auth` how it is
-//     presented to xAI (`grok-account`: the CLI voice host and its token
-//     header; `api-key`: api.x.ai);
+//     `voice-key`, `perspicax-key`, `org-account`, `org-key`, `server`),
+//     `auth` how it is presented to xAI (`grok-account`: the CLI voice host
+//     and its token header, for the person's account and the
+//     organization's; `api-key`: api.x.ai);
 //   - no key serves that person: 200 with an empty `voice_keys` and `cause`,
 //     the app's own refusal cause (`no_credentials`,
 //     `server_engine_not_allowed`, `payer_disabled`, `perspicax_unreachable`);
@@ -83,12 +85,35 @@
 //     stored or cached: the log line names the sources only;
 //   - without the field the route answers the sign-in alone, as before (an
 //     older Perspicax).
+//
+// The same route, asked with `"org_account"` and no `sub` (#5200): the
+// organization's own Grok account (server/voice/org-grok-account.ts), the
+// sign-in of the person the organization named in Perspicax, a team's
+// account or a personal one. In a
+// person's `voice_keys` it already comes at its place, as `org-account`
+// (`auth: "grok-account"`); this request is for what names no person:
+//
+//   - `{"org_account": true}`: the voice service's own use (its probe, a
+//     call no line owns). 200 `{provider: "xai", access_token, expires_at}`,
+//     renewed first like a person's;
+//   - `{"org_account": "test"}`: the console's test. 200 `{provider: "xai",
+//     state, account_kind?, expires_at?}`, `state` `ok` or one of the codes
+//     below: the value is never answered, only whether it serves, and what
+//     the account is when it does (`account_kind`: `team`, `personal` or
+//     `unknown`, an information for the screen). With a `sub`, the
+//     same judgment of a person about to be named, before Perspicax names
+//     them (a test never answers a value, so it may name a person);
+//   - 404 `{error}` for `no_org_account` (none named), `unknown_person`,
+//     `no_sign_in`; 409 `{error}` for `user_inactive`, `sign_in_refused`;
+//   - the same caller check; nothing logged but the outcome code; a server
+//     without the account answers 400 `invalid_request` (no `sub`).
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { AuthFailureLimiter } from "../triggers/webhook-ingress.ts";
 import { reportBackgroundError } from "../background-error.ts";
 import { readBody } from "../harness/http.ts";
 import type { GrokLiveAccess } from "../engines/principal-engine-logins.ts";
+import type { OrgGrokAccess } from "../voice/org-grok-account.ts";
 import { candidateProvider, voiceKeyAuth, type VoiceKeys } from "../voice/voice-keys.ts";
 
 export const ORG_LINK_PREFIX = "/api/org/link/";
@@ -215,6 +240,9 @@ export interface OrgLinkRoutesOptions {
    * its order (server/voice/voice-mode.ts resolveVoiceKeys), for a phone line
    * they own. Absent: the route answers the sign-in alone. */
   voiceKeys?: (principalId: string) => Promise<VoiceKeys>;
+  /** #5200: the organization's own Grok account for one live use, or why
+   * there is none. Absent: the route knows persons only. */
+  orgAccount?: (candidate?: string) => Promise<OrgGrokAccess>;
   limiter?: AuthFailureLimiter;
   now?: () => number;
   log?: (line: string) => void;
@@ -263,10 +291,30 @@ export function createOrgLinkRoutes(options: OrgLinkRoutesOptions) {
       ...(keys.length ? {} : { cause }),
     });
   };
+  /** The organization's own Grok account: the value for the voice service,
+   * or its state alone for a test. */
+  const orgAccount = async (res: ServerResponse, test: boolean, candidate?: string): Promise<true> => {
+    let access: OrgGrokAccess;
+    try {
+      access = await options.orgAccount!(candidate);
+    } catch {
+      access = { ok: false, error: "sign_in_refused" };
+    }
+    log(`org link: the organization's Grok account (${test ? "test: " : ""}${access.ok ? "ok" : access.error})`);
+    const expires = access.ok && access.expiresAt !== null ? new Date(access.expiresAt).toISOString() : null;
+    if (test) return send(res, 200, { provider: "xai", state: access.ok ? "ok" : access.error, ...(access.ok ? { account_kind: access.kind } : {}), ...(expires ? { expires_at: expires } : {}) });
+    if (!access.ok) {
+      const missing = access.error === "no_org_account" || access.error === "unknown_person" || access.error === "no_sign_in";
+      return send(res, missing ? 404 : 409, { error: access.error });
+    }
+    return send(res, 200, { provider: "xai", access_token: access.accessToken, expires_at: expires });
+  };
   const grokSignIn = async (req: IncomingMessage, res: ServerResponse): Promise<true> => {
     const body: unknown = await readBody(req, GROK_SIGN_IN_BODY_MAX).catch(() => null);
-    const fields = body && typeof body === "object" && !Array.isArray(body) ? (body as { sub?: unknown; voice_keys?: unknown }) : undefined;
+    const fields = body && typeof body === "object" && !Array.isArray(body) ? (body as { sub?: unknown; voice_keys?: unknown; org_account?: unknown }) : undefined;
     const sub = fields?.sub;
+    if (options.orgAccount && fields?.org_account === "test" && (sub === undefined || (typeof sub === "string" && SUB.test(sub)))) return orgAccount(res, true, sub);
+    if (options.orgAccount && fields?.org_account === true && sub === undefined) return orgAccount(res, false);
     if (typeof sub !== "string" || !SUB.test(sub)) return send(res, 400, { error: "invalid_request" });
     const person = options.person!(sub);
     if (!person) return send(res, 404, { error: "unknown_person" });

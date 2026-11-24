@@ -19225,6 +19225,8 @@
       "routine.investigation.started": "3ecdec832f7d7535a232e53498ee9d951ada8331e4d83200a898c68de0acac77",
       "voiceMode.key.grokAccount": "d1041728dfb03a0a726ce434c13cf45ecefa0e90a19254c905d7810436d8c5d2",
       "voiceMode.keyAction.grokAccount": "2bc4c480a58587c6c66bdc89a44f81da73e072085c99d3c964748ec276c526cf",
+      "voiceMode.key.orgAccount": "f2c16b18f614b36910d0a6956af7c519d887bf5cab8b9d72af93c18b661cc4ba",
+      "voiceMode.keyAction.orgAccount": "f25f740e0f8c8bbe6b64c165a19a95b19915638facb756c9214318d17c88a3f7",
       "voiceMode.noCall": "7d69be066afadf29f48f945be20f351572871de1d3cbc147df63b76c44ed6912",
       "chat.restart.outwardUnknown": "c531d3c5278dd5aa12fd231a8ea0fd7ededd88f647a5f733a7854e9edfea9f88",
       "question.wizard.step": "8222548e1d35b8532e970c6bb815043332ca68af52225b2008cb45fde2857959",

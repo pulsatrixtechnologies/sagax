@@ -70,10 +70,13 @@ export function noCallReason(tried: readonly { source: string; failure: string }
   if (!tried.some((entry) => entry.source === "grok-account")) return null;
   if (!tried.every((entry) => entry.failure === "quota" || entry.failure === "key")) return null;
   const account = tried.find((entry) => entry.source === "grok-account");
-  const api = tried.filter((entry) => entry.source !== "grok-account");
+  // the organization's Grok account is an account too, never "the xAI API key"
+  const orgAccount = tried.find((entry) => entry.source === "org-account");
+  const api = tried.filter((entry) => entry.source !== "grok-account" && entry.source !== "org-account");
   const accountSide: Side = account?.failure === "quota" ? "credits" : "refused";
   const apiSide: Side = api.length === 0 ? "missing" : api.every((entry) => entry.failure === "quota") ? "credits" : "refused";
-  return language === "fr" ? french(accountSide, apiSide) : english(accountSide, apiSide);
+  const orgSide = orgAccount ? (orgAccount.failure === "quota" ? "credits" : "refused") : null;
+  return language === "fr" ? french(accountSide, apiSide, orgSide) : english(accountSide, apiSide, orgSide);
 }
 
 /** One plain sentence when the provider does not know the voice name that was
@@ -128,7 +131,8 @@ export function realtimeUnreachableCallReason(language: NoCallLanguage): string 
 }
 
 /** Whose credential it is: one of the person's own, or one they were given
- * (the organization's key) and cannot fix alone.
+ * (the organization's key, the organization's Grok account) and cannot fix
+ * alone.
  *
  * `source === "server"` is this installation's own key. The server only ever
  * builds it when there is no organization (server/voice/voice-mode.ts
@@ -140,7 +144,7 @@ export function realtimeUnreachableCallReason(language: NoCallLanguage): string 
  * change it yourself). Treating it as "given" would send a solo person to an
  * organization administrator they do not have, about their own key. */
 function keyOwner(source: string): "own" | "given" {
-  return source === "org-key" ? "given" : "own";
+  return source === "org-key" || source === "org-account" ? "given" : "own";
 }
 
 /** A credential named the way the settings name it (`voiceMode.key.*` in the
@@ -155,7 +159,11 @@ const OWN_KEY_NAME: Record<string, Record<NoCallLanguage, string>> = {
 };
 const GIVEN_KEY_NAME: Record<string, Record<NoCallLanguage, string>> = {
   "org-key": { fr: "la clé xAI de ton organisation", en: "your organization's xAI key" },
+  "org-account": { fr: "le compte Grok de ton organisation", en: "your organization's Grok account" },
 };
+/** French agrees with what is named: a key is refused as "refusée", an
+ * account as "refusé", and a key and an account together as "refusés". */
+const MASCULINE_SOURCES = new Set(["org-account"]);
 
 function credentialNames(rows: readonly { source: string }[], names: Record<string, Record<NoCallLanguage, string>>, language: NoCallLanguage): string {
   const listed = [...new Set(rows.map((row) => names[row.source]?.[language] ?? (language === "fr" ? "ta clé xAI" : "your xAI key")))];
@@ -187,9 +195,33 @@ function ownAction(rows: readonly { source: string }[], language: NoCallLanguage
   return [...new Set(rows.map((row) => OWN_ACTION[row.source]?.[language] ?? ANY_OWN_ACTION[language]))].join(" ");
 }
 
-function refusedWords(out: boolean, many: boolean, language: NoCallLanguage): string {
-  if (language === "fr") return out ? (many ? "n'ont plus de crédits" : "n'a plus de crédits") : (many ? "ont été refusées" : "a été refusée");
+function refusedWords(out: boolean, many: boolean, language: NoCallLanguage, masculine = false): string {
+  if (language === "fr") {
+    if (out) return many ? "n'ont plus de crédits" : "n'a plus de crédits";
+    return many ? (masculine ? "ont été refusés" : "ont été refusées") : (masculine ? "a été refusé" : "a été refusée");
+  }
   return out ? (many ? "are out of credits" : "is out of credits") : (many ? "were refused" : "was refused");
+}
+
+/** What happened to what the organization gives, each credential with its own
+ * state: its account and its key can both be tried, and one can be refused
+ * while the other is out of credits. */
+function givenStateList(given: readonly { source: string; failure: string }[], language: NoCallLanguage): string[] {
+  const states = [...new Set(given.map((row) => row.failure === "quota"))];
+  return states.map((out) => {
+    const rows = given.filter((row) => (row.failure === "quota") === out);
+    return `${credentialNames(rows, GIVEN_KEY_NAME, language)} ${refusedWords(out, rows.length > 1, language, rows.some((row) => MASCULINE_SOURCES.has(row.source)))}`;
+  });
+}
+
+/** Clauses in one list with a single closing "et" / "and": never "a, et b, et c". */
+function clauseList(clauses: readonly string[], language: NoCallLanguage): string {
+  const and = language === "fr" ? ", et " : ", and ";
+  return clauses.length > 2 ? `${clauses.slice(0, -1).join(", ")}${and}${clauses[clauses.length - 1]}` : clauses.join(and);
+}
+
+function givenStates(given: readonly { source: string; failure: string }[], language: NoCallLanguage): string {
+  return clauseList(givenStateList(given, language), language);
 }
 
 /** One plain sentence for `realtime_key_refused` when no connected Grok
@@ -204,18 +236,39 @@ export function realtimeKeyRefusedCallReason(tried: readonly { source: string; f
   const own = tried.filter((row) => keyOwner(row.source) === "own");
   const given = tried.filter((row) => keyOwner(row.source) === "given");
   const dryOf = (rows: readonly { failure: string }[]): boolean => rows.some((row) => row.failure === "quota");
+  const givenAccount = given.some((row) => row.source === "org-account");
+  const givenKey = given.some((row) => row.source !== "org-account");
   if (own.length && given.length) {
     const left = `${credentialNames(own, OWN_KEY_NAME, language)} ${refusedWords(dryOf(own), own.length > 1, language)}`;
-    const right = `${credentialNames(given, GIVEN_KEY_NAME, language)} ${refusedWords(dryOf(given), given.length > 1, language)}`;
+    if (givenAccount) {
+      const all = clauseList([left, ...givenStateList(given, language)], language);
+      return language === "fr"
+        ? `Aucun appel : ${all}. ${ownAction(own, "fr")} Pour ce qui vient de ton organisation, demande à un de ses administrateurs.`
+        : `No call was placed: ${all}. ${ownAction(own, "en")} For what your organization provides, ask one of its administrators.`;
+    }
+    const right = givenStates(given, language);
     return language === "fr"
       ? `Aucun appel : ${left}, et ${right}. ${ownAction(own, "fr")} Pour la clé que tu as reçue, demande à un administrateur de ton organisation.`
       : `No call was placed: ${left}, and ${right}. ${ownAction(own, "en")} A key you were given is for an administrator of your organization.`;
   }
   if (given.length) {
-    const who = credentialNames(given, GIVEN_KEY_NAME, language);
+    const what = givenStates(given, language);
+    // the organization's account alone: the app's own verdict for that row
+    // (src/locales voiceMode.keyAction.orgAccount), an administrator checks it
+    // or the person connects an account of their own
+    if (givenAccount && !givenKey) {
+      return language === "fr"
+        ? `Aucun appel : ${what}. Ce compte n'est pas le tien : demande à un administrateur de ton organisation de le vérifier. Tu peux aussi connecter ton propre compte Grok dans ${path}, puis rappeler.`
+        : `No call was placed: ${what}. That account is not yours to fix: ask an administrator of your organization to check it. You can also connect your own Grok account in ${path}, then call back.`;
+    }
+    if (givenAccount) {
+      return language === "fr"
+        ? `Aucun appel : ${what}. Ni l'un ni l'autre n'est à toi : demande à un administrateur de ton organisation. Tu peux aussi connecter ton propre compte Grok ou ajouter ta propre clé xAI dans ${path}, puis rappeler.`
+        : `No call was placed: ${what}. Neither is yours to fix: ask an administrator of your organization. You can also connect your own Grok account or add your own xAI key in ${path}, then call back.`;
+    }
     return language === "fr"
-      ? `Aucun appel : ${who} ${refusedWords(dryOf(given), given.length > 1, "fr")}. Ce n'est pas ta clé : demande à un administrateur de ton organisation. Tu peux aussi ajouter ta propre clé xAI dans ${path}, puis rappeler.`
-      : `No call was placed: ${who} ${refusedWords(dryOf(given), given.length > 1, "en")}. That key is not yours to fix: ask an administrator of your organization. You can also add your own xAI key in ${path}, then call back.`;
+      ? `Aucun appel : ${what}. Ce n'est pas ta clé : demande à un administrateur de ton organisation. Tu peux aussi ajouter ta propre clé xAI dans ${path}, puis rappeler.`
+      : `No call was placed: ${what}. That key is not yours to fix: ask an administrator of your organization. You can also add your own xAI key in ${path}, then call back.`;
   }
   const who = credentialNames(own, OWN_KEY_NAME, language);
   // the lead-in is the one the client passes through untouched
@@ -225,16 +278,26 @@ export function realtimeKeyRefusedCallReason(tried: readonly { source: string; f
   return `${lead}${who} ${refusedWords(dryOf(own), own.length > 1, language)}. ${ownAction(own, language)}`;
 }
 
-function english(account: Side, api: Side): string {
+function english(account: Side, api: Side, org: "credits" | "refused" | null): string {
   const left = account === "credits" ? "the connected Grok account is out of credits" : "the connected Grok account was refused";
+  if (org) {
+    const middle = org === "credits" ? "your organization's Grok account is out of credits" : "your organization's Grok account was refused";
+    const last = api === "missing" ? "there is no xAI API key" : api === "credits" ? "the xAI API key is out of credits" : "the xAI API key was refused";
+    return `No call was placed: ${left}, ${middle}, and ${last}.`;
+  }
   const right = api === "missing" ? "and there is no xAI API key"
     : api === "credits" ? "and the xAI API key is out of credits too"
       : "and the xAI API key was refused too";
   return `No call was placed: ${left}, ${right}.`;
 }
 
-function french(account: Side, api: Side): string {
+function french(account: Side, api: Side, org: "credits" | "refused" | null): string {
   const left = account === "credits" ? "le compte Grok connecté n'a plus de crédit" : "le compte Grok connecté a été refusé";
+  if (org) {
+    const middle = org === "credits" ? "le compte Grok de ton organisation n'a plus de crédit" : "le compte Grok de ton organisation a été refusé";
+    const last = api === "missing" ? "il n'y a pas de clé API xAI" : api === "credits" ? "la clé API xAI n'a plus de crédit" : "la clé API xAI a été refusée";
+    return `Aucun appel : ${left}, ${middle}, et ${last}.`;
+  }
   const right = api === "missing" ? "et il n'y a pas de clé API xAI"
     : api === "credits" ? "et la clé API xAI non plus"
       : "et la clé API xAI a été refusée aussi";

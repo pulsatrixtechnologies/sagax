@@ -148,6 +148,11 @@ describe("the keys that may serve a voice, in order (server/voice/voice-keys.ts)
     for (const source of ["voice-key", "perspicax-key", "org-key", "server"]) expect(voiceKeyAuth({ source })).toBe("api-key");
   });
 
+  it("presents the organization's Grok account like a person's: an account, never an API key (#5200)", () => {
+    expect(voiceKeyAuth({ source: "org-account" })).toBe("grok-account");
+    expect(describeVoiceKey({ source: "org-account", last4: null })).toBe("organization's Grok account");
+  });
+
   // #5179: a refused voice name and a key out of credits are two different
   // causes, and the one closest to the person is the one they hear.
   it("names the cause of a call that no credential took, an unknown voice never hidden behind credits", () => {

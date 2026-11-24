@@ -60,7 +60,7 @@ export class VoiceModeRefused extends Error {
  * (`down`), an unknown voice (`voice`), anything else (`other`). */
 export type { VoiceProviderFailure };
 const PROVIDER_FAILURES = new Set<VoiceProviderFailure>(["key", "quota", "busy", "down", "voice", "other"]);
-const KEY_SOURCES = new Set<VoiceKeyInfo["source"]>(["voice-key", "perspicax-key", "org-key", "server"]);
+const KEY_SOURCES = new Set<VoiceKeyInfo["source"]>(["voice-key", "perspicax-key", "org-account", "org-key", "server"]);
 const PROVIDERS = new Set<VoiceProviderId>(VOICE_TTS_PROVIDERS);
 
 /** One key xAI refused on the way (server/voice/voice-keys.ts). */

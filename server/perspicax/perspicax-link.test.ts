@@ -382,6 +382,22 @@ describe("PerspicaxDirectory, slice 4: teams and owner keys", () => {
     expect("integrationRights" in h.sync).toBe(false);
   });
 
+  it("reads the organization's Grok account: the person whose sign-in serves everyone's voice (#5200)", async () => {
+    const h = harness({ ...withTeams([person("ALICE")], []), voice_org_account: { sub: "ALICE" } });
+    expect(h.sync.voiceOrgAccount()).toBeUndefined();
+    await h.sync.refresh();
+    expect(h.sync.voiceOrgAccount()).toBe("ALICE");
+    // absent (an older Perspicax, or none named) and malformed are both none, never fatal
+    const none = harness(withTeams([person("ALICE")], []));
+    await none.sync.refresh();
+    expect(none.sync.voiceOrgAccount()).toBeUndefined();
+    expect(none.sync.directory()?.people).toHaveLength(1);
+    const bad = harness({ ...withTeams([person("ALICE")], []), voice_org_account: { sub: 7 } as never });
+    await bad.sync.refresh();
+    expect(bad.sync.voiceOrgAccount()).toBeUndefined();
+    expect(bad.sync.directory()?.people).toHaveLength(1);
+  });
+
   it("reads sagax_server_engines per person: the list, [] for none, null when not sent (Perspicax 0063)", async () => {
     const h = harness(withTeams([
       person("ALICE", { sagax_server_engines: ["grok", "xaiVoice"] }),

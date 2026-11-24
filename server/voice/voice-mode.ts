@@ -245,6 +245,12 @@ export interface VoiceModeDeps {
    * live voice try it before any API key. Absent: API keys only, as before.
    * The token is never logged. */
   grokAccount?(speaker: VoiceSpeaker): Promise<string | undefined> | string | undefined;
+  /** Organization server, #5200: the organization's Grok account
+   * (server/voice/org-grok-account.ts), the sign-in the organization
+   * named. It comes after everything of the person's and before the
+   * organization's key, for the people that key may serve. Absent or
+   * nothing: the order is as before. The token is never logged. */
+  orgAccount?(speaker: VoiceSpeaker): Promise<string | undefined> | string | undefined;
   /** Organization server, 2026-10-16: whether the organization's xAI key
    * may serve this speaker's voice (`sagax_server_engines`). Absent: yes. */
   serverKeyAllowed?(speaker: VoiceSpeaker): boolean;
@@ -331,13 +337,19 @@ export interface VoiceModeDeps {
   now?: () => number;
 }
 
-type KeyDeps = Pick<VoiceModeDeps, "organization" | "serverKey" | "hasOwnKey" | "resolveOwnKey" | "serverKeyAllowed" | "personalKey" | "grokAccount" | "credentialPolicy" | "auditCredential">;
+type KeyDeps = Pick<VoiceModeDeps, "organization" | "serverKey" | "hasOwnKey" | "resolveOwnKey" | "serverKeyAllowed" | "personalKey" | "grokAccount" | "orgAccount" | "credentialPolicy" | "auditCredential">;
 
 function voiceCredentialForm(source: string): CredentialForm | null {
   if (source === "grok-account") return "personal-account";
   if (source === "voice-key" || source === "perspicax-key") return "personal-key";
+  if (source === "org-account") return "org-account";
   if (source === "org-key") return "org-key";
   return null;
+}
+
+/** An account or a subscription: never billed per use. */
+function accountForm(form: CredentialForm | null): boolean {
+  return form === "personal-account" || form === "org-account";
 }
 
 /** The voice order stays. The policy only drops a form or asks before a
@@ -349,7 +361,7 @@ function governVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, threadId: string 
   for (const entry of resolved.keys) {
     const form = voiceCredentialForm(entry.source);
     if (!form) continue;
-    candidates.push({ form, via: entry.source, present: true, available: true, paid: form !== "personal-account" && form !== "org-account" });
+    candidates.push({ form, via: entry.source, present: true, available: true, paid: !accountForm(form) });
   }
   const decision = resolveCredential({ aspect: "voice", candidates, policy });
   deps.auditCredential?.(decision, speaker, threadId);
@@ -357,7 +369,15 @@ function governVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, threadId: string 
     const cause = decision.reason === "no_credentials" ? "no_credentials" : decision.reason;
     return { ok: false, cause, error: decision.error, ...(decision.reason === "confirm_paid_key" ? { confirm: decision.confirm } : {}) };
   }
-  const keys = resolved.keys.filter((entry) => voiceCredentialForm(entry.source) === decision.form);
+  // #5200: a move from one account onto another proceeds without asking
+  // (shared/credential-resolver.ts), so the organization's account stays
+  // behind the person's own when theirs is the form that serves. The other
+  // way round never happens: the person's account comes first, and when the
+  // organization's is the decision theirs was absent or not allowed.
+  const keys = resolved.keys.filter((entry) => {
+    const form = voiceCredentialForm(entry.source);
+    return form === decision.form || (decision.form === "personal-account" && form === "org-account");
+  });
   if (!keys.length) return resolved;
   const withheld = resolved.keys.find((entry) => {
     const form = voiceCredentialForm(entry.source);
@@ -377,8 +397,9 @@ function onThisKey<T>(candidate: { source: string }, run: () => T): T {
 }
 
 /** Every key that may serve this person, in the order above (their connected
- * Grok account, their voice key, their Perspicax key, the organization's),
- * or why none does. Never returns a key to anyone but the caller of xAI. */
+ * Grok account, their voice key, their Perspicax key, the organization's
+ * Grok account, the organization's key), or why none does. Never returns a
+ * key to anyone but the caller of xAI. */
 export async function resolveVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, threadId?: string): Promise<VoiceKeys> {
   const serverKey = (await deps.serverKey())?.trim();
   const accountToken = speaker.disabled ? undefined : (await deps.grokAccount?.(speaker))?.trim();
@@ -407,11 +428,21 @@ export async function resolveVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, thr
   // 2026-10-16: the organization's xAI key serves voice only for the
   // people it was given to (`sagax_server_engines` lists VOICE_SERVER_ENGINE).
   const orgAllowed = !deps.serverKeyAllowed || deps.serverKeyAllowed(speaker);
+  // #5200: the organization's Grok account, under the same grant as its key
+  // (one verdict, `serverKeyAllowed`): an account before a key at each level.
+  // The organization pays (`via`), and a sign-in that renews shows no last
+  // four. The person's own sign-in is never listed twice when it is the one
+  // the organization named.
+  const orgAccount = orgAllowed ? (await deps.orgAccount?.(speaker))?.trim() : undefined;
+  if (orgAccount && orgAccount !== accountToken) keys.push({ key: orgAccount, via: "org-key", source: "org-account", last4: null });
   if (serverKey && orgAllowed) keys.push({ key: serverKey, via: "org-key", source: "org-key", last4: keyLast4(serverKey) });
   if (keys.length) return governVoiceKeys(deps, speaker, threadId, { ok: true, keys });
   // Perspicax could not say: their key there may well exist
   if (perspicax) return { ok: false, cause: perspicax };
-  if (!serverKey) return { ok: false, cause: "no_credentials" };
+  // nothing of the organization's exists, or it exists and was not given to
+  // them. The account is read once per resolution: above when it was given,
+  // here when it was not (the test counts the reads).
+  if (!serverKey && (orgAllowed || !(await deps.orgAccount?.(speaker))?.trim())) return { ok: false, cause: "no_credentials" };
   return { ok: false, cause: "server_engine_not_allowed" };
 }
 

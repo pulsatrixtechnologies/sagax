@@ -146,8 +146,9 @@ export type VoiceErrorNoteKey =
 
 /** The locale key naming a key by its source: "your voice key ···Wez8",
  * "your xAI key in Perspicax ···c0Je", "the organization's key". */
-export function voiceKeyLabelKey(source: VoiceKeySource): `voiceMode.key.${"grokAccount" | "voiceKey" | "perspicaxKey" | "orgKey" | "serverKey"}` {
+export function voiceKeyLabelKey(source: VoiceKeySource): `voiceMode.key.${"grokAccount" | "voiceKey" | "perspicaxKey" | "orgAccount" | "orgKey" | "serverKey"}` {
   if (source === "grok-account") return "voiceMode.key.grokAccount";
+  if (source === "org-account") return "voiceMode.key.orgAccount";
   if (source === "voice-key") return "voiceMode.key.voiceKey";
   if (source === "perspicax-key") return "voiceMode.key.perspicaxKey";
   if (source === "org-key") return "voiceMode.key.orgKey";
@@ -156,8 +157,9 @@ export function voiceKeyLabelKey(source: VoiceKeySource): `voiceMode.key.${"grok
 
 /** The locale key of what to do about a key of that source: add credits
  * or change it where it lives. */
-export function voiceKeyActionKey(source: VoiceKeySource): `voiceMode.keyAction.${"grokAccount" | "voiceKey" | "perspicaxKey" | "orgKey" | "serverKey"}` {
+export function voiceKeyActionKey(source: VoiceKeySource): `voiceMode.keyAction.${"grokAccount" | "voiceKey" | "perspicaxKey" | "orgAccount" | "orgKey" | "serverKey"}` {
   if (source === "grok-account") return "voiceMode.keyAction.grokAccount";
+  if (source === "org-account") return "voiceMode.keyAction.orgAccount";
   if (source === "voice-key") return "voiceMode.keyAction.voiceKey";
   if (source === "perspicax-key") return "voiceMode.keyAction.perspicaxKey";
   if (source === "org-key") return "voiceMode.keyAction.orgKey";

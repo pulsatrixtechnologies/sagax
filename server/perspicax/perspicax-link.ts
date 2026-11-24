@@ -266,6 +266,10 @@ export const directorySchema = z.object({
   /** null: never set in Perspicax, the historical rules stay (never `any`).
    * Absent or malformed: an older Perspicax. */
   capability_marketplace_policy: capabilityMarketplacePolicySchema.nullable().optional().catch(undefined),
+  /** #5200: the organization's Grok account, as the one person whose Grok
+   * sign-in on this server is the organization's (never a token). Absent:
+   * none named, or an older Perspicax; malformed is read as absent. */
+  voice_org_account: z.object({ sub: z.string().min(1).max(255) }).optional().catch(undefined),
 });
 export type DirectoryProfile = z.infer<typeof profileSchema>;
 export type DirectoryPerson = z.infer<typeof personSchema>;
@@ -698,6 +702,13 @@ export class PerspicaxDirectory {
   botRights(sub: string): "manage" | "use" {
     const person = this.data?.people.find((entry) => entry.sub === sub);
     return person?.sagax_bots === "use" ? "use" : "manage";
+  }
+
+  /** #5200: the Perspicax user id of the person whose Grok sign-in is
+   * the organization's account, from the last directory; undefined when the
+   * organization named nobody (server/voice/org-grok-account.ts). */
+  voiceOrgAccount(): string | undefined {
+    return this.data?.voice_org_account?.sub;
   }
 
   /** 2026-10-16: the engine instance ids this subject may run on the

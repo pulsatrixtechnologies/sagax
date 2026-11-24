@@ -16655,12 +16655,12 @@ async function credentialPolicyFor(threadId: string | undefined, payerPrincipalI
       const payer = principals.byId(principalId);
       if (payer?.subject?.iss === IDENTITY.issuer && payer.disabledAt === undefined && perspicaxDirectory) {
         try {
-          let token = await perspicaxAccessToken(principalId);
-          if (!token && routineConsents?.status(principalId).state === "active") {
+          const sessionToken = await perspicaxAccessToken(principalId);
+          allowPersonalWhenActingAs = await perspicaxDirectory.personalActAsConsent(sessionToken, async () => {
+            if (routineConsents?.status(principalId).state !== "active") return null;
             const delegation = await routineConsents.subjectToken(principalId);
-            if (delegation?.ok) token = delegation.token;
-          }
-          if (token) allowPersonalWhenActingAs = await perspicaxDirectory.personalActAsConsent(token);
+            return delegation.ok ? delegation.token : null;
+          });
         } catch {
           // An unavailable sign-in or consent service cannot authorize personal credentials.
         }

@@ -1211,10 +1211,16 @@ export class PerspicaxDirectory {
   }
 
   /** The payer may withdraw consent between two runs. Read it from the linked server each time. */
-  async personalActAsConsent(subjectToken: string): Promise<boolean> {
-    const reply = await this.linkJson("GET", "/api/v1/pulsabot/people/me/act-as-consent", undefined, {
+  async personalActAsConsent(sessionToken: string | null, delegatedToken: () => Promise<string | null>): Promise<boolean> {
+    const read = (subjectToken: string) => this.linkJson("GET", "/api/v1/pulsabot/people/me/act-as-consent", undefined, {
       subjectToken, timeoutMs: 5_000, maxBytes: 2_048,
     });
+    let reply = sessionToken ? await read(sessionToken) : undefined;
+    if (!reply || isSubjectRefusal(reply)) {
+      const delegation = await delegatedToken();
+      if (!delegation) return false;
+      reply = await read(delegation);
+    }
     const body = reply.ok ? reply.body : null;
     return typeof body === "object" && body !== null && "personal_credential" in body && body.personal_credential === true;
   }

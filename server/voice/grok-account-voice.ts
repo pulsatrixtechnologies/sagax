@@ -177,10 +177,6 @@ function credentialNames(rows: readonly { source: string }[], names: Record<stri
  * row uses (`voiceMode.keyAction.*`, so nothing is invented here). */
 const OWN_ACTION: Record<string, Record<NoCallLanguage, string>> = {
   "grok-account": { fr: "Ajoute du crédit au compte Grok connecté, puis rappelle.", en: "Add credits on the connected Grok account, then call back." },
-  "voice-key": {
-    fr: `Ajoute des crédits à ce compte xAI, ou change la clé dans ${VOICE_SETTINGS.fr}, puis rappelle.`,
-    en: `Add credits to that xAI account, or change the key in ${VOICE_SETTINGS.en}, then call back.`,
-  },
   "perspicax-key": {
     fr: "Ajoute des crédits à ce compte xAI, ou change la clé dans Perspicax (Fournisseurs > Grok), puis rappelle.",
     en: "Add credits to that xAI account, or change the key in Perspicax (Providers > Grok), then call back.",
@@ -191,8 +187,19 @@ const ANY_OWN_ACTION: Record<NoCallLanguage, string> = {
   en: `Add credits to that xAI account, or change the key in ${VOICE_SETTINGS.en}, then call back.`,
 };
 
-function ownAction(rows: readonly { source: string }[], language: NoCallLanguage): string {
-  return [...new Set(rows.map((row) => OWN_ACTION[row.source]?.[language] ?? ANY_OWN_ACTION[language]))].join(" ");
+function ownAction(rows: readonly { source: string; failure: string }[], language: NoCallLanguage): string {
+  const actions = rows.map(({ source, failure }) => {
+    if (source !== "voice-key") return OWN_ACTION[source]?.[language] ?? ANY_OWN_ACTION[language];
+    if (failure === "quota") {
+      return language === "fr"
+        ? `Ajoute des crédits au compte xAI associé à ta clé vocale, ou change ta clé vocale dans ${VOICE_SETTINGS.fr}, puis rappelle.`
+        : `Add credits to the xAI account for your voice key, or change your voice key in ${VOICE_SETTINGS.en}, then call back.`;
+    }
+    return language === "fr"
+      ? `Change ta clé vocale dans ${VOICE_SETTINGS.fr}, puis rappelle.`
+      : `Change your voice key in ${VOICE_SETTINGS.en}, then call back.`;
+  });
+  return [...new Set(actions)].join(" ");
 }
 
 function refusedWords(out: boolean, many: boolean, language: NoCallLanguage, masculine = false): string {

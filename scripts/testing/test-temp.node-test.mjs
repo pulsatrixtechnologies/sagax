@@ -21,6 +21,19 @@ test("a run contains child temps and restores the caller's environment", () => {
   assert.equal(existsSync(run.path), false);
 });
 
+// macOS 15 and older refuse a Unix socket path past sun_path (104 bytes,
+// listen EINVAL). A server under test binds DATA_DIR/perm-<tag>.sock, with
+// DATA_DIR one mkdtemp below the run's root, so the root has to stay short:
+// the per-user temp folder there is 49 characters before the run's own.
+test("the run's root leaves room for a Unix socket two folders down", { skip: process.platform === "win32" && "Windows binds named pipes, not socket files" }, () => {
+  const run = createTestTempRoot();
+  try {
+    const socket = join(run.path, "openmausbot-verify-data-XXXXXX", "perm-abcd1234.sock");
+    assert.ok(Buffer.byteLength(socket) < 104, `${socket} is ${Buffer.byteLength(socket)} bytes`);
+    assert.equal(tmpdir(), run.path);
+  } finally { run.cleanup(); }
+});
+
 test("the sweep removes only old test directories and keeps live runs and links", () => {
   const root = mkdtempSync(join(tmpdir(), "test-temp-check-"));
   const old = new Date(Date.now() - 24 * 60 * 60_000);

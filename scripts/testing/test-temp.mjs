@@ -1,5 +1,5 @@
 // Every test run owns one temp root, including temp files of child processes.
-import { existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { accessSync, constants, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -8,7 +8,25 @@ const OWNER = ".sagax-test-owner.json";
 const LEGACY_PREFIXES = ["omb-test-home-", "omb-bridge-home-", "sagax-mac-apps-", "pp-test-", "engine-logins-"];
 const ENV_KEYS = ["TMPDIR", "TMP", "TEMP"];
 
-export function pruneTestTemps(root = tmpdir(), now = Date.now(), maxAgeMs = 6 * 60 * 60_000) {
+// Where a run's root goes. macOS gives each account a temp folder 49
+// characters long, and macOS 15 and older refuse a Unix socket path past 104
+// bytes (listen EINVAL): with the run's root under it, a server under test
+// could no longer bind DATA_DIR/perm-<tag>.sock, nor its short fallback. The
+// machine's /private/tmp keeps the root short there; every other platform's
+// temp folder already is.
+const MAC_SHORT_TEMP = "/private/tmp";
+export function testTempBase(platform = process.platform) {
+  if (platform !== "darwin") return tmpdir();
+  try {
+    accessSync(MAC_SHORT_TEMP, constants.W_OK | constants.X_OK);
+    return MAC_SHORT_TEMP;
+  } catch { return tmpdir(); }
+}
+
+// With no root named, the sweep covers the base of the runs and the account's
+// temp folder, where the legacy prefixes and the roots of older runs are.
+export function pruneTestTemps(root, now = Date.now(), maxAgeMs = 6 * 60 * 60_000) {
+  if (root === undefined) return [...new Set([testTempBase(), tmpdir()])].reduce((sum, each) => sum + pruneTestTemps(each, now, maxAgeMs), 0);
   let removed = 0;
   for (const name of readdirSync(root)) {
     if (!name.startsWith(TEST_TEMP_PREFIX) && !LEGACY_PREFIXES.some((prefix) => name.startsWith(prefix))) continue;
@@ -29,7 +47,7 @@ export function pruneTestTemps(root = tmpdir(), now = Date.now(), maxAgeMs = 6 *
   return removed;
 }
 
-export function createTestTempRoot(root = tmpdir()) {
+export function createTestTempRoot(root = testTempBase()) {
   const previous = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
   const path = mkdtempSync(join(root, TEST_TEMP_PREFIX));
   writeFileSync(join(path, OWNER), JSON.stringify({ pid: process.pid }), { mode: 0o600 });

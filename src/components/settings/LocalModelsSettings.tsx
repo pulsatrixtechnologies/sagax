@@ -7,7 +7,7 @@ import { t } from "@/lib/i18n";
 import { loadLocalModels, localModelKeyBridge, normalizeLoopbackBase, saveLocalModels, type LocalModelRecipients, type LocalModelSettings } from "@/lib/desktop-local-models";
 import { cn } from "@/lib/cn";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
-import { useStore } from "@/state/store";
+import { useStoreOptional } from "@/state/store";
 import { useOrgDirectory } from "../GroupPeoplePicker";
 import { DescribedRow, FIELD, FoldRow, PILL, SettingsGroup, SettingsTextRow, Switch, cardCount } from "../SettingsPrimitives";
 import { LocalModelSharing } from "./LocalModelSharing";
@@ -156,7 +156,7 @@ export function LocalModelsSettings({ bare = false }: { bare?: boolean } = {}) {
   // D-20261123-023: people and teams exist on an organization server only
   const organization = usePerspicaxOrg() !== null;
   const directory = useOrgDirectory(organization);
-  const viewerId = useStore().state.config?.viewer?.principalId ?? null;
+  const viewerId = useStoreOptional()?.state.config?.viewer?.principalId ?? null;
   const recipients = settings.shareWith ?? NOBODY;
 
   const refreshKeyBases = () => {

@@ -3110,7 +3110,7 @@
   "localModels.shareHelp": "Fermé : toi seul les vois. Ouvert : les autres peuvent les choisir, mais ils ne peuvent pas modifier cette liste.",
   "localModels.shareWith": "Partager avec des personnes et des équipes choisies",
   "localModels.shareWithHelp": "Les personnes et les équipes ajoutées ici peuvent choisir les modèles de cet ordinateur, même quand toute l'organisation ne le peut pas. Elles ne peuvent pas modifier cette liste.",
-  "localModels.shareWithNone": "Personne de choisi",
+  "localModels.shareWithNone": "Aucune personne ni équipe choisie",
   "localModels.shareWithAll": "Toute l'organisation y a déjà accès",
   "localModels.suggestions": "Suggestions : DwarfStar :8002, llama-server :9337, Bonsai :9338, oMLX :8000, plus Ollama, LM Studio et les autres ports locaux.",
   "localModels.title": "Modèles locaux",

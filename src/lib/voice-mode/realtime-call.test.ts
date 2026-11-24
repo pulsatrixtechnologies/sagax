@@ -3,10 +3,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { setLocale } from "@/lib/i18n";
+import { DEFAULT_VOICE_MODE_SETTINGS, type VoiceModeSettings } from "../../../shared/voice-mode";
 import en from "@/locales/en.json";
 import fr from "@/locales/fr.json";
 
-import { onVoiceKeyEvent, type VoiceKeyEvent } from "./api";
+import { onVoiceKeyEvent, voiceModeRealtimeUrl, voiceTextLocale, type VoiceKeyEvent } from "./api";
 import { voiceKeyFallbackNote } from "./failure";
 import { REALTIME_DROP_KEYS, RealtimeVoiceCall, realtimeDrop, realtimeDropText, realtimeRefusalText, realtimeStatusUrl } from "./realtime-call";
 
@@ -212,5 +213,27 @@ describe("realtime call drop reasons", () => {
     frame({ type: "ready", sampleRate: 24_000 });
     frame({ type: "ended", by: "person" });
     expect(notes).toEqual([]);
+  });
+
+  // #5222 review: the two language notions stay separate on the call socket.
+  // `language=` carries the SPOKEN voice language (the voice setting); the text
+  // the server writes is chosen from `locale=`, which the client takes from the
+  // app's own language (`voiceTextLocale` = the active catalog locale, src/lib/
+  // i18n), never from navigator.language. A French app with an English voice
+  // still reads a French reason.
+  it("a realtime call sends the app language as locale=, apart from the spoken language=", () => {
+    setLocale("fr");
+    const englishVoice = { ...DEFAULT_VOICE_MODE_SETTINGS, language: "en", forBot: "b-1" } as unknown as VoiceModeSettings;
+    const url = new URL(voiceModeRealtimeUrl("b-1", englishVoice, undefined, "http://localhost"));
+    // the spoken voice stays English
+    expect(url.searchParams.get("language")).toBe("en");
+    // the text language follows the app, not the OS
+    expect(url.searchParams.get("locale")).toBe(voiceTextLocale());
+    expect(url.searchParams.get("locale")).toBe("fr");
+    setLocale("en");
+    const frenchVoice = { ...DEFAULT_VOICE_MODE_SETTINGS, language: "fr", forBot: "b-1" } as unknown as VoiceModeSettings;
+    const back = new URL(voiceModeRealtimeUrl("b-1", frenchVoice, undefined, "http://localhost"));
+    expect(back.searchParams.get("language")).toBe("fr");
+    expect(back.searchParams.get("locale")).toBe("en");
   });
 });

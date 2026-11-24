@@ -168,10 +168,14 @@ async function until<T>(what: string, check: () => T | undefined | null | false,
 }
 
 /** One call of `person` to the bot: the frame that opened or refused it, then a hang-up.
- * `language` is the call's language; the refusal sentence follows the person's
- * interface language, which this harness drives with it (#5222). */
-async function placeCall(person: string, voice?: string, language = "fr"): Promise<Record<string, any>> {
-  const ws = new WebSocket(`${origin.replace("http", "ws")}/api/bots/b-quasar/voice/realtime?language=${language}&threadId=t-1${voice ? `&voice=${voice}` : ""}`, { headers: { origin, "x-test-person": person } });
+ * `language` is the SPOKEN language of the voice; `locale` is the language the
+ * server writes the refusal sentence in (the app's interface language, the
+ * client now sends it as `locale=`, src/lib/voice-mode/api.ts voiceTextLocale).
+ * They are driven apart on purpose (#5222): the text a person reads follows
+ * `locale`, not the voice's spoken `language`. With no `locale` the server
+ * falls back on `language`, which is how the older cases stay in their tongue. */
+async function placeCall(person: string, voice?: string, language = "fr", locale?: string): Promise<Record<string, any>> {
+  const ws = new WebSocket(`${origin.replace("http", "ws")}/api/bots/b-quasar/voice/realtime?language=${language}&threadId=t-1${voice ? `&voice=${voice}` : ""}${locale ? `&locale=${locale}` : ""}`, { headers: { origin, "x-test-person": person } });
   const frames: Array<Record<string, any>> = [];
   ws.on("message", (data, binary) => { if (!binary) frames.push(JSON.parse(String(data)) as Record<string, any>); });
   await new Promise<void>((resolve, reject) => { ws.once("open", () => resolve()); ws.once("error", reject); });
@@ -381,7 +385,7 @@ describe("a refusal the person reads in their own language, end to end", () => {
     expect(call.type).toBe("refused");
     expect(call.code).toBe("realtime_key_refused");
     expect(call.error).toBe(
-      "Aucun appel : la clé xAI de ton organisation n'a plus de crédits. Ce n'est pas ta clé : demande à un administrateur de ton organisation. Tu peux aussi ajouter ta propre clé xAI dans Réglages > Fournisseurs > Voix, puis rappeler.",
+      "Aucun appel : la clé xAI de ton organisation n'a plus de crédits. Ce n'est pas ta clé : demande à un administrateur de ton organisation. Tu peux aussi ajouter ta propre clé xAI dans Réglages > Fournisseurs, puis rappeler.",
     );
     // credits are never dressed up as the voice or the network
     expect(call.error).not.toMatch(/ne répond pas|réseau|ne connaît pas cette voix/i);
@@ -394,7 +398,7 @@ describe("a refusal the person reads in their own language, end to end", () => {
     const call = await placeCall("p-cara", undefined, "en");
     expect(call.code).toBe("realtime_key_refused");
     expect(call.error).toBe(
-      "No call was placed: your organization's xAI key is out of credits. That key is not yours to fix: ask an administrator of your organization. You can also add your own xAI key in Settings > Providers > Voice, then call back.",
+      "No call was placed: your organization's xAI key is out of credits. That key is not yours to fix: ask an administrator of your organization. You can also add your own xAI key in Settings > Providers, then call back.",
     );
   });
 
@@ -426,7 +430,7 @@ describe("a refusal the person reads in their own language, end to end", () => {
     const call = await placeCall("p-cara");
     expect(call.code).toBe("realtime_not_configured");
     expect(call.error).toBe(
-      "Aucun appel : aucune voix en direct n'est prête pour toi. Ajoute une clé xAI dans Réglages > Fournisseurs > Voix, puis rappelle.",
+      "Aucun appel : aucune voix en direct n'est prête pour toi. Ajoute une clé xAI dans Réglages > Fournisseurs, puis rappelle.",
     );
     // nothing was asked of the provider: the call never left the server
     expect(asked).toEqual([]);
@@ -438,7 +442,37 @@ describe("a refusal the person reads in their own language, end to end", () => {
     const call = await placeCall("p-cara", undefined, "en");
     expect(call.code).toBe("realtime_not_configured");
     expect(call.error).toBe(
-      "No call was placed: no live voice is set up for you. Add an xAI key in Settings > Providers > Voice, then call back.",
+      "No call was placed: no live voice is set up for you. Add an xAI key in Settings > Providers, then call back.",
     );
+  });
+
+  // #5222 review: the language of the TEXT is the interface language carried by
+  // `locale=`, never the SPOKEN voice language carried by `language=`. A client
+  // on an English machine that set the app to French (`locale=fr-CA`) reads a
+  // French reason while the voice itself speaks English; a French machine that
+  // set the app to English reads an English reason while the voice speaks
+  // French. Both stay correct because the two notions are separate parameters.
+  it("the refusal text follows locale= (the app language), not language= (the spoken voice)", async () => {
+    clock += 10 * VOICE_KEY_REFUSAL_TTL_MS;
+    answers[ORG_KEY] = 402;
+    // the voice is told to speak English, the app is French
+    const french = await placeCall("p-cara", undefined, "en", "fr-CA");
+    expect(french.code).toBe("realtime_key_refused");
+    expect(french.error).toBe(
+      "Aucun appel : la clé xAI de ton organisation n'a plus de crédits. Ce n'est pas ta clé : demande à un administrateur de ton organisation. Tu peux aussi ajouter ta propre clé xAI dans Réglages > Fournisseurs, puis rappeler.",
+    );
+    expect(french.error).not.toMatch(/^No call was placed:/);
+  });
+
+  it("the refusal text stays English on a French voice when the app is English", async () => {
+    clock += 10 * VOICE_KEY_REFUSAL_TTL_MS;
+    answers[ORG_KEY] = 402;
+    // the voice is told to speak French, the app is English
+    const english = await placeCall("p-cara", undefined, "fr", "en");
+    expect(english.code).toBe("realtime_key_refused");
+    expect(english.error).toBe(
+      "No call was placed: your organization's xAI key is out of credits. That key is not yours to fix: ask an administrator of your organization. You can also add your own xAI key in Settings > Providers, then call back.",
+    );
+    expect(english.error).not.toMatch(/^Aucun appel :/);
   });
 });

@@ -49,9 +49,14 @@ Now (`server/voice/realtime-call.ts`, `server/voice/realtime-call-host.ts`, the 
   credential (`server/voice/grok-account-voice.ts`): a key of the person's own
   sends them to the page where that key lives ("No call was placed: your voice
   key is out of credits. Add credits to that xAI account, or change the key in
-  Settings > Providers > Voice, then call back."), a dry organization account
-  is an administrator's business rather than a member's reconfiguration, an
+  Settings > Providers, then call back."), a dry organization account
+  is an administrator's business rather than a member's reconfiguration (this
+  installation's own key, source `server`, only exists without an
+  organization and is the solo person's to fix), an
   unknown voice is a voice list to refresh, and an outage is a retry. The
+  language is the app's own: the call socket carries it as `locale=`
+  (`voiceTextLocale`, the active catalog, never `navigator.language`), apart
+  from the spoken `language=`. The
   client renders those words as they arrive and writes lines of its own only
   for the four closes the server said nothing about (`voiceMode.drop.*`, in the
   app's catalog). The older macOS dictation call is gone. Text to speech stays
@@ -930,8 +935,8 @@ xAI's refusal is never hidden behind "didn't come through" (2026-10-28):
   stall (`streamVoiceModeSpeech`, 400 ms), then says the reason in the bar,
   naming the key and what to do about it when the server named one
   ("xAI has no credits left for your voice key ···Wez8. Add credits to that
-  xAI account, or change the key in Settings > Models and voice > My voice
-  keys.", `voiceMode.provider.<failure>.named`, `voiceMode.key.*`,
+  xAI account, or change the key in Settings > Providers.",
+  `voiceMode.provider.<failure>.named`, `voiceMode.key.*`,
   `voiceMode.keyAction.*`), else the plain line
   (`voiceMode.provider.<failure>`). That line goes away as soon as the voice
   is heard again; "Try again" is offered only for the microphone, the one

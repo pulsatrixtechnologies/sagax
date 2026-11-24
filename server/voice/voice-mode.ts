@@ -424,7 +424,7 @@ export async function resolveVoiceKey(deps: KeyDeps, speaker: VoiceSpeaker): Pro
 }
 
 const REFUSAL_TEXT: Record<VoiceModeRefusalCause, string> = {
-  no_credentials: "Voice mode needs an xAI or OpenAI key. Add one in Settings > Providers > Voice.",
+  no_credentials: "Voice mode needs an xAI or OpenAI key. Add one in Settings > Providers.",
   server_engine_not_allowed: "Your organization has not given you its xAI voice. Add your own xAI key, or ask an admin.",
   payer_disabled: "Your access is turned off in your organization.",
   perspicax_unreachable: "Perspicax could not be reached to read your xAI key. Try again in a moment.",
@@ -665,9 +665,10 @@ return async function realtime(req: IncomingMessage, res: import("node:http").Se
   if (!isVoiceModeLanguage(language)) { json(res, 400, { error: "unknown language" }); return; }
   const voice = url.searchParams.get("voice") ?? undefined;
   // which language every refusal sentence of this call is written in: the
-  // interface language first, the voice language when nothing says more
-  // (#5222: the person reads a refusal in their own language)
-  const words = voiceSentenceLanguage(url.searchParams.get("locale") ?? acceptLanguage(req), language);
+  // app's own language (`locale=`) decides alone when the client sends it;
+  // otherwise the browser's language, then the voice language (#5222: the
+  // person reads a refusal in the language they read the app in)
+  const words = voiceSentenceLanguage(acceptLanguage(req), language, url.searchParams.get("locale"));
   const { socket } = upgrade;
   upgrade.release();
   const head = upgrade.head;

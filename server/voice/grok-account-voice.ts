@@ -21,9 +21,21 @@ export function soloGrokVoiceToken(env: NodeJS.ProcessEnv = process.env): string
 
 export type NoCallLanguage = "fr" | "en";
 
-/** French when the interface (or, failing that, the voice language) is
- * French. "auto" stays English until a locale says otherwise. */
-export function voiceSentenceLanguage(locale: string | null | undefined, language: string | null | undefined): NoCallLanguage {
+/** The language a refusal sentence is written in (#5222).
+ *
+ * `appLocale` is the language the person reads the app in. A live call sends
+ * it as `locale=` (src/lib/voice-mode/api.ts voiceTextLocale), and when it is
+ * there it decides alone: the catalog holds French and English, so any other
+ * tag reads English. The spoken voice language is another notion and never
+ * overrules it: a French app with an English voice reads French, an English
+ * app with a French voice reads English.
+ *
+ * Without it (the speech and listen sockets, whose `locale` is the speech
+ * hint of the system, and an older client) the earlier rule stands: French
+ * when either the hint or the voice language is French. */
+export function voiceSentenceLanguage(locale: string | null | undefined, language: string | null | undefined, appLocale?: string | null): NoCallLanguage {
+  const app = (appLocale ?? "").trim().toLowerCase();
+  if (app) return app.startsWith("fr") ? "fr" : "en";
   if ((locale ?? "").toLowerCase().startsWith("fr")) return "fr";
   if ((language ?? "").toLowerCase().startsWith("fr")) return "fr";
   return "en";
@@ -55,14 +67,18 @@ export function voiceNameCallReason(language: NoCallLanguage): string {
     : "No call was placed: xAI does not know that voice. Refresh the voice list and choose a voice again.";
 }
 
-/** Where a voice key is set up, in the person's own language (#5222). The
- * page the app shows is Providers > Voice, so a French sentence names the
- * French page: an English menu path inside a French sentence is a sentence a
- * French person cannot follow. One place for the path, so a renamed page
- * moves every sentence at once. */
+/** Where a voice key is set up, in the person's own language (#5222). The xAI
+ * key is added on the Providers page itself (the person's own provider key,
+ * src/components/settings/PersonalProviderKey), not on the Voice card, which
+ * has no key field. A French sentence names the French page: an English menu
+ * path inside a French sentence is a sentence a French person cannot follow.
+ * One place for the path, so a renamed page moves every sentence at once, and
+ * it is the same address the app's own key rows and the other refusal lines
+ * already use ("Réglages > Fournisseurs", src/locales fr.json
+ * voiceMode.noAccess.xaiKey and friends). */
 const VOICE_SETTINGS: Record<NoCallLanguage, string> = {
-  fr: "Réglages > Fournisseurs > Voix",
-  en: "Settings > Providers > Voice",
+  fr: "Réglages > Fournisseurs",
+  en: "Settings > Providers",
 };
 
 /** Nothing to call on this installation (`realtime_unavailable`, #5222): the
@@ -92,9 +108,19 @@ export function realtimeUnreachableCallReason(language: NoCallLanguage): string 
 }
 
 /** Whose credential it is: one of the person's own, or one they were given
- * (the organization's key, this installation's key) and cannot fix alone. */
+ * (the organization's key) and cannot fix alone.
+ *
+ * `source === "server"` is this installation's own key. The server only ever
+ * builds it when there is no organization (server/voice/voice-mode.ts
+ * resolveVoiceKeys, the `if (!deps.organization)` branch): a member on an
+ * organization server is handed the `org-key` instead. So the installation key
+ * is always the solo person's own to fix, and no administrator exists to ask.
+ * It is therefore "own", and the words below reuse the verdict the app already
+ * gives that key (src/locales voiceMode.keyAction.serverKey: add credits or
+ * change it yourself). Treating it as "given" would send a solo person to an
+ * organization administrator they do not have, about their own key. */
 function keyOwner(source: string): "own" | "given" {
-  return source === "org-key" || source === "server" ? "given" : "own";
+  return source === "org-key" ? "given" : "own";
 }
 
 /** A credential named the way the settings name it (`voiceMode.key.*` in the
@@ -103,10 +129,12 @@ const OWN_KEY_NAME: Record<string, Record<NoCallLanguage, string>> = {
   "grok-account": { fr: "ton compte Grok connecté", en: "your connected Grok account" },
   "voice-key": { fr: "ta clé vocale", en: "your voice key" },
   "perspicax-key": { fr: "ta clé xAI dans Perspicax", en: "your xAI key in Perspicax" },
+  // this installation's own key: the solo person's to fix (see keyOwner), named
+  // as the app names it (src/locales voiceMode.key.serverKey)
+  server: { fr: "la clé xAI de ce serveur", en: "this server's xAI key" },
 };
 const GIVEN_KEY_NAME: Record<string, Record<NoCallLanguage, string>> = {
   "org-key": { fr: "la clé xAI de ton organisation", en: "your organization's xAI key" },
-  server: { fr: "la clé xAI de ce serveur", en: "this server's xAI key" },
 };
 
 function credentialNames(rows: readonly { source: string }[], names: Record<string, Record<NoCallLanguage, string>>, language: NoCallLanguage): string {

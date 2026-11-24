@@ -25,6 +25,14 @@ describe("no call when neither side can pay", () => {
     expect(noCallReason([TRIED("grok-account", "key")], "en")).toBe("No call was placed: the connected Grok account was refused, and there is no xAI API key.");
     expect(noCallReason([TRIED("grok-account", "quota"), TRIED("voice-key", "key")], "fr")).toBe("Aucun appel : le compte Grok connecté n'a plus de crédit, et la clé API xAI a été refusée aussi.");
     expect(voiceSentenceLanguage("fr-CA", "en")).toBe("fr");
+    // the app's own language (a call's `locale=`) decides alone; the spoken
+    // voice language and the system hint never overrule it
+    expect(voiceSentenceLanguage("fr-CA", "fr", "en")).toBe("en");
+    expect(voiceSentenceLanguage("en-US", "en", "fr-CA")).toBe("fr");
+    expect(voiceSentenceLanguage(null, "fr", "de")).toBe("en");
+    // without it the earlier rule stands (speech and listen sockets, older clients)
+    expect(voiceSentenceLanguage("en-US", "fr")).toBe("fr");
+    expect(voiceSentenceLanguage("en-US", "fr", "  ")).toBe("fr");
     expect(voiceSentenceLanguage(null, "fr")).toBe("fr");
     expect(voiceSentenceLanguage(null, "auto")).toBe("en");
   });
@@ -48,7 +56,8 @@ describe("a voice the provider does not know", () => {
 // where to go and what to do, and never names an English menu page inside a
 // French sentence.
 describe("every refusal reason the server computes is said in the person's language", () => {
-  const FRENCH_PATH = "Réglages > Fournisseurs > Voix";
+  const FRENCH_PATH = "Réglages > Fournisseurs";
+  const ENGLISH_PATH = "Settings > Providers";
 
   it("no live voice on this installation", () => {
     expect(realtimeNotOnServerCallReason("en")).toBe(
@@ -61,7 +70,7 @@ describe("every refusal reason the server computes is said in the person's langu
 
   it("nothing set up for that person yet: the page and the gesture, in their language", () => {
     expect(realtimeNotConfiguredCallReason("en")).toBe(
-      "No call was placed: no live voice is set up for you. Add an xAI key in Settings > Providers > Voice, then call back.",
+      `No call was placed: no live voice is set up for you. Add an xAI key in ${ENGLISH_PATH}, then call back.`,
     );
     expect(realtimeNotConfiguredCallReason("fr")).toBe(
       `Aucun appel : aucune voix en direct n'est prête pour toi. Ajoute une clé xAI dans ${FRENCH_PATH}, puis rappelle.`,
@@ -89,17 +98,34 @@ describe("every refusal reason the server computes is said in the person's langu
     );
   });
 
-  it("the organization's account is dry: that is asked of its administrator, not reconfigured by the member", () => {
-    const english = realtimeKeyRefusedCallReason([TRIED("org-key", "quota")], "en");
-    const french = realtimeKeyRefusedCallReason([TRIED("org-key", "quota")], "fr");
-    expect(english).toBe(
-      "No call was placed: your organization's xAI key is out of credits. That key is not yours to fix: ask an administrator of your organization. You can also add your own xAI key in Settings > Providers > Voice, then call back.",
+  // #5222 review: a person on an organization and a solo person read about the
+  // same refused installation credential separately. The organization's key is
+  // the organization's to fix; the installation's key only exists when there is
+  // no organization at all (server/voice/voice-mode.ts resolveVoiceKeys, the
+  // `if (!deps.organization)` branch), so it is always the solo person's own to
+  // fix, and there is no administrator of theirs to ask.
+  it("an organization's dry key is that organization's administrator's business (an organization person)", () => {
+    expect(realtimeKeyRefusedCallReason([TRIED("org-key", "quota")], "en")).toBe(
+      `No call was placed: your organization's xAI key is out of credits. That key is not yours to fix: ask an administrator of your organization. You can also add your own xAI key in ${ENGLISH_PATH}, then call back.`,
     );
-    expect(french).toBe(
+    expect(realtimeKeyRefusedCallReason([TRIED("org-key", "quota")], "fr")).toBe(
       `Aucun appel : la clé xAI de ton organisation n'a plus de crédits. Ce n'est pas ta clé : demande à un administrateur de ton organisation. Tu peux aussi ajouter ta propre clé xAI dans ${FRENCH_PATH}, puis rappeler.`,
     );
-    // this installation's key is the same story: not the member's to fix
-    expect(realtimeKeyRefusedCallReason([TRIED("server", "key")], "fr")).toContain("la clé xAI de ce serveur a été refusée");
+  });
+
+  it("a solo person's own installation key is theirs to fix, never sent to an administrator they do not have", () => {
+    // solo server, no organization: the key they are told about is `server`
+    expect(realtimeKeyRefusedCallReason([TRIED("server", "key")], "fr")).toBe(
+      `Aucun appel : la clé xAI de ce serveur a été refusée. Ajoute des crédits à ce compte xAI, ou change la clé dans ${FRENCH_PATH}, puis rappelle.`,
+    );
+    expect(realtimeKeyRefusedCallReason([TRIED("server", "quota")], "en")).toBe(
+      `No call was placed: this server's xAI key is out of credits. Add credits to that xAI account, or change the key in ${ENGLISH_PATH}, then call back.`,
+    );
+    // no phantom administrator is invented for a person who has none
+    expect(realtimeKeyRefusedCallReason([TRIED("server", "key")], "fr")).not.toMatch(/administrateur|organisation/i);
+    expect(realtimeKeyRefusedCallReason([TRIED("server", "quota")], "en")).not.toMatch(/administrator|organization/i);
+    // and the sentence reuses the verdict the app already gives that key
+    expect(realtimeKeyRefusedCallReason([TRIED("server", "key")], "fr")).toContain("change la clé");
   });
 
   it("both sides dry at once: each says who fixes what", () => {

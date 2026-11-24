@@ -9,7 +9,7 @@ import { ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { AGENT_COLORS, agentPreview, agentStatusText, expertName, heavyLineOf, heavyOutcomeText, leaderStepText } from "@/lib/heavy-team";
+import { AGENT_COLORS, agentPreview, agentStatusText, expertName, heavyCauseText, heavyLineOf, heavyOutcomeText, leaderStepText, refusalSaysText, refusalText } from "@/lib/heavy-team";
 import { closeThoughts, useOpenThoughts } from "@/lib/thoughts-panel";
 import { formatElapsed } from "@/lib/working-time";
 import type { Message } from "@/state/store";
@@ -49,8 +49,9 @@ function AgentSection({ agent, index, running }: { agent: HeavyAgentLine; index:
             </div>
           ))}
           {agent.live && <p data-thoughts-live="" className="whitespace-pre-wrap break-words text-[14px] leading-6 text-ink">{agent.live}</p>}
+          {agent.cause && <p data-thoughts-cause={agent.cause} className="text-[13px] leading-5 text-danger">{heavyCauseText(agent.cause)}</p>}
           {agent.error && <p className="text-[13px] leading-5 text-danger">{agent.error}</p>}
-          {!agent.messages.length && !agent.live && !agent.error && <p className="text-[13px] leading-5 text-ink-tertiary">{agentPreview(agent)}</p>}
+          {!agent.messages.length && !agent.live && !agent.error && !agent.cause && <p className="text-[13px] leading-5 text-ink-tertiary">{agentPreview(agent)}</p>}
         </div>
       )}
     </section>
@@ -79,6 +80,19 @@ export function ThoughtsPanel({ line, running, onClose }: { line: HeavyTeamLine;
             <p className="text-[12px] leading-4 text-ink-secondary">{t("heavy.disputes")}</p>
             <ul className="mt-1 list-disc pl-5 text-[13px] leading-5 text-ink">
               {line.disagreements!.map((point) => <li key={point}>{point}</li>)}
+            </ul>
+          </div>
+        )}
+        {(line.refusals?.length ?? 0) > 0 && (
+          <div data-thoughts-refusals="" className="mt-2">
+            <p className="text-[12px] leading-4 text-ink-secondary">{t("heavy.refusals")}</p>
+            <ul className="mt-1 flex flex-col gap-1.5 text-[13px] leading-5">
+              {line.refusals!.map((refusal, at) => (
+                <li key={at} data-thoughts-refusal={refusal.cause}>
+                  <span className="text-ink">{refusalText(refusal)}</span>
+                  {refusalSaysText(refusal) && <span className="block text-ink-secondary">{refusalSaysText(refusal)}</span>}
+                </li>
+              ))}
             </ul>
           </div>
         )}

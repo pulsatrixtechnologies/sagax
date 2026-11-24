@@ -10,7 +10,8 @@ import type { ModeModel } from "../shared/model-mode.ts";
 import { allowsTool, narrowToolScope } from "../shared/tool-scope.ts";
 import {
   DEFAULT_EXPERTS, HEAVY_EXPERT_REFUSAL, HeavyTeamTracker, assignSeats, conversationContext, createHeavyExpertFence, critiquePrompt,
-  expertToolScope, heavyUsage, leaderNotes, parseTeamPlan, parseVerdict, planPrompt, proposePrompt, runRounds, sumUsage,
+  SeatBench, askOnSeats, expertToolScope, heavyUsage, leaderNotes, parseTeamPlan, parseVerdict, planPrompt, proposePrompt, readRefusal, refusalLasts,
+  runRounds, sumUsage,
   type ExpertSeat, type HeavyAgentOutcome,
 } from "./heavy-team.ts";
 
@@ -220,14 +221,14 @@ describe("what an expert is asked and how its verdict reads", () => {
 
 describe("the leader's notes", () => {
   it("tells the leader to act once itself, the experts having taken no action", () => {
-    const notes = leaderNotes({ rounds: 2, agreed: true, disagreements: [], finals: [{ n: 1, persona: "Skeptic", modelLabel: "Opus", text: "Do A.", ok: true }] });
+    const notes = leaderNotes({ rounds: 2, agreed: true, disagreements: [], unseated: [], finals: [{ n: 1, persona: "Skeptic", modelLabel: "Opus", text: "Do A.", ok: true }] });
     expect(notes).toContain("## Team of Experts (Heavy mode)");
     expect(notes).toContain("### Expert 1, Skeptic (Opus)\nDo A.");
     expect(notes).toContain("carry it out ONCE now, yourself, with your usual tools and approvals");
   });
 
   it("with nothing usable tells the leader to act alone", () => {
-    expect(leaderNotes({ rounds: 1, agreed: false, disagreements: [], finals: [{ n: 1, persona: "x", modelLabel: "m", text: "", ok: false }] }))
+    expect(leaderNotes({ rounds: 1, agreed: false, disagreements: [], unseated: [], finals: [{ n: 1, persona: "x", modelLabel: "m", text: "", ok: false }] }))
       .toContain("none of them came back with anything usable");
   });
 });
@@ -276,5 +277,137 @@ describe("Heavy's cost reads in the leader's turn", () => {
     heavyUsage.carry("thread-1", total);
     expect(heavyUsage.take("thread-1")).toEqual(total);
     expect(heavyUsage.take("thread-1")).toBeUndefined();
+  });
+});
+
+// M-20261123-040: "Heavy mode does not work": seats on models the provider
+// refuses (HTTP 403) counted as experts that failed.
+describe("a seat that refuses is replaced by the next one (M-20261123-040)", () => {
+  const FORBIDDEN = "Upstream HTTP 403: This model is not available on your plan. No tool calls were seen before it stopped.";
+  const pool = [seat("router", "strong", "Router"), seat("router", "coder", "Router"), seat("claude", "opus", "Claude")];
+
+  it("reads the real cause of a refusal: the status, the provider's own words, and what kind it is", () => {
+    expect(readRefusal(FORBIDDEN)).toEqual({ cause: "access", status: 403, detail: "This model is not available on your plan" });
+    expect(readRefusal("Upstream HTTP 401: Incorrect API key provided")).toMatchObject({ cause: "access", status: 401 });
+    expect(readRefusal("Upstream HTTP 402: Payment required")).toMatchObject({ cause: "credits", status: 402 });
+    expect(readRefusal("Upstream HTTP 429: Rate limit reached")).toMatchObject({ cause: "limit", status: 429 });
+    expect(readRefusal("Upstream HTTP 404: The model `coder` does not exist")).toMatchObject({ cause: "model", status: 404 });
+    expect(readRefusal("Upstream HTTP 503: upstream connect error")).toMatchObject({ cause: "unavailable", status: 503 });
+    expect(readRefusal("could not open a read-only thread for this expert")).toEqual({ cause: "other", detail: "could not open a read-only thread for this expert" });
+    // what another try will not change is remembered; a limit or an outage is not
+    expect([FORBIDDEN, "Upstream HTTP 402: Payment required", "Upstream HTTP 429: Rate limit reached", "Upstream HTTP 503: down"].map((text) => refusalLasts(readRefusal(text))))
+      .toEqual([true, true, false, false]);
+  });
+
+  it("the bench gives the seat the fewest experts hold, never one that refused, the leader's own last", () => {
+    const leader = seat("claude", "fable", "Claude");
+    const bench = new SeatBench(pool, leader);
+    bench.refuse(pool[1]!);
+    expect(bench.hasRefused(pool[1]!)).toBe(true);
+    // nobody sits yet: the pool's order, strongest first
+    expect(bench.next([])).toBe(pool[0]);
+    // the free seat before a shared one
+    expect(bench.next([pool[0]!])).toBe(pool[2]);
+    expect(bench.next([pool[0]!, pool[2]!])).toEqual(leader);
+    for (const taken of [pool[0]!, pool[2]!, leader]) bench.refuse(taken);
+    expect(bench.next([])).toBeNull();
+  });
+
+  it("the expert goes on on the next seat and the refusal costs no wait", async () => {
+    const bench = new SeatBench(pool);
+    const expert: ExpertSeat = { ...DEFAULT_EXPERTS[0]!, n: 2, seat: pool[1]! };
+    const asked: Array<[string, string, boolean]> = [];
+    const refusals: unknown[] = [];
+    const outcome = await askOnSeats({
+      expert, prompt: "round prompt", fresh: () => `fresh for ${expert.seat.model}`, bench, held: () => [pool[0]!],
+      ask: async (on, prompt, moved) => {
+        asked.push([on.model, prompt, moved]);
+        return on.model === "coder" ? { status: "failed", text: FORBIDDEN } : { status: "reply", text: "plan" };
+      },
+      onRefusal: (from, refusal, to) => refusals.push([from.model, refusal?.cause, to?.model]),
+    });
+    expect(outcome).toEqual({ status: "reply", text: "plan" });
+    // the same round is asked again at once, written for a conversation that starts on the new seat
+    expect(asked).toEqual([["coder", "round prompt", false], ["opus", "fresh for opus", true]]);
+    expect(refusals).toEqual([["coder", "access", "opus"]]);
+    expect(expert.seat).toBe(pool[2]);
+    expect(bench.hasRefused(pool[1]!)).toBe(true);
+  });
+
+  it("a seat that already refused another expert of the run is not asked again", async () => {
+    const bench = new SeatBench(pool);
+    bench.refuse(pool[1]!);
+    const expert: ExpertSeat = { ...DEFAULT_EXPERTS[0]!, n: 3, seat: pool[1]! };
+    const asked: string[] = [];
+    await askOnSeats({
+      expert, prompt: "p", fresh: () => "f", bench, held: () => [],
+      ask: async (on) => { asked.push(on.model); return { status: "reply", text: "plan" }; },
+      onRefusal: () => {},
+    });
+    expect(asked).toEqual(["strong"]);
+  });
+
+  it("no answer in time is not a refusal: the expert keeps its seat and fails saying so", async () => {
+    const bench = new SeatBench(pool);
+    const expert: ExpertSeat = { ...DEFAULT_EXPERTS[0]!, n: 1, seat: pool[0]! };
+    const ask = vi.fn(async (): Promise<HeavyAgentOutcome> => ({ status: "timeout", text: "" }));
+    expect(await askOnSeats({ expert, prompt: "p", fresh: () => "f", bench, held: () => [], ask, onRefusal: () => { throw new Error("not a refusal"); } })).toEqual({ status: "timeout", text: "" });
+    expect(ask).toHaveBeenCalledTimes(1);
+    const line = tracker();
+    line.setTeam([expert, { ...DEFAULT_EXPERTS[1]!, n: 2, seat: pool[2]! }]);
+    await runRounds({ experts: [expert, { ...DEFAULT_EXPERTS[1]!, n: 2, seat: pool[2]! }], tracker: line, request: "x", ask: async (one) => (one.n === 1 ? { status: "timeout", text: "" } : { status: "reply", text: "plan" }) });
+    expect(line.line.agents[0]).toMatchObject({ status: "failed", cause: "timeout" });
+    expect(line.line.agents[0]!.error).toBeUndefined();
+  });
+
+  it("with every seat refused the expert leaves the team: it is not an expert that failed", async () => {
+    const team: ExpertSeat[] = [{ ...DEFAULT_EXPERTS[0]!, n: 1, seat: pool[0]! }, { ...DEFAULT_EXPERTS[1]!, n: 2, seat: pool[1]! }, { ...DEFAULT_EXPERTS[2]!, n: 3, seat: pool[2]! }];
+    const line = tracker();
+    line.setTeam(team);
+    const bench = new SeatBench([pool[1]!]);
+    const result = await runRounds({
+      experts: team, tracker: line, request: "x", maxRounds: 1,
+      ask: (expert, prompt, _hooks, fresh) => (expert.n === 2
+        ? askOnSeats({ expert, prompt, fresh, bench, held: () => [], ask: async () => ({ status: "failed", text: FORBIDDEN }), onRefusal: (from, refusal, to) => line.refused(expert.n, from, refusal, to) })
+        : Promise.resolve({ status: "reply", text: "plan" })),
+    });
+    expect(line.line.agents.map((agent) => agent.n)).toEqual([1, 3]);
+    expect(result.unseated).toEqual([2]);
+    expect(result.finals.map((final) => final.n)).toEqual([1, 3]);
+    expect(line.line.refusals).toEqual([{ n: 2, persona: "Security", engineLabel: "Router", modelLabel: "coder", cause: "access", status: 403, detail: "This model is not available on your plan" }]);
+    // the leader is told the team it really had
+    expect(leaderNotes(result)).toContain("2 read-only experts");
+    expect(leaderNotes({ rounds: 1, agreed: false, disagreements: [], finals: [], unseated: [1, 2] })).toContain("no expert could run");
+  });
+
+  it("the row names who refused, why, and the seat the expert took; a seat is told once", () => {
+    const published: HeavyTeamLine[] = [];
+    const line = tracker(published);
+    line.setTeam(experts(2));
+    const refusal = readRefusal(FORBIDDEN);
+    line.refused(2, seat("router", "coder", "Router"), refusal, seat("claude", "opus", "Claude"));
+    line.refused(1, seat("router", "coder", "Router"), refusal, seat("claude", "opus", "Claude"));
+    line.refused(1, seat("router", "coder", "Router"), null, seat("claude", "opus", "Claude"));
+    const last = published.at(-1)!;
+    expect(last.refusals).toEqual([{ n: 2, persona: "Security", engineLabel: "Router", modelLabel: "coder", cause: "access", status: 403, detail: "This model is not available on your plan", replacedBy: { engineLabel: "Claude", modelLabel: "opus" } }]);
+    expect(last.agents.map((agent) => [agent.status, agent.engineLabel, agent.modelLabel])).toEqual([["working", "Claude", "opus"], ["working", "Claude", "opus"]]);
+  });
+
+  it("moved in a critique round, the expert is told who it is, the request and its own plan so far", async () => {
+    const team: ExpertSeat[] = [{ ...DEFAULT_EXPERTS[0]!, n: 1, seat: pool[0]! }, { ...DEFAULT_EXPERTS[1]!, n: 2, seat: pool[1]! }];
+    const line = tracker();
+    line.setTeam(team);
+    const fresh: string[] = [];
+    await runRounds({
+      experts: team, tracker: line, request: "Plan the cutover", maxRounds: 2,
+      ask: async (expert, _prompt, _hooks, again) => {
+        if (expert.n === 2) fresh.push(again());
+        return { status: "reply", text: `plan of ${expert.n}\nVERDICT: AGREE` };
+      },
+    });
+    expect(fresh[1]).toContain('You are Expert 2 of 2, "Security"');
+    expect(fresh[1]).toContain("Plan the cutover");
+    expect(fresh[1]).toContain("Your own plan so far:\nplan of 2");
+    expect(fresh[1]).toContain("Round 2 of at most 2");
   });
 });

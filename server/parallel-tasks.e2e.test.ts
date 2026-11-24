@@ -10,7 +10,7 @@
 // POSIX-gated like the other CLI e2es (the fakes are shebang scripts).
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -248,6 +248,33 @@ posixOnly("parallel tasks e2e", () => {
       await waitFor(async () => (await messages(bot.id, bot.threadId)).filter((m) => m.parallelTask?.role === "result").length === 3, "three results");
       const results = (await messages(bot.id, bot.threadId)).filter((m) => m.parallelTask?.role === "result");
       expect(results.map((m) => m.replyToId)).toEqual([first.body.message.id, second.body.message.id, third.body.message.id]);
+    } finally {
+      await api("PATCH", "/api/config", { threads: { maxParallelPerPerson: null } });
+    }
+  }, 90_000);
+
+  it("frees the slot and drains the next task when a queued engine cannot start", async () => {
+    expect((await api("PATCH", "/api/config", { threads: { maxParallelPerPerson: 1 } })).status).toBe(200);
+    try {
+      const bot = await busyBot("failure-main");
+      const send = (text: string) => api("POST", `/api/bots/${bot.id}/messages`, { text, threadId: bot.threadId, busyMode: "parallel" });
+      expect((await send("[gate:failure-first] first")).body.parallel.state).toBe("running");
+      const broken = (await send("queued with an unavailable work folder")).body.parallel;
+      const next = (await send("[gate:failure-next] next")).body.parallel;
+      expect(broken.state).toBe("queued");
+      expect(next.state).toBe("queued");
+      // Replace only the queued child's private fixture directory. Starting
+      // its driver there fails even though the other tasks have valid folders.
+      const folder = (await tasks(bot.id)).find(task => task.threadId === broken.threadId).cwd;
+      expect(folder).toBe(join(home, ".sagax", "task-workspaces", bot.id, broken.threadId));
+      renameSync(folder, folder + "-saved");
+      writeFileSync(folder, "not a directory");
+      open("failure-first");
+      await waitFor(async () => (await messages(bot.id, bot.threadId)).some(m => m.parallelTask?.threadId === broken.threadId && m.parallelTask?.role === "result" && m.parallelTask?.state === "failed"), "the failed engine start");
+      await waitFor(async () => (await messages(bot.id, next.threadId)).some(m => m.tool?.name === "Bash"), "the next queued task to start");
+      open("failure-next");
+      open("failure-main");
+      await waitFor(async () => (await messages(bot.id, bot.threadId)).some(m => m.parallelTask?.threadId === next.threadId && m.parallelTask?.state === "done"), "the next task to finish");
     } finally {
       await api("PATCH", "/api/config", { threads: { maxParallelPerPerson: null } });
     }

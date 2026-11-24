@@ -288,7 +288,7 @@ export interface VoiceModeDeps {
   legacyChoice?(speaker: VoiceSpeaker): { provider: VoiceTtsProvider; voice?: string };
   /** #5180: Act as, personal keys, and a paid-key confirmation for this person.
    * Absent: the voice key order is unchanged. */
-  credentialPolicy?(speaker: VoiceSpeaker, threadId?: string): CredentialPolicy;
+  credentialPolicy?(speaker: VoiceSpeaker, threadId?: string): CredentialPolicy | Promise<CredentialPolicy>;
   /** #5180: one audit row for the decision. Never a key. */
   auditCredential?(decision: CredentialDecision, speaker: VoiceSpeaker, threadId?: string): void;
   /** The person's synced voice preference (`omb.voiceMode.v1`): a client
@@ -354,9 +354,9 @@ function accountForm(form: CredentialForm | null): boolean {
 
 /** The voice order stays. The policy only drops a form or asks before a
  * paid key. A solo server, and a caller with no policy, is unchanged. */
-function governVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, threadId: string | undefined, resolved: VoiceKeys): VoiceKeys {
+async function governVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, threadId: string | undefined, resolved: VoiceKeys): Promise<VoiceKeys> {
   if (!resolved.ok || !deps.organization || !deps.credentialPolicy) return resolved;
-  const policy = { ...deps.credentialPolicy(speaker, threadId), aspect: "voice" as const };
+  const policy = { ...await deps.credentialPolicy(speaker, threadId), aspect: "voice" as const };
   const candidates: CredentialCandidate[] = [];
   for (const entry of resolved.keys) {
     const form = voiceCredentialForm(entry.source);

@@ -63,6 +63,16 @@ describe("a bot's one-shot account (#3519)", () => {
     expect(host.turnAccessByThread.has("thread-1")).toBe(true);
   });
 
+  it("awaits the routine payer's consent when runAs differs from the credential owner", async () => {
+    const { host } = orgHost();
+    const credentialPolicyFor = vi.fn(async () => ({ actingAs: "support", allowPersonalWhenActingAs: true }));
+    const governed = vi.fn((input: Parameters<typeof resolveEngineAccess>[0]) => ({ plan: resolveEngineAccess(input), decision: null }));
+    const turn = createOrgTurnAccess(() => ({ ...host, credentialPolicyFor, resolveGovernedEngineAccess: governed }));
+    await turn("thread-1", bot, instance, { origin: "owner-routine", principalId: "other-person" }, "claude-sonnet");
+    expect(credentialPolicyFor).toHaveBeenCalledWith("thread-1", "p1", bot.id);
+    expect(governed.mock.calls[0][0].policy).toMatchObject({ actingAs: "support", allowPersonalWhenActingAs: true });
+  });
+
   it("never falls back on the server's own sign-in while the person's account is valid", async () => {
     const { host } = orgHost();
     const { access } = await createBotOneShotAccess(() => host)(bot, instance);

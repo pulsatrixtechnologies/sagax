@@ -16645,15 +16645,34 @@ function recordLearnedTurn(turn: {
  * model chip reads it) when it changed, and in the Events lens when the
  * account changed or was picked for the first time. Never a row in the chat. */
 /** #5180: Act as consent, the personal-key switch, and a paid-key confirmation. */
-function credentialPolicyFor(threadId: string | undefined, speaker: { principalId?: string } | undefined, botId?: string): CredentialPolicy {
+async function credentialPolicyFor(threadId: string | undefined, payerPrincipalId: string | undefined, botId?: string): Promise<CredentialPolicy> {
   const run = threadId ? activeRoutineRunForThread(threadId) : null;
   const slug = run && (!botId || run.botId === botId) ? (run.actAs?.trim() ?? "") : "";
-  const principalId = speaker?.principalId?.trim().toLowerCase() ?? "";
-  const settings = principalId && isPrincipalId(principalId) ? personSettings.get(principalId) : undefined;
+  const principalId = payerPrincipalId?.trim().toLowerCase() ?? "";
+  let allowPersonalWhenActingAs = false;
+  if (slug && isPrincipalId(principalId)) {
+    if (IDENTITY.kind === "perspicax") {
+      const payer = principals.byId(principalId);
+      if (payer?.subject?.iss === IDENTITY.issuer && payer.disabledAt === undefined && perspicaxDirectory) {
+        try {
+          const sessionToken = await perspicaxAccessToken(principalId);
+          allowPersonalWhenActingAs = await perspicaxDirectory.personalActAsConsent(sessionToken, async () => {
+            if (routineConsents?.status(principalId).state !== "active") return null;
+            const delegation = await routineConsents.subjectToken(principalId);
+            return delegation.ok ? delegation.token : null;
+          });
+        } catch {
+          // An unavailable sign-in or consent service cannot authorize personal credentials.
+        }
+      }
+    } else {
+      allowPersonalWhenActingAs = personSettings.get(principalId).allowPersonalCredentialWhenActingAs === true;
+    }
+  }
   return {
     aspect: "chat",
     ...(slug ? { actingAs: slug } : {}),
-    allowPersonalWhenActingAs: settings?.allowPersonalCredentialWhenActingAs === true,
+    allowPersonalWhenActingAs,
     personalKeysEnabled: cfg.organization?.personalKeys !== false,
     paidKeyConfirmed: paidKeyIsConfirmed(threadId),
   };
@@ -32100,7 +32119,7 @@ const voiceModeDeps: VoiceModeDeps = {
   serverKeyAllowed: (speaker) => serverEngineAllowedFor(speaker.principalId, VOICE_SERVER_ENGINE),
   // #4567: the person's own connected Grok account, before any API key.
   // A disabled person has none. The token is never logged.
-  credentialPolicy: (speaker, threadId) => ({ ...credentialPolicyFor(threadId, speaker), aspect: "voice" }),
+  credentialPolicy: (speaker, threadId) => credentialPolicyFor(threadId, speaker.principalId),
   auditCredential: (decision, speaker, threadId) => auditCredentialDecisionFor(threadId, undefined, decision, speaker),
   grokAccount: grokAccountTokenOf,
   // #5200: the organization's Grok account, after everything of the

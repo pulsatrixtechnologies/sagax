@@ -2,7 +2,7 @@
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { avatarContentType, DIRECTORY_ABSENT_CONFIRM_MS, directoryIntervalMs, isSubjectRefusal, PerspicaxDirectory, readLinkFile, type Directory } from "./perspicax-link.ts";
 import { PrincipalRegistry } from "../auth/principals.ts";
@@ -820,6 +820,37 @@ describe("Capabilities lot 4: the organization's declarations in the directory",
     expect(h.sync.orgCapabilities()?.map((row) => row.id)).toEqual(["cap-1"]);
     expect(h.sync.capabilityMarketplaces()).toBeUndefined();
     expect(h.sync.capabilityMarketplacePolicy()).toBeUndefined();
+  });
+
+  it("reads current personal act-as consent with the payer's subject and fails closed", async () => {
+    const h = harness(directoryOf([person("BOB")]));
+    await h.sync.refresh();
+    for (const [status, body, allowed] of [
+      [200, { personal_credential: true }, true],
+      [200, { personal_credential: false }, false],
+      [200, { personal_credential: "true" }, false],
+      [403, { personal_credential: true }, false],
+      [404, {}, false],
+    ] as const) {
+      h.queue.push({ status, body });
+      expect(await h.sync.personalActAsConsent("payer-fixture", async () => null)).toBe(allowed);
+      expect(h.requests.at(-1)).toMatchObject({
+        url: "http://perspicax:8787/api/v1/pulsabot/people/me/act-as-consent",
+        headers: { authorization: `Bearer ${TOKEN_A}`, "x-perspicax-subject-token": "payer-fixture" },
+      });
+    }
+  });
+
+  it("retries a refused session with the same payer's delegation, and treats a withdrawal as final", async () => {
+    const h = harness(directoryOf([person("BOB")]));
+    await h.sync.refresh();
+    const delegated = vi.fn(async () => "payer-delegation");
+    h.queue.push({ status: 403, body: { code: "subject" } }, { status: 200, body: { personal_credential: true } });
+    expect(await h.sync.personalActAsConsent("payer-session", delegated)).toBe(true);
+    expect(h.requests.slice(-2).map((r) => r.headers["x-perspicax-subject-token"])).toEqual(["payer-session", "payer-delegation"]);
+    h.queue.push({ status: 200, body: { personal_credential: false } });
+    expect(await h.sync.personalActAsConsent("payer-session", delegated)).toBe(false);
+    expect(delegated).toHaveBeenCalledTimes(1);
   });
 
   it("linkJson carries the link token and the person's sign-in token, and keeps a subject refusal's code", async () => {

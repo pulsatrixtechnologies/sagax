@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** orgTurnAccess (#1388). Pure move from server/index.ts. */
-import { materializeEngineAccess } from "../engines/engine-credentials.ts";
+import { materializeEngineAccess, turnPayer } from "../engines/engine-credentials.ts";
 import { soloPiTurnAccess } from "../pi-own-model-servers-access.ts";
 import { claudeAccessUsable } from "../engines/claude-subscription-refresh.ts";
 export type Host = Record<string, any>;
@@ -18,7 +18,7 @@ async function resolveBotEngineAccess(host: Host, bot: BotRecord, instance: { in
   // #2024: so does a Perspicax model server's, whose key comes with it.
   if (host.piLocalModel({ instanceId: instance.instanceId, model })) return { access: host.withPiModelServers(host.piLocalTurnAccess(bot, speaker), instance, bot, speaker), ranOn: undefined };
   const input = host.orgEngineInput(bot, instance, speaker);
-  const policy = host.credentialPolicyFor?.(threadId, speaker, bot.id);
+  const policy = await host.credentialPolicyFor?.(threadId, turnPayer(input).principalId, bot.id);
   const governedInput = policy ? { ...input, policy } : input;
   const governed = host.resolveGovernedEngineAccess
     ? host.resolveGovernedEngineAccess(governedInput)

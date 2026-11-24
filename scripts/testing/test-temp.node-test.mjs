@@ -21,6 +21,18 @@ test("a run contains child temps and restores the caller's environment", () => {
   assert.equal(existsSync(run.path), false);
 });
 
+// macOS before 27 refuses a Unix socket path over 103 bytes (`sun_path`).
+// An e2e fixture gives its server a home inside the run's root as TMPDIR, and
+// the permission broker's short fallback is `<TMPDIR>/omb-perm-<16 hex>.sock`.
+test("a run's root leaves a fixture home room for the permission broker's socket", { skip: process.platform === "win32" }, () => {
+  const run = createTestTempRoot();
+  try {
+    const home = join(run.path, `omb-pi-compaction-recovery-upstream-${"x".repeat(6)}`);
+    const socket = join(home, `omb-perm-${"0".repeat(16)}.sock`);
+    assert.ok(Buffer.byteLength(socket) <= 103, `${Buffer.byteLength(socket)} bytes: ${socket}`);
+  } finally { run.cleanup(); }
+});
+
 test("the sweep removes only old test directories and keeps live runs and links", () => {
   const root = mkdtempSync(join(tmpdir(), "test-temp-check-"));
   const old = new Date(Date.now() - 24 * 60 * 60_000);

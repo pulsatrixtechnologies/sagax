@@ -22,13 +22,13 @@
 //   specks), all from the moves' own timelines (shape-moves.ts).
 import "./shape-mascot.css";
 import { cloneElement, Fragment, isValidElement, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { avatarFrame, createAnimator, pointerGaze, type AvatarDefinition, type AvatarMotion, type EyeMark, type FrameShape, type Matrix } from "open-bot-avatar";
+import { createAnimator, pointerGaze, type AvatarDefinition, type AvatarMotion, type EyeMark, type FrameShape, type Matrix } from "open-bot-avatar";
 import { requestFrame, subscribeFrames, trackPointer } from "open-bot-avatar/dom";
 import { MAUS_COLORS } from "@/lib/mascot";
 import { cn } from "@/lib/cn";
 import { isBodyShape, MASCOT_SHAPES, SHAPE_SKIN_TIER, SHAPE_SKINS, type BodyShape, type MascotShape, type ShapeSkin, type SkinTier } from "../../shared/mascot-look";
 import type { MascotAvatarDef } from "../../shared/mascot-look";
-import { bakedShapeFor, engineMood, eyeMarkup, lookDefinition, moodFrame, pathsMarkup, runtimeStill, shapesMarkup, stillUrl, type BakedStill, type ShapeMood, type StillFrame, type StillPath } from "./shape-avatar";
+import { bakedShapeFor, engineFrame, engineMood, eyeMarkup, lookDefinition, moodFrame, pathsMarkup, runtimeStill, shapesMarkup, stillUrl, type BakedStill, type ShapeMood, type StillFrame, type StillPath } from "./shape-avatar";
 import { mixHex, MOVE_TIMING, ShapeEngine, stillFrame as restFrame, isShapeMove, rainbowStops, type ShapeFrame, type ShapeMove } from "./shape-engine";
 import { loadBakedStill, useBakedStill } from "./shape-stills";
 import { shapeSkinBase, shapeSkinLayers, type ShapeSkinBase, type ShapeSkinLayers } from "./skin-fx/shape-skins";
@@ -385,7 +385,8 @@ function useLiveShape(host: React.RefObject<HTMLSpanElement | null>, refs: DrawR
         if (!playing) moves = null;
 
         const target = input.followPointer && pointer && rect && rect.width > 0 ? pointerGaze(pointer, rect, { x: input.definition.eyes.x / 100, y: input.definition.eyes.y / 100 }) : null;
-        const step = animator.step({ now: now * 1000, motion: input.mood, target, reducedMotion: false });
+        // at work the pose is the app's own over the engine's idle (engineFrame): the engine eases between idle and happy only
+        const step = animator.step({ now: now * 1000, motion: input.mood === "thinking" ? "idle" : input.mood, target, reducedMotion: false });
         // the move's body (the egg, the hexagon, the triangle) once it has turned more than half way
         const into = playing && input.move ? MOVE_BODY[input.move.clip] : undefined;
         const morphStill = into && playing && playing.morphed >= 0.5 ? morphStills.get(into) : undefined;
@@ -393,7 +394,7 @@ function useLiveShape(host: React.RefObject<HTMLSpanElement | null>, refs: DrawR
         if (morphStill) {
           frame = moodFrame(morphStill, input.mood);
         } else {
-          const flat = avatarFrame(input.definition, { motion: input.mood, motionBlend: step.motionBlend, time, gaze: step.gaze, reducedMotion: false, ...(input.depth === undefined ? {} : { depth: input.depth }) });
+          const flat = engineFrame(input.definition, input.mood, { motionBlend: step.motionBlend, time, gaze: step.gaze, reducedMotion: false, depth: input.depth });
           frame = { paths: flat.paths.map((path): StillPath => [path.id, path.d, path.evenOdd, path.box.w * path.box.h]), root: flat.root, shapes: flat.shapes };
         }
         if (playing && moves) frame = withEyes(frame, moveEyeOpen(playing, moves.rest));

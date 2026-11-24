@@ -15,7 +15,7 @@ import { BODY_SHAPES, GALLERY_SHAPES, MASCOT_SHAPES, botMascotLook } from "../..
 import { OBJECT_SHAPE_BY_ID } from "../../shared/shape-avatar-presets";
 import baked from "../../shared/shape-avatars.json";
 import { BotAvatar, type BotAvatarProps } from "./Avatar";
-import { bakeStill, engineMood, lookDefinition, moodFrame, ownDefinition, readStill, shapeDefinition, stillUrl } from "./shape-avatar";
+import { engineFrame, bakeStill, engineMood, lookDefinition, moodFrame, ownDefinition, readStill, shapeDefinition, stillUrl } from "./shape-avatar";
 import { loadBakedStill } from "./shape-stills";
 import { LIVE_MIN, moveExtrasMarkup, moveEyeOpen, ShapeMascot, shapeIsLive, skinFace } from "./ShapeMascot";
 import { SHAPE_MOVES, ShapeEngine, stillFrame as restFrame } from "./shape-engine";
@@ -130,6 +130,21 @@ describe("where a shape shows", () => {
     expect(svgOf(stillOf(named)!)).not.toContain("<title>");
     const decorative = renderToStaticMarkup(createElement(ShapeMascot, { shape: "ghost", color: "blue", size: 28, animated: false }));
     expect(decorative).toContain('aria-hidden="true"');
+  });
+
+  it("keeps the bot's own body and both eyes at work, still and live: never the engine's three dots (0.3) in its place", () => {
+    for (const shape of MASCOT_SHAPES) {
+      const def = shapeDefinition(shape);
+      const rest = engineFrame(def, "idle", { reducedMotion: true });
+      for (const frame of [engineFrame(def, "thinking", { reducedMotion: true }), engineFrame(def, "thinking", { reducedMotion: false, time: 3.2 })]) {
+        const slices = frame.shapes.filter((part) => part.kind === "slice");
+        expect(slices.some((part) => part.key.startsWith("mark-")), shape).toBe(false);
+        expect(slices.length, shape).toBeGreaterThan(0);
+        expect(frame.shapes.filter((part) => part.kind === "eye").length, shape).toBe(rest.shapes.filter((part) => part.kind === "eye").length);
+      }
+      // the pose: rolled about its base (the engine's own root motion), never the idle pose
+      expect(engineFrame(def, "thinking", { reducedMotion: true }).root, shape).not.toEqual(rest.root);
+    }
   });
 
   it("takes the mood from the bot's state: at work it thinks, done it is happy, else at rest", () => {

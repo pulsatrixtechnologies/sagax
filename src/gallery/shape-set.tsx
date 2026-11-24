@@ -6,7 +6,8 @@
  * plays that move on every shape every few seconds, ?still=1 draws the still
  * pose, ?size=<px>, ?only=<shape> draws one shape larger, ?shapeSkin=<skin>
  * dresses every shape in that skin, ?mood=<mood> sets the mood,
- * ?color=<bot color> paints every shape in one color. */
+ * ?color=<bot color> paints every shape in one color, ?pasted=1 adds a
+ * shape a person pasted (an open-bot-avatar definition on the look). */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -31,6 +32,9 @@ const MOODS: readonly ShapeMood[] = ["idle", "thinking", "working", "streaming",
 const moodParam = params.get("mood");
 const mood: ShapeMood = (MOODS as readonly string[]).includes(moodParam ?? "") ? (moodParam as ShapeMood) : "idle";
 const colorParam = params.get("color");
+/** A definition a person pasted in Appearance > Shape (#4160): drawn from the look, never from a baked still. */
+const PASTED = { version: 1 as const, id: "kite", name: "Kite", body: { path: "M50 10L86 50L50 90L14 50Z" }, eyes: { x: 50, y: 48, spacing: 14, scale: 1 } };
+const pasted = params.get("pasted") === "1";
 
 const COLORS = ["blue", "green", "orange", "purple", "pink", "teal", "red", "yellow"] as const;
 const shapes: readonly MascotShape[] = only && (MASCOT_SHAPES as readonly string[]).includes(only) ? [only] : MASCOT_SHAPES;
@@ -64,6 +68,12 @@ function Gallery() {
             <figcaption className="text-xs text-ink-secondary">{t(SHAPE_LABEL[shape])}</figcaption>
           </figure>
         ))}
+        {pasted && (
+          <figure data-shape-cell="pasted" className="flex flex-col items-center gap-1">
+            <ShapeMascot shape="circle" avatarDef={PASTED} skin={shapeSkin} color={colorParam ?? "teal"} size={size} mood={mood} animated={!still} move={move && key ? { clip: move, key } : null} label={PASTED.name} />
+            <figcaption className="text-xs text-ink-secondary">{PASTED.name}</figcaption>
+          </figure>
+        )}
       </div>
     </div>
   );

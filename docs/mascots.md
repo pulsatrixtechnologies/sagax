@@ -404,7 +404,11 @@ avatar of the same shape, colour and mood, with no animation loop. The large
 mascot (88 px and up, or asked in full) is live: the engine's frames
 (`avatarFrame`) on its one shared clock, written onto one SVG (volume,
 breath, blinks, pointer gaze, the bot's mood: thinking at work, happy when
-done), resting off screen. Reduced motion draws the still. A skin paints the
+done), resting off screen. At work the bot keeps its own body: the engine's
+`thinking` replaces the body with three dots since 0.3, so the app asks the
+engine's `idle` for the pose its `thinking` held until 0.2 (`engineFrame`:
+turned, tipped up and rolled, the eyes up and away under two lids). The
+engine's states, moods and Fluffy material are not exposed yet (#5268). Reduced motion draws the still. A skin paints the
 body's colour and eyes and, for the premium skins, its own layers (texture,
 edge, glow, particles; `shapeSkinLayers`) on the body's face, the largest
 cross-section under its projection, with the eyes over it. The fourteen moves
@@ -426,7 +430,15 @@ engine (`shape-engine.ts`, `shape-volume.ts`, `shape-motion.ts`) stays as the
 reference the phone's Swift engine is generated from until the phone follows
 (#4159). Every definition is checked with `validateAvatar`
 (`shape-avatar.test.ts`); captures and the forty-bot cost measure:
-`scripts/capture/shape-mascots.mjs`.
+`scripts/capture/shape-mascots.mjs`. An update of the engine is proven with
+`scripts/capture/shape-engine-update.mjs`: every shape and a pasted one,
+before and after, still and live, light and dark, then `--compare`. The
+gallery copy in `third_party/open-bot-avatar/gallery` holds the engine's
+files unmodified: a definition upstream redraws comes with the update (the
+palette, the rocket and the witch hat with 0.4, the owner's word for
+`shape-object-look.regression.test.ts`), shown before and after in the pull
+request. Its `egg` is kept there without a picker entry, the app's own Egg
+holding that id (#5279).
 
 ### Files
 

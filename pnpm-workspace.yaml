@@ -26,8 +26,8 @@ onlyBuiltDependencies:
 overrides:
   # 7.30.1 closes the open undici advisories. undici 6 stays on its own line.
   "undici@>=7.0.0 <7.30.1": 7.30.1
-  # One zod 4 for every package: the direct dependency is 4.6.6.
-  "zod@>=4.0.0 <4.6.6": 4.6.6
+  # One zod 4 for every package: the direct dependency is 4.6.7.
+  "zod@>=4.0.0 <4.6.7": 4.6.7
   dompurify: 3.4.17
   # minimatch 7.x to 10.x is open to the globparts DoS (GHSA-g3hv-75wg-m249); 11.0.1 is the fix.
   "minimatch@>=7.0.0 <11.0.1": 11.0.1

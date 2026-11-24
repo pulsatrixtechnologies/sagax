@@ -110,7 +110,7 @@ describe("hover-only actions on touch screens", () => {
     expect(css).toMatch(/@media \(hover: none\), \(pointer: coarse\) \{\s*\.touch\\:opacity-100 \{\s*opacity: 100%;/);
     expect(css).not.toMatch(/\.touch\\:opacity-\d+ \(pointer/);
     // desktop keeps its hover-only rule: nothing about the mouse path changes
-    expect(css).toMatch(/@media \(hover: hover\) \{\s*\.group-hover\\:opacity-100:is\(:where\(\.group\):hover \*\)/);
+    expect(css).toMatch(/@media \(hover: hover\) \{\s*:is\(:where\(\.group\):hover \.group-hover\\:opacity-100\) \{\s*opacity: 100%;/);
   });
 
   it("finds the hover-revealed controls it guards", () => {

@@ -196,8 +196,8 @@ export function createComputersRoutes(deps: ComputersRouteDeps): RouteHandler {
     if (m) {
       const bot = deps.bot(m[1]);
       if (!bot) return json(res, 404, { error: "no such bot" });
-      if (method === "GET") return json(res, 200, deps.botControlSnapshot(bot.id));
-      if (method === "POST") {
+      if (method === "GET" || method === "POST") {
+        if (method === "GET") return json(res, 200, deps.botControlSnapshot(bot.id));
         if (!isJsonContentType(req)) {
           return json(res, 415, { error: "content-type must be application/json" });
         }

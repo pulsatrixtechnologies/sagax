@@ -3,6 +3,21 @@ import { z } from "zod";
 
 import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../../shared/image-generation.ts";
 import { decodeGeneratedImage } from "./generated-image.ts";
+import {
+  imageChainWithAccount,
+  imageKeyCandidate,
+  imageRefusalCause,
+  openaiKeyImage,
+  withImageCredentials,
+  xaiAccountImage,
+  xaiKeyImage,
+  XAI_ACCOUNT_HEADER_NAME,
+  XAI_ACCOUNT_HEADER_VALUE,
+  type ChatImageCredential,
+  type ImageChain,
+  type ImageKeyCandidate,
+} from "./chat-image.ts";
+import { VoiceKeyRefusals } from "../voice/voice-keys.ts";
 import { BOT_AVATAR_MAX_BYTES } from "../org/org-admin-look.ts";
 import type { BotRecord } from "../store.ts";
 
@@ -32,9 +47,15 @@ const generatedImageResponseSchema = z.object({
 
 type AvatarIdentity = Pick<BotRecord, "name" | "title" | "description">;
 type AvatarGenerationState = Pick<BotRecord, "avatarUrl" | "avatarCrop">;
-interface AvatarImageConfig {
+export interface AvatarImageConfig {
   imageGen?: ImageGenerationConfig;
   xai?: { key?: string };
+  /** The person's own connected Grok account token (#5223). Its place among
+   * the keys is the chat's own rule (chat-image.ts imageChainWithAccount). */
+  xaiAccount?: string;
+  /** Who asks and what was refused lately (the image chain, D-20261123-053);
+   * a chain with no memory when absent. */
+  chain?: ImageChain & { organization?: boolean };
 }
 
 /** Public settings describe availability without returning provider secrets. */
@@ -150,25 +171,49 @@ export async function generateAvatarImage(
   const refused = avatarDirectionRefusal(direction);
   if (refused) throw Object.assign(new Error(refused), { status: 400 });
   const settings = avatarImageStatus(cfg);
-  const { provider, model } = settings;
-  if (!settings.configured) {
+  const { provider } = settings;
+  // The settings' provider when it can serve, and the person's connected Grok
+  // account where the chat's own rule puts it (#5223): one rule, two surfaces.
+  const shared = cfg.chain?.organization ? "org-key" as const : "server" as const;
+  const configured: ImageKeyCandidate[] = !settings.configured ? []
+    : [imageKeyCandidate(
+      provider === "openai" ? openaiKeyImage(cfg.imageGen!.key!.trim())
+        : provider === "xai" ? xaiKeyImage(cfg.xai!.key!.trim())
+          : { provider: "custom", baseUrl: settings.customUrl, model: settings.customModel, ...(cfg.imageGen?.customApiKey?.trim() ? { key: cfg.imageGen.customApiKey.trim() } : {}) },
+      shared)];
+  const accountToken = cfg.xaiAccount?.trim();
+  const candidates = imageChainWithAccount(configured, accountToken ? imageKeyCandidate(xaiAccountImage(accountToken), "grok-account") : null, cfg.imageGen);
+  if (!candidates.length) {
     const message = provider === "openai" ? "Add an OpenAI image API key first"
-      : provider === "xai" ? "Add an xAI API key first"
+      : provider === "xai" ? "Connect your Grok account or add an xAI API key first"
         : "Set a valid custom image API URL and model first";
-    throw Object.assign(new Error(message), { status: 409 });
+    throw Object.assign(new Error(message), { status: 409, code: "no_provider" });
   }
+  // D-20261123-053: a credential out of credits (or refused) gives way to the
+  // next one, by the same chain as the chat's image and the voice.
+  const chain: ImageChain = cfg.chain ?? { who: "", refusals: new VoiceKeyRefusals() };
+  const prompt = avatarGenerationPrompt(bot, direction);
+  return (await withImageCredentials(chain, candidates, (credential) => avatarOnCredential(credential, prompt, fetchImpl, timeoutMs))).value;
+}
 
-  const apiKey = (provider === "openai" ? cfg.imageGen?.key
-    : provider === "xai" ? cfg.xai?.key : cfg.imageGen?.customApiKey)?.trim();
+/** One avatar generation on one credential. */
+async function avatarOnCredential(
+  credential: ChatImageCredential,
+  prompt: string,
+  fetchImpl: typeof fetch,
+  timeoutMs: number,
+): Promise<GeneratedAvatarImage> {
+  const { provider, model } = credential;
+  const account = credential.auth === "account";
+  const apiKey = credential.key;
   const providerName = provider === "openai" ? "OpenAI" : provider === "xai" ? "xAI" : "Custom";
-  const url = provider === "openai" ? "https://api.openai.com/v1/images/generations"
-    : provider === "xai" ? "https://api.x.ai/v1/images/generations"
-      : `${settings.customUrl}/images/generations`;
+  const url = `${credential.baseUrl}/images/generations`;
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (apiKey) headers.authorization = `Bearer ${apiKey}`;
+  if (account) headers[XAI_ACCOUNT_HEADER_NAME] = XAI_ACCOUNT_HEADER_VALUE;
   const body = {
     model,
-    prompt: avatarGenerationPrompt(bot, direction),
+    prompt,
     ...(provider === "openai" ? { size: "1024x1024", quality: "low", output_format: "webp" }
       : provider === "xai" ? { response_format: "b64_json", aspect_ratio: "1:1" }
         : { response_format: "b64_json", size: "1024x1024", n: 1 }),
@@ -206,9 +251,19 @@ export async function generateAvatarImage(
   }
   if (!response.ok) {
     // Upstream errors can repeat authorization headers, signed URLs, or other
-    // secrets. Return only the provider and HTTP status, never its raw body.
-    const message = `${providerName} image generation failed (HTTP ${response.status})`;
-    throw Object.assign(new Error(message), { status: response.status === 401 ? 401 : 502 });
+    // secrets. The body is read only to sort the cause, never sent back: spent
+    // credits on an account is credits, never a missing key nor a network
+    // outage (#5223, expected 4).
+    const cause = imageRefusalCause(response.status, text);
+    const message = cause === "credits"
+      ? `${providerName} is out of credits for image generation. Add credits, then ask again.`
+      : cause === "key" && account
+        ? `${providerName} refused your connected Grok account (HTTP ${response.status}). Reconnect it in Settings.`
+        : `${providerName} image generation failed (HTTP ${response.status})`;
+    // The status stays coarse (a refused credential 401, any other provider
+    // failure 502); the `code` carries the cause. Spent credits is never the
+    // network nor a missing key (#5223, expected 4).
+    throw Object.assign(new Error(message), { status: cause === "key" ? 401 : 502, code: cause });
   }
 
   let parsedJson: unknown;

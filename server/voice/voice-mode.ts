@@ -452,6 +452,12 @@ function refusalBody(cause: VoiceModeRefusalCause, keysUrl: string | undefined, 
   };
 }
 
+/** A refusal cause in the voice's own words, for another aspect that refuses
+ * the same person for the same reason (the image, #5223): said once, here. */
+export function voiceRefusalText(cause: VoiceModeRefusalCause): string {
+  return REFUSAL_TEXT[cause];
+}
+
 async function readRaw(req: IncomingMessage, limit: number): Promise<Buffer | null> {
   const declared = Number(req.headers["content-length"] ?? "");
   if (Number.isFinite(declared) && declared > limit) return null;

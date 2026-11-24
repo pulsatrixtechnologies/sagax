@@ -147,15 +147,15 @@ export class VoiceKeyRefusals {
   /** The candidates in the order to try them: the ones refused lately
    * last (they are still tried when nothing else serves), each with what
    * it was refused for. */
-  order(who: string, keys: readonly VoiceKeyCandidate[]): Array<{ candidate: VoiceKeyCandidate; refused: GrokVoiceFailure | null }> {
+  order<C extends VoiceKeyCandidate = VoiceKeyCandidate>(who: string, keys: readonly C[]): Array<{ candidate: C; refused: GrokVoiceFailure | null }> {
     const all = keys.map((candidate) => ({ candidate, refused: this.failure(who, voiceKeyRef(candidate)) }));
     return [...all.filter((entry) => !entry.refused), ...all.filter((entry) => entry.refused)];
   }
 }
 
-export interface VoiceKeyAttempt<T> {
+export interface VoiceKeyAttempt<T, C extends VoiceKeyCandidate = VoiceKeyCandidate> {
   value: T;
-  used: VoiceKeyCandidate;
+  used: C;
   /** the keys of the same provider tried before, each with its refusal
    * (the page says it once: a key that gave way is never a silent switch) */
   skipped: VoiceKeyRefusal[];
@@ -164,13 +164,23 @@ export interface VoiceKeyAttempt<T> {
   fellBack: VoiceKeyRefusal[];
 }
 
+/** The next credential when another one can fix `failure` (credits, the
+ * credential itself), else nowhere. The first half of the rule below, and
+ * the whole rule of an aspect that has one provider per request: an image
+ * goes on from a dry Grok account to the person's key, then the
+ * organization's (D-20261123-053), and stays where it is on an outage. */
+export function nextKeyIndex(ordered: readonly unknown[], i: number, failure: GrokVoiceFailure): number {
+  return voiceKeyFailureIsFinal(failure) && i + 1 < ordered.length ? i + 1 : -1;
+}
+
 /** Where to go after `candidate` failed with `failure`: the next key of the
  * same provider when another key can fix it (credits, the key itself),
  * else the first key of another provider (2026-10-29: a provider that
  * fails or reaches its limit gives way to the next one), else nowhere. */
 export function nextCandidateIndex(ordered: readonly VoiceKeyCandidate[], i: number, failure: GrokVoiceFailure): number {
   const provider = candidateProvider(ordered[i]!);
-  if (voiceKeyFailureIsFinal(failure) && i + 1 < ordered.length) return i + 1;
+  const key = nextKeyIndex(ordered, i, failure);
+  if (key >= 0) return key;
   const other = ordered.findIndex((candidate, at) => at > i && candidateProvider(candidate) !== provider);
   return other;
 }
@@ -221,13 +231,20 @@ export class VoiceKeyFailure extends Error {
  * for credits or for itself is remembered and the next one is tried; any
  * other failure stops with the key that got it (another key would not
  * help). Throws VoiceKeyFailure, its message already scrubbed. */
-export async function withVoiceKeys<T>(
+export async function withVoiceKeys<T, C extends VoiceKeyCandidate = VoiceKeyCandidate>(
   who: string,
-  keys: readonly VoiceKeyCandidate[],
+  keys: readonly C[],
   refusals: VoiceKeyRefusals,
-  attempt: (candidate: VoiceKeyCandidate) => Promise<T>,
-  options: { log?(line: string): void; what?: string; scrub?(message: string): string } = {},
-): Promise<VoiceKeyAttempt<T>> {
+  attempt: (candidate: C) => Promise<T>,
+  options: {
+    log?(line: string): void; what?: string; scrub?(message: string): string;
+    /** How this aspect reads its own error (an image error carries its cause);
+     * the voice reading of the message when absent. */
+    failure?(error: unknown, message: string): GrokVoiceFailure;
+    /** Where to go next: `nextCandidateIndex` when absent. */
+    next?(ordered: readonly C[], i: number, failure: GrokVoiceFailure): number;
+  } = {},
+): Promise<VoiceKeyAttempt<T, C>> {
   const ordered = refusals.order(who, keys).map((entry) => entry.candidate);
   const skipped: VoiceKeyRefusal[] = [];
   const fellBack: VoiceKeyRefusal[] = [];
@@ -242,9 +259,9 @@ export async function withVoiceKeys<T>(
       if (error instanceof Error && error.name === "AbortError") throw error;
       const raw = error instanceof Error ? error.message : String(error);
       const message = options.scrub ? options.scrub(raw) : raw;
-      const failure = grokVoiceFailure(message);
+      const failure = options.failure ? options.failure(error, message) : grokVoiceFailure(message);
       const refusal: VoiceKeyRefusal = { ...voiceKeyRef(candidate), failure };
-      const next = nextCandidateIndex(ordered, i, failure);
+      const next = (options.next ?? nextCandidateIndex)(ordered, i, failure);
       if (voiceKeyFailureIsFinal(failure)) refusals.remember(who, voiceKeyRef(candidate), failure);
       else if (next >= 0) refusals.remember(who, voiceKeyRef(candidate), failure, VOICE_PROVIDER_REFUSAL_TTL_MS);
       if (next < 0) throw new VoiceKeyFailure(message, candidate, failure, [...skipped, refusal]);

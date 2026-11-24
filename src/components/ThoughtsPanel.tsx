@@ -9,7 +9,7 @@ import { ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { AGENT_COLORS, agentPreview, agentStatusText, expertName, heavyCauseText, heavyLineOf, heavyOutcomeText, leaderStepText, refusalSaysText, refusalText } from "@/lib/heavy-team";
+import { AGENT_COLORS, agentPreview, agentStatusText, expertName, heavyLineOf, heavyOutcomeText, leaderStepText, refusalSaysText, refusalText } from "@/lib/heavy-team";
 import { closeThoughts, useOpenThoughts } from "@/lib/thoughts-panel";
 import { formatElapsed } from "@/lib/working-time";
 import type { Message } from "@/state/store";
@@ -49,9 +49,8 @@ function AgentSection({ agent, index, running }: { agent: HeavyAgentLine; index:
             </div>
           ))}
           {agent.live && <p data-thoughts-live="" className="whitespace-pre-wrap break-words text-[14px] leading-6 text-ink">{agent.live}</p>}
-          {agent.cause && <p data-thoughts-cause={agent.cause} className="text-[13px] leading-5 text-danger">{heavyCauseText(agent.cause)}</p>}
           {agent.error && <p className="text-[13px] leading-5 text-danger">{agent.error}</p>}
-          {!agent.messages.length && !agent.live && !agent.error && !agent.cause && <p className="text-[13px] leading-5 text-ink-tertiary">{agentPreview(agent)}</p>}
+          {!agent.messages.length && !agent.live && !agent.error && <p className="text-[13px] leading-5 text-ink-tertiary">{agentPreview(agent)}</p>}
         </div>
       )}
     </section>

@@ -247,7 +247,8 @@ describe("the Thoughts panel", () => {
     const late = line({ agents: line().agents.map((agent, index) => (index === 1 ? { ...agent, status: "failed" as const, messages: [], cause: "timeout" as const } : agent)) });
     render(createElement(ThoughtsPanel, { line: late, running: false, onClose: () => {} }));
     expect($("[data-thoughts-agent='2'] [data-thoughts-status]")!.textContent).toBe("No answer in time");
-    expect($("[data-thoughts-agent='2'] [data-thoughts-preview]")!.textContent).toBe("no answer in time");
+    // the state is said once, by the status: the preview does not repeat it
+    expect($("[data-thoughts-agent='2'] [data-thoughts-preview]")!.textContent).toBe("Did not finish");
   });
 
   it("closes from its button", () => {

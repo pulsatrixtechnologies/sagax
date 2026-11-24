@@ -101,7 +101,6 @@ export function refusalSaysText(refusal: HeavyRefusalLine): string | null {
 export function agentPreview(agent: HeavyAgentLine): string {
   const text = (agent.live ?? agent.messages.at(-1) ?? "").replace(/\s+/g, " ").trim();
   if (text) return text;
-  if (agent.status === "failed" && agent.cause) return heavyCauseText(agent.cause);
   if (agent.status === "failed" && agent.error) return agent.error;
   return agent.status === "working" ? t("heavy.agent.working") : agent.status === "failed" ? t("heavy.agent.failed") : agent.status === "stopped" ? t("heavy.agent.stopped") : t("heavy.agent.nothing");
 }

@@ -174,6 +174,29 @@ describe("desktop local models", () => {
     expect(service.available("pr_anyone", encodeInjectId(injectHostId("pr_owner", "desk8002"), "qwen3"))).toBe(true);
   });
 
+  // M-20261123-040: Splash on http://127.0.0.1:8100/v1 serving "local/flash": no port is known in advance
+  it("a server declared on any loopback port serves its models, a model id with a slash included", async () => {
+    const { service, bridge } = await start();
+    const owner = "pr_owner";
+    bridge.online.add(owner);
+    const saved = service.update(owner, { expose: true, endpoints: [{ id: "", label: "Splash", baseUrl: "http://127.0.0.1:8100/v1" }] });
+    expect(saved.ok).toBe(true);
+    const endpoint = saved.ok ? saved.value.endpoints[0]! : null;
+    expect(endpoint).toMatchObject({ label: "Splash", baseUrl: "http://127.0.0.1:8100/v1" });
+    expect(service.publish(owner, { endpoints: [{ id: endpoint!.id, label: "Splash", models: ["local/flash", "flash"] }] }).ok).toBe(true);
+    const hostId = injectHostId(owner, endpoint!.id);
+    const modelId = encodeInjectId(hostId, "local/flash");
+    expect(decodeInjectId(modelId)).toEqual({ host: hostId, model: "local/flash" });
+    expect(service.modelsFor(owner).map((row) => row.model)).toEqual(["local/flash", "flash"]);
+    expect(service.available(owner, modelId)).toBe(true);
+    expect((await post(service.portNumber(), hostId, grant(owner))).status).toBe(200);
+    expect(bridge.calls[0]?.operation).toMatchObject({ endpoint: endpoint!.id, http_path: "/chat/completions" });
+    // the declared server is removed from the same list
+    const removed = service.update(owner, { endpoints: [] });
+    expect(removed.ok && removed.value.endpoints).toEqual([]);
+    expect(service.available(owner, modelId)).toBe(false);
+  });
+
   // M-20261123-040: the owner's bridge log read "The operation was aborted" at exactly 240 s
   it("gives a long local answer the bridge's full time, and says so when the computer did not finish", async () => {
     const { service, bridge } = await start();

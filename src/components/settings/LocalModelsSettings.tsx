@@ -4,9 +4,13 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Eye, EyeOff, Key, Server, Trash2 } from "lucide-react";
 
 import { t } from "@/lib/i18n";
-import { loadLocalModels, localModelKeyBridge, normalizeLoopbackBase, saveLocalModels, type LocalModelSettings } from "@/lib/desktop-local-models";
+import { loadLocalModels, localModelKeyBridge, normalizeLoopbackBase, saveLocalModels, type LocalModelRecipients, type LocalModelSettings } from "@/lib/desktop-local-models";
 import { cn } from "@/lib/cn";
+import { usePerspicaxOrg } from "@/lib/perspicax-org";
+import { useStore } from "@/state/store";
+import { useOrgDirectory } from "../GroupPeoplePicker";
 import { DescribedRow, FIELD, FoldRow, PILL, SettingsGroup, SettingsTextRow, Switch, cardCount } from "../SettingsPrimitives";
+import { LocalModelSharing } from "./LocalModelSharing";
 
 type Endpoint = LocalModelSettings["endpoints"][number];
 
@@ -36,6 +40,15 @@ export function endpointStatus(
   if (status === "empty") return { tone: "muted", text: t("localModels.probe.empty") };
   if (status === "offline") return { tone: "muted", text: t("localModels.probe.offline") };
   return null;
+}
+
+/** The one-line summary of who it is shared with: "2 people · 1 team", or that nobody is chosen. */
+export function sharedWithSummary(recipients: LocalModelRecipients): string {
+  const parts = [
+    ...(recipients.people.length ? [cardCount("people", recipients.people.length)] : []),
+    ...(recipients.teams.length ? [cardCount("teams", recipients.teams.length)] : []),
+  ];
+  return parts.length ? parts.join(" · ") : t("localModels.shareWithNone");
 }
 
 /** The one-line summary of the folded list: "8 local servers · DwarfStar, Ollama, …". */
@@ -125,7 +138,8 @@ export function EndpointKeyEditor({ endpoint, hasKey, onChange }: { endpoint: En
   );
 }
 
-const OFF: LocalModelSettings = { expose: false, share: false, endpoints: [], published: [], probes: [], connected: false };
+const NOBODY: LocalModelRecipients = { people: [], teams: [] };
+const OFF: LocalModelSettings = { expose: false, share: false, shareWith: NOBODY, endpoints: [], published: [], probes: [], connected: false };
 
 /** `bare` (Settings > Providers, #2080): the rows alone, inside the local
  * models provider row, without their own card. */
@@ -138,6 +152,12 @@ export function LocalModelsSettings({ bare = false }: { bare?: boolean } = {}) {
   // The loopback bases that have an API key on THIS computer. Only the list of
   // bases crosses the bridge, never a key value.
   const [keyedBases, setKeyedBases] = useState<string[]>([]);
+
+  // D-20261123-023: people and teams exist on an organization server only
+  const organization = usePerspicaxOrg() !== null;
+  const directory = useOrgDirectory(organization);
+  const viewerId = useStore().state.config?.viewer?.principalId ?? null;
+  const recipients = settings.shareWith ?? NOBODY;
 
   const refreshKeyBases = () => {
     const bridge = localModelKeyBridge();
@@ -157,7 +177,7 @@ export function LocalModelsSettings({ bare = false }: { bare?: boolean } = {}) {
     return () => { cancelled = true; };
   }, []);
 
-  const save = (patch: { expose?: boolean; share?: boolean; endpoints?: LocalModelSettings["endpoints"] }) => {
+  const save = (patch: { expose?: boolean; share?: boolean; shareWith?: LocalModelRecipients; endpoints?: LocalModelSettings["endpoints"] }) => {
     setError(false);
     void saveLocalModels(patch).then((value) => {
       setSettings(value);
@@ -186,6 +206,15 @@ export function LocalModelsSettings({ bare = false }: { bare?: boolean } = {}) {
         <DescribedRow label={t("localModels.share")} description={t("localModels.shareHelp")} rowId="localModels.share">
           <Switch checked={settings.share} aria-label={t("localModels.share")} onClick={() => save({ share: !settings.share })} />
         </DescribedRow>
+        {organization && (
+          <FoldRow cardId="computer.localModels.shareWith" label={t("localModels.shareWith")}
+            description={loaded ? (settings.share ? t("localModels.shareWithAll") : sharedWithSummary(recipients)) : undefined} count={loaded ? recipients.people.length + recipients.teams.length : undefined}>
+            <div className="flex flex-col gap-2">
+              <p className="text-[12px] leading-4 text-ink-secondary">{t("localModels.shareWithHelp")}</p>
+              <LocalModelSharing directory={directory} viewerId={viewerId} value={recipients} onChange={(shareWith) => save({ shareWith })} />
+            </div>
+          </FoldRow>
+        )}
         <FoldRow cardId="computer.localModels.endpoints" label={t("localModels.endpoints")}
           description={loaded ? endpointsSummary(settings.endpoints) : undefined} count={loaded ? settings.endpoints.length : undefined}>
           <div className="flex flex-col gap-2" data-loopback-servers={settings.endpoints.length}>
@@ -209,7 +238,7 @@ export function LocalModelsSettings({ bare = false }: { bare?: boolean } = {}) {
                           </span>
                         )}
                         <button type="button"
-                          className="flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-secondary opacity-0 transition-opacity hover:bg-control hover:text-danger focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 group-hover:opacity-100 group-focus-within:opacity-100 touch:opacity-100 motion-reduce:transition-none md:size-7"
+                          className="flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-secondary hover:bg-control hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 md:size-7"
                           aria-label={t("localModels.remove", { label: name })} title={t("localModels.remove", { label: name })}
                           onClick={() => save({ endpoints: settings.endpoints.filter((row) => row.baseUrl !== endpoint.baseUrl) })}>
                           <Trash2 size={14} aria-hidden="true" />

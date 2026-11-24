@@ -3,9 +3,15 @@
 // does not call them.
 import { normalizeLoopbackBase, type LoopbackEndpoint, type LoopbackProbe } from "../../shared/desktop-local-models";
 
+export interface LocalModelRecipients { people: string[]; teams: string[] }
+
 export interface LocalModelSettings {
   expose: boolean;
+  /** Shared with the whole organization. */
   share: boolean;
+  /** D-20261123-023: the people and teams it is shared with, beside the whole
+   * organization. Absent from a server older than the recipients. */
+  shareWith?: LocalModelRecipients;
   endpoints: LoopbackEndpoint[];
   published: { id: string; label: string; models: string[] }[];
   /** The desktop's last probe outcome per endpoint (Settings panel only). */
@@ -20,7 +26,7 @@ export async function loadLocalModels(fetchImpl: typeof fetch = fetch): Promise<
   return await response.json() as LocalModelSettings;
 }
 
-export async function saveLocalModels(patch: { expose?: boolean; share?: boolean; endpoints?: LoopbackEndpoint[] }, fetchImpl: typeof fetch = fetch): Promise<LocalModelSettings> {
+export async function saveLocalModels(patch: { expose?: boolean; share?: boolean; shareWith?: LocalModelRecipients; endpoints?: LoopbackEndpoint[] }, fetchImpl: typeof fetch = fetch): Promise<LocalModelSettings> {
   const response = await fetchImpl("/api/me/local-models", {
     method: "PUT",
     credentials: "same-origin",

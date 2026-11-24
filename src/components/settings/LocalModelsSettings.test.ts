@@ -8,7 +8,8 @@ import type { DesktopBridgeStatus } from "@/lib/desktop-bridge";
 import { DEFAULT_BOT_WORKPLACE } from "../../../shared/bot-workplace";
 
 import { activityLine, BotWorkplaceSettings } from "./BotWorkplaceSettings";
-import { EndpointKeyEditor, endpointName, endpointsSummary, endpointStatus } from "./LocalModelsSettings";
+import { EndpointKeyEditor, endpointName, endpointsSummary, endpointStatus, sharedWithSummary } from "./LocalModelsSettings";
+import { LocalModelSharing } from "./LocalModelSharing";
 
 const row = (label: string, port: number) => ({ id: label, label, baseUrl: `http://127.0.0.1:${port}/v1` });
 
@@ -93,5 +94,37 @@ describe("computer activity", () => {
   it("never shows the platform or host name of a connection", () => {
     expect(activityLine(status.activity[0])).toBe("Computer connected · your computer");
     expect(activityLine({ ...status.activity[0], kind: "network", detail: "example.com:443" })).toBe("example.com:443 · your computer");
+  });
+});
+
+// D-20261123-023: sharing chooses its recipients
+describe("who the computer's models are shared with", () => {
+  const directory = {
+    people: [{ principalId: "pr_ada", name: "Ada Lovelace", login: "ada", email: "ada@example.com", role: "member" as const, disabled: false }],
+    teams: [{ id: "team_support", name: "Support", members: ["pr_ada"], managers: [] }],
+  };
+
+  it("sums up the chosen people and teams in one line", () => {
+    expect(sharedWithSummary({ people: [], teams: [] })).toBe("Nobody chosen");
+    expect(sharedWithSummary({ people: ["pr_ada"], teams: [] })).toBe("1 person");
+    expect(sharedWithSummary({ people: ["pr_ada", "pr_bob"], teams: ["team_support"] })).toBe("2 people · 1 team");
+  });
+
+  it("names each chosen person and team, with a way to remove each", () => {
+    const html = renderToStaticMarkup(createElement(LocalModelSharing, {
+      directory: directory as never, viewerId: "pr_me", value: { people: ["pr_ada"], teams: ["team_support"] }, onChange: () => {},
+    }));
+    expect(html).toContain('data-local-models-recipients="2"');
+    expect(html).toContain("Ada Lovelace");
+    expect(html).toContain("Support");
+    expect(html).toContain('aria-label="Remove Ada Lovelace"');
+    expect(html).toContain('aria-label="Remove Support"');
+    expect(html).toContain("Add people or groups");
+  });
+
+  it("a recipient the directory no longer lists stays removable", () => {
+    const html = renderToStaticMarkup(createElement(LocalModelSharing, { directory: null, viewerId: null, value: { people: ["pr_gone"], teams: [] }, onChange: () => {} }));
+    expect(html).toContain('data-local-models-recipient="pr_gone"');
+    expect(html).toContain("A person of your organization");
   });
 });

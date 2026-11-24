@@ -38,7 +38,8 @@ const ACCESS_ROWS: Array<{ access: PageAccess; icon: typeof Lock; label: "pages.
   { access: "link", icon: Globe, label: "pages.access.link", hint: "pages.access.linkHint" },
 ];
 
-function Avatar({ name, url, team }: { name: string; url?: string; team?: boolean }) {
+/** The round picture of a person or a team in a share list (also Settings > Local models). */
+export function ShareAvatar({ name, url, team }: { name: string; url?: string; team?: boolean }) {
   if (url) return <img src={url} alt="" className="size-7 shrink-0 rounded-full object-cover" />;
   return (
     <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-full bg-raised text-[11px] font-semibold text-ink-secondary">
@@ -156,7 +157,7 @@ export function PageSharePopover({ page, version, linkOff, onChange, onClose, cl
                 <li key={person.principalId}>
                   <button type="button" role="option" aria-selected="false" disabled={busy} onClick={() => invite({ kind: "person", id: person.principalId }, true)}
                     className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-hover disabled:opacity-40">
-                    <Avatar name={person.name || person.login} {...(person.avatarUrl ? { url: person.avatarUrl } : {})} />
+                    <ShareAvatar name={person.name || person.login} {...(person.avatarUrl ? { url: person.avatarUrl } : {})} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13px]">{person.name || person.login}</span>
                       {person.email && <span className="block truncate text-[11.5px] text-ink-secondary">{person.email}</span>}
@@ -168,7 +169,7 @@ export function PageSharePopover({ page, version, linkOff, onChange, onClose, cl
                 <li key={team.id}>
                   <button type="button" role="option" aria-selected="false" disabled={busy} onClick={() => invite({ kind: "team", id: team.id }, true)}
                     className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-hover disabled:opacity-40">
-                    <Avatar name={team.name} team />
+                    <ShareAvatar name={team.name} team />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13px]">{team.name}</span>
                       <span className="block truncate text-[11.5px] text-ink-secondary">{t("pages.share.group", { count: String(new Set([...team.members, ...team.managers]).size) })}</span>
@@ -184,7 +185,7 @@ export function PageSharePopover({ page, version, linkOff, onChange, onClose, cl
 
       <ul aria-label={t("pages.share.people")} className="mb-3 flex flex-col gap-1.5">
         <li className="flex items-center gap-2.5">
-          <Avatar name={ownerName} {...(viewerId && people.get(viewerId.toLowerCase())?.avatarUrl ? { url: people.get(viewerId.toLowerCase())!.avatarUrl! } : {})} />
+          <ShareAvatar name={ownerName} {...(viewerId && people.get(viewerId.toLowerCase())?.avatarUrl ? { url: people.get(viewerId.toLowerCase())!.avatarUrl! } : {})} />
           <span className="min-w-0 flex-1 truncate text-[13px]">{ownerName}</span>
           <span className="text-[12px] text-ink-secondary">{t("pages.share.owner")}</span>
         </li>
@@ -193,7 +194,7 @@ export function PageSharePopover({ page, version, linkOff, onChange, onClose, cl
           const name = person?.name || person?.login || t("pages.share.someone");
           return (
             <li key={`p:${id}`} data-page-invite={id} className="flex items-center gap-2.5">
-              <Avatar name={name} {...(person?.avatarUrl ? { url: person.avatarUrl } : {})} />
+              <ShareAvatar name={name} {...(person?.avatarUrl ? { url: person.avatarUrl } : {})} />
               <span className="min-w-0 flex-1 truncate text-[13px]" title={person?.email}>{name}</span>
               <button type="button" disabled={busy} aria-label={t("pages.share.remove", { name })} title={t("pages.share.remove", { name })} onClick={() => invite({ kind: "person", id }, false)}
                 className="rounded-full p-1 text-ink-secondary hover:bg-hover hover:text-ink disabled:opacity-40"><X size={13} /></button>
@@ -205,7 +206,7 @@ export function PageSharePopover({ page, version, linkOff, onChange, onClose, cl
           const name = team?.name || t("pages.share.someGroup");
           return (
             <li key={`t:${id}`} data-page-invite={id} className="flex items-center gap-2.5">
-              <Avatar name={name} team />
+              <ShareAvatar name={name} team />
               <span className="min-w-0 flex-1 truncate text-[13px]">{name}</span>
               <button type="button" disabled={busy} aria-label={t("pages.share.remove", { name })} title={t("pages.share.remove", { name })} onClick={() => invite({ kind: "team", id }, false)}
                 className="rounded-full p-1 text-ink-secondary hover:bg-hover hover:text-ink disabled:opacity-40"><X size={13} /></button>

@@ -721,7 +721,7 @@ async function handleBotMessagePost(deps: BotsMessagesRouteDeps, ctx: RouteConte
     // queued one is remembered by its slot: cancelling it reopens the widget.
     press?.settle(receipt && typeof receipt === "object" && "queueId" in receipt && typeof receipt.queueId === "string" ? receipt.queueId : undefined);
     const person = actorPrincipalId(auth);
-    recordAchievements(person, achievementSendEvents({ text, parallel: busyMode === "parallel", ...(voiceCall ? { voiceCall } : {}) }, achievementCallStarts, Date.now()));
+    recordAchievements(person, achievementSendEvents({ text, ...(voiceCall ? { voiceCall } : {}) }, achievementCallStarts, Date.now()));
     if (voiceCall) {
       const family = modelFamily(masteryThreadModel(threadId));
       recordAchievements(person, claudeActivityEvents({ family, kind: "voice" }));

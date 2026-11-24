@@ -252,6 +252,24 @@ describe("createBotsMessagesRoutes", () => {
     expect(result.sent).toBeUndefined();
   });
 
+  it("credits the person who takes browser control only after a successful grant", async () => {
+    const recordAchievements = vi.fn();
+    const action = vi.fn().mockResolvedValue({ ok: true });
+    const deps = baseDeps({
+      browserIntegration: async () => ({ session: "sess-1" }),
+      actorPrincipalId: () => "pr_viewer",
+      browserLive: { action },
+      recordAchievements,
+    });
+    const act = (type: string) => call(deps, { path: "/api/bots/b1/browser/action", body: { viewerId: "v1", type } });
+    await act("release");
+    action.mockRejectedValueOnce(new Error("view closed"));
+    await expect(act("take")).rejects.toThrow("view closed");
+    expect(recordAchievements).not.toHaveBeenCalled();
+    expect((await act("take")).sent?.status).toBe(200);
+    expect(recordAchievements).toHaveBeenCalledExactlyOnceWith("pr_viewer", [{ type: "computer.control" }]);
+  });
+
   it("404s browser live for an unknown bot", async () => {
     const result = await call(baseDeps(), {
       path: "/api/bots/missing/browser/live",

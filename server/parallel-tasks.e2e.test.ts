@@ -121,6 +121,8 @@ posixOnly("parallel tasks e2e", () => {
   });
 
   it("two parallel requests run beside the main turn, finish in any order and answer their own request", async () => {
+    const parallelCount = async () => (await api("GET", "/api/me/achievements")).body.items.find((item: { id: string }) => item.id === "juggler").current;
+    const previousCount = await parallelCount();
     const bot = await busyBot("main1");
     const first = await api("POST", `/api/bots/${bot.id}/messages`, { text: "[gate:p1] summarize the logs", threadId: bot.threadId, busyMode: "parallel", sendId: SEND_P1 });
     const second = await api("POST", `/api/bots/${bot.id}/messages`, { text: "[gate:p2] draft the email", threadId: bot.threadId, busyMode: "parallel", sendId: SEND_P2 });
@@ -134,6 +136,7 @@ posixOnly("parallel tasks e2e", () => {
     // a retry of the same send answers with the same request, no new task
     const retry = await api("POST", `/api/bots/${bot.id}/messages`, { text: "[gate:p1] summarize the logs", threadId: bot.threadId, busyMode: "parallel", sendId: SEND_P1 });
     expect(retry.body.message.id).toBe(first.body.message.id);
+    expect(await parallelCount()).toBe(previousCount + 2);
     expect((await tasks(bot.id)).filter((task) => task.parallelOf)).toHaveLength(2);
 
     // all three run at once: the main turn and both tasks

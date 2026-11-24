@@ -12,10 +12,18 @@ export const SANDBOX_CONTROL_REFUSAL =
 export class SandboxControlHolds {
   private readonly holds = new Map<string, number>();
 
+  private readonly onTake?: (principalId: string) => void;
+
+  constructor(onTake?: (principalId: string) => void) {
+    this.onTake = onTake;
+  }
+
   /** One open control view. Returns its release (idempotent). */
   hold(principalId: string): () => void {
     const key = principalId.trim().toLowerCase();
-    this.holds.set(key, (this.holds.get(key) ?? 0) + 1);
+    const previous = this.holds.get(key) ?? 0;
+    this.holds.set(key, previous + 1);
+    if (previous === 0) this.onTake?.(key);
     let released = false;
     return () => {
       if (released) return;

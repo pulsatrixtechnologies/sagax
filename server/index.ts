@@ -15380,7 +15380,7 @@ function audienceChanged(): void {
   }
 }
 // The person drives their server environment desktop: bots' clicks there wait.
-const sandboxControlHolds = new SandboxControlHolds();
+const sandboxControlHolds = new SandboxControlHolds((person) => recordAchievements(person, [{ type: "computer.control" }]));
 // Cloud boot can revoke sessions before routes are registered. Create the
 // viewer manager before installing any revocation callbacks.
 const desktopViewer = createDesktopViewer({
@@ -37051,6 +37051,7 @@ ROUTES.push(createComputersRoutes({
   vpsStatus: (botId) => vps.vpsComputerStatus(cfg, botId),
   botControlSnapshot: (botId) => botComputerControlSnapshot(botId),
   controlSnapshot: (key) => computerControl.snapshot(key),
+  controlTaken: (auth) => recordAchievements(actorPrincipalId(auth), [{ type: "computer.control" }]),
   controlTake: (key) => computerControl.take(key),
   controlRelease: (key) => computerControl.release(key),
   controlDismissHelp: (key) => computerControl.dismissHelp(key),

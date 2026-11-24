@@ -285,23 +285,23 @@ describe("server events", () => {
     expect(ok("POST", "/api/bots/b1/primary")).toEqual(["bot.primary"]);
     expect(ok("POST", "/api/routines")).toEqual(["routine.created"]);
     expect(ok("PATCH", "/api/bots/b1/cards/c1")).toEqual(["approval.answered"]);
-    expect(ok("POST", "/api/bots/b1/computer/control")).toEqual(["computer.control"]);
+    expect(ok("POST", "/api/bots/b1/computer/control")).toEqual([]); // only the route knows whether control was acquired
     expect(ok("PUT", "/api/bots/b1/grants")).toEqual(["bot.shared"]);
     expect(ok("POST", "/api/groups/dm/messages")).toEqual(["dm.sent"]);
     expect(ok("POST", "/api/groups/mix/messages")).toEqual(["group.message", "message.sent", "group.mixed"]);
     expect(ok("GET", "/api/bots")).toEqual([]);
   });
 
-  it("reads a message: slash command, attachment, zip, parallel and the voice call", () => {
+  it("reads a message: slash command, attachment, zip and the voice call", () => {
     const starts = new Map<string, number>();
     const t0 = 1_000_000;
     expect(slashCommandName("/compact please")).toBe("compact");
     expect(slashCommandName("a /path")).toBeNull();
     const types = (events: ReturnType<typeof achievementSendEvents>) => events.map((event) => event.type);
-    expect(types(achievementSendEvents({ text: "/goal ship", parallel: true }, starts, t0))).toEqual(["message.sent", "message.slash", "message.parallel"]);
-    expect(types(achievementSendEvents({ text: 'see <attached-file path="a/b.zip" name="b.zip">', parallel: false }, starts, t0))).toEqual(["message.sent", "message.attachment", "message.zip"]);
-    achievementSendEvents({ text: "hi", parallel: false, voiceCall: { callId: "call-1" } }, starts, t0);
-    const later = achievementSendEvents({ text: "and", parallel: false, voiceCall: { callId: "call-1", interrupted: true } }, starts, t0 + 11 * 60_000);
+    expect(types(achievementSendEvents({ text: "/goal ship" }, starts, t0))).toEqual(["message.sent", "message.slash"]);
+    expect(types(achievementSendEvents({ text: 'see <attached-file path="a/b.zip" name="b.zip">' }, starts, t0))).toEqual(["message.sent", "message.attachment", "message.zip"]);
+    achievementSendEvents({ text: "hi", voiceCall: { callId: "call-1" } }, starts, t0);
+    const later = achievementSendEvents({ text: "and", voiceCall: { callId: "call-1", interrupted: true } }, starts, t0 + 11 * 60_000);
     expect(later).toContainEqual({ type: "voice.minutes", value: 11 });
     expect(later).toContainEqual({ type: "voice.interrupt" });
     expect(later).toContainEqual({ type: "voice.call", key: "call-1", id: "call-1" });

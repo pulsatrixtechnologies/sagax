@@ -66,6 +66,7 @@ function baseDeps(over: Partial<ComputersRouteDeps> = {}): ComputersRouteDeps {
     vpsStatus: vi.fn(async () => ({ configured: true, state: "ready" })),
     botControlSnapshot: () => ({ held: false }),
     controlSnapshot: () => ({ held: false }),
+    controlTaken: vi.fn(),
     controlTake: () => ({ held: true }),
     controlRelease: () => ({ held: false }),
     controlDismissHelp: () => ({ held: false }),
@@ -256,5 +257,23 @@ describe("createComputersRoutes", () => {
       body: { action: "take" },
     });
     expect(result.sent).toEqual({ status: 200, body: { held: true } });
+    expect(deps.controlTaken).toHaveBeenCalledExactlyOnceWith(admin);
+  });
+
+  it("credits a lease only when it acquires control", async () => {
+    const deps = baseDeps();
+    const path = "/api/bots/b1/computer/control";
+    const headers = { "content-type": "application/json" };
+    const controlLeaseId = "01234567-89ab-4cde-8123-456789abcdef";
+    for (const action of ["release", "check", "dismiss-help"]) {
+      expect((await call(deps, { path, method: "POST", headers, body: { action, controlLeaseId } })).sent?.status).toBe(200);
+    }
+    const take = () => call(deps, { path, method: "POST", headers, body: { action: "take", controlLeaseId } });
+    deps.controlAcquireLease = () => ({ snapshot: { held: true }, owned: false, acquired: false });
+    await take();
+    expect(deps.controlTaken).not.toHaveBeenCalled();
+    deps.controlAcquireLease = () => ({ snapshot: { held: true }, owned: true, acquired: true });
+    await take();
+    expect(deps.controlTaken).toHaveBeenCalledExactlyOnceWith(admin);
   });
 });

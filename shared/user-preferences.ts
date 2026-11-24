@@ -76,6 +76,9 @@ export const USER_PREFERENCE_KEYS = [
   // Settings > Appearance > Sidebar: the account menu kept open above the name in
   // the wide foot (src/lib/account-menu-above.ts). "on" | "off"; absent is on (#5016).
   "sagax.accountMenuAbove.v1",
+  // Settings > Appearance > Sidebar: show the Bot threads section, "on" |
+  // "off"; absent is off (src/lib/sidebar-bot-threads.ts, #5239)
+  "sagax.sidebarBotThreads.v1",
   // Settings > Appearance > Sidebar: the Primary Bot as a large tile or a regular
   // row (src/lib/primary-bot-style.ts, #4588). "tile" | "row"; absent is tile.
   "sagax.primaryBotStyle.v1",

@@ -4,6 +4,7 @@
  * server. ?skin=<id>&lang=<code>&threads=one|header|sidebar&width=<px, 368>
  * &density=comfortable|compact&rooms=1 (a room and a person's conversation
  * beside the bots, for the row alignment check)
+ * &botthreads=1: a conversation between two bots (the Bot threads section)
  * &sharing=1: an organization with bots shared by Ada and Bob (their faces on
  * the avatar), the viewer's own bot, working bots and two people with their
  * presence (the capture script serves /api/people/<id>/avatar).
@@ -117,6 +118,12 @@ if (params.get("rooms") === "1") dmGroups.push(
     tasks: [task("room-ops-t", "Général", minutes(15)), task("room-ops-2", "Suivi des billets", minutes(60))] } as never,
   { id: "dm-sam", threadId: "dm-sam-t", name: "Sam", memberIds: [], peopleDm: true, humanIds: ["pr_me", "pr_sam"], defaultResponder: { kind: "mentions" }, bulletin: "", unread: false, createdAt: minutes(800),
     messages: [message("dm3", "Parfait, merci.", minutes(35))] } as never,
+);
+// &botthreads=1 (#5239): a conversation between two bots, which the sidebar
+// lists under "Bot threads" only when Settings > Appearance > Sidebar says so
+if (params.get("botthreads") === "1") dmGroups.push(
+  { id: "dm-atlas-iris", threadId: "dm-atlas-iris-t", name: "Atlas, Iris", memberIds: ["atlas", "iris"], dm: true, defaultResponder: { kind: "mentions" }, bulletin: "", unread: false, createdAt: minutes(900),
+    messages: [message("bt1", "Voici le rapport demandé.", minutes(12))] } as never,
 );
 
 // ?share=1 (#2615): Atlas shared with Ada (two people after the name), Iris

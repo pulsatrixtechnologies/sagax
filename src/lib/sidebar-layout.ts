@@ -147,12 +147,15 @@ export function partitionSidebarBots<T extends SidebarBot>(
 /** Bot-to-bot DMs are also a virtual view. We do not rewrite their persisted
  * context, because that context still participates in comms visibility.
  * When `peopleApart` is on, unassigned people-DMs leave Unassigned for the
- * People automatic section; a person filed in a personal section stays there. */
+ * People automatic section; a person filed in a personal section stays there.
+ * When `botThreads` is false (Settings > Appearance > Sidebar, "Show Bot
+ * threads", off by default, #5239), the Bot threads section is not listed:
+ * the threads stay as they are, out of the rooms. */
 export function partitionSidebarGroups<T extends SidebarGroup>(
   groups: T[],
-  options?: { peopleApart?: boolean },
+  options?: { peopleApart?: boolean; botThreads?: boolean },
 ) {
-  const botChats = groups.filter((group) => Boolean(group.dm));
+  const botChats = options?.botThreads === false ? [] : groups.filter((group) => Boolean(group.dm));
   const rooms = groups.filter((group) => !group.dm);
   const peopleDms = options?.peopleApart
     ? rooms.filter((group) => Boolean(group.peopleDm) && !group.section)

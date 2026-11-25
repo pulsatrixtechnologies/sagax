@@ -40,6 +40,15 @@ export function clickByAccessibleNameJs(name: string): string {
   })()`;
 }
 
+/** The wide sidebar starts with its account menu docked open. In the
+ * compact sidebar, or after dismissal, open it through the same trigger. */
+export async function openAccountMenu(flow: {
+  snapshot: () => Promise<string>;
+  click: (name: string) => Promise<unknown>;
+}): Promise<void> {
+  if (!(await flow.snapshot()).includes('menu "You"')) await flow.click("You");
+}
+
 /** Settings > a page, by its entry in the left nav. A page name can also be a
  * section heading elsewhere (General has an Appearance section), so a click
  * by accessible name is ambiguous. False until the lazy Settings chunk paints. */

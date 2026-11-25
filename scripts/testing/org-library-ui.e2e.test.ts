@@ -11,7 +11,7 @@ import { runControlOmb } from "../control-omb.ts";
 import { request } from "../mcp-server.ts";
 import { UI_TOOLS_DIR } from "./control-omb-ui.ts";
 import { openTemplatesCatalog } from "./compose-flow.ts";
-import { clickAccessible, openBotMenuJs, openPanelAria } from "./ui-click.ts";
+import { clickAccessible, closePluginsJs, openBotMenuJs, openPanelAria } from "./ui-click.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const FIXTURES = join(ROOT, "shared", "package-fixtures");
@@ -90,7 +90,10 @@ describe("the organization library in the real renderer", () => {
     await openTemplatesCatalog(catalogFlow);
     await expect.poll(snapshot, { timeout: 10_000 }).toContain("Templates");
     expect(await snapshot()).not.toContain("From Customer Co");
-    await press("Escape");
+    // Escape moves up one page inside Connect Apps. Close its window so
+    // reopening the catalog reads the newly relayed organization.
+    await expect.poll(() => evaluate(closePluginsJs())).toBe(true);
+    await expect.poll(() => evaluate("Boolean(document.querySelector('[data-plugins-page]'))")).toBe(false);
 
     // Relay a catalog the way Electron does, with the files where it keeps them.
     const team = release("full-team.v2.json");

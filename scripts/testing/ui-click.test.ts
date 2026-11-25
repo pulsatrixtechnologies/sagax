@@ -1,8 +1,16 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
-import { clickByAccessibleNameJs, closePluginsJs, openPanelAria, overlaysOpenJs } from "./ui-click.ts";
+import { describe, expect, it, vi } from "vitest";
+import { clickByAccessibleNameJs, closePluginsJs, openAccountMenu, openPanelAria, overlaysOpenJs } from "./ui-click.ts";
 
 describe("renderer e2e click helpers", () => {
+  it("opens the account menu only when it is collapsed", async () => {
+    const click = vi.fn().mockResolvedValue(undefined);
+    await openAccountMenu({ click, snapshot: async () => 'menu "You"\nbutton "You" [expanded=true]' });
+    expect(click).not.toHaveBeenCalled();
+    await openAccountMenu({ click, snapshot: async () => 'button "You" [expanded=false]' });
+    expect(click).toHaveBeenCalledExactlyOnceWith("You");
+  });
+
   it("uses the possessive panel aria from chat.openPanelAria", () => {
     expect(openPanelAria("Quill")).toBe("Open Quill's panel");
     expect(openPanelAria("Quill")).not.toBe("Open Quill panel");

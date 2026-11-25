@@ -6,7 +6,7 @@ import { resolveAgentBrowserBinary } from "../../server/browser/browser-engine.t
 import { waitForExit } from "../../server/testing/cleanup.ts";
 import { runControlOmb } from "../control-omb.ts";
 import { UI_TOOLS_DIR } from "./control-omb-ui.ts";
-import { clickAccessible, openBotMenuJs } from "./ui-click.ts";
+import { openAccountMenu, clickAccessible, openBotMenuJs } from "./ui-click.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const enabled = process.env.SAGAX_UI_E2E === "1" || Boolean(resolveAgentBrowserBinary({ dataDir: UI_TOOLS_DIR, env: process.env }));
@@ -69,7 +69,7 @@ describe("trust controls in the real renderer", () => {
     await expect.poll(snapshot, { timeout: 10_000 }).toContain("Ran a command");
     await ui("screenshot", "--out", `${info.logPath}.activity.png`);
 
-    await evaluate("document.querySelector('.achievement-toast button')?.click(); true");
+    await evaluate("document.querySelector('.achievement-toast-close')?.click(); true");
     const interactive = await ui("snapshot", "--interactive");
     const profile = Object.entries(interactive.refs as Record<string, { role: string; name: string }>)
       .find(([, entry]) => entry.role === "button" && entry.name === "Open Pepper's panel");
@@ -113,7 +113,7 @@ describe("trust controls in the real renderer", () => {
     await evaluate("document.querySelector('[data-bot-profile-topbar] [data-window-close]').click(); true");
 
     await evaluate(`(() => { localStorage.setItem('sagax.interfaceMode.v1','advanced'); window.dispatchEvent(new StorageEvent('storage', {key:'sagax.interfaceMode.v1'})); return true; })()`);
-    await click("You");
+    await openAccountMenu({ click, snapshot });
     await click("Tools");
     await click("Team map");
     const openMemory = async () => {

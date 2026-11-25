@@ -65,7 +65,7 @@ import { InitialsAvatar } from "./Avatar";
 import { SidebarPopoverMenu, type SidebarMenuItem, type SidebarSubmenuEntry } from "./SidebarPopoverMenu";
 import { useServerMode } from "./ServerModeSettings";
 import { api } from "@/state/store";
-import { accountChoices, businessAccount, SAGAX_MOBILE_URL, switchAccount, switchTargets as listSwitchTargets, usageLines as planUsageLines, usageSummary, type AccountChoice, type SwitchTarget, type UsageLine } from "@/lib/account-menu";
+import { accountChoices, businessAccount, SAGAX_MOBILE_URL, switchAccount, switchTargets as listSwitchTargets, usageLines as planUsageLines, usageSummary, watchSavedServers, type AccountChoice, type SwitchTarget, type UsageLine } from "@/lib/account-menu";
 import { toggleUsageFavorite, useUsageFavorite } from "@/lib/usage-favorite";
 import { connectedPlanRows, type PlanRow, type PlanUsageReport } from "@/lib/plan-usage";
 import { costOf, formatCost, personalUsagePeriods, usageQuery, type PersonalUsageSummary } from "@/lib/usage-personal";
@@ -570,9 +570,9 @@ function useAccountMenuData(enabled: boolean, refresh = 0): AccountMenuData {
     void api<PersonalUsageSummary>(usageQuery(month, "day"))
       .catch(() => api<PersonalUsageSummary>(usageQuery(month, "day", true)))
       .then((summary) => { if (alive) setMonthCost(formatCost(costOf(summary))); }, () => {});
-    void Promise.resolve(window.ogb?.environments?.state())
-      .then((next) => { if (alive && next) setEnvironments(next); }, () => {});
-    return () => { alive = false; };
+    // #5353: asked again when this page comes on screen (account-menu.ts)
+    const unwatch = watchSavedServers(window.ogb?.environments, (next) => { if (alive) setEnvironments(next); });
+    return () => { alive = false; unwatch(); };
   }, [enabled, refresh]);
   const summary = usageSummary(rows, favorite);
   return {

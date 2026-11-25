@@ -12,6 +12,7 @@ import { pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
+import { turnWithPrompt } from "../testing/turn-dump-log.ts";
 import { openSse } from "../testing/sse.ts";
 
 // Drives a fixed Works on through the HTTP API (scripts/control-omb.ts passes
@@ -45,7 +46,7 @@ async function launch(boat?: string, enterprise?: { dir: string; licenseKey: str
   // Every real turn dumps to <thread>.json and, when "slow", is held open
   // by <thread>.gate so its token stays live and timing is deterministic.
   // `mode` is a JS expression over `thread` naming that turn's fake mode.
-  const useCli = async (mode: string) => {
+  const useCli = async (mode: string, { logTurns = false } = {}) => {
     const wrapper = join(dataDir, "incident-cli.mjs");
     writeFileSync(wrapper, [
       "#!/usr/bin/env node",
@@ -56,6 +57,7 @@ async function launch(boat?: string, enterprise?: { dir: string; licenseKey: str
       `process.env.FAKE_CLAUDE_MODE = thread === "probe" ? "happy" : ${mode};`,
       `process.env.FAKE_CLAUDE_SLOW_FINISH_GATE = join(${JSON.stringify(dataDir)}, thread + ".gate");`,
       `process.env.FAKE_CLAUDE_DUMP = join(${JSON.stringify(dataDir)}, thread + ".json");`,
+      ...(logTurns ? [`process.env.FAKE_CLAUDE_DUMP_LOG = join(${JSON.stringify(dataDir)}, thread + ".jsonl");`] : []),
       `await import(${JSON.stringify(pathToFileURL(join(process.cwd(), "server/testing/fake-claude-cli.ts")).href)});`,
     ].join("\n"), { mode: 0o700 });
     await api("PATCH", "/api/instances/claude", { cli: wrapper });
@@ -340,18 +342,16 @@ it("keeps the team computer for a report turn, and answers without it once it is
     const bot = async (name: string) => (await control(["new-bot", "--name", name, "--section", "Ops"])).bot as { id: string; activeTaskId: string };
     const team = { ada: await bot("Ada"), ben: await bot("Ben"), cara: await bot("Cara"), dan: await bot("Dan") };
     await api("PATCH", `/api/bots/${team.ben.id}`, { computer: "off" });
-    await useCli(`${JSON.stringify([team.ada.activeTaskId, team.ben.activeTaskId])}.includes(thread) ? "exit-early" : "slow"`);
+    await useCli(`${JSON.stringify([team.ada.activeTaskId, team.ben.activeTaskId])}.includes(thread) ? "exit-early" : "slow"`, { logTurns: true });
     const requestId = randomUUID();
     await api("POST", "/api/team-computers", { requestId, name: "Ops desktop", acknowledgeCost: true }, undefined, 201);
     await api("PATCH", `/api/team-computers/${requestId}`, { section: "Ops", acknowledgeSharedAccess: true });
-    const reportRan = (pattern: string) => expect.poll(async () => JSON.stringify((await dump(incidents)).prompt), { timeout: 20_000 }).toContain(pattern);
-    let incidents = "";
 
     // Ada's run crashes for a reason of its own. The Chief's report turn has
     // the team computer like any of its turns, so it can still look for
     // itself: a report needs no computer, but loses none it can have.
     await control(["send", "--bot", team.ada.id, "--text", "Reconcile the September invoices."]);
-    incidents = (await incidentsThread(chief.id)).threadId;
+    const incidents = (await incidentsThread(chief.id)).threadId;
     const first = await dump(incidents);
     expect(JSON.stringify(first.prompt)).toContain("Ada's run in its thread #Reconcile the September invoices. failed");
     expect(Object.keys(first.mcpConfig.mcpServers)).toContain("computer");
@@ -377,8 +377,9 @@ it("keeps the team computer for a report turn, and answers without it once it is
         changing.then(() => { throw new Error("Boat account changed before its credential check was held"); }),
       ]);
       await control(["send", "--bot", team.ben.id, "--text", "Draft the vendor letter."]);
-      await reportRan("Ben's run in its thread #Draft the vendor letter. failed");
-      const duringChange = await dump(incidents);
+      // A follow-up can replace the latest dump before the first poll.
+      const duringChange = await turnWithPrompt(file(incidents, "jsonl"), 'The request there was: "Draft the vendor letter."', 20_000);
+      expect(JSON.stringify(duringChange.prompt)).toContain("Ben's run in its thread #Draft the vendor letter. failed");
       expect(Object.keys(duringChange.mcpConfig.mcpServers)).not.toContain("computer");
       // The turn's surface section changed since the last copy, so it comes
       // in the turn's own context update, not in the cached system prompt.

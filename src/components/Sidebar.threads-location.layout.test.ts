@@ -121,6 +121,35 @@ describe("threads location: one place at a time", () => {
     expect(on).not.toContain("put-away");
   });
 
+  // #5289 review: the server marks a hand-off closed as soon as it is answered
+  // and a start_thread thread closed when it finishes (closedBy). With the
+  // choice on those rows stay too, alone or swept later, within their own six;
+  // a thread of the person a bot closed still folds, on or off.
+  it("Show Bot threads on: an answered hand-off and a finished thread stay as rows", () => {
+    prefs.location = "sidebar";
+    const closedBy = { botId: "nimbus", name: "Nimbus", at: 50 };
+    const busy: Bot = { ...bot, projects: [], tasks: [
+      { threadId: "current", title: "Current", createdAt: 1 },
+      { threadId: "mine-closed", title: "Mine, closed by a bot", createdAt: 2, closedBy },
+      { threadId: "ticket", title: "#1234 - Order script", createdAt: 3, openedBy: { botId: "nimbus", name: "Nimbus", kind: "work", at: 3 }, closedBy },
+      { threadId: "ticket-swept", title: "#1235 - Printer", createdAt: 4, archivedAt: 60, autoArchived: true, openedBy: { botId: "nimbus", name: "Nimbus", kind: "work", at: 4 }, closedBy },
+      { threadId: "self", title: "Thread Test", createdAt: 5, openedBy: { botId: "atlas", name: "Atlas", at: 5 }, closedBy: { botId: "atlas", name: "Atlas", at: 51 } },
+      ...Array.from({ length: 7 }, (_, i) => ({ threadId: `done-${i}`, title: `Done ${i}`, createdAt: 10 + i, openedBy: { botId: "nimbus", name: "Nimbus", kind: "work" as const, at: 10 + i }, closedBy })),
+    ] };
+    const rowsOf = (html: string) => [...html.matchAll(/data-sidebar-thread-row="([^"]+)"/g)].map((match) => match[1]);
+    const list = () => rowsOf(renderToStaticMarkup(createElement(StoreProvider, null, createElement(BotThreadList, { bot: busy, selected: true }))));
+    expect(list()).toEqual(["current"]);
+    prefs.botThreads = true;
+    const on = list();
+    expect(on).toContain("current");
+    expect(on).not.toContain("mine-closed");
+    // six rows of their own, the newest first: the seven later hand-offs take
+    // them here, so the older closed ones fold behind "Show all"
+    expect(on.filter((id) => id !== "current").sort()).toEqual(["done-1", "done-2", "done-3", "done-4", "done-5", "done-6"]);
+    busy.tasks = busy.tasks!.filter((task) => !task.threadId.startsWith("done-"));
+    expect(list().sort()).toEqual(["current", "self", "ticket", "ticket-swept"]);
+  });
+
   it("With threads off neither place shows threads", () => {
     prefs.show = false;
     for (const location of ["header", "sidebar"] as const) {

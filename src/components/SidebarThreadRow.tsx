@@ -139,8 +139,12 @@ export function visibleSidebarThreads<T extends ThreadRowTask>(tasks: T[], activ
     // An archived thread stays archived until the person unarchives it, even
     // when something new lands in it; only the open one is shown.
     if (isArchived(task)) return task.threadId === activeId;
-    if (task.closedBy || isSnoozed(task)) return demandsAttention(task, activeId);
-    return (apart?.(task) ? openApart++ : open++) < 6 || demandsAttention(task, activeId);
+    // The server closes a hand-off once it is answered and a start_thread
+    // thread once it finishes: an `apart` row stays a row all the same, within
+    // its own six, or the list would only ever show the ones still running.
+    const isApart = apart?.(task) === true;
+    if ((task.closedBy && !isApart) || isSnoozed(task)) return demandsAttention(task, activeId);
+    return (isApart ? openApart++ : open++) < 6 || demandsAttention(task, activeId);
   });
 }
 

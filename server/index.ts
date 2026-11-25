@@ -1652,6 +1652,7 @@ import { createAdminAuditRows } from "./index-leaves/adminAuditRows.ts";
 import { createMemberSeesFrame } from "./index-leaves/memberSeesFrame.ts";
 import { createBotOverview } from "./index-leaves/botOverview.ts";
 import { createOrgAdminBots } from "./index-leaves/orgAdminBots.ts";
+import { createOrgAdminSetModel } from "./index-leaves/orgAdminSetModel.ts";
 import { createHoldDirectMachineTurn } from "./index-leaves/holdDirectMachineTurn.ts";
 import { createComputerCallGate } from "./index-leaves/computerCallGate.ts";
 import { createAskBotAndWait } from "./index-leaves/askBotAndWait.ts";
@@ -8431,6 +8432,7 @@ const claudeArtifactCommentsCheck = createClaudeArtifactCommentsCheck(getLeafHos
 const harnessCommandAccount = createHarnessCommandAccount(getLeafHost);
 const harnessCommandSource = createHarnessCommandSource(getLeafHost);
 const orgAdminBots = createOrgAdminBots(getLeafHost);
+const orgAdminSetModel = createOrgAdminSetModel(getLeafHost);
 const personEngineAccess = createPersonEngineAccess(getLeafHost);
 const singleBotPackage = createSingleBotPackage(getLeafHost);
 const importPackageFor = createImportPackageFor(getLeafHost);
@@ -33569,21 +33571,7 @@ const orgBotsDeps: BotsDeps = {
     settleMemberAutoLevels([botId]);
     audienceChanged();
   },
-  setModel: (botId, input) => {
-    const bot = store.bot(botId);
-    if (!bot) throw new ConsoleRefusal(404, "not_found", "No such bot.");
-    const instanceId = input.engineInstanceId ?? bot.modelSelection.instanceId;
-    const entry = registry.entries().find((candidate) => candidate.instanceId === instanceId);
-    if (!entry || !engineInstalled(instanceId)) throw new ConsoleRefusal(400, "engine_not_installed", `The engine ${instanceId} is not installed on this server.`);
-    if (!consoleEngineAllowed(instanceId)) throw new ConsoleRefusal(400, "engine_not_allowed", `The organization's policy does not allow the engine ${instanceId}.`);
-    if (bot.approvalGrant) throw new ConsoleRefusal(409, "busy", "Wait for the approval-level change to finish before changing models.");
-    // null: the bot's model on the same engine, else the engine's default.
-    const model = input.model ?? (instanceId === bot.modelSelection.instanceId ? bot.modelSelection.model : registry.get(instanceId)?.models.default ?? null);
-    if (!model) throw new ConsoleRefusal(400, "bad_request", "This engine has no default model: choose one.");
-    const checked = checkedModelSelection({ instanceId, model }, { selection: bot.modelSelection, busy: threadBusy(bot.id, bot.threadId) }, true);
-    if (!checked.ok) throw new ConsoleRefusal(checked.status, checked.status === 409 ? "busy" : "bad_request", checked.error);
-    store.patchBot(bot.id, { modelSelection: checked.selection });
-  },
+  setModel: (botId, input) => orgAdminSetModel(botId, input),
   setApprovalMode: (botId, mode, threads) => setBotApprovalModeFromConsole(botId, mode, threads),
   stop: forceStopBot,
   remove: (botId) => deleteBotWithLifecycle(botId),

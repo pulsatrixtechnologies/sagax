@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** orgAdminBots (#1388). Pure move from server/index.ts. */
 import { isSurfaceBot } from "../temporary-agents.ts";
+import { effortForModel, modelDefaultEffort, modelEffortLevels } from "../../shared/model-capabilities.ts";
 export type Host = Record<string, any>;
 
 export function createOrgAdminBots(getHost: () => Host): any {
@@ -59,7 +60,18 @@ function orgAdminBots(): Array<{ bot: AdminBot; reach: AdminBotReach }> {
         threads: host.botThreadIds(bot).length,
         look: host.botLook(bot, attachmentExists),
         persona: host.botPersona(bot),
-        approvalMode: approvalModeFor(bot)
+        approvalMode: approvalModeFor(bot),
+        // #5323: what the console's Reasoning row draws, by the composer's own rules (shared/model-capabilities.ts)
+        reasoning: (() => {
+          const live = host.registry.get(engine.instanceId);
+          const engineLevels = live?.adapter?.capabilities?.effortLevels;
+          const option = live?.models?.options?.find((candidate) => candidate.id === bot.modelSelection?.model);
+          return {
+            effort: effortForModel(bot.modelSelection?.effort, option, engineLevels) ?? null,
+            levels: modelEffortLevels(option, engineLevels),
+            default: modelDefaultEffort(option, engineLevels) ?? null,
+          };
+        })()
       },
       reach: host.orgBotReach(bot)
     };

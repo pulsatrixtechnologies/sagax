@@ -563,6 +563,17 @@ engine, else the engine's default model. Answers `{bot}`. Refusals: 400
 policy, Settings), 400 `bad_request` (a model the engine does not offer), 409
 `busy` (the bot is working). Audited `bot.model`.
 
+`effort` is optional (#5323): the bot's reasoning level, as in
+`{"model": "gpt-5", "effort": "high"}`, or null for none. It goes through the
+check of any model selection and is stored with it; a level the model does not
+take is refused (400 `effort_not_offered`), an unknown one too (400
+`bad_request`). A level sent with the bot's own engine and model changes the
+level alone (the rest of the bot's selection stays) and may change while the
+bot works. A call without `effort` does what it always did: the engine and the
+model are written, nothing else. A bot row carries `reasoning`: `{effort,
+levels, default}`, the level it runs at (null: none chosen), the levels its
+model takes (empty: no control) and the model's own default.
+
 ### `POST bots/{id}/stop`, `POST bots/{id}/delete`
 
 Stop: `{}`, answers `{bot}`. Delete: `{"confirm": "Atlas"}` (the bot's exact

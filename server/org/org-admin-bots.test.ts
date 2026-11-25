@@ -49,7 +49,8 @@ function setup() {
     transfer: (id, owner) => { bots.set(id, { ...bots.get(id)!, owner: { principalId: owner, sub: null, name: owner } }); reach.set(id, { ...reach.get(id)!, ownerPrincipalId: owner }); },
     setModel: (id, input) => {
       if (input.engineInstanceId === "ghost") throw new ConsoleRefusal(400, "engine_not_installed", "Not installed.");
-      bots.set(id, { ...bots.get(id)!, model: input.model });
+      bots.set(id, { ...bots.get(id)!, model: input.model, ...(input.effort !== undefined ? { reasoning: { effort: input.effort, levels: ["low", "high"], default: null } } : {}) });
+      calls.push(`model:${id}:${JSON.stringify(input)}`);
     },
     setApprovalMode: (id, mode, threads) => {
       const current = bots.get(id)!;
@@ -208,6 +209,29 @@ describe("bots", () => {
     expect(console.records.at(-1)).toMatchObject({ action: "bot.model", before: { model: "m1" }, after: { model: "m2" } });
     expect(await console.call("POST", "bots/a/model", { body: { engineInstanceId: "ghost", model: "m" } })).toMatchObject({ status: 400, body: { code: "engine_not_installed" } });
     expect((await console.call("POST", "bots/a/model", { body: { model: 5 } })).status).toBe(400);
+  });
+
+  it("model: an optional reasoning level goes to setModel; a call without one is sent as before (#5323)", async () => {
+    const { console, calls } = setup();
+    expect((await console.call("POST", "bots/a/model", { body: { model: "m2" } })).status).toBe(200);
+    expect((await console.call("POST", "bots/a/model", { body: { engineInstanceId: " claude ", model: null } })).status).toBe(200);
+    // before #5323 setModel received these two keys at most: the same now, no `effort` key
+    expect(calls).toEqual(['model:a:{"model":"m2"}', 'model:a:{"engineInstanceId":"claude","model":null}']);
+    // the audit row of a call without a level is the one it always was
+    expect(console.records.at(-1)).toEqual(expect.objectContaining({ action: "bot.model", changed: ["model"], before: { engine: "claude", model: "m2" }, after: { engine: "claude", model: null } }));
+    const leveled = await console.call("POST", "bots/a/model", { body: { model: "m2", effort: " high " } });
+    expect(leveled.body.bot.reasoning.effort).toBe("high");
+    expect(console.records.at(-1)).toMatchObject({ action: "bot.model", changed: ["model", "effort"], before: { effort: null }, after: { model: "m2", effort: "high" } });
+    expect(calls.at(-1)).toBe('model:a:{"model":"m2","effort":"high"}');
+    for (const effort of [5, "", "x".repeat(41)]) {
+      expect(await console.call("POST", "bots/a/model", { body: { model: "m2", effort } })).toMatchObject({ status: 400, body: { code: "bad_request" } });
+    }
+    expect(calls).toHaveLength(3);
+    // null takes the level off
+    expect((await console.call("POST", "bots/a/model", { body: { model: "m2", effort: null } })).body.bot.reasoning.effort).toBeNull();
+    expect(calls.at(-1)).toBe('model:a:{"model":"m2","effort":null}');
+    // the rights are the route's own: a manager out of reach still gets 404
+    expect((await console.call("POST", "bots/a/model", { ...MANAGER, body: { model: "m2", effort: "high" } })).status).toBe(404);
   });
 
   it("stop and delete: the owner is told; delete needs the bot's name", async () => {

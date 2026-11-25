@@ -149,6 +149,10 @@ export interface AdminBot {
   /** 2026-10-16: the bot's default approval level (ask, edits, auto, full,
    * custom), for the console's "Approve for me" bulk action. */
   approvalMode: string;
+  /** #5323: the reasoning level the bot runs at (null: none chosen), the
+   * levels its model takes, ascending (empty: no control), and the level the
+   * model runs at when none is sent. Absent on a server from before. */
+  reasoning?: { effort: string | null; levels: string[]; default: string | null };
 }
 
 export type ApprovalType = "tool" | "skill" | "routine" | "profile" | "model" | "team_setup" | "tightening" | "peer" | "other";

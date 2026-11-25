@@ -68,7 +68,9 @@ export interface BotsDeps {
   setArchived(botId: string, archived: boolean): void;
   /** The new owner owns it; grants kept, the old owner keeps `manage`. */
   transfer(botId: string, ownerPrincipalId: string): void;
-  setModel(botId: string, input: { engineInstanceId?: string; model: string | null }): void;
+  /** `effort` (#5323): the bot's reasoning level, one the model takes, or
+   * null for none; left out, the call writes the engine and the model alone. */
+  setModel(botId: string, input: { engineInstanceId?: string; model: string | null; effort?: string | null }): void;
   /** 2026-10-16: the bot's default level to Ask or Approve for me (never
    * Full, Custom or Edits from here); with `threads`, its conversations on
    * Ask follow to Auto (a conversation on another level keeps it). Throws a
@@ -171,9 +173,20 @@ function act(ctx: ConsoleContext, deps: BotsDeps, action: ActionName, botId: str
       if ((engine !== undefined && (typeof engine !== "string" || !engine.trim() || engine.length > 80)) || (model !== null && (typeof model !== "string" || !model.trim() || model.length > 200))) {
         return new ConsoleRefusal(400, "bad_request", "Send { \"engineInstanceId\"?: an engine instance, \"model\": a model id or null }.");
       }
-      deps.setModel(botId, { ...(typeof engine === "string" ? { engineInstanceId: engine.trim() } : {}), model: typeof model === "string" ? model.trim() : null });
+      // #5323: the reasoning level, optional (null: none); which levels the model takes is setModel's check
+      const effort = body.effort;
+      if (effort !== undefined && effort !== null && (typeof effort !== "string" || !effort.trim() || effort.length > 40)) {
+        return new ConsoleRefusal(400, "bad_request", "effort is a reasoning level the model takes, or null for none; leave it out to keep the call as it was.");
+      }
+      deps.setModel(botId, { ...(typeof engine === "string" ? { engineInstanceId: engine.trim() } : {}), model: typeof model === "string" ? model.trim() : null, ...(effort !== undefined ? { effort: typeof effort === "string" ? effort.trim() : null } : {}) });
       const after = botOf(deps, botId)!;
-      ctx.record({ category: "bot", action: "bot.model", target, changed: ["model"], before: { engine: before.engine.instanceId, model: before.model }, after: { engine: after.engine.instanceId, model: after.model } });
+      // the audit row of a call without a level is the one it always was
+      const level = effort !== undefined;
+      ctx.record({
+        category: "bot", action: "bot.model", target, changed: level ? ["model", "effort"] : ["model"],
+        before: { engine: before.engine.instanceId, model: before.model, ...(level ? { effort: before.reasoning?.effort ?? null } : {}) },
+        after: { engine: after.engine.instanceId, model: after.model, ...(level ? { effort: after.reasoning?.effort ?? null } : {}) },
+      });
     }
   } catch (error) {
     if (error instanceof ConsoleRefusal) return error;
@@ -263,7 +276,7 @@ export function botsRoutes(deps: BotsDeps): ConsoleRoute[] {
     single(deps, "bots/{id}/archive", "archive", [], () => null, "manager", true),
     single(deps, "bots/{id}/restore", "restore", [], () => null, "manager", true),
     single(deps, "bots/{id}/transfer", "transfer", ["ownerPrincipalId", "ownerSub"], (body) => typeof body.ownerPrincipalId === "string" || typeof body.ownerSub === "string" ? null : "Send { \"ownerSub\": a Perspicax user id } or { \"ownerPrincipalId\" }.", "admin"),
-    single(deps, "bots/{id}/model", "model", ["engineInstanceId", "model"], (body) => "model" in body ? null : "Send { \"engineInstanceId\"?: an engine instance, \"model\": a model id or null }.", "manager", true),
+    single(deps, "bots/{id}/model", "model", ["engineInstanceId", "model", "effort"], (body) => "model" in body ? null : "Send { \"engineInstanceId\"?: an engine instance, \"model\": a model id or null }.", "manager", true),
   ];
   return [
     {

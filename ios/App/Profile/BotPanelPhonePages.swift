@@ -229,10 +229,16 @@ struct BotModelSection: View {
     }
     private var modelOption: ModelOption? { instance?.models.options.first { $0.id == modelID } }
     private var draft: ModelSelection {
-        var next = usesVariants
-            ? ModelSelection(instanceId: instanceID, model: modelID, variant: variant)
-            : ModelSelection(instanceId: instanceID, model: modelID, effort: effort)
-        if auto { next.auto = true }
+        var next = saved
+        next.instanceId = instanceID
+        next.model = modelID
+        next.variant = usesVariants ? variant : nil
+        next.effort = usesVariants ? nil : effort
+        next.auto = auto ? true : nil
+        if !auto {
+            next.mode = nil
+            next.autoOptimize = nil
+        }
         return next
     }
     private var canApply: Bool {

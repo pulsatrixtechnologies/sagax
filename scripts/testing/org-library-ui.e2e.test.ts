@@ -164,9 +164,11 @@ describe("the organization library in the real renderer", () => {
     await expect.poll(() => evaluate(openBotMenuJs()), { timeout: 10_000 }).toBe(true);
     await expect.poll(snapshot, { timeout: 10_000 }).toContain('menuitem "Edit bot"');
     await click("Edit bot");
-    // A bot's skills are on its profile's Knowledge tab since 0.8.52 (#2168).
+    // The Knowledge tab opens Skills from the bot folder's options.
     await expect.poll(snapshot, { timeout: 10_000 }).toContain('tab "Knowledge"');
     await click("Knowledge");
+    await click("Folder options");
+    await click("Skills");
     // The shared skills card: its hint now sits behind the heading's help tip.
     await expect.poll(snapshot, { timeout: 10_000 }).toContain('heading "From Customer Co"');
     await evidence("org-library-bot-skills.png");

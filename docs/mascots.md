@@ -556,6 +556,30 @@ with a key this build does not know keeps everything else
 | Say and sprout fix (#2981): before/after, rest and orbit move | `docs/screenshots/shapes-say-sprout` |
 | Sprout restored and say mascot look (#3104): before main and after, rest and move | `docs/screenshots/shapes-regression-2026-11-09` |
 
+### Turned by hand (#5384)
+
+Where a shape is drawn large (the bot page's hero, which is also the mascot
+picker's preview, and the bot panel's avatar, 88 px and up), the person turns
+it as on the open-bot-avatar site's stage, with that stage's own figures
+(`floating-bots/mascot-turn.ts`): a drag turns the body (0.011 rad a pixel
+across, 0.009 up, the pitch held within 0.9 rad, the gaze held meanwhile), the
+arrow keys turn it by 0.2 rad (0.6 with Shift), Home, 0, Escape, a double
+click or the Reset view button bring it back over 420 ms (at once under
+reduced motion). Keys 1 to 6 preview one of the six states until the mascot
+loses the focus (never stored: a bot's state follows its activity), M changes
+the mood. A press that moved less than 4 px stays a click and opens the
+picker. A glass body has the engine site's tinted glow under it.
+
+The stage is a React context (`shape-stage.ts`) that `use-mascot-turn.tsx`
+provides and `ShapeMascot.tsx` reads; a body in a material hands the view to
+the engine (`shape-material.tsx`, `canvasOptions`). On a stage a reduced
+mascot stays the moving drawing (the engine's reduced motion: no idle life,
+but it turns and its eyes follow); off a stage it is the still image, as
+before. Small thumbnails, the desktop mascot and the characters that are not
+shapes are never turned. Covered by `mascot-turn.test.ts`,
+`mascot-turn.dom.test.ts` and `shape-stage.test.ts`; captured by
+`scripts/capture/mascot-turn.mjs`.
+
 ## HD mascots (painted art, pilot: Shiba)
 
 A character may ship painted art beside its vector drawing. Only the Shiba

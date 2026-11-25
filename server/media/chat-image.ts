@@ -11,6 +11,7 @@ import type { ReadableStreamReadResult } from "node:stream/web";
 import { z } from "zod";
 import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../../shared/image-generation.ts";
 import { providerOrder } from "../../shared/voice-providers.ts";
+import { imageWord, type ImageLanguage } from "./image-words.ts";
 import type { ProviderKeyResult } from "../perspicax/perspicax-link.ts";
 import { decodeGeneratedImage } from "./generated-image.ts";
 import type { VoiceKeySource, VoiceModeRefusalCause } from "../../shared/voice-mode.ts";
@@ -32,8 +33,8 @@ export const OPENAI_IMAGE_MODEL = "gpt-image-2";
 export const XAI_ACCOUNT_IMAGE_BASE = "https://cli-chat-proxy.grok.com/v1";
 export const XAI_ACCOUNT_HEADER_NAME = "x-xai-token-auth";
 export const XAI_ACCOUNT_HEADER_VALUE = "xai-grok-cli";
-export const NO_IMAGE_PROVIDER =
-  "No image provider is connected. Connect your Grok account or an xAI (Grok Imagine) or OpenAI key in Settings > Providers, then ask again.";
+/** English, the catalog's source; a person reads `imageWord(language, "noProvider")`. */
+export const NO_IMAGE_PROVIDER = imageWord("en", "noProvider");
 
 /** Why an image generation could not happen, computed server-side from what
  * the provider answered. Never a hard-coded "configure a key": a connected
@@ -275,9 +276,12 @@ export async function renderChatImage(
   input: ChatImageInput,
   fetchImpl: typeof fetch = fetch,
   timeoutMs = CHAT_IMAGE_TIMEOUT_MS,
+  /** The language of the person the image is for: every sentence below is theirs to read (#5223). */
+  language?: ImageLanguage,
 ): Promise<ChatImageResult> {
   const name = NAMES[credential.provider];
   const edit = Boolean(input.image);
+  const say = (word: Parameters<typeof imageWord>[1], status?: number) => imageWord(language, word, { provider: name, ...(status === undefined ? {} : { status }) });
   const url = `${credential.baseUrl}/images/${edit ? "edits" : "generations"}`;
   const account = credential.auth === "account";
   const headers: Record<string, string> = {};
@@ -316,12 +320,12 @@ export async function renderChatImage(
     // that answered is handled below, so spent credits are never read as a
     // network outage (#5223, expected 4).
     const timedOut = signal.aborted || (error instanceof Error && error.name === "TimeoutError");
-    throw new ChatImageError(timedOut ? `${name} image ${edit ? "editing" : "generation"} timed out` : `Could not reach ${name} image ${edit ? "editing" : "generation"}`, 502, "network");
+    throw new ChatImageError(say(timedOut ? (edit ? "editTimeout" : "genTimeout") : (edit ? "editUnreachable" : "genUnreachable")), 502, "network");
   }
   let text: string;
-  try { text = await boundedText(response); }
+  try { text = await boundedText(response, language); }
   catch (error) {
-    if (signal.aborted) throw new ChatImageError(`${name} image ${edit ? "editing" : "generation"} timed out`, 502, "network");
+    if (signal.aborted) throw new ChatImageError(say(edit ? "editTimeout" : "genTimeout"), 502, "network");
     throw error;
   }
   // Provider error bodies can echo headers or signed URLs: the body is read
@@ -331,12 +335,10 @@ export async function renderChatImage(
   if (!response.ok) {
     const cause = imageRefusalCause(response.status, text);
     const message = cause === "credits"
-      ? `${name} is out of credits for image generation. Add credits, then ask again.`
+      ? say("credits")
       : cause === "key"
-        ? (account
-          ? `${name} refused your connected Grok account (HTTP ${response.status}). Reconnect it in Settings.`
-          : `${name} refused the API key (HTTP ${response.status}). Reconnect it in Settings > Providers.`)
-        : `${name} image ${edit ? "editing" : "generation"} failed (HTTP ${response.status})`;
+        ? say(account ? "accountRefused" : "keyRefused", response.status)
+        : say(edit ? "editFailed" : "genFailed", response.status);
     // The status stays coarse (a refused credential is 401, any other provider
     // failure 502); the `cause` carries what the person can act on. A refusal
     // that is spent credits is never reported as a network outage.
@@ -344,16 +346,16 @@ export async function renderChatImage(
   }
   let parsed: z.infer<typeof responseSchema>;
   try { parsed = responseSchema.parse(JSON.parse(text)); }
-  catch { throw new ChatImageError(`${name} returned no generated image`); }
+  catch { throw new ChatImageError(say("noImage")); }
   const encoded = parsed.data[0]!.b64_json;
   // A provider URL is never fetched: compatible gateways must return b64_json.
-  if (!encoded) throw new ChatImageError(`${name} must return base64 image data (b64_json)`);
+  if (!encoded) throw new ChatImageError(say("needsBase64"));
   try {
     const image = decodeGeneratedImage(encoded, MAX_UPSTREAM_RESPONSE_BYTES);
     if (image.mime === "image/gif") throw new Error("gif");
     return { bytes: image.bytes, mime: image.mime };
   } catch {
-    throw new ChatImageError(`${name} returned invalid image data; expected PNG, JPEG or WebP`);
+    throw new ChatImageError(say("invalidData"));
   }
 }
 
@@ -377,11 +379,11 @@ function openAiSize(aspect?: string): string {
   return "1024x1024";
 }
 
-async function boundedText(response: Response): Promise<string> {
+async function boundedText(response: Response, language?: ImageLanguage): Promise<string> {
   const advertised = Number(response.headers.get("content-length"));
   if (Number.isFinite(advertised) && advertised > MAX_UPSTREAM_RESPONSE_BYTES * 1.4) {
     await response.body?.cancel().catch(() => {});
-    throw new ChatImageError("Generated image exceeded the response limit");
+    throw new ChatImageError(imageWord(language, "tooLarge"));
   }
   const reader = response.body?.getReader();
   if (!reader) return "";
@@ -392,12 +394,12 @@ async function boundedText(response: Response): Promise<string> {
     for (;;) {
       let chunk: ReadableStreamReadResult<Uint8Array>;
       try { chunk = await reader.read(); }
-      catch { throw new ChatImageError("Could not read the generated image response"); }
+      catch { throw new ChatImageError(imageWord(language, "unreadable")); }
       if (chunk.done) break;
       received += chunk.value.byteLength;
       if (received > MAX_UPSTREAM_RESPONSE_BYTES * 1.4) {
         await reader.cancel().catch(() => {});
-        throw new ChatImageError("Generated image exceeded the response limit");
+        throw new ChatImageError(imageWord(language, "tooLarge"));
       }
       chunks.push(decoder.decode(chunk.value, { stream: true }));
     }

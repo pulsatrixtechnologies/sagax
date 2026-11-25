@@ -432,4 +432,20 @@ describe("avatar image generation", () => {
       message: "Could not read the generated avatar response", status: 502,
     });
   });
+
+  // #5223, expected 5: the avatar's refusals in the person's language
+  it("says an avatar refusal in the person's language, the code unchanged (#5223)", async () => {
+    const none = vi.fn<typeof fetch>();
+    await expect(generateAvatarImage({ imageGen: { provider: "xai" }, language: "fr" }, BOT, "owl", none))
+      .rejects.toMatchObject({ status: 409, code: "no_provider", message: "Connecte d'abord ton compte Grok ou ajoute une clé d'API xAI" });
+    await expect(generateAvatarImage({ ...OPENAI, language: "fr" }, BOT, "photo of a coworker", none))
+      .rejects.toMatchObject({ status: 400, message: "Choisis une image, ou décris un personnage dessiné. Un avatar n'est pas une image générée d'une vraie personne." });
+    expect(none).not.toHaveBeenCalled();
+    const dry = vi.fn<typeof fetch>(async () => new Response('{"error":"out_of_credits"}', { status: 402 }));
+    await expect(generateAvatarImage({ imageGen: { provider: "xai" }, xaiAccount: "acct-token", language: "fr" }, BOT, "owl", dry))
+      .rejects.toMatchObject({ code: "credits", message: "xAI n'a plus de crédits pour générer des images. Ajoute des crédits, puis redemande." });
+    const refused = vi.fn<typeof fetch>(async () => new Response("no", { status: 401 }));
+    await expect(generateAvatarImage({ imageGen: { provider: "xai" }, xaiAccount: "acct-token", language: "fr" }, BOT, "owl", refused))
+      .rejects.toMatchObject({ code: "key", message: "xAI a refusé ton compte Grok connecté (HTTP 401). Reconnecte-le dans Réglages." });
+  });
 });

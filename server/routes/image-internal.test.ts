@@ -1,6 +1,7 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { imageKeyCandidate, xaiAccountImage, xaiKeyImage, type ChatImageCredential } from "../media/chat-image.ts";
 import { VoiceKeyRefusals } from "../voice/voice-keys.ts";
@@ -89,6 +90,28 @@ describe("POST /api/internal/image (#2954)", () => {
     expect(out.payload).toMatchObject({ code: "credits" });
     expect(String(out.payload.error)).toMatch(/out of credits/);
     expect(String(out.payload.error)).not.toMatch(/Settings > Providers|configure a key|reach/i);
+  });
+
+  // #5223, expected 5: the route says a refusal in the language of the person the turn is for
+  it("says a refusal in the person's language, with the same code (#5223)", async () => {
+    const french = { language: () => "fr" as const };
+    const none = await call({ prompt: "x" }, { ...french, credentials: async () => [] });
+    expect(none.payload).toEqual({ code: "no_provider", error: "Aucun fournisseur d'images n'est connecté. Connecte ton compte Grok, ou une clé xAI (Grok Imagine) ou OpenAI dans Réglages > Fournisseurs, puis redemande." });
+    const account = { provider: "xai", auth: "account", key: "acct", baseUrl: "https://cli-chat-proxy.grok.com/v1", model: "m" };
+    const dry = await call({ prompt: "an owl", use_attached_image: false }, {
+      ...french, credentials: async () => one(account as never),
+      fetch: (async () => new Response('{"error":"out_of_credits"}', { status: 402 })) as unknown as typeof fetch,
+    });
+    expect(dry.status).toBe(502);
+    expect(dry.payload).toEqual({ code: "credits", error: "xAI n'a plus de crédits pour générer des images. Ajoute des crédits, puis redemande." });
+    const nobody = await call({ prompt: "x" }, { ...french, owner: () => null });
+    expect(nobody.payload.error).toBe("La génération d'image a besoin de la personne pour qui cette conversation parle.");
+  });
+
+  it("the server gives the route and the avatar the language of the person each is for (#5223)", () => {
+    const index = readFileSync(fileURLToPath(new URL("../index.ts", import.meta.url)), "utf8");
+    expect(index).toMatch(/language: \(capability\) => personLanguageCode\(languageOfPerson\(turnMediaPrincipal\(capability\.threadId\)\)\),/);
+    expect(index).toMatch(/language: personLanguageCode\(languageOfPerson\(principalId\)\),/);
   });
 
   // D-20261123-053: a Grok account out of credits goes on to the person's API

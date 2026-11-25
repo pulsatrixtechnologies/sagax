@@ -24068,6 +24068,7 @@ async function orgAvatarImageConfig(principalId: string | null): Promise<AvatarI
   if (!given && !ownXai && avatarImageStatus(cfg).provider === "xai") return null;
   return {
     imageGen: cfg.imageGen, ...(given ? { xai: cfg.xai } : {}), credentials, refusalText: voiceRefusalText,
+    language: personLanguageCode(languageOfPerson(principalId)),
     chain: { who: principalId ?? "solo", refusals: imageKeyRefusals, organization: IDENTITY.kind === "perspicax", log: (line) => console.warn(line) },
   };
 }
@@ -24787,6 +24788,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     },
     refusals: imageKeyRefusals,
     refusalText: voiceRefusalText,
+    // #5223: a refusal is said in the language of the person the turn is for
+    language: (capability) => personLanguageCode(languageOfPerson(turnMediaPrincipal(capability.threadId))),
     log: (line) => console.warn(line),
     credentials: (capability) => personImageCredentials(
       imagePeople,

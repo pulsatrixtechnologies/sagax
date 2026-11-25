@@ -6,12 +6,12 @@ import { saveImage } from "../attachments/attachments.ts";
 import {
   ChatImageError,
   chatImageRequestSchema,
-  NO_IMAGE_PROVIDER,
   renderChatImage,
   withImageCredentials,
   type ChatImageCredential,
   type ImageCredentials,
 } from "../media/chat-image.ts";
+import { imageWord, type ImageLanguage } from "../media/image-words.ts";
 import type { VoiceModeRefusalCause } from "../../shared/voice-mode.ts";
 import type { VoiceKeyRefusals } from "../voice/voice-keys.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
@@ -31,6 +31,9 @@ export interface ImageInternalDeps {
    * credential that serves (the voice's own memory, voice-keys.ts). */
   refusals: VoiceKeyRefusals;
   log?(line: string): void;
+  /** The language of the person this conversation speaks for (#5223): the
+   * sentence of a refusal is theirs to read. Absent: English. */
+  language?(capability: InternalCapabilityView): ImageLanguage;
   /** The image named by reference, or the latest one in the current person's
    * message when reference is omitted; null when there is none. */
   image(capability: InternalCapabilityView, reference?: string): Promise<{ bytes: Buffer; mime: string } | null>;
@@ -45,10 +48,11 @@ export function createImageInternalRoutes(deps: ImageInternalDeps): InternalRout
     const parsed = chatImageRequestSchema.safeParse(await readBody());
     if (!parsed.success) return json(res, 400, { error: "prompt (1-4000 characters) is required; aspect_ratio is 1:1, 16:9, 9:16, 4:3, 3:4, 3:2 or 2:3." });
     const owner = deps.owner(capability);
-    if (!owner) return json(res, 403, { error: "Image generation needs the person this conversation speaks for." });
+    const language = deps.language?.(capability);
+    if (!owner) return json(res, 403, { error: imageWord(language, "noOwner") });
     const candidates = await deps.credentials(capability);
     if (!Array.isArray(candidates)) return json(res, 403, { error: deps.refusalText(candidates.refused), code: candidates.refused });
-    if (!candidates.length) return json(res, 409, { error: NO_IMAGE_PROVIDER, code: "no_provider" });
+    if (!candidates.length) return json(res, 409, { error: imageWord(language, "noProvider"), code: "no_provider" });
     const now = deps.now ?? Date.now;
     const started = now();
     try {
@@ -64,7 +68,7 @@ export function createImageInternalRoutes(deps: ImageInternalDeps): InternalRout
           prompt: parsed.data.prompt,
           ...(source ? { image: source } : {}),
           ...(parsed.data.aspect_ratio ? { aspectRatio: parsed.data.aspect_ratio } : {}),
-        }, deps.fetch),
+        }, deps.fetch, undefined, language),
       );
       const saved = saveImage(result.bytes, result.mime, undefined, owner);
       const ext = saved.mime === "image/png" ? "png" : saved.mime === "image/webp" ? "webp" : "jpg";
@@ -85,7 +89,7 @@ export function createImageInternalRoutes(deps: ImageInternalDeps): InternalRout
       // "configure a key" when an account served but is out of credits (#5223).
       if (error instanceof ChatImageError) return json(res, error.status, { error: error.message, code: error.cause });
       const status = (error as { status?: number })?.status;
-      return json(res, typeof status === "number" && status >= 400 && status < 600 ? status : 502, { error: "The image could not be saved in the chat." });
+      return json(res, typeof status === "number" && status >= 400 && status < 600 ? status : 502, { error: imageWord(language, "notSaved") });
     }
   };
 }

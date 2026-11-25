@@ -14,6 +14,7 @@ import {
   type ImageCredentials,
 } from "./chat-image.ts";
 import type { VoiceModeRefusalCause } from "../../shared/voice-mode.ts";
+import { imageWord, type ImageLanguage } from "./image-words.ts";
 import { VoiceKeyRefusals } from "../voice/voice-keys.ts";
 import { BOT_AVATAR_MAX_BYTES } from "../org/org-admin-look.ts";
 import type { BotRecord } from "../store.ts";
@@ -27,10 +28,10 @@ const MAX_UPSTREAM_RESPONSE_BYTES = 15 * 1024 * 1024;
  * photograph of someone. */
 const REAL_PERSON_AVATAR = /\b(?:photorealistic|photograph|photo of|photo de|headshot|selfie|real person|personne r[eé]elle|likeness of)\b/i;
 
-export function avatarDirectionRefusal(direction: string): string | null {
+export function avatarDirectionRefusal(direction: string, language?: ImageLanguage): string | null {
   const text = direction.trim();
   if (!text || !REAL_PERSON_AVATAR.test(text)) return null;
-  return "Choose a picture, or describe a drawn character. An avatar is not a generated image of a real person.";
+  return imageWord(language, "avatarRealPerson");
 }
 
 export const avatarGenerationRequestSchema = z.object({
@@ -57,6 +58,9 @@ export interface AvatarImageConfig {
   credentials?: ImageCredentials;
   /** The voice's own words for a refusal cause (voice-mode.ts voiceRefusalText). */
   refusalText?(cause: VoiceModeRefusalCause): string;
+  /** The language of the person the avatar is made for (#5223): every
+   * sentence of a refusal is theirs to read. Absent: English. */
+  language?: ImageLanguage;
   /** Who asks and what was refused lately (the image chain, D-20261123-053);
    * a chain with no memory when absent. */
   chain?: ImageChain & { organization?: boolean };
@@ -129,11 +133,11 @@ export interface GeneratedAvatarImage {
  * arbitrarily large body. The image API returns base64 JSON, so a byte cap is
  * the real memory boundary; decoding happens only after the bounded read.
  */
-async function boundedResponseText(response: Response): Promise<string> {
+async function boundedResponseText(response: Response, language?: ImageLanguage): Promise<string> {
   const advertised = Number(response.headers.get("content-length"));
   if (Number.isFinite(advertised) && advertised > MAX_UPSTREAM_RESPONSE_BYTES) {
     await response.body?.cancel().catch(() => {});
-    throw Object.assign(new Error("Generated avatar exceeded the response limit"), { status: 502 });
+    throw Object.assign(new Error(imageWord(language, "avatarTooLarge")), { status: 502 });
   }
   const reader = response.body?.getReader();
   if (!reader) return "";
@@ -147,14 +151,14 @@ async function boundedResponseText(response: Response): Promise<string> {
       try {
         chunk = await reader.read();
       } catch {
-        throw Object.assign(new Error("Could not read the generated avatar response"), { status: 502 });
+        throw Object.assign(new Error(imageWord(language, "avatarUnreadable")), { status: 502 });
       }
       const { done, value } = chunk;
       if (done) break;
       received += value.byteLength;
       if (received > MAX_UPSTREAM_RESPONSE_BYTES) {
         await reader.cancel().catch(() => {});
-        throw Object.assign(new Error("Generated avatar exceeded the response limit"), { status: 502 });
+        throw Object.assign(new Error(imageWord(language, "avatarTooLarge")), { status: 502 });
       }
       chunks.push(decoder.decode(value, { stream: true }));
     }
@@ -172,7 +176,8 @@ export async function generateAvatarImage(
   fetchImpl: typeof fetch = fetch,
   timeoutMs = AVATAR_IMAGE_TIMEOUT_MS,
 ): Promise<GeneratedAvatarImage> {
-  const refused = avatarDirectionRefusal(direction);
+  const language = cfg.language;
+  const refused = avatarDirectionRefusal(direction, language);
   if (refused) throw Object.assign(new Error(refused), { status: 400 });
   const settings = avatarImageStatus(cfg);
   const { provider } = settings;
@@ -190,23 +195,21 @@ export async function generateAvatarImage(
     organizationXaiKey: () => cfg.xai?.key,
   });
   // the voice's verdict for a person turned off, in the voice's words
-  if (!Array.isArray(all)) throw Object.assign(new Error(cfg.refusalText?.(all.refused) ?? "Image generation is not available to you."), { status: 403, code: all.refused });
+  if (!Array.isArray(all)) throw Object.assign(new Error(cfg.refusalText?.(all.refused) ?? all.refused), { status: 403, code: all.refused });
   // A provider chosen in the image settings keeps the avatar on that provider
   // and on the person's own Grok account: no other provider's key is
   // borrowed. Nothing chosen: the whole chain, as in the chat.
   const chosen = cfg.imageGen?.provider;
   const candidates = chosen ? all.filter((entry) => entry.credential.provider === chosen || entry.credential.auth === "account") : all;
   if (!candidates.length) {
-    const message = provider === "openai" ? "Add an OpenAI image API key first"
-      : provider === "xai" ? "Connect your Grok account or add an xAI API key first"
-        : "Set a valid custom image API URL and model first";
+    const message = imageWord(language, provider === "openai" ? "avatarNeedsOpenai" : provider === "xai" ? "avatarNeedsXai" : "avatarNeedsCustom");
     throw Object.assign(new Error(message), { status: 409, code: "no_provider" });
   }
   // D-20261123-053: a credential out of credits (or refused) gives way to the
   // next one, by the same chain as the chat's image and the voice.
   const chain: ImageChain = cfg.chain ?? { who: "", refusals: new VoiceKeyRefusals() };
   const prompt = avatarGenerationPrompt(bot, direction);
-  return (await withImageCredentials(chain, candidates, (credential) => avatarOnCredential(credential, prompt, fetchImpl, timeoutMs))).value;
+  return (await withImageCredentials(chain, candidates, (credential) => avatarOnCredential(credential, prompt, fetchImpl, timeoutMs, language))).value;
 }
 
 /** One avatar generation on one credential. */
@@ -215,11 +218,13 @@ async function avatarOnCredential(
   prompt: string,
   fetchImpl: typeof fetch,
   timeoutMs: number,
+  language?: ImageLanguage,
 ): Promise<GeneratedAvatarImage> {
   const { provider, model } = credential;
   const account = credential.auth === "account";
   const apiKey = credential.key;
   const providerName = provider === "openai" ? "OpenAI" : provider === "xai" ? "xAI" : "Custom";
+  const say = (word: Parameters<typeof imageWord>[1], status?: number) => imageWord(language, word, { provider: providerName, ...(status === undefined ? {} : { status }) });
   const url = `${credential.baseUrl}/images/generations`;
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (apiKey) headers.authorization = `Bearer ${apiKey}`;
@@ -245,20 +250,20 @@ async function avatarOnCredential(
   } catch (error) {
     const timedOut = timeoutSignal.aborted || (error instanceof Error && error.name === "TimeoutError");
     throw Object.assign(
-      new Error(timedOut ? "Avatar generation timed out" : `Could not reach ${providerName} image generation`),
+      new Error(say(timedOut ? "avatarTimeout" : "genUnreachable")),
       { status: 502 },
     );
   }
 
   let text: string;
   try {
-    text = await boundedResponseText(response);
+    text = await boundedResponseText(response, language);
   } catch (error) {
     // A fetch can resolve its headers before the provider stalls. When the
     // same timeout later aborts the response body, undici may surface either
     // TimeoutError or AbortError; the signal is the authoritative cause.
     if (timeoutSignal.aborted || (error instanceof Error && error.name === "TimeoutError")) {
-      throw Object.assign(new Error("Avatar generation timed out"), { status: 502 });
+      throw Object.assign(new Error(say("avatarTimeout")), { status: 502 });
     }
     throw error;
   }
@@ -269,10 +274,10 @@ async function avatarOnCredential(
     // outage (#5223, expected 4).
     const cause = imageRefusalCause(response.status, text);
     const message = cause === "credits"
-      ? `${providerName} is out of credits for image generation. Add credits, then ask again.`
+      ? say("credits")
       : cause === "key" && account
-        ? `${providerName} refused your connected Grok account (HTTP ${response.status}). Reconnect it in Settings.`
-        : `${providerName} image generation failed (HTTP ${response.status})`;
+        ? say("accountRefused", response.status)
+        : say("genFailed", response.status);
     // The status stays coarse (a refused credential 401, any other provider
     // failure 502); the `code` carries the cause. Spent credits is never the
     // network nor a missing key (#5223, expected 4).
@@ -283,26 +288,26 @@ async function avatarOnCredential(
   try {
     parsedJson = JSON.parse(text);
   } catch {
-    throw Object.assign(new Error(`${providerName} returned an invalid image response`), { status: 502 });
+    throw Object.assign(new Error(say("avatarInvalidResponse")), { status: 502 });
   }
   const parsed = generatedImageResponseSchema.safeParse(parsedJson);
   if (!parsed.success) {
-    throw Object.assign(new Error(`${providerName} returned no generated image`), { status: 502 });
+    throw Object.assign(new Error(say("noImage")), { status: 502 });
   }
   const encoded = parsed.data.data[0]!.b64_json;
   if (!encoded) {
     // Do not fetch arbitrary URLs returned by a provider. Compatible gateways
     // must support the requested inline base64 response format.
-    throw Object.assign(new Error(`${providerName} image generation must return base64 image data (b64_json)`), { status: 502 });
+    throw Object.assign(new Error(say("avatarNeedsBase64")), { status: 502 });
   }
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length % 4 !== 0) {
-    throw Object.assign(new Error(`${providerName} returned invalid image data`), { status: 502 });
+    throw Object.assign(new Error(say("avatarInvalidData")), { status: 502 });
   }
   try {
     const image = decodeGeneratedImage(encoded, BOT_AVATAR_MAX_BYTES);
     if (image.mime === "image/gif") throw new Error("unsupported avatar format");
     return { bytes: image.bytes, mime: image.mime };
   } catch {
-    throw Object.assign(new Error(`${providerName} returned invalid or oversized image data; expected PNG, JPEG, or WebP`), { status: 502 });
+    throw Object.assign(new Error(say("avatarOversized")), { status: 502 });
   }
 }

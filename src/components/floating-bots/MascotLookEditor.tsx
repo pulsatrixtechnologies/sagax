@@ -581,7 +581,7 @@ function FacePanel({ look, settings, color, disabled, onChange }: EnginePanelPro
               aria-checked={settings.eyeColor === hex}
               data-shape-eye-color={hex}
               onClick={() => onChange({ eyeColor: hex })}
-              className={cn("size-7 rounded-full ring-1 ring-inset ring-hairline outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50", settings.eyeColor === hex && "ring-2 ring-ink/80 ring-offset-[3px] ring-offset-panel")}
+              className={cn("size-7 rounded-full ring-1 ring-inset ring-ink/30 outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50", settings.eyeColor === hex && "ring-2 ring-ink/80 ring-offset-[3px] ring-offset-panel")}
               style={{ backgroundColor: hex }}
               title={hex}
               aria-label={t("appearance.eyes.use", { color: hex })}
@@ -829,7 +829,8 @@ export default function MascotLookEditor({
     skin: skinName,
     material: t(MATERIAL_LABEL[settings.material]),
     face: t(MOOD_LABEL[settings.mood]),
-    states: previewState ? t(AGENT_STATE_LABEL[previewState]) : t("appearance.states.auto"),
+    // no value: nothing is chosen there, the mascot takes its state from the bot
+    states: null,
   };
   const skinPicker = shown === "owl" ? (
     <SkinPicker
@@ -915,8 +916,8 @@ export default function MascotLookEditor({
           label={(id) => (
             <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
               <span className="font-medium">{t(EDITOR_TAB_LABEL[id])}</span>
-              {id !== "color" && <span aria-hidden="true" className="text-ink-tertiary">·</span>}
-              <span className="inline-flex max-w-[9rem] items-center gap-1.5 truncate text-ink-tertiary" data-appearance-tab-value="">{tabValue[id]}</span>
+              {id !== "color" && tabValue[id] !== null && <span aria-hidden="true" className="text-ink-tertiary">·</span>}
+              {tabValue[id] !== null && <span className="inline-flex max-w-[9rem] items-center gap-1.5 truncate text-ink-tertiary" data-appearance-tab-value="">{tabValue[id]}</span>}
             </span>
           )}
         />

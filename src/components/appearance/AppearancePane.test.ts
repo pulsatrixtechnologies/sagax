@@ -214,8 +214,8 @@ describe("the Mascot gallery", () => {
     const html = renderEditor(makeBot({ mascotLook: botMascotLook({ character: "shape", shape: "pumpkin" }) }));
     expect([...html.matchAll(/data-appearance-tab="(\w+)"/g)].map((match) => match[1])).toEqual(["mascot", "shape", "color", "skin", "material", "face", "states"]);
     expect(html).toMatch(/data-appearance-tab="mascot"[^>]*aria-selected="true"/);
-    // one value per tab: the three tabs of the engine's settings carry theirs too (#5349)
-    expect(html.match(/data-appearance-tab-value=""/g)).toHaveLength(7);
+    // one value per tab that holds a choice: Material and Face carry theirs too; States holds none, the bot sets it (#5349)
+    expect(html.match(/data-appearance-tab-value=""/g)).toHaveLength(6);
     expect(html).toContain(">Pumpkin<");
     // only the open tab's grid is drawn
     expect(html).toContain("data-character-option=");

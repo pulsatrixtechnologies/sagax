@@ -2,7 +2,9 @@
  * Appearance page: the real persona editor (PersonaEditorModal) opened on
  * Appearance for a fictional bot wearing Shapes. The capture script
  * (scripts/capture/appearance-editor.mjs) clicks the tabs. Not shipped in
- * the app. ?skin=<id>&lang=<code>&character=<id>&color=<name>&shapeSkin=<id>&avatarDef=<json> */
+ * the app. ?skin=<id>&lang=<code>&character=<id>&color=<name>&shapeSkin=<id>&avatarDef=<json>
+ * #5349: &shape=<id>&material=flat|fluffy|glass&mood=neutral|happy&eyeColor=<#rrggbb>&depth=<0..14>
+ * are the engine's look settings on the bot (scripts/capture/mascot-settings.mjs). */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { PersonaEditorModal } from "../components/persona/PersonaEditorModal";
@@ -33,7 +35,7 @@ const bot = {
   avatarCrop: "mascot",
   // ?shapeSkin=<id>: the bot's shape skin (#4145 captures a premium one)
   // ?avatarDef=<json>: a pasted open-bot-avatar definition as the bot's own shape (#4160)
-  mascotLook: botMascotLook({ character: params.get("character") ?? "shape", shape: "pumpkin", skins: { shape: params.get("shapeSkin") ?? "plain" }, ...(params.get("avatarDef") ? { avatarDef: JSON.parse(params.get("avatarDef") ?? "null") } : {}) }),
+  mascotLook: botMascotLook({ character: params.get("character") ?? "shape", shape: params.get("shape") ?? "pumpkin", skins: { shape: params.get("shapeSkin") ?? "plain" }, ...(params.get("avatarDef") ? { avatarDef: JSON.parse(params.get("avatarDef") ?? "null") } : {}), ...(params.get("material") ? { material: params.get("material") } : {}), ...(params.get("mood") ? { mood: params.get("mood") } : {}), ...(params.get("eyeColor") ? { eyeColor: params.get("eyeColor") } : {}), ...(params.get("depth") ? { depth: Number(params.get("depth")) } : {}) }),
   modelSelection: { instanceId: "local", model: "test-model" },
   messages: [],
   tasks: [],

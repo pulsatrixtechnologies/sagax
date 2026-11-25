@@ -229,7 +229,6 @@
   "appearance.eyes.use": "Use {color} for the eyes",
   "appearance.eyes.follow": "Eyes follow the pointer",
   "appearance.states.note": "Your bot changes state by itself with what it is doing. Pick one to see it on the preview.",
-  "appearance.states.auto": "Automatic",
   "appearance.state.idle": "At rest",
   "appearance.state.thinking": "Thinking",
   "appearance.state.working": "Working",

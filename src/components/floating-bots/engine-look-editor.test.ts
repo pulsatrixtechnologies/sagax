@@ -116,6 +116,9 @@ describe("what each tab shows", () => {
       expect(html).toMatch(new RegExp(`data-agent-state-preview="${state}"[\\s\\S]*?data-agent-state="${state}"`));
     }
     expect(html).toContain(t("appearance.states.note"));
+    // the States tab names no value: nothing is chosen there
+    expect(html).not.toMatch(/data-appearance-tab="states"[^>]*>(?:(?!<\/button>)[\s\S])*data-appearance-tab-value/);
+    expect(html).toMatch(/data-appearance-tab="face"[^>]*>(?:(?!<\/button>)[\s\S])*data-appearance-tab-value/);
     // a preview is a pressed button, never a radio that would read as a saved choice
     expect(html).not.toMatch(/role="radio"[^>]*data-agent-state-preview/);
     expect(html).toMatch(/aria-pressed="false"[^>]*data-agent-state-preview="idle"/);
@@ -124,7 +127,7 @@ describe("what each tab shows", () => {
   it("reads in French", () => {
     setLocale("fr");
     const html = render(shapeLook(), "states");
-    for (const word of ["Matière", "Visage", "États", "Au repos", "Réfléchit", "Travaille", "T&#x27;attend", "Bloqué", "Terminé", "Automatique"]) expect(html, word).toContain(word);
+    for (const word of ["Matière", "Visage", "États", "Au repos", "Réfléchit", "Travaille", "T&#x27;attend", "Bloqué", "Terminé"]) expect(html, word).toContain(word);
     expect(render(shapeLook({ material: "fluffy" }), "material")).toContain("Peluche");
     expect(html).not.toMatch(/[–—]/);
   });

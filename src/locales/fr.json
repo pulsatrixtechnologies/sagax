@@ -166,7 +166,6 @@
   "appearance.eyes.use": "Utiliser {color} pour les yeux",
   "appearance.eyes.follow": "Les yeux suivent le pointeur",
   "appearance.states.note": "Ton bot change d'état tout seul selon ce qu'il fait. Choisis-en un pour le voir dans l'aperçu.",
-  "appearance.states.auto": "Automatique",
   "appearance.state.idle": "Au repos",
   "appearance.state.thinking": "Réfléchit",
   "appearance.state.working": "Travaille",

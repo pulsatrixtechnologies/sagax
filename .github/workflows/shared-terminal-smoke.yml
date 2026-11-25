@@ -38,6 +38,32 @@ jobs:
         with:
           node-version: 24
           architecture: ${{ matrix.arch }}
+      - name: Download published reference
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri 'https://github.com/pulsatrixtechnologies/sagax/releases/download/pulsa-v0.8.170/Sagax-0.8.170-setup.exe' -OutFile "$env:RUNNER_TEMP/candidate.exe"
+      - name: Verify published reference
+        id: reference
+        continue-on-error: true
+        shell: pwsh
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+          EXPECTED_SHA512: 4YZlL/TWn8oxnuQpihjRyYLB7VRoiZ3bYtd6cIO8PBPGI/yIigow/BNtV3i62e25zZ8y+TxTyLALGMRwnFw5Tg==
+          EXPECTED_VERSION: 0.8.170
+          EXPECTED_PUBLISHER_HASH: ${{ inputs.publisher_hash }}
+        run: ./scripts/verify/release/windows-candidate-smoke.ps1
+      - name: Remove reference before installing candidate
+        shell: pwsh
+        run: |
+          $entry = Get-ItemProperty 'HKCU:/Software/Microsoft/Windows/CurrentVersion/Uninstall/*' | Where-Object DisplayName -eq 'Pulsatrix Sagax 0.8.170'
+          if (!$entry) { throw 'Reference registration missing.' }
+          $bin = [regex]::Match($entry.UninstallString, '^"([^"]+)"').Groups[1].Value
+          if ((Split-Path $bin -Leaf) -ne 'Uninstall Sagax.exe') { throw 'Unexpected reference uninstaller.' }
+          $uninstall = Start-Process -FilePath $bin -ArgumentList '/S' -PassThru -Wait
+          if ($uninstall.ExitCode -ne 0) { throw 'Reference removal failed.' }
+          for ($i = 0; $i -lt 60 -and (Test-Path $bin); $i++) { Start-Sleep -Seconds 1 }
+          if (Test-Path $bin) { throw 'Reference installation still present.' }
+          Write-Output 'Reference removed.'
       - name: Download private candidate
         shell: pwsh
         env:
@@ -56,3 +82,7 @@ jobs:
           EXPECTED_VERSION: ${{ inputs.version }}
           EXPECTED_PUBLISHER_HASH: ${{ inputs.publisher_hash }}
         run: ./scripts/verify/release/windows-candidate-smoke.ps1
+      - name: Require successful reference
+        if: always() && steps.reference.outcome != 'success'
+        shell: pwsh
+        run: throw 'The published reference did not pass this launch validation.'

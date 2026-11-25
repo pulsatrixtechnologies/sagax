@@ -326,6 +326,15 @@ function withEyes(frame: StillFrame, open: [number, number]): StillFrame {
   };
 }
 
+/**
+ * The engine's frame of a state, live. The body's colour goes with it: the
+ * ribbons of working and done are shades of that colour, and without it the
+ * engine shades its own default orange (#5384).
+ */
+export function liveStateFrame(definition: AvatarDefinition, options: Parameters<typeof avatarFrame>[1] & { color: string }) {
+  return avatarFrame(definition, { ...options, ...(HEX.test(options.color) ? { color: options.color } : { color: undefined }) });
+}
+
 const seconds = () => (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
 
 /* --------------------------------------------------------------- live */
@@ -420,7 +429,7 @@ function useLiveShape(host: React.RefObject<HTMLSpanElement | null>, refs: DrawR
           // at rest, the app's own pose (engineFrame); in a state, the engine's own frame for it, its age counted by the animator
           const flat = pose.motion
             ? engineFrame(input.definition, pose.motion, { motionBlend: step.motionBlend, time, gaze: step.gaze, reducedMotion: reduced, depth: input.depth, view })
-            : avatarFrame(input.definition, { state: pose.state, mood: pose.mood, stateAge: step.stateAge, motionBlend: step.motionBlend, time, gaze: step.gaze, reducedMotion: reduced, ...(input.depth === undefined ? {} : { depth: input.depth }), ...(view ? { view } : {}) });
+            : liveStateFrame(input.definition, { state: pose.state, mood: pose.mood, stateAge: step.stateAge, motionBlend: step.motionBlend, time, gaze: step.gaze, reducedMotion: reduced, color: input.color, ...(input.depth === undefined ? {} : { depth: input.depth }), ...(view ? { view } : {}) });
           frame = { paths: flat.paths.map((path): StillPath => [path.id, path.d, path.evenOdd, path.box.w * path.box.h]), root: flat.root, shapes: flat.shapes };
         }
         if (playing && moves) frame = withEyes(frame, moveEyeOpen(playing, moves.rest));

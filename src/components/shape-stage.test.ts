@@ -104,3 +104,16 @@ describe("a body in a material, on the engine's own canvas (#5384)", () => {
     expect(canvasOptions({ ...base, reduced: true, live: false }).followPointer).toBe(false);
   });
 });
+
+describe("the ribbons of a state, on the app's own drawing (#5384)", () => {
+  it("are shades of the bot's colour, as the engine paints them, never of the engine's default orange", async () => {
+    const { liveStateFrame } = await import("./ShapeMascot");
+    const definition = shapeDefinition("cup");
+    const at = { state: "done" as const, mood: "happy" as const, stateAge: 0.6, time: 0.6, reducedMotion: false };
+    const stopsOf = (frame: ReturnType<typeof avatarFrame>) => frame.shapes.flatMap((shape) => (shape.kind === "ribbon" ? shape.gradient.stops : []));
+    const teal = stopsOf(liveStateFrame(definition, { ...at, color: "#14b3a5" }));
+    expect(teal.length).toBeGreaterThan(0);
+    expect(teal).toEqual(stopsOf(avatarFrame(definition, { ...at, color: "#14b3a5" })));
+    expect(teal).not.toEqual(stopsOf(avatarFrame(definition, at)));
+  });
+});

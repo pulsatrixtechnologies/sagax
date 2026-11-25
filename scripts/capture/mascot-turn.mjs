@@ -98,6 +98,15 @@ async function measure(browser) {
     const opens = [];
     const rates = [];
     const longest = [];
+    // the server optimizes its dependencies on the first visit and reloads the page: let it settle before any timed run
+    {
+      const made = await context(browser);
+      const page = await made.newPage();
+      await page.goto(url, { waitUntil: "networkidle" }).catch(() => {});
+      await sleep(4000);
+      await page.goto(url, { waitUntil: "networkidle" }).catch(() => {});
+      await made.close();
+    }
     for (let i = 0; i < 4; i++) {
       const made = await context(browser);
       const page = await made.newPage();

@@ -1518,7 +1518,7 @@ function createAgentApiHandlers(env: {
           ...wireSummary(agent),
           // #5326: a path named in live_via has a turn that works or waits
           // (a card waiting for the person): never idle beside it. A waiting
-          // turn counts as running, as a thread's status does in read_transcript.
+          // turn counts as running, as a thread's status does in read_latest_page_with_threads.
           ...(profile.live_via?.length ? { status: "running" as const } : {}),
           title: profile.title, ...(model ? { model } : {}),
           ...(profile.persona ? { persona: profile.persona } : {}), ...(profile.speech ? { speech: profile.speech } : {}),

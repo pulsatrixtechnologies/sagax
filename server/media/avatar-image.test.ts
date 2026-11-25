@@ -140,6 +140,70 @@ describe("avatar image generation", () => {
     expect(await hosts({ ...ALL_KEYS, imageGen: { ...ALL_KEYS.imageGen, provider: "xai" }, xaiAccount: "acct-token" })).toBe("cli-chat-proxy.grok.com");
   });
 
+  // #5231: one rule for the chat and the avatar. The person's own keys are in
+  // the avatar's chain as in the chat's, a chosen provider leads on both, and
+  // with nothing chosen the decided order stands [D-20261120-012].
+  it("the same person with the same settings starts on the same credential as in the chat, own keys included (#5231)", async () => {
+    const own = async (provider: "xai" | "openai") => (provider === "xai" ? "own-xai-key" : undefined);
+    const settings: Array<NonNullable<Parameters<typeof generateAvatarImage>[0]["imageGen"]>> = [
+      { ...ALL_KEYS.imageGen, provider: "openai" },
+      { ...ALL_KEYS.imageGen, provider: "custom" },
+      { ...ALL_KEYS.imageGen, provider: "xai" },
+      { ...ALL_KEYS.imageGen },
+    ];
+    for (const organization of [false, true]) {
+      for (const account of ["acct-token", undefined]) {
+        for (const imageGen of settings) {
+          const credentials = await chatImageCredentials({
+            organization, solo: own, personal: async (p) => (p === "xai" ? { ok: true, key: "own-xai-key", fingerprint: "f" } : { ok: false, error: "no_key" }),
+            account: async () => account, imageGen, organizationXaiAllowed: () => true, organizationXaiKey: () => "xai-secret",
+          });
+          const fetchMock = vi.fn<typeof fetch>(async () => imageResponse());
+          await generateAvatarImage({ imageGen, credentials }, BOT, "owl", fetchMock);
+          const [url, init] = fetchMock.mock.calls[0]!;
+          const headers = (init?.headers ?? {}) as Record<string, string>;
+          const first = (credentials as Array<{ credential: { baseUrl: string; key?: string } }>)[0]!.credential;
+          const label = `${organization ? "organization" : "solo"}, ${account ? "account" : "no account"}, provider ${imageGen.provider ?? "not chosen"}`;
+          expect(new URL(String(url)).host, label).toBe(new URL(first.baseUrl).host);
+          expect(headers.authorization, label).toBe(`Bearer ${first.key}`);
+        }
+      }
+    }
+  });
+
+  it("the person's own xAI key makes their avatar when nothing else of xAI is theirs to use (#5231)", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => imageResponse(JPEG));
+    const credentials = await chatImageCredentials({
+      organization: true, solo: async () => undefined,
+      personal: async (p) => (p === "xai" ? { ok: true, key: "own-xai-key", fingerprint: "f" } : { ok: false, error: "no_key" }),
+      imageGen: { provider: "xai" }, organizationXaiAllowed: () => false, organizationXaiKey: () => "xai-secret",
+    });
+    await expect(generateAvatarImage({ imageGen: { provider: "xai" }, credentials }, BOT, "owl", fetchMock)).resolves.toEqual({ bytes: JPEG, mime: "image/jpeg" });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://api.x.ai/v1/images/generations");
+    expect(init?.headers).toMatchObject({ authorization: "Bearer own-xai-key" });
+    expect(JSON.stringify(init)).not.toContain("xai-secret");
+  });
+
+  it("a chosen provider keeps the avatar off the other providers' keys, the person's own included (#5231)", async () => {
+    const asked: string[] = [];
+    const fetchMock = vi.fn<typeof fetch>(async (url) => { asked.push(new URL(String(url)).host); return new Response('{"error":"out_of_credits"}', { status: 402 }); });
+    const imageGen = { provider: "openai" as const, key: "openai-secret" };
+    const credentials = await chatImageCredentials({
+      organization: false, solo: async (p) => (p === "xai" ? "own-xai-key" : undefined), personal: async () => ({ ok: false, error: "no_key" }),
+      account: async () => "acct-token", imageGen, organizationXaiAllowed: () => true, organizationXaiKey: () => "xai-secret",
+    });
+    await expect(generateAvatarImage({ imageGen, credentials }, BOT, "owl", fetchMock)).rejects.toMatchObject({ code: "credits" });
+    expect(asked).toEqual(["api.openai.com", "cli-chat-proxy.grok.com"]);
+  });
+
+  it("a person turned off gets the voice's refusal for their avatar, and no provider is asked (#5231)", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    await expect(generateAvatarImage({ imageGen: { provider: "xai" }, credentials: { refused: "payer_disabled" }, refusalText: (cause) => `refused: ${cause}` }, BOT, "owl", fetchMock))
+      .rejects.toMatchObject({ status: 403, code: "payer_disabled", message: "refused: payer_disabled" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   // D-20261123-053: the avatar goes on like the chat's image and the voice
   it("an account out of credits gives way to the organization's xAI key", async () => {
     const asked: string[] = [];
@@ -367,5 +431,21 @@ describe("avatar image generation", () => {
     await expect(generateAvatarImage(OPENAI, BOT, "", fetchMock)).rejects.toMatchObject({
       message: "Could not read the generated avatar response", status: 502,
     });
+  });
+
+  // #5223, expected 5: the avatar's refusals in the person's language
+  it("says an avatar refusal in the person's language, the code unchanged (#5223)", async () => {
+    const none = vi.fn<typeof fetch>();
+    await expect(generateAvatarImage({ imageGen: { provider: "xai" }, language: "fr" }, BOT, "owl", none))
+      .rejects.toMatchObject({ status: 409, code: "no_provider", message: "Connecte d'abord ton compte Grok ou ajoute une clé d'API xAI" });
+    await expect(generateAvatarImage({ ...OPENAI, language: "fr" }, BOT, "photo of a coworker", none))
+      .rejects.toMatchObject({ status: 400, message: "Choisis une image, ou décris un personnage dessiné. Un avatar n'est pas une image générée d'une vraie personne." });
+    expect(none).not.toHaveBeenCalled();
+    const dry = vi.fn<typeof fetch>(async () => new Response('{"error":"out_of_credits"}', { status: 402 }));
+    await expect(generateAvatarImage({ imageGen: { provider: "xai" }, xaiAccount: "acct-token", language: "fr" }, BOT, "owl", dry))
+      .rejects.toMatchObject({ code: "credits", message: "xAI n'a plus de crédits pour générer des images. Ajoute des crédits, puis redemande." });
+    const refused = vi.fn<typeof fetch>(async () => new Response("no", { status: 401 }));
+    await expect(generateAvatarImage({ imageGen: { provider: "xai" }, xaiAccount: "acct-token", language: "fr" }, BOT, "owl", refused))
+      .rejects.toMatchObject({ code: "key", message: "xAI a refusé ton compte Grok connecté (HTTP 401). Reconnecte-le dans Réglages." });
   });
 });

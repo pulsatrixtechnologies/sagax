@@ -303,8 +303,13 @@ describe("one person's connected Grok account, for the voice and the image alike
   it("the server wires the voice and the image on this one function", () => {
     const index = readFileSync(fileURLToPath(new URL("../index.ts", import.meta.url)), "utf8");
     expect(index).toMatch(/grokAccount: grokAccountTokenOf,/);
-    expect(index).toMatch(/account: \(\) => grokAccountTokenOf\(person\)/);
-    expect(index).toMatch(/await grokAccountTokenOf\(imagePersonOf\(principalId\)\)/);
+    // the image reads the account of the person the voice sees (imagePersonOf),
+    // once, for the chat's image and for the avatar (#5231)
+    expect(index).toMatch(/person: imagePersonOf,/);
+    expect(index).toMatch(/account: \(person\) => grokAccountTokenOf\(person\),/);
+    expect(index.match(/personImageCredentials\(\s*imagePeople,/g)).toHaveLength(2);
+    expect(index.match(/chatImageCredentials\(/g)).toBeNull();
+    expect(index.match(/grokAccountTokenOf\(/g)).toHaveLength(2);
     expect(index.match(/grokLiveAccessOf\(speaker\.principalId\)|imageAccountTokenFor/g)).toBeNull();
   });
 });

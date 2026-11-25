@@ -6,6 +6,9 @@ import {
   chatImageCredentials,
   type ChatImageCredential,
   ChatImageError,
+  type ImageKeyCandidate,
+  type ImagePeople,
+  personImageCredentials,
   imageRefusalCause,
   NO_IMAGE_PROVIDER,
   OPENAI_IMAGE_MODEL,
@@ -13,6 +16,7 @@ import {
   XAI_IMAGE_MODEL,
 } from "./chat-image.ts";
 import type { ProviderKeyResult } from "../perspicax/perspicax-link.ts";
+import { imageWord, type ImageWord } from "./image-words.ts";
 
 const PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 const PNG = Buffer.from(PNG_B64, "base64");
@@ -67,6 +71,77 @@ describe("chatImageCredential (#2954)", () => {
     expect(await sources({ ...base, account, imageGen: { key: "gk" } })).toEqual(["xai:account", "openai:key"]);
     // a chosen provider that cannot serve (no key) leaves the account in front
     expect(await sources({ ...base, account, imageGen: { provider: "openai" } })).toEqual(["xai:account"]);
+  });
+
+  // #5231: the provider the image settings name is the explicit choice. It
+  // leads whatever else the person has, their own xAI key included, and
+  // without a choice the decided order stands [D-20261120-012].
+  it("a chosen image provider leads the person's own keys too, solo and organization (#5231)", async () => {
+    const account = async (): Promise<string | undefined> => "acct-token";
+    const chainOf = async (input: Parameters<typeof chatImageCredentials>[0]) => {
+      const chain = await chatImageCredentials(input);
+      return Array.isArray(chain) ? chain.map((entry) => `${entry.credential.provider}:${entry.credential.auth ?? "key"}:${entry.source}`) : chain;
+    };
+    const solo = { ...base, account, solo: async (p: "xai" | "openai") => p === "xai" ? "own-xai" : undefined };
+    // OpenAI chosen: the person's xAI key no longer takes the image in front of it
+    expect(await chainOf({ ...solo, imageGen: { provider: "openai", key: "gk" } }))
+      .toEqual(["openai:key:server", "xai:account:grok-account", "xai:key:server"]);
+    expect(await chainOf({ ...solo, imageGen: { provider: "custom", customUrl: "https://img.example.test/v1", customModel: "m" } }))
+      .toEqual(["custom:key:server", "xai:account:grok-account", "xai:key:server"]);
+    // nothing chosen: account, the person's key, then the shared one
+    expect(await chainOf({ ...solo, imageGen: { key: "gk" } }))
+      .toEqual(["xai:account:grok-account", "xai:key:server", "openai:key:server"]);
+    const org = {
+      ...base, organization: true, account,
+      personal: async (p: "xai" | "openai") => ({ ok: true, key: `own-${p}`, fingerprint: "f" } as never),
+      organizationXaiAllowed: () => true, organizationXaiKey: () => "shared",
+    };
+    // OpenAI chosen in an organization: the person's OpenAI key, the organization's, then the decided order
+    expect(await chainOf({ ...org, imageGen: { provider: "openai", key: "gk" } })).toEqual([
+      "openai:key:perspicax-key", "openai:key:org-key", "xai:account:grok-account", "xai:key:perspicax-key", "xai:key:org-key",
+    ]);
+    // xAI chosen: every xAI form first, an account before a key at each level
+    expect(await chainOf({ ...org, imageGen: { provider: "xai" } })).toEqual([
+      "xai:account:grok-account", "xai:key:perspicax-key", "xai:key:org-key", "openai:key:perspicax-key",
+    ]);
+    // a chosen provider with nothing to serve changes nothing
+    expect(await chainOf({ ...org, personal: none, imageGen: { provider: "openai" } })).toEqual(["xai:account:grok-account", "xai:key:org-key"]);
+  });
+
+  // isolation between people: one person's key or account never serves another
+  it("one person's chain holds nothing of another person (#5231)", async () => {
+    const keys: Record<string, Partial<Record<"xai" | "openai", string>>> = { alice: { xai: "alice-xai-key" }, bob: { xai: "bob-xai-key", openai: "bob-openai-key" } };
+    const accounts: Record<string, string> = { bob: "bob-account-token" };
+    const read: string[] = [];
+    const people: ImagePeople = {
+      organization: true,
+      person: (principalId) => ({ principalId: principalId ?? "" }),
+      ownKey: async (principalId, provider) => {
+        read.push(`key:${principalId}:${provider}`);
+        const key = keys[principalId ?? ""]?.[provider];
+        return key ? { ok: true, key, fingerprint: "f" } : { ok: false, error: "no_key" };
+      },
+      soloKey: async () => "never-in-an-organization",
+      account: async (person) => { read.push(`account:${person.principalId}`); return accounts[person.principalId ?? ""]; },
+      imageGen: () => undefined,
+      organizationXaiGiven: () => false,
+      organizationXaiKey: () => "shared",
+    };
+    const secrets = async (principalId: string | null) => {
+      const chain = await personImageCredentials(people, principalId);
+      return Array.isArray(chain) ? chain.map((entry) => entry.credential.key) : chain;
+    };
+    expect(await secrets("alice")).toEqual(["alice-xai-key"]);
+    expect(read.filter((line) => !line.endsWith(":alice") && !line.includes(":alice:"))).toEqual([]);
+    expect(await secrets("bob")).toEqual(["bob-account-token", "bob-xai-key", "bob-openai-key"]);
+    // nobody known: nothing of anyone, and the shared key only as the organization gives it
+    expect(await secrets(null)).toEqual([]);
+    // the request made for alice carries her key and nothing of bob's
+    const { calls, fetchImpl } = recorder();
+    const alice = await personImageCredentials(people, "alice");
+    await renderChatImage((alice as ImageKeyCandidate[])[0]!.credential, { prompt: "an owl" }, fetchImpl);
+    expect(JSON.stringify(calls)).toContain("alice-xai-key");
+    expect(JSON.stringify(calls)).not.toMatch(/bob-/);
   });
 
   it("the whole chain, in order: account, the person's keys, then the organization's (D-20261123-053)", async () => {
@@ -200,5 +275,51 @@ describe("renderChatImage (#2954)", () => {
     expect(error.cause).toBe("key");
     expect(error.message).toMatch(/Grok account/);
     expect(error.message).not.toMatch(/expired credentials|secret/i);
+  });
+
+  // #5223, expected 5: the sentence is the person's to read, in their language
+  it("says a refusal in the person's language, the cause unchanged (#5223)", async () => {
+    const account = { provider: "xai" as const, auth: "account" as const, key: "t", baseUrl: "https://cli-chat-proxy.grok.com/v1", model: XAI_IMAGE_MODEL };
+    const refused = async (answer: () => Response, credential: ChatImageCredential = account) =>
+      renderChatImage(credential, { prompt: "x" }, recorder(answer).fetchImpl, undefined, "fr").catch((e) => e);
+    const dry = await refused(() => new Response('{"error":"out_of_credits"}', { status: 402 }));
+    expect(dry.cause).toBe("credits");
+    expect(dry.message).toBe("xAI n'a plus de crédits pour générer des images. Ajoute des crédits, puis redemande.");
+    const out = await refused(() => new Response('{"error":"Invalid or expired credentials"}', { status: 401 }));
+    expect(out.cause).toBe("key");
+    expect(out.message).toBe("xAI a refusé ton compte Grok connecté (HTTP 401). Reconnecte-le dans Réglages.");
+    const key = await refused(() => new Response("no", { status: 403 }), { provider: "openai", key: "k", baseUrl: "https://api.openai.com/v1", model: OPENAI_IMAGE_MODEL });
+    expect(key.message).toBe("OpenAI a refusé la clé d'API (HTTP 403). Reconnecte-la dans Réglages > Fournisseurs.");
+    const down = await renderChatImage(account, { prompt: "x" }, (async () => { throw new Error("socket"); }) as unknown as typeof fetch, undefined, "fr").catch((e) => e);
+    expect(down.cause).toBe("network");
+    expect(down.message).toBe("Impossible de joindre xAI pour générer l'image");
+    for (const error of [dry, out, key, down]) expect(error.message).not.toMatch(/out of credits|refused|Settings|Could not/);
+    // no language known: English, as before
+    const english = await renderChatImage(account, { prompt: "x" }, recorder(() => new Response('{"error":"out_of_credits"}', { status: 402 })).fetchImpl).catch((e) => e);
+    expect(english.message).toBe("xAI is out of credits for image generation. Add credits, then ask again.");
+  });
+
+  it("every image sentence exists in French and in English, and the two files keep no sentence of their own (#5223)", () => {
+    const catalog = (name: string) => JSON.parse(readFileSync(fileURLToPath(new URL(`../../src/locales/${name}.json`, import.meta.url)), "utf8")) as Record<string, string>;
+    const en = catalog("en");
+    const fr = catalog("fr");
+    const keys = Object.keys(en).filter((key) => key.startsWith("image.error."));
+    expect(keys.length).toBeGreaterThan(20);
+    for (const key of keys) {
+      expect(fr[key], key).toBeTruthy();
+      expect(fr[key], key).not.toBe(en[key]);
+      expect(imageWord("fr", key.slice("image.error.".length) as ImageWord), key).toBe(fr[key]);
+    }
+    // every word the code can say is in the catalog (an unknown key would be said as the key itself)
+    for (const file of ["./chat-image.ts", "./avatar-image.ts", "../routes/image-internal.ts"]) {
+      const source = readFileSync(fileURLToPath(new URL(file, import.meta.url)), "utf8");
+      for (const match of source.matchAll(/(?:say|imageWord)\((?:language, |"en", )?([^)]*)\)/g)) {
+        for (const word of match[1]!.matchAll(/(?<!=== )"([A-Za-z0-9]+)"/g)) expect(en[`image.error.${word[1]}`], `${file}: ${word[1]}`).toBeTruthy();
+      }
+      // a sentence written in the file would be English for everyone (a
+      // lowercase word is an inner marker, caught where it is thrown)
+      expect(source.match(/new (?:ChatImage)?Error\(\s*[`"][A-Z$]/g), file).toBeNull();
+      expect(source.match(/\?\? "[A-Z]/g), file).toBeNull();
+    }
   });
 });

@@ -10,6 +10,8 @@
 import type { ReadableStreamReadResult } from "node:stream/web";
 import { z } from "zod";
 import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../../shared/image-generation.ts";
+import { providerOrder } from "../../shared/voice-providers.ts";
+import { imageWord, type ImageLanguage } from "./image-words.ts";
 import type { ProviderKeyResult } from "../perspicax/perspicax-link.ts";
 import { decodeGeneratedImage } from "./generated-image.ts";
 import type { VoiceKeySource, VoiceModeRefusalCause } from "../../shared/voice-mode.ts";
@@ -31,8 +33,8 @@ export const OPENAI_IMAGE_MODEL = "gpt-image-2";
 export const XAI_ACCOUNT_IMAGE_BASE = "https://cli-chat-proxy.grok.com/v1";
 export const XAI_ACCOUNT_HEADER_NAME = "x-xai-token-auth";
 export const XAI_ACCOUNT_HEADER_VALUE = "xai-grok-cli";
-export const NO_IMAGE_PROVIDER =
-  "No image provider is connected. Connect your Grok account or an xAI (Grok Imagine) or OpenAI key in Settings > Providers, then ask again.";
+/** English, the catalog's source; a person reads `imageWord(language, "noProvider")`. */
+export const NO_IMAGE_PROVIDER = imageWord("en", "noProvider");
 
 /** Why an image generation could not happen, computed server-side from what
  * the provider answered. Never a hard-coded "configure a key": a connected
@@ -94,21 +96,27 @@ export function imageKeyCandidate(credential: ChatImageCredential, source: Voice
   };
 }
 
-/** Where the connected Grok account stands among the keys of an image
- * request. ONE rule for the chat (make_image) and the avatar (#5223 review):
- * the account is an xAI credential and leads, a connected account beating a
- * key [D-20261120-012], unless the image settings name another provider
- * (`imageGen.provider` openai or custom) that can serve: that chosen
- * provider keeps its place and the account comes right after it, never in
- * front of it. The same person with the same settings reaches the same
- * provider on both surfaces. A choice of credential form per person is
- * #5231. */
+/** The providers an image can be made on, in the order of the chain's default. */
+export const IMAGE_PROVIDERS = ["xai", "openai", "custom"] as const satisfies readonly ChatImageProvider[];
+
+/** The order of one person's image credentials. ONE rule for the chat
+ * (make_image) and the avatar (#5223 review, #5231), in the decided order
+ * [D-20261120-012]: the person's explicit choice, then their connected Grok
+ * account, then their keys, then the organization's. `keys` come in that
+ * order already (the person's, then the shared ones) and the account leads
+ * them, an account beating a key. The explicit choice is the provider the
+ * image settings name (`imageGen.provider`): when it has a credential to
+ * serve, every credential of that provider comes first, in the same order
+ * among themselves, the person's own keys of another provider included.
+ * Whether a choice leads is the voice's own verdict (`providerOrder`,
+ * shared/voice-providers.ts: the chosen provider first when it serves, else
+ * the default order), not a second rule. */
 export function imageChainWithAccount(keys: readonly ImageKeyCandidate[], account: ImageKeyCandidate | null, imageGen?: ImageGenerationConfig): ImageKeyCandidate[] {
-  if (!account) return [...keys];
-  const chosen = imageGen?.provider === "openai" || imageGen?.provider === "custom" ? imageGen.provider : null;
-  let after = -1;
-  if (chosen) keys.forEach((entry, at) => { if (entry.credential.provider === chosen) after = at; });
-  return [...keys.slice(0, after + 1), account, ...keys.slice(after + 1)];
+  const all = account ? [account, ...keys] : [...keys];
+  const choice = imageGen?.provider ?? "auto";
+  const serving = IMAGE_PROVIDERS.filter((provider) => all.some((entry) => entry.credential.provider === provider));
+  if (choice === "auto" || providerOrder(choice, serving, IMAGE_PROVIDERS)[0] !== choice) return all;
+  return [...all.filter((entry) => entry.credential.provider === choice), ...all.filter((entry) => entry.credential.provider !== choice)];
 }
 
 /** Every credential that may make this person's image, in the order to try
@@ -117,7 +125,7 @@ export function imageChainWithAccount(keys: readonly ImageKeyCandidate[], accoun
  * account, then their own keys, the shared keys only as the organization
  * allows. The order is decided [D-20261120-012, M-20261122-023]: an account
  * beats a key at each level, the organization's account is the next lot
- * (#5200). The account's place is `imageChainWithAccount`. A credential
+ * (#5200). The order, a chosen provider included, is `imageChainWithAccount`. A credential
  * refused for credits or for itself gives way to the next one
  * (`withImageCredentials`, D-20261123-053). */
 export async function chatImageCredentials(input: {
@@ -161,6 +169,42 @@ export async function chatImageCredentials(input: {
   }
   const account = (await (input.account?.() ?? Promise.resolve(undefined)).catch(() => undefined))?.trim();
   return imageChainWithAccount(keys, account ? imageKeyCandidate(xaiAccountImage(account), "grok-account") : null, gen);
+}
+
+/** Where one person's image credentials are read on this server: the same
+ * sources for the chat's image and for the avatar, so both surfaces ask
+ * `personImageCredentials` and neither keeps its own list (#5231). Every
+ * lookup takes the person it is for: nothing of one person is read for
+ * another. */
+export interface ImagePeople {
+  organization: boolean;
+  /** The person as the voice sees them (the same `disabled`). */
+  person(principalId: string | null): { principalId?: string | null; disabled?: boolean };
+  /** This person's own key for a provider, in an organization. */
+  ownKey(principalId: string | null, provider: "xai" | "openai"): Promise<ProviderKeyResult>;
+  /** This computer's key for a provider, on a solo server. */
+  soloKey(provider: "xai" | "openai"): Promise<string | undefined>;
+  /** This person's connected Grok account, by the voice's own rule. */
+  account(person: { principalId?: string | null; disabled?: boolean }): Promise<string | undefined>;
+  imageGen(): ImageGenerationConfig | undefined;
+  /** The organization gave its xAI key to this person for images. */
+  organizationXaiGiven(principalId: string | null): boolean;
+  organizationXaiKey(): string | undefined;
+}
+
+/** One person's image chain, for the chat's image and for the avatar. */
+export function personImageCredentials(people: ImagePeople, principalId: string | null): Promise<ImageCredentials> {
+  const person = people.person(principalId);
+  return chatImageCredentials({
+    ...(person.disabled ? { disabled: true } : {}),
+    organization: people.organization,
+    personal: (provider) => people.ownKey(principalId, provider),
+    solo: (provider) => people.soloKey(provider),
+    account: () => people.account(person),
+    imageGen: people.imageGen(),
+    organizationXaiAllowed: () => people.organizationXaiGiven(principalId),
+    organizationXaiKey: () => people.organizationXaiKey(),
+  });
 }
 
 /** The chain of one person, or why the organization serves them nothing
@@ -232,9 +276,12 @@ export async function renderChatImage(
   input: ChatImageInput,
   fetchImpl: typeof fetch = fetch,
   timeoutMs = CHAT_IMAGE_TIMEOUT_MS,
+  /** The language of the person the image is for: every sentence below is theirs to read (#5223). */
+  language?: ImageLanguage,
 ): Promise<ChatImageResult> {
   const name = NAMES[credential.provider];
   const edit = Boolean(input.image);
+  const say = (word: Parameters<typeof imageWord>[1], status?: number) => imageWord(language, word, { provider: name, ...(status === undefined ? {} : { status }) });
   const url = `${credential.baseUrl}/images/${edit ? "edits" : "generations"}`;
   const account = credential.auth === "account";
   const headers: Record<string, string> = {};
@@ -273,12 +320,12 @@ export async function renderChatImage(
     // that answered is handled below, so spent credits are never read as a
     // network outage (#5223, expected 4).
     const timedOut = signal.aborted || (error instanceof Error && error.name === "TimeoutError");
-    throw new ChatImageError(timedOut ? `${name} image ${edit ? "editing" : "generation"} timed out` : `Could not reach ${name} image ${edit ? "editing" : "generation"}`, 502, "network");
+    throw new ChatImageError(say(timedOut ? (edit ? "editTimeout" : "genTimeout") : (edit ? "editUnreachable" : "genUnreachable")), 502, "network");
   }
   let text: string;
-  try { text = await boundedText(response); }
+  try { text = await boundedText(response, language); }
   catch (error) {
-    if (signal.aborted) throw new ChatImageError(`${name} image ${edit ? "editing" : "generation"} timed out`, 502, "network");
+    if (signal.aborted) throw new ChatImageError(say(edit ? "editTimeout" : "genTimeout"), 502, "network");
     throw error;
   }
   // Provider error bodies can echo headers or signed URLs: the body is read
@@ -288,12 +335,10 @@ export async function renderChatImage(
   if (!response.ok) {
     const cause = imageRefusalCause(response.status, text);
     const message = cause === "credits"
-      ? `${name} is out of credits for image generation. Add credits, then ask again.`
+      ? say("credits")
       : cause === "key"
-        ? (account
-          ? `${name} refused your connected Grok account (HTTP ${response.status}). Reconnect it in Settings.`
-          : `${name} refused the API key (HTTP ${response.status}). Reconnect it in Settings > Providers.`)
-        : `${name} image ${edit ? "editing" : "generation"} failed (HTTP ${response.status})`;
+        ? say(account ? "accountRefused" : "keyRefused", response.status)
+        : say(edit ? "editFailed" : "genFailed", response.status);
     // The status stays coarse (a refused credential is 401, any other provider
     // failure 502); the `cause` carries what the person can act on. A refusal
     // that is spent credits is never reported as a network outage.
@@ -301,16 +346,16 @@ export async function renderChatImage(
   }
   let parsed: z.infer<typeof responseSchema>;
   try { parsed = responseSchema.parse(JSON.parse(text)); }
-  catch { throw new ChatImageError(`${name} returned no generated image`); }
+  catch { throw new ChatImageError(say("noImage")); }
   const encoded = parsed.data[0]!.b64_json;
   // A provider URL is never fetched: compatible gateways must return b64_json.
-  if (!encoded) throw new ChatImageError(`${name} must return base64 image data (b64_json)`);
+  if (!encoded) throw new ChatImageError(say("needsBase64"));
   try {
     const image = decodeGeneratedImage(encoded, MAX_UPSTREAM_RESPONSE_BYTES);
     if (image.mime === "image/gif") throw new Error("gif");
     return { bytes: image.bytes, mime: image.mime };
   } catch {
-    throw new ChatImageError(`${name} returned invalid image data; expected PNG, JPEG or WebP`);
+    throw new ChatImageError(say("invalidData"));
   }
 }
 
@@ -334,11 +379,11 @@ function openAiSize(aspect?: string): string {
   return "1024x1024";
 }
 
-async function boundedText(response: Response): Promise<string> {
+async function boundedText(response: Response, language?: ImageLanguage): Promise<string> {
   const advertised = Number(response.headers.get("content-length"));
   if (Number.isFinite(advertised) && advertised > MAX_UPSTREAM_RESPONSE_BYTES * 1.4) {
     await response.body?.cancel().catch(() => {});
-    throw new ChatImageError("Generated image exceeded the response limit");
+    throw new ChatImageError(imageWord(language, "tooLarge"));
   }
   const reader = response.body?.getReader();
   if (!reader) return "";
@@ -349,12 +394,12 @@ async function boundedText(response: Response): Promise<string> {
     for (;;) {
       let chunk: ReadableStreamReadResult<Uint8Array>;
       try { chunk = await reader.read(); }
-      catch { throw new ChatImageError("Could not read the generated image response"); }
+      catch { throw new ChatImageError(imageWord(language, "unreadable")); }
       if (chunk.done) break;
       received += chunk.value.byteLength;
       if (received > MAX_UPSTREAM_RESPONSE_BYTES * 1.4) {
         await reader.cancel().catch(() => {});
-        throw new ChatImageError("Generated image exceeded the response limit");
+        throw new ChatImageError(imageWord(language, "tooLarge"));
       }
       chunks.push(decoder.decode(chunk.value, { stream: true }));
     }

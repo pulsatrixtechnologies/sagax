@@ -5,7 +5,9 @@
 //                          harnessByProvider: { <provider id>: <driver kind> },
 //                          contextByProvider: { <provider id>: <tokens> },
 //                          accountSwitchByProvider: { <provider id>: { strategy, threshold } } }
+//                          modeModels: { fast?, expert?, heavy? } }
 //   PUT /api/me/models   { disabledModels?: string[], favoriteModels?: string[],
+//                          modeModels?: { fast?, expert?, heavy? } | null,
 //                          harnessByProvider?: { <provider id>: <driver kind> | null },
 //                          contextByProvider?: { <provider id>: <tokens> | null },
 //                          accountSwitchByProvider?: { <provider id>: { strategy?, threshold? } | null } }
@@ -31,6 +33,12 @@
 // accounts of that provider runs a turn when several offer the model. A
 // provider given sets the fields sent (the rest kept) or (null) clears it.
 //
+// M-20261125-074, M-20261125-075 (#5372): `modeModels` is the person's own
+// modes (shared/mode-models.ts): the model and reasoning Fast and Expert
+// use, Heavy's experts. The object given replaces the whole setting; null
+// puts the defaults back (what Sagax resolves by itself). Per person, never
+// per organization.
+//
 // `learnedRouting` is that person's switch for learned account routing.
 // Off until they set true. It never changes the model they chose.
 //
@@ -44,6 +52,7 @@ import { cleanDisabledModels, cleanFavoriteModels } from "../../shared/offered-m
 import { cleanHarnessDefaults, isHarnessId } from "../../shared/harness-matrix.ts";
 import { cleanContextDefaults, isContextSize } from "../../shared/context-size.ts";
 import { accountSwitchSettingOf, cleanAccountSwitchDefaults, cleanAccountThreshold, isAccountStrategy, type AccountSwitchSetting } from "../../shared/account-switch.ts";
+import { cleanModeModels, type ModeModels } from "../../shared/mode-models.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const MODEL_SWITCHES_PATH = "/api/me/models";
@@ -81,6 +90,12 @@ export interface ModelSwitchRouteDeps {
     /** Saves the whole map; the next turn of each bot reads it. */
     save(owner: string | "installation", map: Record<string, AccountSwitchSetting>): void;
   };
+  /** M-20261125-074: the owner's own modes. */
+  modeModels?: {
+    read(owner: string | "installation"): ModeModels;
+    /** Saves the whole setting; the next turn of each bot reads it. */
+    save(owner: string | "installation", value: ModeModels): void;
+  };
   /** Learned account routing for this person. Off until they turn it on. */
   learnedRouting?: {
     read(owner: string | "installation"): boolean;
@@ -101,12 +116,18 @@ export function createModelSwitchRoutes(deps: ModelSwitchRouteDeps): RouteHandle
       ...(deps.contextDefaults ? { contextByProvider: { ...deps.contextDefaults.read(owner) } } : {}),
       ...(deps.accountSwitchDefaults ? { accountSwitchByProvider: { ...deps.accountSwitchDefaults.read(owner) } } : {}),
       ...(deps.learnedRouting ? { learnedRouting: deps.learnedRouting.read(owner) === true } : {}),
+      ...(deps.modeModels ? { modeModels: cleanModeModels(deps.modeModels.read(owner)) } : {}),
     });
     if (method === "GET") return answer();
     if (!String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
       return json(res, 415, { error: "content-type must be application/json" });
     }
-    const body = await readBody(req).catch(() => undefined) as { disabledModels?: unknown; favoriteModels?: unknown; harnessByProvider?: unknown; contextByProvider?: unknown; accountSwitchByProvider?: unknown; learnedRouting?: unknown } | undefined;
+    const body = await readBody(req).catch(() => undefined) as { disabledModels?: unknown; favoriteModels?: unknown; harnessByProvider?: unknown; contextByProvider?: unknown; accountSwitchByProvider?: unknown; learnedRouting?: unknown; modeModels?: unknown } | undefined;
+    const rawModes = body && typeof body === "object" ? body.modeModels : undefined;
+    if (deps.modeModels && rawModes !== undefined && rawModes !== null && (typeof rawModes !== "object" || Array.isArray(rawModes))) {
+      return json(res, 400, { error: "modeModels is { fast?, expert?, heavy? }, or null for the defaults." });
+    }
+    const modes = Boolean(deps.modeModels) && rawModes !== undefined;
     const switches = body && typeof body === "object" && Array.isArray(body.disabledModels);
     const favorites = body && typeof body === "object" && Array.isArray(body.favoriteModels);
     const rawHarness = body && typeof body === "object" ? body.harnessByProvider : undefined;
@@ -119,7 +140,7 @@ export function createModelSwitchRoutes(deps: ModelSwitchRouteDeps): RouteHandle
       return json(res, 400, { error: "learnedRouting is true or false." });
     }
     const learned = Boolean(deps.learnedRouting) && typeof body?.learnedRouting === "boolean";
-    if (!switches && !favorites && !harness && !context && !accounts && !learned) return json(res, 400, { error: "Send { disabledModels: [\"<engine>/<model>\", …] } and/or { favoriteModels: [\"<engine>/<model>\", …] } and/or { harnessByProvider: { \"<provider>\": \"<engine>\" | null } } and/or { contextByProvider: { \"<provider>\": <tokens> | null } } and/or { accountSwitchByProvider: { \"<provider>\": { \"strategy\": \"high-water\" | \"most-free\" | \"fill-up\", \"threshold\": <10-100> } | null } } and/or { learnedRouting: true | false }." });
+    if (!switches && !favorites && !harness && !context && !accounts && !learned && !modes) return json(res, 400, { error: "Send { disabledModels: [\"<engine>/<model>\", …] } and/or { favoriteModels: [\"<engine>/<model>\", …] } and/or { harnessByProvider: { \"<provider>\": \"<engine>\" | null } } and/or { contextByProvider: { \"<provider>\": <tokens> | null } } and/or { accountSwitchByProvider: { \"<provider>\": { \"strategy\": \"high-water\" | \"most-free\" | \"fill-up\", \"threshold\": <10-100> } | null } } and/or { learnedRouting: true | false }." });
     let accountsMap: Record<string, AccountSwitchSetting> | undefined;
     if (accounts) {
       const next: Record<string, AccountSwitchSetting> = { ...deps.accountSwitchDefaults!.read(owner) };
@@ -164,6 +185,7 @@ export function createModelSwitchRoutes(deps: ModelSwitchRouteDeps): RouteHandle
     if (contextMap) deps.contextDefaults!.save(owner, contextMap);
     if (accountsMap) deps.accountSwitchDefaults!.save(owner, accountsMap);
     if (learned) deps.learnedRouting!.save(owner, body!.learnedRouting as boolean);
+    if (modes) deps.modeModels!.save(owner, cleanModeModels(rawModes));
     return answer();
   };
 }

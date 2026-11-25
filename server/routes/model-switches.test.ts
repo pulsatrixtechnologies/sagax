@@ -137,7 +137,7 @@ describe("GET/PUT /api/me/models", () => {
   });
   // M-20261125-074, M-20261125-075 (#5372): the person's own modes, per person, no admin right
   it("reads and saves the person's own modes, per person; null puts the defaults back", async () => {
-    const kept = new Map<string, Record<string, unknown>>();
+    const kept = new Map<string, object>();
     const handler = createModelSwitchRoutes({
       org: () => [], owner: (auth) => ((auth as { who?: string }).who ?? null), mine: () => [], save: () => {},
       favorites: () => [], saveFavorites: () => {},

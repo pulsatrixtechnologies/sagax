@@ -35,7 +35,7 @@ function autoPickForTurn(input: {
   const open = offered.filter((engine) => !limited.has(engine.instanceId));
   const engines = open.length ? open : offered;
   // #4329 lot 5: the engines the owner chose to run with come right after the bot's own
-  const request = { base: bot.modelSelection, engines, catalog: host.autoCatalogLookup, skip, ...(host.autoHarnessesFor ? { harness: host.autoHarnessesFor(bot) } : {}) };
+  const request = { base: bot.modelSelection, engines, catalog: host.autoCatalogLookup, skip, ...(host.autoHarnessesFor ? { harness: host.autoHarnessesFor(bot) } : {}), ...(host.autoModeModelsFor ? { modeModels: host.autoModeModelsFor(bot) } : {}) };
   // #5014: among the accounts of the picked model's provider that offer it,
   // the person's account strategy says which one runs it (its chain follows)
   const onAccount = (pick: AutoPick): AutoPick => {

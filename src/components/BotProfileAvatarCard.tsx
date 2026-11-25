@@ -20,10 +20,10 @@ import type { Bot } from "@/state/store";
 import { useStoreDispatch } from "@/state/store-selector";
 import { useBotEditor } from "./bot-settings/BotEditorContext";
 import { t } from "@/lib/i18n";
-import { type MausMotion, type MausState } from "@/lib/mascot";
+import { agentStateForBot, type MausMotion, type MausState } from "@/lib/mascot";
 import { BotAvatar } from "./Avatar";
 import { MascotPickerPopover } from "./floating-bots/MascotPickerPopover";
-import { MascotTurnReset, turnCursor, useMascotTurn } from "./floating-bots/use-mascot-turn";
+import { MascotGlassCaustic, MascotTurnReset, turnCursor, useMascotTurn } from "./floating-bots/use-mascot-turn";
 import { ShapeStageContext } from "./shape-stage";
 import { completeMascotLook, withEngineLook, type MascotLook } from "../../shared/mascot-look";
 import { useAvatarSources, type AvatarPatch } from "./appearance/AvatarSources";
@@ -116,9 +116,10 @@ export function BotProfileAvatarCard({
           }}
           title={t("botPanel.avatar.dropOrPaste")}
           data-avatar-dropping={dropping ? "" : undefined}
-          className={cn("rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent", turnCursor(turn), dropping && "ring-2 ring-accent")}
+          className={cn("relative rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent", turnCursor(turn), dropping && "ring-2 ring-accent")}
         >
           <ShapeStageContext.Provider value={turn.stage}>
+          <MascotGlassCaustic turn={turn} bot={bot} state={agentStateForBot(bot)} />
           <BotAvatar
             bot={bot}
             state={activeState}

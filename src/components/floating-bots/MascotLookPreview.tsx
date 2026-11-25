@@ -18,7 +18,7 @@ import { ShapeStageContext } from "@/components/shape-stage";
 import type { FxMoveRequest } from "@/components/skin-fx/skin-fx";
 import type { OwlMove } from "./moves";
 import { useDrawnLeftInset } from "./drawn-inset";
-import { MascotTurnReset, turnCursor, useMascotTurn } from "./use-mascot-turn";
+import { MascotGlassCaustic, MascotTurnReset, turnCursor, useMascotTurn } from "./use-mascot-turn";
 
 const focusRing = "outline-none focus-visible:ring-2 focus-visible:ring-accent";
 /** The mascot's size in the profile page's hero (Grok Bot's avatar, on the
@@ -88,7 +88,8 @@ function MascotStage({ bot, shownName, shownLook, owlSkin, moves, fxMove, onPlay
       className={cn("relative grid shrink-0 place-items-center rounded-2xl", onActivate && !turn.enabled && "cursor-pointer", turnCursor(turn), clip && "overflow-hidden", focusRing)}
     >
       <ShapeStageContext.Provider value={turn.stage}>
-      <span aria-hidden="true" className={cn("pointer-events-none", profile && "profile-mascot-shadow")}>
+      <MascotGlassCaustic turn={turn} bot={{ color: bot.color, mascotLook: shownLook }} state={liveState !== undefined ? agentStateForBot(bot as MascotLiveBot) : "idle"} />
+      <span aria-hidden="true" className={cn("pointer-events-none relative", profile && "profile-mascot-shadow")}>
         <BotAvatar
           bot={picture ?? { name: bot.name, color: bot.color, mascotSkin: owlSkin, mascotLook: shownLook, avatarCrop: "mascot" }}
           size={size}

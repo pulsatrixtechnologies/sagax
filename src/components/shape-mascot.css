@@ -6,3 +6,22 @@
 .trombi-skin-retro98 svg.r98-trombi {
   filter: grayscale(0.35) contrast(1.15);
 }
+
+/* Under a glass body on a stage (#5384): the tinted glow the open-bot-avatar
+   site lays under its own (its .stage-glass-caustic: 150 by 36 px under a
+   156 px body), in the body's colour and in the same proportions here. */
+.mascot-glass-caustic {
+  position: absolute;
+  bottom: 2.5%;
+  left: 50%;
+  width: 96%;
+  height: 23%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse 36% 52% at 50% 48%, color-mix(in srgb, var(--glass-tint) 68%, white 32%) 0%, color-mix(in srgb, var(--glass-tint) 38%, transparent) 48%, transparent 80%),
+    radial-gradient(ellipse 68% 58% at 50% 56%, color-mix(in srgb, var(--glass-tint) 36%, transparent) 0%, transparent 74%);
+  filter: blur(8px);
+  opacity: 0.78;
+}

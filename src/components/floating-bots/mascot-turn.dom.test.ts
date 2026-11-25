@@ -5,6 +5,7 @@ import { act, createElement } from "react";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { installHappyWindow } from "@/testing/happy-window";
 import { setLocale } from "@/lib/i18n";
+import { resetMaterialSupport } from "@/components/shape-material";
 import { loadAllBakedStills } from "@/components/shape-stills";
 import { completeMascotLook, type MascotLook } from "../../../shared/mascot-look";
 import { MascotLookPreview, type MascotLookPreviewProps } from "./MascotLookPreview";
@@ -180,6 +181,35 @@ describe("the large mascot, turned by hand", () => {
     await act(async () => stageButton().click());
     expect(onActivate).toHaveBeenCalledTimes(1);
     expect((await key("ArrowRight")).defaultPrevented).toBe(false);
+  });
+
+  it("lays the glass body's tinted glow under it, as the engine's stage does, and under no other body", async () => {
+    resetMaterialSupport(true);
+    try {
+      const glass = { ...shape, material: "glass" } as MascotLook;
+      await mount({ shownLook: glass, liveState: "idle" });
+      const glow = host.querySelector<HTMLElement>("[data-mascot-glass-caustic]");
+      expect(glow).not.toBeNull();
+      expect(glow!.getAttribute("aria-hidden")).toBe("true");
+      expect(glow!.style.getPropertyValue("--glass-tint")).toMatch(/^#[0-9a-f]{6}$/i);
+      // the body gives way to a mark while it thinks or is blocked: no glow under a mark
+      await key("2");
+      expect(host.querySelector("[data-mascot-glass-caustic]")).toBeNull();
+      await key("5");
+      expect(host.querySelector("[data-mascot-glass-caustic]")).toBeNull();
+      await key("1");
+      expect(host.querySelector("[data-mascot-glass-caustic]")).not.toBeNull();
+      await mount({ shownLook: { ...shape, material: "fluffy" } as MascotLook });
+      expect(host.querySelector("[data-mascot-glass-caustic]")).toBeNull();
+      await mount();
+      expect(host.querySelector("[data-mascot-glass-caustic]")).toBeNull();
+      // a device that cannot paint glass draws the body flat: no glow either
+      resetMaterialSupport(false);
+      await mount({ shownLook: glass });
+      expect(host.querySelector("[data-mascot-glass-caustic]")).toBeNull();
+    } finally {
+      resetMaterialSupport(null);
+    }
   });
 
   it("tells a screen reader how the mascot is turned", async () => {

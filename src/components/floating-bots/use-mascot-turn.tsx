@@ -10,15 +10,18 @@
 // volume to turn, and a picture is a picture. The state a key previews is
 // never stored: it shows until the mascot loses the focus, then the bot's
 // own state is back.
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import type { AvatarState } from "open-bot-avatar";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { cn } from "@/lib/cn";
 import type { ShapeStage } from "@/components/shape-stage";
+import { materialsSupported } from "@/components/shape-material";
 import { useReducedMotion } from "@/components/skin-fx/skin-fx";
 import { RotateCcw } from "lucide-react";
 import { botMascotLook, engineLookOf, type MascotLook, type ShapeMoodSetting } from "../../../shared/mascot-look";
+import { pickerColor } from "./mascot-picker";
+import type { MausColor } from "@/lib/mascot";
 import { FRONT, dragView, isDrag, isTurned, keyAction, resetView, wrapYaw, RESET_MS, type ViewAngle } from "./mascot-turn";
 
 const MOODS: readonly ShapeMoodSetting[] = ["neutral", "happy"];
@@ -197,4 +200,17 @@ export function MascotTurnReset({ turn, className }: { turn: MascotTurn; classNa
       <span className="sr-only" role="status" data-mascot-turn-said="">{turn.said}</span>
     </>
   );
+}
+
+/**
+ * Under a glass body on a stage: the soft glow of its own colour the engine's
+ * site lays there (its stage-glass-caustic), sized to the mascot. Never under
+ * a mark (thinking, blocked: the body has given way), nor where the device
+ * draws the body flat.
+ */
+export function MascotGlassCaustic({ turn, bot, state }: { turn: MascotTurn; bot: { color: MausColor; mascotLook?: MascotLook | null | undefined }; state: AvatarState }) {
+  if (!turn.enabled || engineLookOf(bot.mascotLook).material !== "glass" || !materialsSupported()) return null;
+  const shown = turn.stage?.previewState ?? state;
+  if (shown === "thinking" || shown === "blocked") return null;
+  return <span aria-hidden="true" data-mascot-glass-caustic="" className="mascot-glass-caustic" style={{ "--glass-tint": pickerColor(bot).hex } as CSSProperties} />;
 }

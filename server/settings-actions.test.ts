@@ -135,6 +135,25 @@ describe("sagax_settings", () => {
     expect((await ask.call({ action: "set", key: "routine.delete", target: "r1", value: true })).body.text).toContain("this bot is at Ask");
   });
 
+  // #5233: the Primary Bot (any bot of the person) stops the turn running in
+  // a conversation of another bot of the same person, by the route the
+  // Stop button calls, for that thread only.
+  it("#5233: stops the turn of a thread of another bot of the person by the Stop button's route", async () => {
+    for (const mode of ["auto", "full"] as const) {
+      const h = harness({ mode, botOfThread: (id) => (id === "th1" ? "b1" : id === "th-work" ? "b2" : null) });
+      const result = await h.call({ action: "set", key: "thread.running", target: "th-work", value: false });
+      expect(result.body.text, mode).toContain("Done");
+      expect(h.planned, mode).toEqual([expect.objectContaining({ effect: "run", method: "POST", path: "/api/bots/b2/interrupt", body: { threadId: "th-work" } })]);
+      expect(h.audits, mode).toEqual([expect.objectContaining({ key: "thread.running", value: false, how: "run", actor: "pr_owner" })]);
+    }
+    const h = harness();
+    expect((await h.call({ action: "set", key: "thread.running", target: "th1", value: true })).body.error).toMatch(/value is false/);
+    expect(h.planned).toEqual([]);
+    // the route answers for what the person may not stop: its refusal is relayed
+    const refused = harness({ routeStatus: 403, botOfThread: (id) => (id === "th-theirs" ? "theirs" : null) });
+    expect(JSON.stringify((await refused.call({ action: "set", key: "thread.running", target: "th-theirs", value: false })).body)).not.toContain("Done");
+  });
+
   it("keeps the card for deleting a group with another person in it, someone else's routine, a shared team or an unknown group", async () => {
     const alone = harness({ mode: "full", groupHumans: () => ["pr_owner"] });
     await alone.call({ action: "set", key: "group.delete", target: "g1", value: true });

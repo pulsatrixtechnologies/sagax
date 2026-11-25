@@ -234,6 +234,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Project | Thread menu > Move to project | `sagax_settings` get, set `thread.project` | simple |
 | Confidential (one way) | Thread menu > Confidential | `sagax_settings` get, set `thread.confidential` | simple |
 | Delete the conversation (true) | Thread menu > Delete | `sagax_settings` set `thread.delete` | suppression |
+| Whether a turn is running in this conversation; false stops it (Stop), a teammate's work thread too, for that thread only | Composer > Stop; teammate exchange view > Stop | `sagax_settings` get, set `thread.running` | simple |
 
 ### Routines
 

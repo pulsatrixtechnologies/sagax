@@ -197,6 +197,15 @@ export const GUIDES: Guide[] = [
     refs: ["menu:sidebar.account.viewUsage", "setting:usage", "bot-setting:usage", "px:console:/usage"],
   },
   {
+    id: "stop-bot-turn",
+    title: "Stop a bot's running turn, another bot's work included",
+    where: "Stop in the composer; Stop in the teammate exchange view; bot tool sagax_settings (thread.running)",
+    access: "the person, for the conversations of their own bots; a bot they own does it for them when they ask",
+    keywords: "arreter arrete stop stopper interrompre interrupt annuler cancel tour turn bloque stuck gele frozen working travaille coequipier teammate coordinate_bots delegation echange exchange modele local ollama",
+    text: "Yes. The person stops a running turn with Stop in the composer, and a teammate's work with Stop in the exchange view (the window a hand-off opens), which shows while that thread's turn runs. A bot they own does it for them when they ask (their Primary Bot for work it handed to another bot): sagax_settings set thread.running to false, target the thread id (the one coordinate_bots or start_thread returned, or list_threads). It stops that thread's turn only, never the bot's other work, through the route the Stop button calls; get thread.running says whether a turn still runs there.",
+    refs: ["tool:sagax_settings", "file:shared/settings-actions.ts", "file:src/components/TeammateExchangeSheet.tsx", "file:server/routes/bots-messages-interrupt.ts"],
+  },
+  {
     id: "primary-cards",
     title: "Have a bot answer or cancel approval cards, or the Primary Bot turn them off",
     where: "bot tool sagax_approvals in a conversation with any bot the person owns; sagax_settings with their Primary Bot",

@@ -143,7 +143,7 @@ describe("BotEventSubscriptions", () => {
     expect(store.list("carnot")[0]!.targetName).toBe("Digest");
   });
 
-  it("sends a ping on test, forgets a deleted bot, saves at 0600", async () => {
+  it("sends a ping on test, forgets a deleted bot, saves at 0600 on POSIX", async () => {
     const dir = mkdtempSync(join(tmpdir(), "bot-events-"));
     dirs.push(dir);
     const file = join(dir, "subs.json");
@@ -152,7 +152,7 @@ describe("BotEventSubscriptions", () => {
     store.create({ botId: "pepper", ownerId: "alice", events: ["run.quiet"], target: { kind: "routine", botId: "carnot", routineId: "digest" } });
     expect(await store.test("carnot", a.subscription.id)).toMatchObject({ ok: true });
     expect(JSON.parse(String(calls[0]!.init.body)).type).toBe("ping");
-    expect(statSync(file).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(file).mode & 0o777).toBe(0o600);
     expect(readFileSync(file, "utf8")).toContain(a.secret);
     const reloaded = harness({ file }).store;
     expect(reloaded.list("carnot")).toHaveLength(1);

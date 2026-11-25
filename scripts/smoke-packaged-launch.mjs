@@ -6,7 +6,8 @@
 //   node scripts/smoke-packaged-launch.mjs --app release/mac-arm64/Sagax.app
 //   node scripts/smoke-packaged-launch.mjs --app ... --user-data-copy "<an existing userData folder>"
 //
-// Everything runs in a disposable HOME, userData and data folder. With
+// Everything runs in a disposable HOME, userData and data folder (on Windows
+// the account profile is kept, see the launch environment below). With
 // --user-data-copy the folder is COPIED first (caches and locks left out);
 // the original is only read. The built-in SAGAX_SMOKE_TEST hook prints
 // "[smoke] renderer-ready" once the window's renderer reached the server.
@@ -47,7 +48,10 @@ const child = spawn(executable, args, {
   env: {
     ...process.env,
     HOME: home,
-    USERPROFILE: process.platform === "win32" ? home : process.env.USERPROFILE,
+    // Windows resolves its known folders (appData) from the account profile:
+    // with USERPROFILE moved to an empty folder, app.getPath("appData") throws
+    // before any window. The profile stays the native one; userData and the
+    // Sagax data folder stay disposable.
     SAGAX_DATA_DIR: dataDir,
     SAGAX_SMOKE_TEST: "1",
     SAGAX_SMOKE_CUA: "0",

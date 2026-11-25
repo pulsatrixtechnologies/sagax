@@ -1,27 +1,58 @@
-name: Shared terminal smoke
-
+name: Candidate Windows launch
 on:
-  # Main CI runs both tests on Windows; keep this for focused manual reruns.
   workflow_dispatch:
-
+    inputs:
+      sha512:
+        description: Installer SHA512 in base64 from the updater feed
+        type: string
+        required: true
+      version:
+        description: Installer version
+        type: string
+        required: true
+      publisher_hash:
+        description: SHA256 of the expected certificate common name in UTF-8
+        type: string
+        required: true
 permissions:
   contents: read
-
 jobs:
   windows:
-    name: Windows shared terminal
-    runs-on: windows-latest
-    timeout-minutes: 10
+    if: github.ref == 'refs/heads/qa/desktop-install-smoke'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            arch: x64
+          - runner: windows-11-arm
+            arch: arm64
+    environment: desktop-install-smoke
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24
-      - name: Shared terminal and authority regressions
-        run: node --test electron/shared-computer-access.node-test.mjs
-      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
-      - run: pnpm install --frozen-lockfile
-      - name: Shared computer real connector
-        run: pnpm exec vitest run server/computer/shared-computers.e2e.test.ts
+          architecture: ${{ matrix.arch }}
+      - name: Download private candidate
+        shell: pwsh
+        env:
+          CANDIDATE_READ_URL: ${{ secrets.CANDIDATE_READ_URL }}
+        run: |
+          try {
+            Invoke-WebRequest -Uri $env:CANDIDATE_READ_URL -OutFile "$env:RUNNER_TEMP/candidate.exe" -ErrorAction Stop
+          } catch {
+            throw "Private candidate download failed (HTTP $($_.Exception.Response.StatusCode.value__))."
+          }
+      - name: Verify signature, installation and packaged launch
+        shell: pwsh
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+          EXPECTED_SHA512: ${{ inputs.sha512 }}
+          EXPECTED_VERSION: ${{ inputs.version }}
+          EXPECTED_PUBLISHER_HASH: ${{ inputs.publisher_hash }}
+        run: ./scripts/verify/release/windows-candidate-smoke.ps1

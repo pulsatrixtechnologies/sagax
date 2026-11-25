@@ -188,9 +188,9 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
     seenUserRow.current = { key: transcriptKey, id: lastUserRowId };
   } else if (lastUserRowId !== null && lastUserRowId !== seenUserRow.current.id) {
     seenUserRow.current.id = lastUserRowId;
-    if (transcriptShown && !followRef.current) {
-      followRef.current = true;
-      queueMicrotask(() => setFollow(true));
+    if (transcriptShown) {
+      if (transcriptWindow.end !== null) setTranscriptWindow({ key: transcriptKey, start: tailStart, end: null });
+      if (!followRef.current) setBottomFollow(true);
     }
   } else if (lastUserRowId === null) {
     seenUserRow.current.id = null;

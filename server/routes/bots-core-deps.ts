@@ -139,7 +139,7 @@ export interface BotsCoreRouteDeps {
   memberDefaultSelection(principalId: string | null | undefined): Promise<ModelSelection>;
   defaultSelection(): Promise<ModelSelection>;
   githubCredentialsFor(actor: string | null | undefined): readonly GithubCredential[];
-  orgAvatarImageConfig(principalId: string | null): Promise<{ imageGen?: { provider?: string; key?: string; customApiKey?: string; customModel?: string; customUrl?: string }; xai?: { key?: string }; xaiAccount?: string; chain?: unknown } | null>;
+  orgAvatarImageConfig(principalId: string | null): Promise<{ imageGen?: { provider?: string; key?: string; customApiKey?: string; customModel?: string; customUrl?: string }; xai?: { key?: string }; xaiAccount?: string; credentials?: unknown; refusalText?: unknown; chain?: unknown } | null>;
   requesterPrincipal(auth: RequestAuth): string | null;
   takeTemporaryCreateToken(token: unknown, auth: RequestAuth): TemporaryAgent | null;
   botCreationAllowed(auth: RequestAuth): boolean;

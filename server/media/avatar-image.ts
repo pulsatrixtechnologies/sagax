@@ -4,19 +4,16 @@ import { z } from "zod";
 import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../../shared/image-generation.ts";
 import { decodeGeneratedImage } from "./generated-image.ts";
 import {
-  imageChainWithAccount,
-  imageKeyCandidate,
+  chatImageCredentials,
   imageRefusalCause,
-  openaiKeyImage,
   withImageCredentials,
-  xaiAccountImage,
-  xaiKeyImage,
   XAI_ACCOUNT_HEADER_NAME,
   XAI_ACCOUNT_HEADER_VALUE,
   type ChatImageCredential,
   type ImageChain,
-  type ImageKeyCandidate,
+  type ImageCredentials,
 } from "./chat-image.ts";
+import type { VoiceModeRefusalCause } from "../../shared/voice-mode.ts";
 import { VoiceKeyRefusals } from "../voice/voice-keys.ts";
 import { BOT_AVATAR_MAX_BYTES } from "../org/org-admin-look.ts";
 import type { BotRecord } from "../store.ts";
@@ -53,6 +50,13 @@ export interface AvatarImageConfig {
   /** The person's own connected Grok account token (#5223). Its place among
    * the keys is the chat's own rule (chat-image.ts imageChainWithAccount). */
   xaiAccount?: string;
+  /** The person's image chain as the chat's image gets it (chat-image.ts
+   * personImageCredentials, #5231): their account, their own keys, the
+   * shared ones, a chosen provider in front. Absent: the chain of the
+   * settings above alone, by the same rule. */
+  credentials?: ImageCredentials;
+  /** The voice's own words for a refusal cause (voice-mode.ts voiceRefusalText). */
+  refusalText?(cause: VoiceModeRefusalCause): string;
   /** Who asks and what was refused lately (the image chain, D-20261123-053);
    * a chain with no memory when absent. */
   chain?: ImageChain & { organization?: boolean };
@@ -172,17 +176,26 @@ export async function generateAvatarImage(
   if (refused) throw Object.assign(new Error(refused), { status: 400 });
   const settings = avatarImageStatus(cfg);
   const { provider } = settings;
-  // The settings' provider when it can serve, and the person's connected Grok
-  // account where the chat's own rule puts it (#5223): one rule, two surfaces.
-  const shared = cfg.chain?.organization ? "org-key" as const : "server" as const;
-  const configured: ImageKeyCandidate[] = !settings.configured ? []
-    : [imageKeyCandidate(
-      provider === "openai" ? openaiKeyImage(cfg.imageGen!.key!.trim())
-        : provider === "xai" ? xaiKeyImage(cfg.xai!.key!.trim())
-          : { provider: "custom", baseUrl: settings.customUrl, model: settings.customModel, ...(cfg.imageGen?.customApiKey?.trim() ? { key: cfg.imageGen.customApiKey.trim() } : {}) },
-      shared)];
-  const accountToken = cfg.xaiAccount?.trim();
-  const candidates = imageChainWithAccount(configured, accountToken ? imageKeyCandidate(xaiAccountImage(accountToken), "grok-account") : null, cfg.imageGen);
+  // One rule, two surfaces (#5231): the avatar takes the person's chain as
+  // the chat's image builds it (chatImageCredentials), and never orders a
+  // credential itself.
+  const all = cfg.credentials ?? await chatImageCredentials({
+    organization: cfg.chain?.organization === true,
+    personal: async () => ({ ok: false, error: "no_key" }),
+    solo: async () => undefined,
+    account: async () => cfg.xaiAccount,
+    imageGen: cfg.imageGen,
+    // a key that is not this person's to use is already left out of `cfg`
+    organizationXaiAllowed: () => true,
+    organizationXaiKey: () => cfg.xai?.key,
+  });
+  // the voice's verdict for a person turned off, in the voice's words
+  if (!Array.isArray(all)) throw Object.assign(new Error(cfg.refusalText?.(all.refused) ?? "Image generation is not available to you."), { status: 403, code: all.refused });
+  // A provider chosen in the image settings keeps the avatar on that provider
+  // and on the person's own Grok account: no other provider's key is
+  // borrowed. Nothing chosen: the whole chain, as in the chat.
+  const chosen = cfg.imageGen?.provider;
+  const candidates = chosen ? all.filter((entry) => entry.credential.provider === chosen || entry.credential.auth === "account") : all;
   if (!candidates.length) {
     const message = provider === "openai" ? "Add an OpenAI image API key first"
       : provider === "xai" ? "Connect your Grok account or add an xAI API key first"

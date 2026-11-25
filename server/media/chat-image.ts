@@ -10,6 +10,7 @@
 import type { ReadableStreamReadResult } from "node:stream/web";
 import { z } from "zod";
 import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../../shared/image-generation.ts";
+import { providerOrder } from "../../shared/voice-providers.ts";
 import type { ProviderKeyResult } from "../perspicax/perspicax-link.ts";
 import { decodeGeneratedImage } from "./generated-image.ts";
 import type { VoiceKeySource, VoiceModeRefusalCause } from "../../shared/voice-mode.ts";
@@ -94,21 +95,27 @@ export function imageKeyCandidate(credential: ChatImageCredential, source: Voice
   };
 }
 
-/** Where the connected Grok account stands among the keys of an image
- * request. ONE rule for the chat (make_image) and the avatar (#5223 review):
- * the account is an xAI credential and leads, a connected account beating a
- * key [D-20261120-012], unless the image settings name another provider
- * (`imageGen.provider` openai or custom) that can serve: that chosen
- * provider keeps its place and the account comes right after it, never in
- * front of it. The same person with the same settings reaches the same
- * provider on both surfaces. A choice of credential form per person is
- * #5231. */
+/** The providers an image can be made on, in the order of the chain's default. */
+export const IMAGE_PROVIDERS = ["xai", "openai", "custom"] as const satisfies readonly ChatImageProvider[];
+
+/** The order of one person's image credentials. ONE rule for the chat
+ * (make_image) and the avatar (#5223 review, #5231), in the decided order
+ * [D-20261120-012]: the person's explicit choice, then their connected Grok
+ * account, then their keys, then the organization's. `keys` come in that
+ * order already (the person's, then the shared ones) and the account leads
+ * them, an account beating a key. The explicit choice is the provider the
+ * image settings name (`imageGen.provider`): when it has a credential to
+ * serve, every credential of that provider comes first, in the same order
+ * among themselves, the person's own keys of another provider included.
+ * Whether a choice leads is the voice's own verdict (`providerOrder`,
+ * shared/voice-providers.ts: the chosen provider first when it serves, else
+ * the default order), not a second rule. */
 export function imageChainWithAccount(keys: readonly ImageKeyCandidate[], account: ImageKeyCandidate | null, imageGen?: ImageGenerationConfig): ImageKeyCandidate[] {
-  if (!account) return [...keys];
-  const chosen = imageGen?.provider === "openai" || imageGen?.provider === "custom" ? imageGen.provider : null;
-  let after = -1;
-  if (chosen) keys.forEach((entry, at) => { if (entry.credential.provider === chosen) after = at; });
-  return [...keys.slice(0, after + 1), account, ...keys.slice(after + 1)];
+  const all = account ? [account, ...keys] : [...keys];
+  const choice = imageGen?.provider ?? "auto";
+  const serving = IMAGE_PROVIDERS.filter((provider) => all.some((entry) => entry.credential.provider === provider));
+  if (choice === "auto" || providerOrder(choice, serving, IMAGE_PROVIDERS)[0] !== choice) return all;
+  return [...all.filter((entry) => entry.credential.provider === choice), ...all.filter((entry) => entry.credential.provider !== choice)];
 }
 
 /** Every credential that may make this person's image, in the order to try
@@ -117,7 +124,7 @@ export function imageChainWithAccount(keys: readonly ImageKeyCandidate[], accoun
  * account, then their own keys, the shared keys only as the organization
  * allows. The order is decided [D-20261120-012, M-20261122-023]: an account
  * beats a key at each level, the organization's account is the next lot
- * (#5200). The account's place is `imageChainWithAccount`. A credential
+ * (#5200). The order, a chosen provider included, is `imageChainWithAccount`. A credential
  * refused for credits or for itself gives way to the next one
  * (`withImageCredentials`, D-20261123-053). */
 export async function chatImageCredentials(input: {
@@ -161,6 +168,42 @@ export async function chatImageCredentials(input: {
   }
   const account = (await (input.account?.() ?? Promise.resolve(undefined)).catch(() => undefined))?.trim();
   return imageChainWithAccount(keys, account ? imageKeyCandidate(xaiAccountImage(account), "grok-account") : null, gen);
+}
+
+/** Where one person's image credentials are read on this server: the same
+ * sources for the chat's image and for the avatar, so both surfaces ask
+ * `personImageCredentials` and neither keeps its own list (#5231). Every
+ * lookup takes the person it is for: nothing of one person is read for
+ * another. */
+export interface ImagePeople {
+  organization: boolean;
+  /** The person as the voice sees them (the same `disabled`). */
+  person(principalId: string | null): { principalId?: string | null; disabled?: boolean };
+  /** This person's own key for a provider, in an organization. */
+  ownKey(principalId: string | null, provider: "xai" | "openai"): Promise<ProviderKeyResult>;
+  /** This computer's key for a provider, on a solo server. */
+  soloKey(provider: "xai" | "openai"): Promise<string | undefined>;
+  /** This person's connected Grok account, by the voice's own rule. */
+  account(person: { principalId?: string | null; disabled?: boolean }): Promise<string | undefined>;
+  imageGen(): ImageGenerationConfig | undefined;
+  /** The organization gave its xAI key to this person for images. */
+  organizationXaiGiven(principalId: string | null): boolean;
+  organizationXaiKey(): string | undefined;
+}
+
+/** One person's image chain, for the chat's image and for the avatar. */
+export function personImageCredentials(people: ImagePeople, principalId: string | null): Promise<ImageCredentials> {
+  const person = people.person(principalId);
+  return chatImageCredentials({
+    ...(person.disabled ? { disabled: true } : {}),
+    organization: people.organization,
+    personal: (provider) => people.ownKey(principalId, provider),
+    solo: (provider) => people.soloKey(provider),
+    account: () => people.account(person),
+    imageGen: people.imageGen(),
+    organizationXaiAllowed: () => people.organizationXaiGiven(principalId),
+    organizationXaiKey: () => people.organizationXaiKey(),
+  });
 }
 
 /** The chain of one person, or why the organization serves them nothing

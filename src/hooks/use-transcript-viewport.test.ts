@@ -623,6 +623,17 @@ describe("transcript viewport", () => {
     expect(view.current.laterCount).toBe(181);
   });
 
+  it("opens the live tail when sending from a bounded search result", () => {
+    store.state.focusMessage = { threadId: "thread", messageId: "m10", nonce: 1, consumed: false };
+    const view = mount({ messages: rows(300) });
+    expect(view.current.laterCount).toBeGreaterThan(0);
+    view.rerender({ messages: [...rows(300), { id: "sent", role: "user" }] });
+    expect(view.current.windowedMessages.at(-1)?.id).toBe("sent");
+    expect(view.current.laterCount).toBe(0);
+    expect(view.current.following).toBe(true);
+    expect(scroller.scrollTop).toBe(scroller.bottom);
+  });
+
   it("jumps back to the latest rows and resumes following", () => {
     const view = mount({ messages: rows(300) });
     view.act(() => view.current.showEarlier());

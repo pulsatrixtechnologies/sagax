@@ -124,18 +124,36 @@ describe("the context and usage meter", () => {
     expect(fixture.api).toHaveBeenCalledWith("/api/bots/scout/compact", expect.objectContaining({ method: "POST", body: JSON.stringify({ threadId: "t-1" }) }));
   });
 
-  it("D-20261125-015: the usage detail names the account with its provider, its windows with their reset, then Switch engine and See usage", async () => {
+  it("D-20261125-015, M-20261125-084: the usage detail is one row for the account, named with its provider, its two windows side by side, one star; then Switch engine and See usage", async () => {
     await mount();
     await click(half("usage"));
     const detail = host.querySelector('[data-composer-meter-detail="usage"]')!;
-    expect(detail.querySelector("[data-composer-meter-account]")?.textContent).toBe("Claude · ada@acme.test Max");
-    const windows = [...detail.querySelectorAll("[data-composer-meter-window]")].map((node) => node.textContent);
-    expect(windows).toEqual(["Weekly · resets in 2d 4h89% used", "5-hour · resets in 2h 30m31% used"]);
+    // one row for the account, the row of Settings > Usage limits (PlanUsage.tsx)
+    const rows = detail.querySelectorAll("[data-plan-line]");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.querySelector("[data-plan-name]")?.textContent).toBe("Claude · ada@acme.test");
+    expect(rows[0]!.textContent).toContain("Max");
+    // the short session then the week, on that same row, each with its percent and its renewal
+    const windows = [...rows[0]!.querySelectorAll<HTMLElement>("[data-plan-window-kind]")];
+    expect(windows.map((node) => node.dataset.planWindowKind)).toEqual(["fiveHour", "weekly"]);
+    expect(windows.map((node) => node.querySelector("[data-limit-figure]")?.textContent)).toEqual(["5-hour session31% used", "Week89% used"]);
+    for (const node of windows) expect(node.querySelector("[data-plan-window]")).not.toBeNull();
+    expect(detail.querySelectorAll("[data-usage-favorite]")).toHaveLength(1);
+    // no line per window any more
+    expect(detail.querySelector("[data-composer-meter-window]")).toBeNull();
     await click(detail.querySelector('[data-testid="engine-limit-switch"]'));
     expect(modelWindow.open).toHaveBeenCalledWith("scout");
     await click(half("usage"));
     await click(host.querySelector('[data-testid="engine-limit-usage"]'));
     expect(fixture.dispatch).toHaveBeenCalledWith({ type: "toggleAppSettings", open: true, section: "usage" });
+  });
+
+  it("M-20261125-084: an account with one window shows one", async () => {
+    fixture.plan = [provider({ fiveHour: window(null) })];
+    await mount();
+    await click(half("usage"));
+    const kinds = [...host.querySelectorAll<HTMLElement>('[data-composer-meter-detail="usage"] [data-plan-window-kind]')].map((node) => node.dataset.planWindowKind);
+    expect(kinds).toEqual(["weekly"]);
   });
 
   it("D-20261125-014: the figures are read again when the detail opens, then every minute while it stays open", async () => {

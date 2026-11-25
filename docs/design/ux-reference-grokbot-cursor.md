@@ -1986,6 +1986,14 @@ Rules that hold at every width:
   medium, no pill fill or ring), on the bar's own ground so it does not sit
   over the messages. A group, a split pane, a coding chat and a bot-to-bot
   window keep the pill either way.
+- Chat bar (owner 2026-11-25, M-20261125-070 to M-20261125-075, #5372): one
+  box holding the +, the field and one voice button (the mic or the waves,
+  and an arrow); under it a quiet row in small text, the model chip at the
+  left and the context and usage meter at the right. No limit dot and no
+  separate controls under the field. Detail: `docs/model-modes.md`.
+- Usage by account (M-20261125-084): the account menu's Usage and the
+  meter's usage detail draw one row per account, its two windows side by
+  side, as Settings > Usage limits does; never a row per window.
 - No token figure in the header (owner 2026-11-25, M-20261125-076): the
   conversation's share of its model's window reads in the meter under the
   message box. The exact cost lives in Settings > Usage and in the bot's

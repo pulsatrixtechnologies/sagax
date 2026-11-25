@@ -484,7 +484,7 @@ export function profileMenuItems(input: {
         ...usage,
         { key: "view-usage", label: t("sidebar.account.viewUsage"), separatorBefore: usage.length > 0, foot: true, onSelect: input.handlers.onViewUsage },
       ],
-      submenuWidth: input.usageRows.some((row) => row.state === "windows") ? 320 : 228,
+      submenuWidth: input.usageRows.some((row) => row.state === "windows") ? 400 : 228,
       onSelect: () => {},
     },
     ...(input.mobile ? [{

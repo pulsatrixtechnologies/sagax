@@ -10,12 +10,13 @@
  * ?skin=<id>&lang=<code>&mode=auto|fast|expert|heavy|pinned&view=short|all
  * &open=0 (the bar at rest, no menu) &meter=context|usage (a detail open)
  * &place=left|right (the bar at a side of the window)
+ * &settings=modes (Settings > Models > Modes alone; &set=1 with choices made)
  * (the capture hovers a row with a real pointer, as a person would) */
 import { StrictMode, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Mic } from "lucide-react";
+import { AudioLines } from "lucide-react";
 import { COMPOSER_PILL } from "../components/Composer.tsx-parts/ComposerEditor";
-import { ATTACH_ICON, ComposerPlusMenu, RecordMark } from "../components/ComposerControls";
+import { ATTACH_ICON, ComposerMicButton, ComposerPlusMenu, RecordMark, SECONDARY_CIRCLE } from "../components/ComposerControls";
 import { ModelPanel } from "../components/ModelPanel";
 import { ClaudeMark, ProviderMonogram } from "../components/ProviderIcons";
 import { ModelPickerTrigger } from "../components/ModelPicker.tsx-parts/ModelPickerTrigger";
@@ -28,6 +29,9 @@ import { chatBarChipLabel, type ModelMode } from "../lib/model-mode";
 import { ComposerMeterView } from "../components/ComposerMeter";
 import { MENU_ROW } from "../components/menu-look";
 import type { PlanRow } from "../lib/plan-usage";
+import { ComposerVoiceButton } from "../components/ComposerVoiceButton";
+import { ModesSettingsView, type ModeEngine } from "../components/settings/ModesSettings";
+import type { ModeModels } from "../../shared/mode-models";
 import { trackInputModality } from "../lib/input-modality";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import type { ModeModel, ModeResolution } from "../../shared/model-mode";
@@ -97,6 +101,26 @@ const meterRow: PlanRow = {
   message: null, fiveHour: meterWindow(31, 2.5), weekly: meterWindow(89, 52), extra: [], models: [],
 };
 
+/** Settings > Providers > Models > Modes, alone (?settings=modes). */
+function ModesGallery() {
+  const [value, setValue] = useState<ModeModels>(params.get("set") === "1"
+    ? { fast: { instanceId: "grok", model: "grok-4-fast", effort: "low" }, heavy: [{ instanceId: "claude-team", model: "claude-opus-5-5" }, { instanceId: "grok", model: "grok-4.7" }] }
+    : {});
+  const engines: ModeEngine[] = instances.filter((instance) => instance.snapshot.authenticated !== false).map((instance) => ({
+    instanceId: instance.instanceId,
+    name: [instance.displayName, instance.snapshot.account?.email].filter((part, index, parts) => part && parts.indexOf(part) === index).join(" · "),
+    models: instance.models.options.map((option) => ({ id: option.id, label: option.label, effortLevels: ["low", "medium", "high"] as const })),
+  }));
+  return (
+    <div className="min-h-screen bg-app p-8 text-ink">
+      <span data-gallery-chip="" aria-hidden="true" className="block size-px" />
+      <div data-gallery-modes-settings="" className="mx-auto max-w-[720px]">
+        <ModesSettingsView value={value} engines={engines} favorites={["grok\u0000grok-4.7", "claude-team\u0000claude-mythos-5-2"]} onChange={setValue} onReset={() => setValue({})} busy={false} error={null} />
+      </div>
+    </div>
+  );
+}
+
 function Gallery() {
   const autoOn = current !== "pinned";
   const selection = { instanceId: "claude-team", model: "claude-opus-5-5", ...(autoOn ? { auto: true as const } : {}), ...(autoOn && current !== "auto" ? { mode: current } : {}) };
@@ -134,7 +158,10 @@ function Gallery() {
               { id: "teach", label: t("composer.plus.teach"), icon: <RecordMark />, onSelect: () => {} },
             ]} />
             <textarea rows={1} placeholder="Message Wren · Assistant" className="block min-h-6 w-full flex-1 resize-none bg-transparent chat-input-text px-1 py-1.5 placeholder:text-ink-secondary focus:outline-none" />
-            <span className="flex size-7 items-center justify-center rounded-full bg-ink/[0.06] text-ink-secondary"><Mic size={16} aria-hidden="true" /></span>
+            {/* the one voice button (ComposerVoiceButton.tsx): its face, its arrow, its menu */}
+            <ComposerVoiceButton engine="xai"
+              dictation={<ComposerMicButton onClick={() => undefined} engine="xai" shortcut="⌘D" />}
+              conversation={<button type="button" data-composer-voice="" aria-label="Voice" className={SECONDARY_CIRCLE}><AudioLines size={16} aria-hidden="true" /></button>} />
           </div>
         </div>
         {/* the quiet row under the box (ComposerUnderRow.tsx): the chip, then the meter at its end */}
@@ -164,4 +191,5 @@ function Gallery() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<StrictMode><Gallery /></StrictMode>);
+const Shown = params.get("settings") === "modes" ? ModesGallery : Gallery;
+createRoot(document.getElementById("root")!).render(<StrictMode><Shown /></StrictMode>);

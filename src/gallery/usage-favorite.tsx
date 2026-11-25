@@ -52,7 +52,7 @@ function Gallery() {
       { key: "month-cost", label: t("sidebar.account.monthCost"), value: "5,26 $", info: true, foot: true },
       { key: "view-usage", label: t("sidebar.account.viewUsage"), separatorBefore: true, foot: true, onSelect: () => {} },
     ],
-    submenuWidth: 320,
+    submenuWidth: 400,
     onSelect: () => {},
   }];
   return (

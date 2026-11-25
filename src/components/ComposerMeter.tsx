@@ -52,7 +52,7 @@ const FIGURE = "@max-[22rem]/composer:hidden";
 const TONE: Record<UsageTone, string> = { quiet: "", warning: "text-warning", danger: "text-danger" };
 const DETAIL = cn(MENU_SURFACE, MENU_FIT_ROW, "absolute bottom-full right-0 z-40 mb-1.5 max-w-[min(320px,calc(100vw-16px))]");
 /** The usage detail holds an account's row, its two windows side by side. */
-const USAGE_DETAIL = "w-[min(340px,calc(100vw-16px))] max-w-none";
+const USAGE_DETAIL = "w-[min(400px,calc(100vw-16px))] max-w-none";
 
 export type MeterHalf = "context" | "usage";
 

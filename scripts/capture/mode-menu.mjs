@@ -39,6 +39,11 @@ const shots = [
   { name: "00-bar-narrowest", query: "mode=expert&open=0", width: 330 },
   { name: "00-meter-context", query: "mode=expert&open=0&meter=context" },
   { name: "00-meter-usage", query: "mode=expert&open=0&meter=usage" },
+  // the one voice button's menu: Dictation or Voice conversation, the microphone, the dictation's language
+  { name: "00-voice-menu", query: "mode=expert&open=0", steps: ["[data-composer-voice-menu-toggle]"] },
+  // Settings > Providers > Models > Modes: nothing set, then choices made
+  { name: "00-settings-modes", query: "settings=modes" },
+  { name: "00-settings-modes-set", query: "settings=modes&set=1" },
   { name: "01-menu-auto", query: "mode=auto" },
   { name: "02-menu-fast-tooltip", query: "mode=auto&hover=fast", tip: english ? "Quick responses · Grok 4 Fast" : undefined },
   { name: "03-menu-expert-reasoning-imposed", query: "mode=expert" },

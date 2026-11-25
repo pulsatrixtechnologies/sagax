@@ -18,6 +18,8 @@
 #   https://openmausbot.invalid/            reserved invalid origin in tests/binaries
 #   openmausbot.sidebarCollapsedSections.v1 local preference key
 #   openmausbot.sidebarSectionOrder.v1      local preference key
+#   openmaus.grok/1                         bot starter format, alone or as a JSON format field
+# About retains the upstream credit documented in docs/code/repository.md.
 # Third-party license texts (paths containing LICENSE or Licenses) are skipped.
 set -eu
 
@@ -30,7 +32,14 @@ report="$tmp/report"
 : > "$report"
 
 scan() { # $1 = file label, stdin = text
-  sed -e 's#_openmausbot\._tcp##g' \
+  sed -e '/^openmaus\.grok\/1$/d' \
+      -e 's#"format":"openmaus\.grok/1"#"format":""#g' \
+      -e '/^Based on OpenMausBot $/d' \
+      -e '/^Based on OpenMausBot %@$/d' \
+      -e '/^[[:space:]]*<key>Based on OpenMausBot %@<\/key>$/d' \
+      -e '/^[[:space:]]*<string>Based on OpenMausBot %@<\/string>$/d' \
+      -e '/^[[:space:]]*<string>Basé sur OpenMausBot %@<\/string>$/d' \
+      -e 's#_openmausbot\._tcp##g' \
       -e 's#/\.well-known/openmausbot/environment##g' \
       -e 's#openmausbot-phone-credential-v1##g' \
       -e 's#OpenMausBot phone credential v1##g' \

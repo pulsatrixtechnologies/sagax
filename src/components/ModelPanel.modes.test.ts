@@ -98,7 +98,7 @@ describe("the model panel with the composer's modes", () => {
   it("opens on the rows of the menu, no model list, the footer kept", () => {
     const markup = html();
     const order = [...markup.matchAll(/data-mode-row="([a-z]+)"/g)].map((match) => match[1]);
-    expect(order).toEqual(["auto", "fast", "expert", "heavy", "build", "reasoning", "all"]);
+    expect(order).toEqual(["auto", "fast", "expert", "heavy", "reasoning", "all"]);
     expect(markup).not.toContain("data-model-panel-segment");
     expect(markup).not.toContain('data-model-option="opus"');
     expect(markup).toContain("data-model-manage");
@@ -148,17 +148,37 @@ describe("the model panel with the composer's modes", () => {
     expect(markup).toMatch(/data-mode-row="all"[^>]*>.*Claude · opus/);
   });
 
-  it("M-20261123-045: All models opens on the providers, the favorites first with their stars, no account, no state, no model of a provider yet", () => {
+  it("M-20261123-045: All models opens on the providers, no account, no state, no model of a provider yet", () => {
     const markup = html({ view: "all" });
     expect(markup).toContain('data-mode-panel="providers"');
     expect(markup).not.toContain("data-model-panel-segment");
     const providers = [...markup.matchAll(/data-model-cascade-provider="([a-z]+)"/g)].map((match) => match[1]);
     // OpenAI is signed out: it is not there
     expect(providers).toEqual(["anthropic", "xai", "local"]);
-    expect(markup.indexOf("data-model-cascade-favorites")).toBeLessThan(markup.indexOf("data-model-cascade-provider"));
-    expect(markup).toContain(`aria-pressed="true" data-model-favorite="grok\u0000grok-4"`);
     expect(markup).not.toContain("Signed out");
     expect(markup).not.toContain("ada.admin@acme.test");
     expect(markup).not.toContain('data-model-option="mythos"');
+  });
+
+  it("M-20261125-074: the favorites sit in the menu itself, under the modes and the heading Favorites, before Reasoning; the providers no longer repeat them", () => {
+    const markup = html({ view: "all" });
+    const at = (needle: string) => markup.indexOf(needle);
+    expect(at('data-mode-favorite="grok\u0000grok-4"')).toBeGreaterThan(at('data-mode-row="heavy"'));
+    expect(at('data-mode-favorite="grok\u0000grok-4"')).toBeLessThan(at('data-mode-row="reasoning"'));
+    expect(markup).toMatch(/data-mode-favorites=""[^>]*>.*?>Favorites</);
+    // sentence case, never capitals
+    expect(markup.match(/<div[^>]*data-mode-favorites-heading[^>]*class="([^"]*)"/)?.[1]).not.toContain("uppercase");
+    expect(markup).not.toContain("data-model-cascade-favorites");
+    // one row per favorite, in the menu only
+    expect(markup.match(/data-mode-favorite=/g)).toHaveLength(1);
+  });
+
+  it("a favorite is a model the person picks in one click; one that cannot run now is absent, and with no favorite there is no heading", () => {
+    const given = props();
+    const tree = renderToStaticMarkup(createElement(ModelPanel, given));
+    expect(tree).toContain("data-mode-favorite=");
+    expect(html({ sections: sections().filter((section) => section.key !== "favorites") })).not.toContain("data-mode-favorites");
+    const off = sections().map((section) => section.key === "favorites" ? { ...section, rows: section.rows.map((one) => ({ ...one, unavailable: "Signed out" })) } : section);
+    expect(html({ sections: off })).not.toContain("data-mode-favorites");
   });
 });

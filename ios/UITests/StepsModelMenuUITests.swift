@@ -24,7 +24,7 @@ final class StepsModelMenuUITests: XCTestCase {
     }
 
     @MainActor
-    func testModelMenuIsShortAndAllModelsStarsEachModel() {
+    func testModeMenuOpensRunnableProvidersAndStarsEachModel() {
         let app = launchPreview()
         openModelPage(app)
         shot("model-section", app)
@@ -32,27 +32,28 @@ final class StepsModelMenuUITests: XCTestCase {
         XCTAssertTrue(open.waitForExistence(timeout: 10))
         open.tap()
         let all = app.buttons["model-all"]
-        XCTAssertTrue(all.waitForExistence(timeout: 5), "the short menu ends on All models")
-        XCTAssertTrue(app.buttons["model-row.auto"].exists, "Auto at the top")
-        XCTAssertFalse(app.buttons["model-provider.preview"].exists, "no provider on the short menu")
-        shot("model-menu-short", app)
+        XCTAssertTrue(all.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["model-mode.auto"].exists)
+        XCTAssertTrue(app.buttons["model-mode.build"].exists)
+        XCTAssertFalse(app.buttons["model-provider.Claude"].exists)
+        shot("model-menu-modes", app)
         all.tap()
-        let claude = app.buttons["model-provider.preview"]
-        XCTAssertTrue(claude.waitForExistence(timeout: 5), "a segment per provider")
-        // OpenAI is signed out and Qwen is not installed: neither is offered
-        XCTAssertFalse(app.buttons["model-provider.codex"].exists)
-        XCTAssertFalse(app.buttons["model-provider.qwen"].exists)
-        XCTAssertTrue(app.buttons["model-provider.local:this-computer"].exists, "local models in their own segment")
+        let claude = app.buttons["model-provider.Claude"]
+        XCTAssertTrue(claude.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["model-provider.OpenAI"].exists)
+        XCTAssertFalse(app.buttons["model-provider.Qwen"].exists)
+        XCTAssertTrue(app.buttons["model-provider.local:this-computer"].exists)
+        shot("model-menu-providers", app)
+        claude.tap()
         let star = app.buttons["model-favorite.preview.claude-opus-4-5"]
         XCTAssertTrue(star.waitForExistence(timeout: 5))
         shot("model-menu-all", app)
         star.tap()
         shot("model-menu-all-starred", app)
         app.buttons["model-menu-back"].tap()
-        XCTAssertTrue(app.buttons["model-row.favorite.preview.claude-opus-4-5"].waitForExistence(timeout: 5), "the star puts it under Auto")
+        XCTAssertTrue(app.buttons["model-row.preview/claude-opus-4-5"].waitForExistence(timeout: 5), "the star puts it on the provider page")
         shot("model-menu-favorite", app)
-        // leave the favorite as it was for the next run
-        app.buttons["model-all"].tap()
+        // Leave the favorite as it was for the next run.
         app.buttons["model-favorite.preview.claude-opus-4-5"].tap()
     }
 

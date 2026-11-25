@@ -960,6 +960,8 @@ public struct ModelSelection: Codable, Hashable, Sendable {
     /// `heavy`, ComposerModes); absent is plain Auto. Kept as text so a
     /// selection this device sends back never loses it.
     public var mode: String? = nil
+    /// A model chosen under a second account of its provider stays on that account.
+    public var accountPinned: Bool? = nil
 
     public init(
         instanceId: String,
@@ -2192,6 +2194,7 @@ public struct ConfigStatus: Codable, Sendable {
     /// Organization server: the engines its admin allows in Perspicax
     /// (#261); nil or empty means every engine.
     public var allowedEngines: [String]? = nil
+    public var ownAccountsOutsideList: Bool? = nil
     /// Stable <instance>/<model> ids, off at organization then person level.
     public var disabledModels: [String]? = nil
     public var myDisabledModels: [String]? = nil

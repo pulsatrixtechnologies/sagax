@@ -112,6 +112,12 @@ public extension CompanionClient {
         try await send(makeRequest("GET", "/api/me/engines"), as: MyEnginesList.self)
     }
 
+    func personalModelIds(instanceId: String) async throws -> [String]? {
+        guard MyEnginesRules.validInstanceId(instanceId) else { throw APIError.badURL }
+        struct Answer: Decodable { var models: [String]? }
+        return try await send(makeRequest("GET", "/api/me/engines/\(instanceId)/models"), as: Answer.self).models
+    }
+
     /// `POST /api/me/engines/:id/login/start`: nil when the sign-in needed
     /// nothing more (already signed in).
     func startEngineLogin(instanceId: String) async throws -> EngineLoginState? {

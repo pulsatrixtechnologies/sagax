@@ -150,3 +150,85 @@ struct ModelMenuReasoning: View {
         .accessibilityIdentifier(idPrefix)
     }
 }
+
+/// The same drill-down rows in the phone sheet and the iPad popover.
+struct ComposerMenuPanel<ModelRow: View>: View {
+    @Binding var panel: ComposerModes.Panel
+    let list: ComposerModes.ManualList
+    let reasoning: ComposerModes.Reasoning
+    let automatic: Bool
+    let pickEffort: (String?) -> Void
+    @ViewBuilder var modelRow: (ModelMenuRow) -> ModelRow
+
+    private var visiblePanel: ComposerModes.Panel { ComposerModes.settle(panel, providers: list.providers) }
+
+    private var heading: String {
+        switch visiblePanel {
+        case .root, .providers: return String(localized: "All models")
+        case .reasoning: return String(localized: "Reasoning")
+        case let .accounts(id): return list.providers.first { $0.id == id }?.label ?? ""
+        case let .models(id, accountId):
+            guard let provider = list.providers.first(where: { $0.id == id }) else { return "" }
+            let account = provider.accounts.first { $0.id == accountId }
+            return [provider.label, provider.accounts.count > 1 ? account?.label : nil].compactMap { $0 }.joined(separator: " · ")
+        }
+    }
+
+    var body: some View {
+        Button {
+            panel = ComposerModes.back(visiblePanel, providers: list.providers)
+        } label: {
+            Label { Text(verbatim: heading) } icon: { Image(systemName: "chevron.left") }
+        }
+        .accessibilityLabel(Text("Back"))
+        .accessibilityIdentifier("model-menu-back")
+        switch visiblePanel {
+        case .providers:
+            ForEach(list.top) { modelRow($0) }
+            if !list.favorites.isEmpty {
+                Text("Favorites").font(.caption).foregroundStyle(.secondary)
+                ForEach(list.favorites) { modelRow($0) }
+            }
+            ForEach(list.providers) { provider in
+                link(provider.label, current: provider.current) { panel = ComposerModes.open(provider) }
+                    .accessibilityIdentifier("model-provider.\(provider.id)")
+            }
+        case let .accounts(id):
+            if let provider = list.providers.first(where: { $0.id == id }) {
+                ForEach(provider.accounts) { account in
+                    link(account.label ?? provider.label, current: account.rows.contains(where: \.current)) { panel = .models(id, account.id) }
+                        .accessibilityIdentifier("model-account.\(account.id)")
+                }
+            }
+        case let .models(id, accountId):
+            if let provider = list.providers.first(where: { $0.id == id }),
+               let account = provider.accounts.first(where: { $0.id == accountId }) {
+                ForEach(account.rows) { modelRow($0) }
+            }
+        case .reasoning:
+            ForEach(reasoning.choices, id: \.self) { level in
+                Button { pickEffort(level) } label: {
+                    HStack {
+                        Text(verbatim: reasoning.label(level, automatic: automatic))
+                        Spacer()
+                        if level == reasoning.value { Image(systemName: "checkmark").accessibilityHidden(true) }
+                    }
+                }
+                .accessibilityAddTraits(level == reasoning.value ? .isSelected : [])
+            }
+        case .root: EmptyView()
+        }
+    }
+
+    private func link(_ title: String, current: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(verbatim: title)
+                Spacer()
+                if current { Image(systemName: "checkmark") }
+                Image(systemName: "chevron.right").foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityAddTraits(current ? .isSelected : [])
+    }
+}

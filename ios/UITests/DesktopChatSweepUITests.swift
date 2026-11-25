@@ -191,6 +191,10 @@ final class DesktopChatSweepUITests: XCTestCase {
     func testModelMenuIsThePopover() throws {
         let app = launch("chat-model-picker")
         XCTAssertTrue(element(app, "desktop-model-menu").waitForExistence(timeout: 20), "the model menu")
+        XCTAssertTrue(element(app, "desktop-mode-auto").exists)
+        let all = element(app, "desktop-mode-all")
+        XCTAssertTrue(all.waitForExistence(timeout: 10))
+        all.tap()
         XCTAssertTrue(element(app, "desktop-model-search").exists, "its search field")
         XCTAssertTrue(element(app, "model-menu-providers").exists, "Providers at its foot")
     }

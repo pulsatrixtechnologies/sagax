@@ -33,6 +33,7 @@ public struct ModelMenuRow: Hashable, Sendable, Identifiable {
     public var keywords: String?
     /// The model in use cannot run a turn now: said beside it.
     public var notResponding = false
+    public var pinAccount = false
     /// M-20261119-015: the account this row runs on (the name the person
     /// gave it, else its address), while the provider has two or more.
     public var account: String?
@@ -213,10 +214,11 @@ public enum ModelMenu {
         var top = [ModelMenuRow(key: "auto", kind: .auto, label: labels.auto, detail: labels.autoHint, current: autoOn)]
         if let follows, botModel.auto == true || modelOn(botModel.instanceId, botModel.model) {
             top.append(ModelMenuRow(
-                key: "follow", kind: .follow, label: labels.useBotModel(botName),
+                key: "follow", kind: .follow, instanceId: botModel.auto == true ? nil : botModel.instanceId,
+                modelId: botModel.auto == true ? nil : botModel.model, label: labels.useBotModel(botName),
                 detail: botOption?.label ?? botModel.model, current: follows,
                 keywords: botName,
-                notResponding: botInstance.map { !modelUsable($0, modelId: botModel.model, organization: organization) } ?? false
+                notResponding: botModel.auto != true && (botInstance.map { !modelUsable($0, modelId: botModel.model, organization: organization) } ?? false)
             ))
         }
         let pinned = !autoOn && follows != true

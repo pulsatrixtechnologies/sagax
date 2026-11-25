@@ -190,10 +190,57 @@ export type MascotBotProfile = {
   description?: string;
   mascotExpression?: string | null;
   busy?: boolean;
+  /** What the bot is doing as the harness sees it (the sidebar's waiting dot reads the same field). */
+  activity?: string;
   unread?: boolean;
-  tasks?: Array<{ unread?: boolean; routineRunId?: string }> | null;
+  tasks?: Array<{ unread?: boolean; routineRunId?: string; activity?: string }> | null;
   messages?: MascotMessage[];
 };
+
+/**
+ * What a bot is doing right now, read once for every mascot: a card that
+ * waits for the person, a step that failed, a turn that runs, a finished
+ * turn not read yet, a question on screen. Nothing of the bot's profile and
+ * no pinned face: only what is happening.
+ */
+/** The live fields of a bot the mascots read. */
+export type MascotLiveBot = Pick<MascotBotProfile, "busy" | "activity" | "unread" | "tasks" | "messages"> & Partial<Pick<MascotBotProfile, "name" | "title" | "description" | "mascotExpression">>;
+
+function liveSignals(bot: MascotLiveBot) {
+  // the harness's receipts (digest, compaction) follow every turn; the mood
+  // reads the last row a person reads, not the record about it
+  const last = lastNonReceipt(bot.messages);
+  return {
+    last,
+    waiting: bot.activity === "waiting-on-you" || Boolean(bot.tasks?.some((task) => task.activity === "waiting-on-you")),
+    failed: last?.kind === "activity" && last.tool?.ok === false,
+    busy: Boolean(bot.busy),
+    unread: botShowsUnread(bot),
+    question: last?.kind === "options",
+  };
+}
+
+/** The six states an agent moves through, as the open-bot-avatar engine draws them (#5276). */
+export const AGENT_STATES = ["idle", "thinking", "working", "waiting", "blocked", "done"] as const;
+export type AgentState = (typeof AGENT_STATES)[number];
+
+/**
+ * The engine's state for what the bot is really doing (#5349), from the same
+ * live signals as stateForBot: it waits while a card or a question waits for
+ * the person, is blocked on a failed step, thinks while a turn runs and
+ * nothing has come out, works once a step is on screen, is done while a
+ * finished turn is unread, and rests otherwise. A pinned face and the bot's
+ * profile never set it: nobody chooses a fixed state.
+ */
+export function agentStateForBot(bot: MascotLiveBot): AgentState {
+  const live = liveSignals(bot);
+  if (live.waiting) return "waiting";
+  if (live.failed) return "blocked";
+  if (live.busy || bot.activity === "working") return live.last?.kind === "activity" ? "working" : "thinking";
+  if (live.unread) return "done";
+  if (live.question) return "waiting";
+  return "idle";
+}
 
 /**
  * Selects a state from live state first, then from what the bot is about.
@@ -204,14 +251,11 @@ export function stateForBot(bot: MascotBotProfile): MausState {
   const pinned = normalizeState(bot.mascotExpression);
   if (pinned) return pinned;
 
-  // the harness's receipts (digest, compaction) follow every turn; the mood
-  // reads the last row a person reads, not the record about it
-  const last = lastNonReceipt(bot.messages);
-
-  if (last?.kind === "activity" && last.tool?.ok === false) return "alerting";
-  if (bot.busy) return "working";
-  if (botShowsUnread(bot)) return "notifying";
-  if (last?.kind === "options") return "curious";
+  const live = liveSignals(bot);
+  if (live.failed) return "alerting";
+  if (live.busy) return "working";
+  if (live.unread) return "notifying";
+  if (live.question) return "curious";
 
   const profile = `${bot.name} ${bot.title ?? ""} ${bot.description ?? ""}`.toLowerCase();
   const matches = (words: RegExp) => words.test(profile);

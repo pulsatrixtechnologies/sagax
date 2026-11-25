@@ -212,9 +212,10 @@ describe("the Mascot gallery", () => {
 
   it("shows the Mascot, Shape, Color and Skin tabs with their values, one grid at a time", () => {
     const html = renderEditor(makeBot({ mascotLook: botMascotLook({ character: "shape", shape: "pumpkin" }) }));
-    expect([...html.matchAll(/data-appearance-tab="(\w+)"/g)].map((match) => match[1])).toEqual(["mascot", "shape", "color", "skin"]);
+    expect([...html.matchAll(/data-appearance-tab="(\w+)"/g)].map((match) => match[1])).toEqual(["mascot", "shape", "color", "skin", "material", "face", "states"]);
     expect(html).toMatch(/data-appearance-tab="mascot"[^>]*aria-selected="true"/);
-    expect(html.match(/data-appearance-tab-value=""/g)).toHaveLength(4);
+    // one value per tab: the three tabs of the engine's settings carry theirs too (#5349)
+    expect(html.match(/data-appearance-tab-value=""/g)).toHaveLength(7);
     expect(html).toContain(">Pumpkin<");
     // only the open tab's grid is drawn
     expect(html).toContain("data-character-option=");
@@ -227,7 +228,8 @@ describe("the Mascot gallery", () => {
 
   it("offers Shape only for Shapes and Color only for a character that takes it", () => {
     const tabsOf = (id: string) => editorTabsFor(MASCOTS.find((option) => option.id === id)!);
-    expect(tabsOf("shape")).toEqual(["mascot", "shape", "color", "skin"]);
+    // #5349: the shapes, the mascots the engine draws, also take its Material, Face and States
+    expect(tabsOf("shape")).toEqual(["mascot", "shape", "color", "skin", "material", "face", "states"]);
     expect(tabsOf("owl")).toEqual(["mascot", "color", "skin"]);
     expect(tabsOf("trombi")).toEqual(["mascot", "skin"]);
     // a tab the character does not offer opens Mascot

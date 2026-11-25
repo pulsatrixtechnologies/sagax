@@ -6,7 +6,7 @@ import { LiveReply } from "../LiveReply";
 import { ultracodeFromSelection } from "@/lib/ultracode-chrome";
 import { isViewersPrimaryBot } from "@/lib/primary-bot";
 import { viewerActorId } from "@/lib/viewer";
-import { stateForBot } from "@/lib/mascot";
+import { agentStateForBot, stateForBot } from "@/lib/mascot";
 import { askText, runSkill, skillPrompt } from "@/lib/verify-steps";
 import { appendComposerDraft, appendDraftAttachments } from "@/lib/drafts";
 import { useChatColumnClass } from "@/lib/chat-bubble-width";
@@ -301,7 +301,7 @@ export function ChatViewShell(m: Record<string, any>) {
         <PageBotStatus
           status={pageBotStatusLine(messages, bot.busy === true, openPage.openedAt ?? 0)}
           name={bot.name}
-          avatar={<BotAvatar bot={bot} primary={isViewersPrimaryBot(bot, viewerActorId(state.config))} state={stateForBot({ ...bot, messages })} size={22} />}
+          avatar={<BotAvatar bot={bot} primary={isViewersPrimaryBot(bot, viewerActorId(state.config))} state={stateForBot({ ...bot, messages })} agentState={agentStateForBot({ ...bot, messages })} size={22} />}
         />
       )}
       {/* The pane is too narrow for the side column: the card would cover the

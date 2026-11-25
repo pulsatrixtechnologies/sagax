@@ -41,12 +41,14 @@ import "@/components/achievements/achievements.css";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
-import { MAUS_COLORS, swatchStyle, type MausColor, type MausMotion } from "@/lib/mascot";
+import { AGENT_STATES, MAUS_COLORS, swatchStyle, type AgentState, type MausColor, type MausMotion } from "@/lib/mascot";
 import { MausAvatar } from "@/components/Avatar";
 import { MASCOT_SKIN_IDS, OWL_SKIN_TIER, botMascotSkin, type MascotSkinId } from "../../../shared/mascot-skins";
 import type { MascotColorGroup } from "../../../shared/mascot-colors";
-import { BUNBU_SKIN_TIER, BUNBU_SKINS, completeMascotLook, CRAB_SKIN_TIER, CRAB_SKINS, FROG_SKIN_TIER, FROG_SKINS, GRUMP_SKIN_TIER, GRUMP_SKINS, OGRE_SKIN_TIER, OGRE_SKINS, SHIBA_SKIN_TIER, SHIBA_SKINS, SHAPE_SKIN_TIER, SHAPE_SKINS, TROMBI_SKIN_TIER, TROMBI_SKINS, PUMPKIN_COLOR, SHAPE_SKINS_IN_BOT_COLOR, type MascotCharacter, type MascotLook, type MascotShape, type ShapeSkin, type SkinTier } from "../../../shared/mascot-look";
+import { BUNBU_SKIN_TIER, BUNBU_SKINS, completeMascotLook, engineLookOf, SHAPE_DEPTH, SHAPE_MATERIALS, SHAPE_MOODS, withEngineLook, type EngineLook, type ShapeMaterial, type ShapeMoodSetting, CRAB_SKIN_TIER, CRAB_SKINS, FROG_SKIN_TIER, FROG_SKINS, GRUMP_SKIN_TIER, GRUMP_SKINS, OGRE_SKIN_TIER, OGRE_SKINS, SHIBA_SKIN_TIER, SHIBA_SKINS, SHAPE_SKIN_TIER, SHAPE_SKINS, TROMBI_SKIN_TIER, TROMBI_SKINS, PUMPKIN_COLOR, SHAPE_SKINS_IN_BOT_COLOR, type MascotCharacter, type MascotLook, type MascotShape, type ShapeSkin, type SkinTier } from "../../../shared/mascot-look";
 import { ShapeMascot } from "@/components/ShapeMascot";
+import { materialsSupported } from "@/components/shape-material";
+import { Switch } from "@/components/SettingsPrimitives";
 import { bakedShapeFor } from "@/components/shape-avatar";
 import { parseEngineAvatar, type EngineAvatarReason } from "../../../shared/engine-avatar-def";
 import { SkinnedTrombi } from "@/components/skin-fx/SkinnedTrombi";
@@ -408,7 +410,7 @@ function MascotTile({ option, look, color, owlSkin, selected, inUse, lock, disab
 }
 
 /** The editor's tabs, in order: one grid shows at a time. */
-export const EDITOR_TABS = ["mascot", "shape", "color", "skin"] as const;
+export const EDITOR_TABS = ["mascot", "shape", "color", "skin", "material", "face", "states"] as const;
 export type EditorTab = (typeof EDITOR_TABS)[number];
 
 const EDITOR_TAB_LABEL = {
@@ -416,11 +418,203 @@ const EDITOR_TAB_LABEL = {
   shape: "floatingBots.mascot.shape",
   color: "mascot.color.title",
   skin: "mascot.skin.title",
+  material: "appearance.tab.material",
+  face: "appearance.tab.face",
+  states: "appearance.tab.states",
 } satisfies Record<EditorTab, LocaleKey>;
 
-/** The tabs a character offers: Shape only for Shapes, Color for a character that takes the bot's color. */
-export function editorTabsFor(option: Pick<MascotDefinition, "id" | "paint">): EditorTab[] {
-  return EDITOR_TABS.filter((tab) => (tab !== "shape" || option.id === "shape") && (tab !== "color" || option.paint.colors));
+/** The tabs of the engine's look settings (#5349): only for the mascots the open-bot-avatar engine draws, the shapes. */
+const ENGINE_TABS: readonly EditorTab[] = ["material", "face", "states"];
+
+/**
+ * The tabs a character offers: Shape only for Shapes, Color for a character
+ * that takes the bot's color. Material, Face and States show only for the
+ * shapes, the mascots the engine draws: an option a mascot does not take is
+ * hidden, never greyed. While a shape wears a material the engine paints
+ * (Fluffy, Glass), the material stands in place of the skin, so Skin is
+ * hidden; where this device cannot paint a material and the body is the
+ * flat Outline, the Material tab has nothing to offer and is hidden too.
+ */
+export function editorTabsFor(option: Pick<MascotDefinition, "id" | "paint">, look?: { material: ShapeMaterial; skin: string; materials: boolean }): EditorTab[] {
+  const engine = option.id === "shape";
+  const painted = engine && look ? look.materials && look.material !== "flat" : false;
+  const materialTab = engine && (look ? look.materials || look.skin !== "outline" : true);
+  return EDITOR_TABS.filter((tab) =>
+    (tab !== "shape" || engine)
+    && (tab !== "color" || option.paint.colors)
+    && (!ENGINE_TABS.includes(tab) || engine)
+    && (tab !== "material" || materialTab)
+    && (tab !== "skin" || !painted));
+}
+
+const MATERIAL_LABEL = {
+  flat: "appearance.material.flat",
+  fluffy: "appearance.material.fluffy",
+  glass: "appearance.material.glass",
+} satisfies Record<ShapeMaterial, LocaleKey>;
+
+const MOOD_LABEL = {
+  neutral: "appearance.mood.neutral",
+  happy: "appearance.mood.happy",
+} satisfies Record<ShapeMoodSetting, LocaleKey>;
+
+export const AGENT_STATE_LABEL = {
+  idle: "appearance.state.idle",
+  thinking: "appearance.state.thinking",
+  working: "appearance.state.working",
+  waiting: "appearance.state.waiting",
+  blocked: "appearance.state.blocked",
+  done: "appearance.state.done",
+} satisfies Record<AgentState, LocaleKey>;
+
+/** The eye colours offered: the bot colours' original set, after white and the engine's own ink. */
+export const EYE_COLORS: readonly string[] = ["#151515", "#ffffff", ...(["red", "orange", "yellow", "green", "teal", "blue", "purple", "pink"] as const).map((name) => MAUS_COLORS[name].toLowerCase())];
+
+/** A card of the engine's settings: the mascot as it would look, and the choice's name (the skin cards' size and ground). */
+function LookCard({ label, checked, disabled, role = "radio", data, onSelect, children }: { label: string; checked: boolean; disabled?: boolean; role?: "radio" | "button"; data: Record<string, string>; onSelect: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      role={role === "radio" ? "radio" : undefined}
+      disabled={disabled}
+      {...(role === "radio" ? { "aria-checked": checked } : { "aria-pressed": checked })}
+      title={label}
+      {...data}
+      onClick={onSelect}
+      className={cn(card, "relative h-[96px] gap-1.5 rounded-xl pt-1.5", focusRing, checked && on)}
+    >
+      <span className="grid size-[56px] place-items-center" aria-hidden="true">{children}</span>
+      <span className="w-full truncate text-center text-[12px] leading-4 text-ink">{label}</span>
+    </button>
+  );
+}
+
+const lookGrid = "grid grid-cols-[repeat(auto-fill,minmax(92px,1fr))] gap-2";
+
+interface EnginePanelProps {
+  look: CompleteLook;
+  settings: EngineLook;
+  color: MausColor;
+  disabled?: boolean;
+  onChange: (change: Partial<EngineLook>) => void;
+}
+
+/** The mascot of a settings card: the bot's shape in its colour and skin, live, with one setting changed. */
+function EngineThumb({ look, settings, color, agentState }: Pick<EnginePanelProps, "look" | "settings" | "color"> & { agentState?: AgentState }) {
+  return <ShapeMascot shape={look.shape} skin={look.skins.shape} color={color} size={52} detail="full" avatarDef={look.avatarDef} engineLook={settings} agentState={agentState} trackPointer={false} label={null} />;
+}
+
+/** Material: the body's finish (Flat, Fluffy, Glass) where this device paints them, and the body's volume. */
+function MaterialPanel({ look, settings, color, disabled, onChange }: EnginePanelProps) {
+  const materials = materialsSupported();
+  // the Outline skin is flat on purpose: no volume to set under it
+  const volume = settings.material !== "flat" && materials ? true : look.skins.shape !== "outline";
+  const depth = settings.depth ?? SHAPE_DEPTH.natural;
+  return (
+    <div className="flex min-w-0 flex-col gap-4" data-engine-panel="material">
+      {materials && (
+        <div className="flex flex-col gap-2">
+          <div className={lookGrid} role="radiogroup" aria-label={t("appearance.tab.material")}>
+            {SHAPE_MATERIALS.map((material) => (
+              <LookCard key={material} label={t(MATERIAL_LABEL[material])} checked={settings.material === material} disabled={disabled} data={{ "data-shape-material-option": material }} onSelect={() => onChange({ material })}>
+                <EngineThumb look={look} settings={{ ...settings, material }} color={color} />
+              </LookCard>
+            ))}
+          </div>
+          {settings.material !== "flat" && <p className="m-0 text-[12px] leading-4 text-ink-secondary" data-material-note="">{t("appearance.material.note")}</p>}
+        </div>
+      )}
+      {volume && (
+        <label className="flex flex-wrap items-center gap-3" data-shape-depth="">
+          <span className={heading}>{t("appearance.depth.title")}</span>
+          <input
+            type="range"
+            min={SHAPE_DEPTH.min}
+            max={SHAPE_DEPTH.max}
+            step={1}
+            value={depth}
+            disabled={disabled}
+            onChange={(event) => onChange({ depth: Number(event.target.value) === SHAPE_DEPTH.natural ? null : Number(event.target.value) })}
+            className="w-[180px] accent-accent"
+          />
+          <span className="w-6 text-right text-[12px] tabular-nums text-ink-secondary" aria-hidden="true">{depth}</span>
+        </label>
+      )}
+    </div>
+  );
+}
+
+/** Face: the mood over whatever the bot does, the eyes' colour, and whether they follow the pointer. */
+function FacePanel({ look, settings, color, disabled, onChange }: EnginePanelProps) {
+  return (
+    <div className="flex min-w-0 flex-col gap-4" data-engine-panel="face">
+      <section className="flex flex-col gap-2" aria-labelledby="appearance-mood-heading">
+        <h3 id="appearance-mood-heading" className={heading}>{t("appearance.mood.title")}</h3>
+        <div className={lookGrid} role="radiogroup" aria-labelledby="appearance-mood-heading">
+          {SHAPE_MOODS.map((mood) => (
+            <LookCard key={mood} label={t(MOOD_LABEL[mood])} checked={settings.mood === mood} disabled={disabled} data={{ "data-shape-mood-option": mood }} onSelect={() => onChange({ mood })}>
+              <EngineThumb look={look} settings={{ ...settings, mood }} color={color} />
+            </LookCard>
+          ))}
+        </div>
+      </section>
+      <section className="flex flex-col gap-2" aria-labelledby="appearance-eyes-heading">
+        <h3 id="appearance-eyes-heading" className={heading}>{t("appearance.eyes.title")}</h3>
+        <div className="flex flex-wrap items-center gap-3 px-1 py-1" role="radiogroup" aria-labelledby="appearance-eyes-heading">
+          <button
+            type="button"
+            role="radio"
+            disabled={disabled}
+            aria-checked={settings.eyeColor === null}
+            data-shape-eye-color="default"
+            onClick={() => onChange({ eyeColor: null })}
+            className={cn(chip, focusRing, settings.eyeColor === null ? chipOn : chipOff)}
+          >
+            {t("appearance.eyes.default")}
+          </button>
+          {EYE_COLORS.map((hex) => (
+            <button
+              key={hex}
+              type="button"
+              role="radio"
+              disabled={disabled}
+              aria-checked={settings.eyeColor === hex}
+              data-shape-eye-color={hex}
+              onClick={() => onChange({ eyeColor: hex })}
+              className={cn("size-7 rounded-full ring-1 ring-inset ring-hairline outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50", settings.eyeColor === hex && "ring-2 ring-ink/80 ring-offset-[3px] ring-offset-panel")}
+              style={{ backgroundColor: hex }}
+              title={hex}
+              aria-label={t("appearance.eyes.use", { color: hex })}
+            />
+          ))}
+        </div>
+      </section>
+      <label className="flex items-center justify-between gap-3" data-shape-follow-pointer="">
+        <span className="text-[13px] leading-5 text-ink">{t("appearance.eyes.follow")}</span>
+        <Switch checked={settings.followPointer} disabled={disabled} onClick={() => onChange({ followPointer: !settings.followPointer })} />
+      </label>
+    </div>
+  );
+}
+
+/**
+ * States: the engine's six agent states, each on the bot's own mascot. A
+ * click shows one on the preview; nothing is saved: the mascot takes its
+ * state from what the bot does (#5349).
+ */
+function StatesPanel({ look, settings, color, preview, onPreview }: Pick<EnginePanelProps, "look" | "settings" | "color"> & { preview: AgentState | null; onPreview: (state: AgentState | null) => void }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-2" data-engine-panel="states">
+      <p className="m-0 text-[12px] leading-4 text-ink-secondary" data-states-note="">{t("appearance.states.note")}</p>
+      <div className={lookGrid} role="group" aria-label={t("appearance.tab.states")}>
+        {AGENT_STATES.map((state) => (
+          <LookCard key={state} role="button" label={t(AGENT_STATE_LABEL[state])} checked={preview === state} data={{ "data-agent-state-preview": state }} onSelect={() => onPreview(preview === state ? null : state)}>
+            <EngineThumb look={look} settings={settings} color={color} agentState={state} />
+          </LookCard>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /** One of a list, at random (Randomize). */
@@ -554,7 +748,12 @@ export default function MascotLookEditor({
   };
 
   // the tabs: one grid at a time; a tab the character does not offer falls back to Mascot
-  const tabs = editorTabsFor(shownOption);
+  const settings = engineLookOf(look);
+  const tabs = editorTabsFor(shownOption, { material: settings.material, skin: look.skins.shape, materials: materialsSupported() });
+  const setEngine = (change: Partial<EngineLook>) => onPatch({ mascotLook: withEngineLook(look, change) as MascotLook });
+  // a state shown on the preview while the person looks at it: never saved, gone with the character shown
+  const [previewState, setPreviewState] = useState<AgentState | null>(null);
+  useEffect(() => setPreviewState(null), [shown]);
   const [tabChoice, setTab] = useState<EditorTab>(initialTab);
   const tab: EditorTab = tabs.includes(tabChoice) ? tabChoice : "mascot";
   const tint = MAUS_COLORS[bot.color] ?? MAUS_COLORS.green;
@@ -628,6 +827,9 @@ export default function MascotLookEditor({
       </span>
     ),
     skin: skinName,
+    material: t(MATERIAL_LABEL[settings.material]),
+    face: t(MOOD_LABEL[settings.mood]),
+    states: previewState ? t(AGENT_STATE_LABEL[previewState]) : t("appearance.states.auto"),
   };
   const skinPicker = shown === "owl" ? (
     <SkinPicker
@@ -687,6 +889,7 @@ export default function MascotLookEditor({
         activateLabel={slot?.openLabel}
         liveState={slot?.state}
         liveMotion={slot?.motion}
+        previewState={shown === "shape" ? previewState : null}
       />
   );
   if (heroOnly) return preview;
@@ -839,6 +1042,9 @@ export default function MascotLookEditor({
           <ColorPicker color={bot.color} groups={colorGroupsFor(shown, bot.color)} disabled={optionsOff} onSelect={(color) => onPatch({ color })} />
         )}
         {tab === "skin" && skinPicker}
+        {tab === "material" && <MaterialPanel look={look} settings={settings} color={bot.color} disabled={optionsOff} onChange={setEngine} />}
+        {tab === "face" && <FacePanel look={look} settings={settings} color={bot.color} disabled={optionsOff} onChange={setEngine} />}
+        {tab === "states" && <StatesPanel look={look} settings={settings} color={bot.color} preview={previewState} onPreview={setPreviewState} />}
       </div>
     </div>
   );

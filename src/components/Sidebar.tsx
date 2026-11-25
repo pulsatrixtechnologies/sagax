@@ -75,7 +75,7 @@ import { llmThreadTitlesEnabled } from "@/lib/feature-flags";
 import { useAdvancedMode } from "@/lib/interface-mode";
 
 import { SidebarMascotAvatar, SidebarMascotProvider } from "./SidebarMascotAvatar";
-import { stateForBot } from "@/lib/mascot";
+import { agentStateForBot, stateForBot } from "@/lib/mascot";
 import { mascotRowAnimated } from "@/lib/mascot-animate";
 import { useBotUnread } from "./unread-notice";
 import { cn } from "@/lib/cn";
@@ -1994,7 +1994,7 @@ export function BotListItem({
           bot={bot}
           primary={primary}
           primaryRingClassName="ring-sidebar"
-          state={stateForBot({ ...bot, messages: visible })}
+          state={stateForBot({ ...bot, messages: visible })} agentState={agentStateForBot({ ...bot, messages: visible })}
           size={avatarSize}
           motion={mascotMotion?.kind ?? "none"}
           motionKey={mascotMotion?.nonce ?? 0}

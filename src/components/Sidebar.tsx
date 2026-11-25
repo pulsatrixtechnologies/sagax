@@ -100,7 +100,7 @@ import { ListeningBadge } from "./ListeningCard";
 import { LiveCallPill } from "./LiveCallPill";
 import { nudgeLineText } from "@/lib/nudge-line";
 import { Layers, LogOut, PanelLeft, UserRound } from "lucide-react";
-import { backgroundThreads, personThreads } from "../../shared/background-threads";
+import { backgroundThreads, isListedBotThread, listedRows, personThreads, type ThreadListChoice } from "../../shared/background-threads";
 import { hideFromSidebar } from "@/lib/sidebar-hidden";
 import { PersonAvatar } from "./MessageAuthor";
 import { SidebarSharerBadge } from "./SidebarSharerBadge";
@@ -161,6 +161,7 @@ import { PulsatrixMark } from "./PulsatrixMark";
 
 import { SidebarFoot, SidebarRailFoot } from "./SidebarFoot";
 import { useShowThreads, useThreadsMode } from "@/lib/thread-preferences";
+import { useSidebarBotThreads } from "@/lib/sidebar-bot-threads";
 import { openBotConversationActions } from "./thread-home";
 import { useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
 import { iconUnreadDotPosition } from "@/lib/bot-unread";
@@ -1422,7 +1423,7 @@ type ThreadTreeActions = Omit<Parameters<typeof SidebarThreadRow>[0], "task" | "
  * One tree for every owner of threads: a bot (BotThreadList) and a
  * conversation with a person (PersonThreadList); the owner decides only
  * where its actions go. */
-function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, tasks: ownTasks, projects, selected, density, query, hidden, actions, rowState, activeActivityLabel, onNew, onNewKind, onNewInFolder, onReorder, canMarkRead, markRead, bulk, background, children }: {
+function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, tasks: ownTasks, projects, selected, density, query, hidden, actions, rowState, activeActivityLabel, onNew, onNewKind, onNewInFolder, onReorder, canMarkRead, markRead, bulk, background, apartRows, children }: {
   ownerId: string;
   ownerName: string;
   owner: FolderOwnerKind;
@@ -1456,6 +1457,9 @@ function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, task
   /** A bot's background threads (shared/background-threads.ts): never in the
    * list, shown instead of it by the list menu's "Show background". */
   background?: ThreadTreeTask[];
+  /** Rows that count toward six of their own in the folded list (the
+   * threads bots opened, with Show Bot threads on, #5289). */
+  apartRows?: (task: ThreadTreeTask) => boolean;
   children?: React.ReactNode;
 }) {
   const confirm = useConfirm();
@@ -1498,7 +1502,7 @@ function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, task
   // Pin, then newest update. Search keeps the same order among matches.
   // Background threads are listed whole, archived ones included: the
   // server archives them once they are done.
-  const visibleTasks = orderedThreadList(visibleSidebarThreads(tasks, openThreadId, query, projects, showAll || backgroundShown));
+  const visibleTasks = orderedThreadList(visibleSidebarThreads(tasks, openThreadId, query, projects, showAll || backgroundShown, backgroundShown ? undefined : apartRows));
   // A folder rises with the thread of its that sits highest in that order.
   // An empty index sorts last. Saved order breaks ties, and still governs
   // move up and down.
@@ -1752,9 +1756,15 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
   // The person's own conversations (shared/background-threads.ts): a
   // routine run, a hand-off, a thread a bot opened or an AI client's never
   // shows here; the selected one stays reachable. "Show background" lists them.
-  const tasks = personThreads(bot.tasks ?? [{ threadId: bot.threadId, title: t("task.newShort"), createdAt: 0 }], bot.threadId)
+  // With Settings > Appearance > Sidebar "Show Bot threads" on (off by
+  // default), a hand-off and a thread a bot opened are rows here (#5289).
+  const listChoice: ThreadListChoice = { botThreads: useSidebarBotThreads() };
+  // A row the background sweep archived is drawn open (listedRows); Archive
+  // all and Delete all keep to the person's own threads (botListedThreads).
+  const tasks = listedRows(personThreads(bot.tasks ?? [{ threadId: bot.threadId, title: t("task.newShort"), createdAt: 0 }], bot.threadId, listChoice), listChoice)
     .map((task) => ({ ...task, queued: Boolean(pendingQueued[task.threadId]?.length) }));
-  const background = backgroundThreads(bot.tasks ?? []);
+  const apartRows = listChoice.botThreads ? (task: ThreadTreeTask) => isListedBotThread(task, listChoice) : undefined;
+  const background = backgroundThreads(bot.tasks ?? [], listChoice);
   // the same live verb the chat pane derives from the visible tail
   // ("Reading a file"), passed to the active thread's row while it works
   const activeActivityLabel = liveActivityLabel(visibleMessages(bot).at(-1));
@@ -1811,7 +1821,7 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
   return (
     <ThreadTree ownerId={bot.id} ownerName={bot.name} owner="bot" folderOwner={bot} openThreadId={bot.threadId} tasks={tasks} projects={bot.projects ?? []}
       selected={selected} density={density} query={query} hidden={hidden} actions={actions} rowState={rowState} activeActivityLabel={activeActivityLabel} bulk={bulk}
-      background={background}
+      background={background} apartRows={apartRows}
       onNew={(projectId) => dispatch({ type: "newTask", botId: bot.id, ...(projectId ? { projectId } : {}) })}
       onNewKind={{ choices: newThreadChoices(confidentialByDefault), create: (confidential) => dispatch({ type: "newTask", botId: bot.id, confidential }) }}
       onNewInFolder={canChooseFolder && advanced ? () => setFolderDialog(true) : undefined}

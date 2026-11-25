@@ -123,21 +123,28 @@ const demandsAttention = (task: ThreadRowTask, activeId: string) =>
  * closed thread that becomes busy or unread is back at once, and a pin
  * keeps a closed or archived thread in the list. An archived thread is folded
  * away whatever happens in it, unless it is the open one. */
-export function visibleSidebarThreads<T extends ThreadRowTask>(tasks: T[], activeId: string, query = "", folders: BotProject[] = [], showAll = false): T[] {
+export function visibleSidebarThreads<T extends ThreadRowTask>(tasks: T[], activeId: string, query = "", folders: BotProject[] = [], showAll = false, apart?: (task: T) => boolean): T[] {
   const needle = query.trim().toLowerCase();
   if (needle) {
     return tasks.filter((task) => task.title.toLowerCase().includes(needle) || folders.some((folder) => folder.id === task.projectId && folder.name.toLowerCase().includes(needle)));
   }
   if (showAll) return tasks;
+  // `apart` rows (the threads bots opened, with Show Bot threads on, #5289)
+  // count toward six of their own, so they never push one of the person's
+  // threads out of the first six.
   let open = 0;
+  let openApart = 0;
   return orderedThreadList(tasks).filter((task) => {
     if (task.pinned === true) return true;
     // An archived thread stays archived until the person unarchives it, even
     // when something new lands in it; only the open one is shown.
     if (isArchived(task)) return task.threadId === activeId;
-    return task.closedBy || isSnoozed(task)
-      ? demandsAttention(task, activeId)
-      : open++ < 6 || demandsAttention(task, activeId);
+    // The server closes a hand-off once it is answered and a start_thread
+    // thread once it finishes: an `apart` row stays a row all the same, within
+    // its own six, or the list would only ever show the ones still running.
+    const isApart = apart?.(task) === true;
+    if ((task.closedBy && !isApart) || isSnoozed(task)) return demandsAttention(task, activeId);
+    return (isApart ? openApart++ : open++) < 6 || demandsAttention(task, activeId);
   });
 }
 

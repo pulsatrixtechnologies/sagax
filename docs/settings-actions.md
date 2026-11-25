@@ -234,6 +234,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Project | Thread menu > Move to project | `sagax_settings` get, set `thread.project` | simple |
 | Confidential (one way) | Thread menu > Confidential | `sagax_settings` get, set `thread.confidential` | simple |
 | Delete the conversation (true) | Thread menu > Delete | `sagax_settings` set `thread.delete` | suppression |
+| Whether a turn is running in this conversation; false stops it (Stop), a teammate's work thread too, for that thread only | Composer > Stop; teammate exchange view > Stop | `sagax_settings` get, set `thread.running` | simple |
 
 ### Routines
 
@@ -352,7 +353,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Sidebar logo | Settings > General > Appearance | `sagax_settings` get, set `appearance.sidebarLogo` | simple |
 | Keep people apart from bots in Unassigned (on, the default; off mixes them again) | Settings > Permissions > Privacy | `sagax_settings` get, set `appearance.sidebarPeopleApart` | simple |
 | Show the account menu above my name in the sidebar (on, the default; off keeps it behind the name) | Settings > General > Appearance > More appearance > Sidebar | `sagax_settings` get, set `appearance.accountMenuAbove` | simple |
-| Show the Bot threads section in the sidebar (off, the default; on lists the conversations between bots) | Settings > General > Appearance > More appearance > Sidebar | `sagax_settings` get, set `appearance.sidebarBotThreads` | simple |
+| Show the Bot threads section in the sidebar (off, the default; on lists the conversations between bots, and shows the threads bots opened, hand-offs and start_thread, in each bot's normal thread list) | Settings > General > Appearance > More appearance > Sidebar | `sagax_settings` get, set `appearance.sidebarBotThreads` | simple |
 | Primary Bot in the sidebar (tile, the large tile; row, a regular row) | Settings > General > Appearance > More appearance > Sidebar | `sagax_settings` get, set `appearance.primaryBotStyle` | simple |
 | Routines badge | Settings > General > Appearance | `sagax_settings` get, set `appearance.routinesBadge` | simple |
 | Sidebar density | Settings > General > Appearance | `sagax_settings` get, set `appearance.sidebarDensity` | simple |

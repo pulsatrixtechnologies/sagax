@@ -581,6 +581,15 @@ add({
   write: (ids, v) => v === true ? { method: "DELETE", path: `/api/bots/${enc(ids.botId!)}/tasks/${enc(ids.target!)}` } : "value is true.",
   classes: always("delete"),
 });
+// #5233: Stop, as the composer and the teammate exchange view send it (POST
+// /api/bots/:id/interrupt with the thread): false stops the turn running in
+// that conversation only, on any bot of the person; get says whether one is
+// running. The route answers for what the person may stop.
+add({
+  key: "thread.running", family: "thread", target: "thread", value: "boolean", label: "Whether a turn is running in this conversation; false stops it (Stop), a teammate's work thread too, for that thread only", where: "Composer > Stop; teammate exchange view > Stop",
+  read: (ids) => ({ path: "/api/bots", query: { messages: "0" }, list: "bots", match: "id", field: `tasks[threadId=${ids.target}].busy` }),
+  write: (ids, v) => v === false ? { method: "POST", path: `/api/bots/${enc(ids.botId!)}/interrupt`, body: { threadId: ids.target } } : "value is false: it stops the running turn. A turn starts with a message, never from here.",
+});
 
 // ── routine (PATCH /api/routines/:id, Automations) ────────────────────
 function routineField(key: string, field: string, value: SettingValue, label: string, where: string, classes?: SettingSpec["classes"]): void {
@@ -904,7 +913,7 @@ pref("appearance.runCard", "appearance", "omb-show-run-card", "boolean", "This r
 pref("appearance.sidebarLogo", "appearance", "sagax-show-sidebar-logo", "boolean", "Sidebar logo", "Settings > General > Appearance");
 pref("appearance.sidebarPeopleApart", "appearance", "sagax.sidebarPeopleApart.v1", "enum:on|off", "Keep people apart from bots in Unassigned (on, the default; off mixes them again)", "Settings > Permissions > Privacy");
 pref("appearance.accountMenuAbove", "appearance", "sagax.accountMenuAbove.v1", "enum:on|off", "Show the account menu above my name in the sidebar (on, the default; off keeps it behind the name)", "Settings > General > Appearance > More appearance > Sidebar");
-pref("appearance.sidebarBotThreads", "appearance", "sagax.sidebarBotThreads.v1", "enum:on|off", "Show the Bot threads section in the sidebar (off, the default; on lists the conversations between bots)", "Settings > General > Appearance > More appearance > Sidebar");
+pref("appearance.sidebarBotThreads", "appearance", "sagax.sidebarBotThreads.v1", "enum:on|off", "Show the Bot threads section in the sidebar (off, the default; on lists the conversations between bots, and shows the threads bots opened, hand-offs and start_thread, in each bot's normal thread list)", "Settings > General > Appearance > More appearance > Sidebar");
 pref("appearance.primaryBotStyle", "appearance", "sagax.primaryBotStyle.v1", "enum:tile|row", "Primary Bot in the sidebar (tile, the large tile; row, a regular row)", "Settings > General > Appearance > More appearance > Sidebar");
 pref("appearance.routinesBadge", "appearance", "sagax-show-routines-badge", "boolean", "Routines badge", "Settings > General > Appearance");
 pref("appearance.sidebarDensity", "appearance", "openmausbot.sidebarDensity", "string", "Sidebar density", "Settings > General > Appearance");

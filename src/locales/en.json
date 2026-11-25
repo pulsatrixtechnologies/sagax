@@ -7041,7 +7041,7 @@
   "settings.accountMenuAbove.title": "Show the account menu above my name",
   "settings.allHistory.show": "Show the All history row in the bot panel",
   "settings.allHistory.title": "Show All history",
-  "settings.sidebarBotThreads.show": "Show the Bot threads section in the sidebar",
+  "settings.sidebarBotThreads.show": "Show the Bot threads section in the sidebar, and the threads bots opened in each bot's thread list",
   "settings.sidebarBotThreads.title": "Show Bot threads",
   "settings.showSuggestions.show": "Show the Suggestions card in the bot panel",
   "settings.showSuggestions.title": "Show suggestions",

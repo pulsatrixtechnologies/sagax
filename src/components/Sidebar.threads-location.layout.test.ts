@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { StoreProvider, type Bot } from "@/state/store";
 
-const prefs = vi.hoisted(() => ({ show: true, location: "header" as "header" | "sidebar" }));
+const prefs = vi.hoisted(() => ({ show: true, location: "header" as "header" | "sidebar", botThreads: false }));
+vi.mock("@/lib/sidebar-bot-threads", () => ({ useSidebarBotThreads: () => prefs.botThreads }));
 vi.mock("./DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({}) }));
 vi.mock("@/lib/thread-preferences", async (original) => ({ ...await original<typeof import("@/lib/thread-preferences")>(),
   useShowThreads: () => prefs.show,
@@ -30,7 +31,7 @@ const sidebar = () => renderToStaticMarkup(createElement(StoreProvider, null,
   createElement(BotListItem, { bot, density: "comfortable", query: "earl", onMenu: () => undefined })));
 const header = () => renderToStaticMarkup(createElement(StoreProvider, null, createElement(TaskPicker, { bot })));
 
-beforeEach(() => { prefs.show = true; prefs.location = "header"; });
+beforeEach(() => { prefs.show = true; prefs.location = "header"; prefs.botThreads = false; });
 
 describe("threads location: one place at a time", () => {
   it("In the chat header: the header button is there and the sidebar lists nothing under the bot", () => {
@@ -70,6 +71,83 @@ describe("threads location: one place at a time", () => {
     expect(html).not.toMatch(/>Threads</);
     expect(html).not.toContain("No threads yet");
     expect(html).toContain('draggable="true"');
+  });
+
+  // #5289: a hand-off another bot opened and a thread the bot opened itself
+  it("lists the threads bots opened under the bot only when Show Bot threads is on", () => {
+    prefs.location = "sidebar";
+    const busy: Bot = { ...bot, projects: [], tasks: [
+      { threadId: "current", title: "Current", createdAt: 1 },
+      { threadId: "ticket", title: "#1234 - Order script", createdAt: 2, openedBy: { botId: "nimbus", name: "Nimbus", kind: "work", at: 2 } },
+      { threadId: "self", title: "Thread Test", createdAt: 3, openedBy: { botId: "atlas", name: "Atlas", at: 3 } },
+      { threadId: "run", title: "Nightly", createdAt: 4, routineRunId: "run-1" },
+      { threadId: "client", title: "From a client", createdAt: 5, openedBy: { botId: "agent:acme", name: "Acme", kind: "agent", at: 5 } },
+    ] };
+    const list = () => renderToStaticMarkup(createElement(StoreProvider, null, createElement(BotThreadList, { bot: busy, selected: true })));
+    const off = list();
+    expect(off).toContain('data-sidebar-thread-row="current"');
+    for (const id of ["ticket", "self", "run", "client"]) expect(off).not.toContain(`data-sidebar-thread-row="${id}"`);
+    prefs.botThreads = true;
+    const on = list();
+    for (const id of ["current", "ticket", "self"]) expect(on).toContain(`data-sidebar-thread-row="${id}"`);
+    expect(on).toContain("#1234 - Order script");
+    expect(on).toContain("Thread Test");
+    expect(on).toContain("opened by Nimbus");
+    for (const id of ["run", "client"]) expect(on).not.toContain(`data-sidebar-thread-row="${id}"`);
+  });
+
+  // #5289 review: the rows must stay (the background sweep archives a
+  // finished bot thread after 30 minutes) and must never push the person's
+  // own threads out of the first rows.
+  it("Show Bot threads on: swept bot threads stay as rows, and the person's rows are the ones shown with it off", () => {
+    prefs.location = "sidebar";
+    const mine = Array.from({ length: 8 }, (_, i) => ({ threadId: `mine-${i}`, title: `Mine ${i}`, createdAt: 10 + i }));
+    const tickets = Array.from({ length: 8 }, (_, i) => ({ threadId: `ticket-${i}`, title: `Ticket ${i}`, createdAt: 100 + i, archivedAt: 200 + i, autoArchived: true as const,
+      openedBy: { botId: "nimbus", name: "Nimbus", kind: "work" as const, at: 100 + i } }));
+    const putAway = { threadId: "put-away", title: "Put away", createdAt: 300, archivedAt: 301, openedBy: { botId: "nimbus", name: "Nimbus", kind: "work" as const, at: 300 } };
+    const busy: Bot = { ...bot, threadId: "mine-7", projects: [], tasks: [...mine, ...tickets, putAway] };
+    const rowsOf = (html: string) => [...html.matchAll(/data-sidebar-thread-row="([^"]+)"/g)].map((match) => match[1]);
+    const list = () => rowsOf(renderToStaticMarkup(createElement(StoreProvider, null, createElement(BotThreadList, { bot: busy, selected: true }))));
+    const off = list();
+    expect(off.filter((id) => id.startsWith("ticket") || id === "put-away")).toEqual([]);
+    expect(off.length).toBe(6);
+    prefs.botThreads = true;
+    const on = list();
+    // every row of the person shown with it off is still shown
+    expect(on.filter((id) => id.startsWith("mine")).sort()).toEqual([...off].sort());
+    // the six newest bot threads, although the sweep archived them
+    expect(on.filter((id) => id.startsWith("ticket")).sort()).toEqual(["ticket-2", "ticket-3", "ticket-4", "ticket-5", "ticket-6", "ticket-7"]);
+    // the one the person archived stays put away
+    expect(on).not.toContain("put-away");
+  });
+
+  // #5289 review: the server marks a hand-off closed as soon as it is answered
+  // and a start_thread thread closed when it finishes (closedBy). With the
+  // choice on those rows stay too, alone or swept later, within their own six;
+  // a thread of the person a bot closed still folds, on or off.
+  it("Show Bot threads on: an answered hand-off and a finished thread stay as rows", () => {
+    prefs.location = "sidebar";
+    const closedBy = { botId: "nimbus", name: "Nimbus", at: 50 };
+    const busy: Bot = { ...bot, projects: [], tasks: [
+      { threadId: "current", title: "Current", createdAt: 1 },
+      { threadId: "mine-closed", title: "Mine, closed by a bot", createdAt: 2, closedBy },
+      { threadId: "ticket", title: "#1234 - Order script", createdAt: 3, openedBy: { botId: "nimbus", name: "Nimbus", kind: "work", at: 3 }, closedBy },
+      { threadId: "ticket-swept", title: "#1235 - Printer", createdAt: 4, archivedAt: 60, autoArchived: true, openedBy: { botId: "nimbus", name: "Nimbus", kind: "work", at: 4 }, closedBy },
+      { threadId: "self", title: "Thread Test", createdAt: 5, openedBy: { botId: "atlas", name: "Atlas", at: 5 }, closedBy: { botId: "atlas", name: "Atlas", at: 51 } },
+      ...Array.from({ length: 7 }, (_, i) => ({ threadId: `done-${i}`, title: `Done ${i}`, createdAt: 10 + i, openedBy: { botId: "nimbus", name: "Nimbus", kind: "work" as const, at: 10 + i }, closedBy })),
+    ] };
+    const rowsOf = (html: string) => [...html.matchAll(/data-sidebar-thread-row="([^"]+)"/g)].map((match) => match[1]);
+    const list = () => rowsOf(renderToStaticMarkup(createElement(StoreProvider, null, createElement(BotThreadList, { bot: busy, selected: true }))));
+    expect(list()).toEqual(["current"]);
+    prefs.botThreads = true;
+    const on = list();
+    expect(on).toContain("current");
+    expect(on).not.toContain("mine-closed");
+    // six rows of their own, the newest first: the seven later hand-offs take
+    // them here, so the older closed ones fold behind "Show all"
+    expect(on.filter((id) => id !== "current").sort()).toEqual(["done-1", "done-2", "done-3", "done-4", "done-5", "done-6"]);
+    busy.tasks = busy.tasks!.filter((task) => !task.threadId.startsWith("done-"));
+    expect(list().sort()).toEqual(["current", "self", "ticket", "ticket-swept"]);
   });
 
   it("With threads off neither place shows threads", () => {

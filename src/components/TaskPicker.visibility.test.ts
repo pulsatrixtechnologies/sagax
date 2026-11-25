@@ -5,6 +5,7 @@ import type { Bot, Group } from "@/state/store";
 
 const fixture = vi.hoisted(() => ({
   showThreads: true,
+  botThreads: false,
   location: "header" as "header" | "sidebar",
   queued: {} as Record<string, unknown[]>,
   bots: [] as Bot[],
@@ -12,6 +13,7 @@ const fixture = vi.hoisted(() => ({
   threadReturn: null as null | { ownerId: string; threadId: string },
   dispatch: vi.fn(),
 }));
+vi.mock("@/lib/sidebar-bot-threads", () => ({ useSidebarBotThreads: () => fixture.botThreads }));
 vi.mock("@/lib/thread-preferences", () => ({ useShowThreads: () => fixture.showThreads, useThreadsLocationChoice: () => fixture.location, useThreadsMode: () => ((fixture.showThreads) ? fixture.location : "one") as "one" | "header" | "sidebar" }));
 vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
@@ -36,6 +38,7 @@ const bot: Bot = {
 };
 beforeEach(() => {
   fixture.showThreads = true;
+  fixture.botThreads = false;
   fixture.location = "header";
   fixture.queued = {};
   fixture.bots = [];
@@ -110,6 +113,18 @@ describe("the header picker lists only the open bot's threads", () => {
     expect(markup).toContain("Show background");
     expect(botPickerThreads(pepper).map((task) => task.threadId).sort())
       .toEqual(["current", "idle", "waiting", "working", "queued", "unread", "peer-adopted"].sort());
+  });
+
+  // #5289: Settings > Appearance > Sidebar, "Show Bot threads" (off by default)
+  it("lists the threads bots opened in the normal list once Show Bot threads is on", () => {
+    fixture.bots = [pepper, talon];
+    fixture.groups = [room];
+    fixture.botThreads = true;
+    const markup = renderToStaticMarkup(createElement(TaskPicker, { bot: pepper, initialOpen: true }));
+    expect(markup).toContain("@Talon · work");
+    for (const title of ["Nightly", "From Claude"]) expect(markup).not.toContain(title);
+    expect(botPickerThreads(pepper, { botThreads: true }).map((task) => task.threadId)).toContain("peer-opened");
+    expect(botPickerBackground(pepper, { botThreads: true }).map((task) => task.threadId)).toEqual(["agent"]);
   });
 
   it("lists background work behind Show background, newest first, never a routine run", () => {

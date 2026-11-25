@@ -472,7 +472,8 @@ private struct BotPanelSoul: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Who this bot is and the rules it never breaks. Always in its context.")
+            // #5327: the desktop's own soul intro and context (SoulField), never a sentence about rules
+            Text(verbatim: "\(AppStrings.localized("Who this bot is: its identity, its persona and its voice. A rule goes in Rules, a procedure in a skill, a reference in the bot folder.")) \(AppStrings.localized("Read by the bot on every turn."))")
                 .panelText(13, 21.125)
                 .foregroundStyle(theme.inkSecondary)
             PanelLabel(text: "Standing instructions (SOUL.md)")

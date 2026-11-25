@@ -98344,7 +98344,7 @@
         }
       }
     },
-    "Who this bot is and the rules it never breaks.": {
+    "Who this bot is: its identity, its persona and its voice. A rule goes in Rules, a procedure in a skill, a reference in the bot folder.": {
       "localizations": {
         "en": {
           "stringUnit": {
@@ -98360,29 +98360,7 @@
         }
       }
     },
-    "Who this bot is and the rules it never breaks. Always in its context.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Who this bot is and the rules it never breaks. Always in its context."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Qui est ce bot et les règles qu'il n'enfreint jamais. Toujours dans son contexte."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Quem é este bot e as regras que ele nunca quebra. Sempre no contexto dele."
-          }
-        }
-      }
-    },
-    "Who this bot is and the rules it never breaks. Keep it short; put step-by-step procedure into a skill.": {
+    "Who this bot is, its persona and how it speaks. Rules go in Rules; a procedure goes in a skill.": {
       "localizations": {
         "en": {
           "stringUnit": {

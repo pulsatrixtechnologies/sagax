@@ -1,3 +1,4 @@
+import { openAccountMenu } from "./ui-click.ts";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -51,7 +52,7 @@ type Computer = { id: string; name: string; section: string | null; state: strin
     const click = async (name: string, role?: string) => ui("click", "--ref", await ref(name, role));
     const computers = async (): Promise<Computer[]> => (await api("GET", "/api/team-computers")).computers;
     const receipts = () => provider("GET", "/__fixture");
-    const openMap = async () => { await click("You"); await click("Tools"); await click("Team map"); await expect.poll(snapshot).toContain('region "Team canvas"'); };
+    const openMap = async () => { await openAccountMenu({ click, snapshot }); await click("Tools"); await click("Team map"); await expect.poll(snapshot).toContain('region "Team canvas"'); };
     await api("PATCH", `/api/bots/${fixture.botId}`, { name: "Ada", section: "Engineering" });
     await api("POST", "/api/sidebar-sections", { name: "Research" });
     await api("POST", "/api/bots", { name: "Ben", section: "Research", modelSelection: { instanceId: "claude", model: "claude-sonnet-5" } });

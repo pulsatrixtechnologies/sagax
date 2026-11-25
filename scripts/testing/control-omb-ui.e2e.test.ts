@@ -20,7 +20,7 @@ import { removeTempDir, waitForExit } from "../../server/testing/cleanup.ts";
 import { runControlOmb } from "../control-omb.ts";
 import { UI_TOOLS_DIR } from "./control-omb-ui.ts";
 import { fixtureApi } from "./preview-fixture.ts";
-import { openSettingsPageJs, openSettingsSubPageJs } from "./ui-click.ts";
+import { openAccountMenu, openSettingsPageJs, openSettingsSubPageJs } from "./ui-click.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const CLI = join(ROOT, "scripts", "control-omb.ts");
@@ -107,6 +107,25 @@ function launch(args: string[]): Promise<Launched> {
 
 const ui = (verb: string, handle: string, ...args: string[]) =>
   runControlOmb(["ui", verb, "--ui", handle, ...args]) as Promise<Record<string, any>>;
+
+async function openFixtureAccountMenu(handle: string) {
+  await openAccountMenu({
+    click: (name) => ui("click", handle, "--name", name),
+    snapshot: async () => (await ui("snapshot", handle)).snapshot,
+  });
+}
+
+/** The fixture providers each have a single account, so All models takes
+ * the person directly from their provider to its list of models. */
+async function openProviderModels(handle: string, provider: string) {
+  for (const selector of ['[data-mode-row="all"]', `[data-model-cascade-provider=${JSON.stringify(provider)}]`]) {
+    await expect.poll(async () => (await ui("eval", handle, "--js", `(() => {
+      const row = document.querySelector(${JSON.stringify(selector)});
+      row?.click();
+      return Boolean(row);
+    })()`)).result, { timeout: 10_000 }).toBe(true);
+  }
+}
 
 /** Interactive refs by accessible name, from a snapshot's `refs` table. */
 const refsNamed = (snapshot: Record<string, any>, name: string, role?: string) =>
@@ -210,7 +229,7 @@ describe("control-omb ui drives the real renderer", () => {
       };
       return true;
     })()`);
-    await click("You");
+    await openFixtureAccountMenu(info.ui);
     await click("Settings");
     // Settings is its own chunk (src/components/lazy-screens.tsx): opened before
     // the idle prefetch has fetched it, it paints once the chunk arrives.
@@ -281,7 +300,7 @@ describe("control-omb ui drives the real renderer", () => {
       launched = await launch([]);
       const { info } = launched;
       const evaluate = async (js: string) => (await ui("eval", info.ui, "--js", js)).result;
-      await ui("click", info.ui, "--name", "You");
+      await openFixtureAccountMenu(info.ui);
       await ui("click", info.ui, "--name", "Settings");
       await expect.poll(() => evaluate(openSettingsPageJs("Providers")), { timeout: 10_000 }).toBe(true);
       // The page and its add flow render after a click: wait for each control.
@@ -312,15 +331,8 @@ describe("control-omb ui drives the real renderer", () => {
       await expect.poll(() => evaluate(`document.querySelector('[data-models-page]').textContent`)).toContain("azure-chat");
       await ui("screenshot", info.ui, "--out", join(evidenceDir, "azure-models.png"));
       await evaluate(`document.querySelector('[aria-label="Close settings"]').click(); true`);
-      // #2106: the chat bar's model chip opens the model menu. Since #4329 it
-      // has two steps: the providers ("a server added by address is a
-      // provider under the name the person gave it"), then its models.
       await clickWhenShown('main [data-composer-actions] button[data-tour="model"]');
-      await expect.poll(() => evaluate(`(() => {
-        if (document.querySelector('[data-model-option="azure-chat"]')) return true;
-        [...document.querySelectorAll('[data-model-menu] [data-model-provider^="server:"]')].find((row) => (row.textContent || "").trim().startsWith("Azure Foundry"))?.click();
-        return false;
-      })()`), { timeout: 10_000 }).toBe(true);
+      await openProviderModels(info.ui, `server:${instance.providerAccount?.serverId ?? instance.instanceId}`);
       expect(await evaluate(`document.querySelector('[data-model-menu]').textContent`)).toContain("Azure Foundry");
       await evaluate(`document.querySelector('[data-model-option="azure-chat"]').scrollIntoView({ block: "center" }); true`);
       await ui("screenshot", info.ui, "--out", join(evidenceDir, "azure-model-picker.png"));
@@ -459,7 +471,8 @@ describe("control-omb ui drives the real renderer", () => {
     const scopeShot = join(evidenceDir, "model-dropdown.png");
     mkdirSync(evidenceDir, { recursive: true });
     await ui("screenshot", info.ui, "--out", scopeShot);
-    // Active models are immediately visible in the flat provider groups.
+    // The seeded Claude account offers its models under All models.
+    await openProviderModels(info.ui, "anthropic");
     await expect.poll(async () => (await ui("eval", info.ui, "--js", `Boolean(document.querySelector('[data-model-menu] [data-model-option="${nextModel.id}"]'))`)).result, { timeout: 10_000 }).toBe(true);
     await ui("eval", info.ui, "--js", `document.querySelector('[data-model-menu] [data-model-option="${nextModel.id}"]').click(); true`);
     await expect.poll(async () => (await savedBot()).modelSelection.model, { timeout: 10_000 }).toBe(nextModel.id);
@@ -526,7 +539,7 @@ describe("control-omb ui drives the real renderer", () => {
     expect(collapsed.snapshot).toContain("Expand the run");
     expect(collapsed.snapshot).not.toContain('list "Run steps"');
 
-    await ui("click", info.ui, "--name", "You");
+    await openFixtureAccountMenu(info.ui);
     await ui("click", info.ui, "--name", "Settings");
     // The Inspector button's switch sits in Developer's options since 0.8.64,
     // which are Updates > Advanced since #4457 (seven pages).

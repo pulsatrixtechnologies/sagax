@@ -9,7 +9,7 @@ import { runControlOmb } from "../control-omb.ts";
 import { request } from "../mcp-server.ts";
 import { UI_TOOLS_DIR } from "./control-omb-ui.ts";
 import { chooseStartFromJs, NEW_BOT_ROOT_JS, openNewBotDialog, openTemplatesCatalog, START_FROM, startFromGroupsJs } from "./compose-flow.ts";
-import { clickAccessible, openSettingsPageJs } from "./ui-click.ts";
+import { openAccountMenu, clickAccessible, openSettingsPageJs } from "./ui-click.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const binary = resolveAgentBrowserBinary({ dataDir: UI_TOOLS_DIR, env: process.env });
@@ -67,7 +67,7 @@ describe("Preset bots in the real renderer", () => {
     // Developer on 2026-11-08 (ModelsDeveloperCards, EnginesSettings.tsx), and
     // it is a row of Providers > Models since #4457 (NewBotDefaultsRow).
     await expect.poll(snapshot, { timeout: 10_000 }).toContain('button "You"');
-    await click("You");
+    await openAccountMenu({ click, snapshot });
     await click("Settings");
     await expect.poll(() => evaluate(openSettingsPageJs("Providers")), { timeout: 10_000 }).toBe(true);
     await expect.poll(snapshot, { timeout: 10_000 }).toContain("Share as preset…");

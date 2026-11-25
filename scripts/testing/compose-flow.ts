@@ -11,7 +11,7 @@
 
 import { readFileSync } from "node:fs";
 import { jsLiteral } from "./js-literal.mjs";
-import { clickAccessible, dismissOverlays } from "./ui-click.ts";
+import { openAccountMenu, clickAccessible, dismissOverlays } from "./ui-click.ts";
 
 export type CatalogFlow = {
   click: (name: string) => Promise<unknown>;
@@ -145,7 +145,7 @@ export async function openNewBotDialog(flow: NewBotFlow): Promise<void> {
   if (!(await onTeamMap())) {
     // Team map sits in the account menu's Tools submenu (#1064), as the
     // other team smokes reach it (team-computers-ui, team-canvas-ui).
-    await click("You");
+    await openAccountMenu({ click, snapshot: flow.snapshot });
     await click("Tools");
     await click("Team map");
     await until(onTeamMap, 12_000, "Team map");

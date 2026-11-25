@@ -54,6 +54,7 @@ vi.mock("./settings/ProviderKeys", async (importOriginal) => ({
 const { Composer } = await import("./Composer");
 const { ComposerPlusMenu } = await import("./ComposerControls");
 const { setLocale } = await import("@/lib/i18n");
+const { setComposerVoiceMode } = await import("@/lib/composer-voice");
 const { openProviderKeyDialog } = await import("./settings/ProviderKeys");
 const { forgetVoiceModeStatus } = await import("@/lib/voice-mode/api");
 
@@ -82,6 +83,7 @@ function type(value: string) {
 
 beforeEach(() => {
   setLocale("en");
+  setComposerVoiceMode("dictation");
   fixture.dispatch.mockClear();
   fixture.toggleModel.mockClear();
   fixture.closeModel.mockClear();
@@ -115,6 +117,8 @@ describe("composer controls (the reference app's prompt bar)", () => {
   });
 
   it("paints the Voice button in the open bot's color, and keeps a grey bot on the ink button", () => {
+    // M-20261125-072: the waves are the button's face once the person keeps the voice conversation
+    setComposerVoiceMode("conversation");
     render(createElement(Composer, { bot: bot("pink") }));
     const pink = $("[data-composer-voice]")!.getAttribute("style") ?? "";
     expect(pink).toContain("--cta-fill: #d84f8b");

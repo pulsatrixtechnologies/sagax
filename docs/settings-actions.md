@@ -393,6 +393,8 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 
 | Réglage | Où dans l'UI | Outil du bot | Classe |
 |---|---|---|---|
+| What a click on the chat bar's voice button starts (dictation, the default; conversation: the voice conversation) | The chat bar > the voice button's arrow | `sagax_settings` get, set `models.composerVoiceMode` | simple |
+| The dictation's language (auto, the default: detected; or a language code such as fr, en) | The chat bar > the voice button's arrow | `sagax_settings` get, set `models.dictationLanguage` | simple |
 | Voice mode (voice, speed, language) | Settings > Providers > Voice > Voice mode | `sagax_settings` get, set `models.voiceMode` | simple |
 | Fish Audio model | Settings > Providers > Voice | `sagax_settings` get, set `models.fishModel` | simple; organisation : organisation |
 | Image generation | Settings > Providers > Models > Images | `sagax_settings` get, set `models.imageGen` | simple; organisation : organisation |

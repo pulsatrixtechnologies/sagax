@@ -7,6 +7,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, Group } from "@/state/store";
 import { setLocale } from "@/lib/i18n";
+import { setComposerVoiceMode } from "@/lib/composer-voice";
 
 const bot: Bot = {
   id: "solo-bot", threadId: "solo-bot-thread", name: "Atlas", title: "", description: "",
@@ -53,13 +54,22 @@ describe("voice mode button in the composer", () => {
 
   it("is absent in a group chat, the mic stays", () => {
     flushSync(() => root.render(createElement(Composer, { group, members: [bot] })));
+    flushSync(() => container.querySelector<HTMLElement>("[data-composer-voice-menu-toggle]")!.click());
+    expect(container.querySelector("[data-voice-mode-row]")).toBeNull();
     expect(container.querySelector("[data-voice-mode]")).toBeNull();
     expect(container.querySelector("[data-composer-mic]")).not.toBeNull();
   });
 
-  it("is present in a lone bot's chat", () => {
+  // M-20261125-072: dictation and the voice conversation are one button,
+  // the face is the mode kept; both stay reachable in a lone bot's chat
+  it("is present in a lone bot's chat: the mic by default with the conversation in the button's menu, the waves once chosen", () => {
+    setComposerVoiceMode("dictation");
     flushSync(() => root.render(createElement(Composer, { bot })));
-    expect(container.querySelector("[data-voice-mode]")).not.toBeNull();
     expect(container.querySelector("[data-composer-mic]")).not.toBeNull();
+    flushSync(() => container.querySelector<HTMLElement>("[data-composer-voice-menu-toggle]")!.click());
+    flushSync(() => container.querySelector<HTMLElement>('[data-voice-mode-row="conversation"]')!.click());
+    expect(container.querySelector("[data-voice-mode]")).not.toBeNull();
+    expect(container.querySelector("[data-composer-mic]")).toBeNull();
+    setComposerVoiceMode("dictation");
   });
 });

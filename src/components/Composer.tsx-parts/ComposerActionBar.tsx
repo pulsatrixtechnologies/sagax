@@ -4,6 +4,7 @@ import { sendBlockStops, type SendBlock } from "@/lib/send-state";
 import type { Bot, Group } from "@/state/store";
 import { CallButton } from "../CallView";
 import { NudgeButton } from "../NudgeButton";
+import { ComposerVoiceButton } from "../ComposerVoiceButton";
 import {
   ComposerCtaSeat,
   ComposerMicButton,
@@ -103,17 +104,6 @@ export function ComposerActionBar({
         <Square size={14} className="fill-current" aria-hidden="true" />
       </button>
     )}
-  {!locked && (
-    <ComposerMicButton
-      onClick={clickMic}
-      onPress={pressMic}
-      onRelease={releaseMic}
-      hidden={dictating || voiceNoting}
-      needsSetup={!engine}
-      engine={engine}
-      shortcut={dictationShortcut}
-    />
-  )}
   {!locked && dictating && (
     <DictationChip
       seconds={dictation.seconds}
@@ -152,8 +142,9 @@ export function ComposerActionBar({
       <span className="r98-send-label">{t("chat.send")}</span>
     </button>
   )}
-  {/* No Send button: Enter sends. Grok Bot's round CTA turns into the
-      send arrow while something is typed, Voice otherwise. */}
+  {/* No Send button: Enter sends. The seat holds the one voice button
+      (M-20261125-072: the mic for dictation or the waves for the voice
+      conversation, and its arrow), and the send arrow once something is typed. */}
   {!dictating && !voiceNoting && (() => {
     const sendButton = !retroSkin && !locked ? (
       <ComposerSendButton
@@ -166,12 +157,16 @@ export function ComposerActionBar({
       />
     ) : null;
     const typed = Boolean(sendButton && hasContent);
-    if (bot && !group) {
-      return <ComposerCtaSeat typed={typed} send={sendButton} voice={<CallButton bot={bot} tone={ctaTone} />} />;
-    }
-    // voice mode cannot start in a group chat: no waveform button there
-    if (group) return typed ? sendButton : null;
-    return typed ? sendButton : null;
+    const voice = locked ? null : (
+      <ComposerVoiceButton
+        engine={engine}
+        dictation={<ComposerMicButton onClick={clickMic} onPress={pressMic} onRelease={releaseMic} needsSetup={!engine} engine={engine} shortcut={dictationShortcut} />}
+        // voice mode cannot start in a group chat: no conversation there
+        conversation={bot && !group ? <CallButton bot={bot} tone={ctaTone} /> : undefined}
+      />
+    );
+    if (!voice) return typed ? sendButton : null;
+    return <ComposerCtaSeat typed={typed} send={sendButton} voice={voice} />;
   })()}
     {nudgePeer && <NudgeButton principalId={nudgePeer.id} name={nudgePeer.name} threadId={nudgePeer.threadId} />}
     {!nudgePeer && nudgeGroup && <NudgeButton groupId={nudgeGroup.id} name={nudgeGroup.name} />}

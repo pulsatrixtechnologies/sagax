@@ -17,6 +17,7 @@ import { voiceFailureKind } from "@/lib/voice-mode/api";
 import { LiveTranscriber } from "@/lib/voice-mode/stt-stream";
 import { voiceErrorNote } from "@/lib/voice-mode/failure";
 import { openPreferredMicrophone } from "@/lib/audio-input";
+import { readDictationLanguage } from "@/lib/composer-voice";
 
 export type DictationPhase = "idle" | "recording" | "processing";
 
@@ -29,7 +30,7 @@ interface Microphone {
 }
 
 /** Opens the microphone: 16 kHz frames for xAI (`onFrame`), loudness for the bars. */
-async function openMicrophone(onLevel: (level: number) => void, onFrame: ((frame: Float32Array) => void) | null, onWaiting?: () => void): Promise<Microphone> {
+export async function openMicrophone(onLevel: (level: number) => void, onFrame: ((frame: Float32Array) => void) | null, onWaiting?: () => void): Promise<Microphone> {
   // the microphone chosen in Settings (lib/audio-input), else the default
   const stream = await openPreferredMicrophone({ echoCancellation: true, noiseSuppression: true, autoGainControl: true }, undefined, onWaiting);
   // 16 kHz straight from the browser when it can (what xAI hears); else
@@ -214,7 +215,7 @@ export function useComposerDictation({
     }
     // the ears open while the microphone does: the frames heard before the
     // socket is ready wait in the utterance and go out once it is
-    const transcriber = new LiveTranscriber({ botId, language: () => "auto", threadId: () => threadId, finalTimeoutMs: DICTATION_FINAL_TIMEOUT_MS });
+    const transcriber = new LiveTranscriber({ botId, language: () => readDictationLanguage(), threadId: () => threadId, finalTimeoutMs: DICTATION_FINAL_TIMEOUT_MS });
     ears.current = transcriber;
     transcriber.onPartial((heard) => {
       if (!discard.current && ears.current === transcriber) editRef.current(joinDictated(base.current, heard));

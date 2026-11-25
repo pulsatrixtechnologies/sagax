@@ -2272,6 +2272,13 @@ shares nothing (2026-10-02). Keep these rules, covered by
   Bot threads" is on (`sagax.sidebarBotThreads.v1`). It is off by default
   for everyone (owner, 2026-11-23, #5239). Off hides the section only: the
   threads are neither deleted nor changed.
+- The same choice decides where the threads bots opened on a bot sit (a
+  teammate's hand-off, `start_thread`; #5289). Off, the default: behind the
+  thread list's "Show background", as before. On: rows of that bot's normal
+  thread list (sidebar tree and header picker), under their title with the
+  "opened by" byline, and no longer repeated under "Show background". A
+  routine run, a results thread and an AI client's conversation never move
+  (`shared/background-threads.ts`, `ThreadListChoice`).
 - Server: bots take no access from a section. At boot each legacy shared
   section became bot grants once (`sectionShareGrants`, marker
   `botSharesMigratedAt` in `section-channels.json`); the records stay and

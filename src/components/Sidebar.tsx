@@ -100,7 +100,7 @@ import { ListeningBadge } from "./ListeningCard";
 import { LiveCallPill } from "./LiveCallPill";
 import { nudgeLineText } from "@/lib/nudge-line";
 import { Layers, LogOut, PanelLeft, UserRound } from "lucide-react";
-import { backgroundThreads, personThreads } from "../../shared/background-threads";
+import { backgroundThreads, personThreads, type ThreadListChoice } from "../../shared/background-threads";
 import { hideFromSidebar } from "@/lib/sidebar-hidden";
 import { PersonAvatar } from "./MessageAuthor";
 import { SidebarSharerBadge } from "./SidebarSharerBadge";
@@ -161,6 +161,7 @@ import { PulsatrixMark } from "./PulsatrixMark";
 
 import { SidebarFoot, SidebarRailFoot } from "./SidebarFoot";
 import { useShowThreads, useThreadsMode } from "@/lib/thread-preferences";
+import { useSidebarBotThreads } from "@/lib/sidebar-bot-threads";
 import { openBotConversationActions } from "./thread-home";
 import { useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
 import { iconUnreadDotPosition } from "@/lib/bot-unread";
@@ -992,8 +993,8 @@ function MoveToSectionItem({
 }
 
 /** The threads a bot's sidebar list shows (BotThreadList), busy marked. */
-export function botListedThreads(bot: Pick<Bot, "id" | "threadId" | "busy" | "tasks">): BulkThreadCandidate[] {
-  return personThreads(bot.tasks ?? [], bot.threadId)
+export function botListedThreads(bot: Pick<Bot, "id" | "threadId" | "busy" | "tasks">, choice?: ThreadListChoice): BulkThreadCandidate[] {
+  return personThreads(bot.tasks ?? [], bot.threadId, choice)
     .map((task) => ({ ...task, busy: Boolean(task.busy || (task.threadId === bot.threadId && bot.busy)) }));
 }
 
@@ -1086,6 +1087,9 @@ export function BotContextMenu({
     settingsOpen: current.settingsOpen,
   }), (a, b) => equalRows(a.bots, b.bots) && Object.is(a.config, b.config) && Object.is(a.deletingBots, b.deletingBots) && Object.is(a.selectedId, b.selectedId) && Object.is(a.settingsOpen, b.settingsOpen));
   const showThreads = useShowThreads();
+  // the bulk actions take what the list shows: with "Show Bot threads" on,
+  // the threads bots opened too (#5289)
+  const botThreads = useSidebarBotThreads();
   const bulk = useBulkThreadActions();
   const remoteClient = window.ogb?.remoteClient?.active === true;
   const personal = usePersonalLayout();
@@ -1266,7 +1270,7 @@ export function BotContextMenu({
   // Threads turned off (the single stream): New topic, a fresh context in
   // the same conversation (docs/single-stream-orchestration.md).
   // Threads on: Archive all threads and Delete all threads of this bot.
-  const threadsOwner: BulkThreadOwner | null = showThreads ? { kind: "bot", id: bot.id, tasks: botListedThreads(bot) } : null;
+  const threadsOwner: BulkThreadOwner | null = showThreads ? { kind: "bot", id: bot.id, tasks: botListedThreads(bot, { botThreads }) } : null;
   const newThreadItem = showThreads ? item(<Plus size={16} />, t("task.newShort"), () => {
     dispatch({ type: "newTask", botId: bot.id });
   }, { id: "new-thread" }) : item(<Plus size={16} />, t("stream.newTopic"), () => {
@@ -1752,9 +1756,12 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
   // The person's own conversations (shared/background-threads.ts): a
   // routine run, a hand-off, a thread a bot opened or an AI client's never
   // shows here; the selected one stays reachable. "Show background" lists them.
-  const tasks = personThreads(bot.tasks ?? [{ threadId: bot.threadId, title: t("task.newShort"), createdAt: 0 }], bot.threadId)
+  // With Settings > Appearance > Sidebar "Show Bot threads" on (off by
+  // default), a hand-off and a thread a bot opened are rows here (#5289).
+  const listChoice: ThreadListChoice = { botThreads: useSidebarBotThreads() };
+  const tasks = personThreads(bot.tasks ?? [{ threadId: bot.threadId, title: t("task.newShort"), createdAt: 0 }], bot.threadId, listChoice)
     .map((task) => ({ ...task, queued: Boolean(pendingQueued[task.threadId]?.length) }));
-  const background = backgroundThreads(bot.tasks ?? []);
+  const background = backgroundThreads(bot.tasks ?? [], listChoice);
   // the same live verb the chat pane derives from the visible tail
   // ("Reading a file"), passed to the active thread's row while it works
   const activeActivityLabel = liveActivityLabel(visibleMessages(bot).at(-1));
@@ -1794,7 +1801,7 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
     };
   }, [botId, dispatch, generatedTitles, prefetch]);
   const bulkActions = useBulkThreadActions();
-  const bulkOwner: BulkThreadOwner = { kind: "bot", id: bot.id, tasks: botListedThreads(bot) };
+  const bulkOwner: BulkThreadOwner = { kind: "bot", id: bot.id, tasks: botListedThreads(bot, listChoice) };
   const bulk = {
     archive: bulkActions.count(bulkOwner, "archive"), delete: bulkActions.count(bulkOwner, "delete"),
     onArchiveAll: () => { void bulkActions.archiveAll(bulkOwner); }, onDeleteAll: () => { void bulkActions.deleteAll(bulkOwner); },

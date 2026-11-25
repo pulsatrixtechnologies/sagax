@@ -730,6 +730,24 @@ describe("get_agent / delete_agent", () => {
     expect(r.body.agent).toMatchObject({ id: "bot-a", live_via: ["Sagax chat", "Cursor"] });
   });
 
+  // #5326: a card waits for the person; the bot-wide summary says idle
+  it("get_agent never answers idle while it names a path where a turn works or waits", async () => {
+    const w = world();
+    const profile = w.deps.profile;
+    let liveVia: string[] = ["Sagax chat"];
+    w.deps.profile = async (caller, agentId) => {
+      const read = await profile(caller, agentId);
+      return "status" in read && typeof read.status === "number" ? read : { ...read, live_via: liveVia };
+    };
+    const api = createAgentApi(w.deps);
+    const waiting = await api.call(person("pr_1"), "get_agent", { agent_id: "bot-a" });
+    expect(waiting.body.agent).toMatchObject({ id: "bot-a", status: "running", live_via: ["Sagax chat"] });
+    // no live path: the summary's own status stands
+    liveVia = [];
+    const idle = await api.call(person("pr_1"), "get_agent", { agent_id: "bot-a" });
+    expect(idle.body.agent).toMatchObject({ id: "bot-a", status: "idle" });
+  });
+
   it("#4236: get_agent on an agent shared with the caller answers its persona and speech; an unreachable one stays unknown_agent", async () => {
     const w = world({ reachable: (caller, agent) => agent.id !== "bot-c" || caller.id === "pr_owner" });
     const shared = await w.api.call(person("pr_1"), "get_agent", { agent_id: "bot-a" });

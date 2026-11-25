@@ -51,6 +51,36 @@ describe("iPad desktop shell wording", () => {
   });
 });
 
+// #5327: the soul is the bot's identity, persona and voice; a rule goes in
+// Rules. The iPad never words the soul as rules, in a value, in a key a
+// language without its own value falls back to, or in a sentence of its own.
+describe("iPad soul wording (#5327)", () => {
+  const asRules = /rules it never breaks|r\u00e8gles qu.il (n.enfreint|ne brise) jamais|regras que ele nunca quebra/i;
+
+  it("never words the soul as the rules the bot never breaks", () => {
+    const worded: string[] = [];
+    for (const [key, entry] of Object.entries(catalog.strings)) {
+      if (asRules.test(key)) worded.push(key);
+      for (const [lang, unit] of Object.entries(entry.localizations ?? {})) {
+        if (asRules.test(unit.stringUnit?.value ?? "")) worded.push(`${key} (${lang})`);
+      }
+    }
+    expect(worded).toEqual([]);
+    for (const key of Object.keys(map)) expect(asRules.test(key), key).toBe(false);
+    for (const file of ["BotPanelMore.swift", "PersonaPagesInstructions.swift"]) {
+      expect(readFileSync(join(root, "ios", "App", "Desktop", file), "utf8"), file).not.toMatch(asRules);
+    }
+  });
+
+  it("says the desktop's soul intro, context and placeholder", () => {
+    const keys = Object.fromEntries(Object.entries(map).map(([key, desktopKey]) => [desktopKey, key]));
+    for (const desktopKey of ["botPanel.soul.intro", "botPanel.soul.context", "botPanel.soul.placeholder"]) {
+      // the key is the desktop's English, so a language without its own value reads it
+      expect(keys[desktopKey], desktopKey).toBe(desktop.en![desktopKey]);
+    }
+  });
+});
+
 // #4097: the desktop's shortcut labels became short words with a grey hint.
 // The iPad sheet shows both (no precision lost), and the iPad's own buttons
 // and menu items that once borrowed the long sentences keep their full
@@ -62,8 +92,7 @@ describe("iPad keyboard shortcuts sheet (#4097)", () => {
     const { SHORTCUT_GROUPS } = await import("@/lib/keyboard-shortcuts");
     const hinted = new Set([...sheet.matchAll(/hinted\("([\w-]+)"/g)].map((match) => match[1]));
     const desktopHinted = SHORTCUT_GROUPS.flatMap((group) => group.items)
-      // the screen side panel (#4452) is the desktop window only; the iPad keeps BrowserLiveView
-      .filter((item) => item.hint !== undefined && !["settings", "zoom", "full-screen", "toggle-screen-panel"].includes(item.id))
+      .filter((item) => item.hint !== undefined && !["settings", "zoom", "full-screen"].includes(item.id))
       .map((item) => item.id);
     expect(desktopHinted.length).toBeGreaterThan(0);
     for (const id of desktopHinted) expect(hinted.has(id), `${id} has its hint on the iPad`).toBe(true);

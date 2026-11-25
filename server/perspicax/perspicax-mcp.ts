@@ -586,6 +586,13 @@ const API_PRODUCTS_MAX = 2000;
 /** D-20261119-087 (#5105): the longest a turn waits for the api_list read
  * that decides its product skills, then it goes on with what is known. */
 const API_LIST_TURN_WAIT_MS = 4_000;
+/** #5325: how long a failed api_list read is kept for a bot: until then no
+ * turn reads it again or waits for it. */
+const API_LIST_FAILURE_TTL_MS = 60_000;
+/** #5325: the catalogs (one per role) whose api_list answer one bot keeps. */
+const API_LIST_CATALOGS_MAX = 4;
+/** One api_list answer, as kept per bot. */
+type ApiNamesEntry = { at: number; names: Map<string, string>; reviewed: Set<string>; groups: Map<string, string[]>; products: Map<string, string[]>; ids: Set<string>; catalog?: string };
 
 function isObject(value: unknown): value is Json {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -679,7 +686,12 @@ export class PerspicaxMcp {
    * every API id listed (`ids`), the products whose skills the bot sees, and
    * the turn's catalog when it was read (`catalog`), to read it again at the
    * next turn once a product was given or taken away. */
-  private readonly apiNames = new Map<string, { at: number; names: Map<string, string>; reviewed: Set<string>; groups: Map<string, string[]>; products: Map<string, string[]>; ids: Set<string>; catalog?: string }>();
+  private readonly apiNames = new Map<string, ApiNamesEntry>();
+  /** #5325: each bot's api_list answers by catalog stamp, so a bot that
+   * alternates between two roles finds the answer it already read. */
+  private readonly apiNamesByCatalog = new Map<string, Map<string, ApiNamesEntry>>();
+  /** #5325: each bot's last failed api_list read, and the catalog it was for. */
+  private readonly apiNamesFailed = new Map<string, { at: number; catalog?: string }>();
   private readonly apiNamesPending = new Map<string, Promise<void>>();
   /** "At the same time": a 5 minute window, then a write is sent again. */
   private readonly writes = new WriteOnce<PerspicaxRelayAnswer>({ ttlMs: 5 * 60_000 });
@@ -2468,10 +2480,13 @@ export class PerspicaxMcp {
 
   /** Read the product names Perspicax declares for this bot's APIs
    * (api_list), at most once per API_NAMES_TTL_MS per bot (`force`: now,
-   * unless a read is already on its way). Never throws. */
+   * unless a read is already on its way). A read that failed for this
+   * catalog is not tried again before API_LIST_FAILURE_TTL_MS (#5325).
+   * Never throws. */
   async refreshApiNames(input: { threadId: string; generation: string; botId: string }, options?: { force?: boolean }): Promise<void> {
     const cached = this.apiNames.get(input.botId);
     if (!options?.force && cached && Date.now() - cached.at < API_NAMES_TTL_MS) return;
+    if (this.apiListFailedLately(input.botId, this.catalogStamp(input))) return;
     const pending = this.apiNamesPending.get(input.botId);
     if (pending) return pending;
     const read = this.readApiNames(input);
@@ -2485,16 +2500,47 @@ export class PerspicaxMcp {
    * for this bot yet, or when the turn's catalog changed since the last read
    * (a product given or taken away); otherwise it is read beside the turn
    * once older than API_NAMES_TTL_MS, as before. Never a call of its own:
-   * the same read as the product names. Never throws. */
+   * the same read as the product names. Never throws.
+   * #5325: a catalog this bot already had an answer for (a bot alternating
+   * between two roles) takes that answer back without a read while it is
+   * younger than API_NAMES_TTL_MS; a read that failed, or that did not
+   * answer within the wait, is kept API_LIST_FAILURE_TTL_MS, and until then
+   * no turn reads it again or waits for it. */
   async apiListForTurn(input: { threadId: string; generation: string; botId: string }): Promise<void> {
-    const cached = this.apiNames.get(input.botId);
+    let cached = this.apiNames.get(input.botId);
     const catalog = this.catalogStamp(input);
-    const changed = Boolean(cached?.catalog && catalog && cached.catalog !== catalog);
-    const read = this.refreshApiNames(input, changed ? { force: true } : undefined).catch(() => undefined);
+    let changed = Boolean(cached?.catalog && catalog && cached.catalog !== catalog);
+    if (changed) {
+      const kept = this.apiNamesByCatalog.get(input.botId)?.get(catalog!);
+      if (kept && Date.now() - kept.at < API_NAMES_TTL_MS) {
+        this.apiNames.delete(input.botId);
+        this.apiNames.set(input.botId, kept);
+        cached = kept;
+        changed = false;
+      }
+    }
+    if (this.apiListFailedLately(input.botId, catalog)) return;
+    let answered = false;
+    const read = this.refreshApiNames(input, changed ? { force: true } : undefined).catch(() => undefined).then(() => { answered = true; });
     if (cached && !changed) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([read, new Promise<void>((resolve) => { timer = setTimeout(resolve, API_LIST_TURN_WAIT_MS); timer.unref?.(); })]);
     if (timer) clearTimeout(timer);
+    // no answer within the wait: kept as a failure, which an answer that comes later clears
+    if (!answered) this.noteApiListFailure(input.botId, catalog);
+  }
+
+  /** #5325: whether this bot's api_list read failed for this catalog less
+   * than API_LIST_FAILURE_TTL_MS ago. */
+  private apiListFailedLately(botId: string, catalog: string | undefined): boolean {
+    const failed = this.apiNamesFailed.get(botId);
+    return Boolean(failed && failed.catalog === catalog && Date.now() - failed.at < API_LIST_FAILURE_TTL_MS);
+  }
+
+  private noteApiListFailure(botId: string, catalog: string | undefined): void {
+    this.apiNamesFailed.delete(botId);
+    this.apiNamesFailed.set(botId, { at: Date.now(), ...(catalog ? { catalog } : {}) });
+    while (this.apiNamesFailed.size > API_NAMES_MAX) this.apiNamesFailed.delete(this.apiNamesFailed.keys().next().value!);
   }
 
   /** The tools this turn's connection serves, as one stamp (undefined
@@ -2512,15 +2558,32 @@ export class PerspicaxMcp {
   }
 
   private async readApiNames(input: { threadId: string; generation: string; botId: string }): Promise<void> {
+    const catalog = this.catalogStamp(input);
     try {
-      const catalog = this.catalogStamp(input);
       const answer = await this.callTool({ ...input, name: "api_list", args: {}, mapping: true });
-      if (!answer.ok || answer.isError) return;
+      if (!answer.ok || answer.isError) {
+        this.noteApiListFailure(input.botId, catalog);
+        return;
+      }
+      const entry: ApiNamesEntry = { at: Date.now(), names: apiNamesOf(answer.value), reviewed: reviewedReadsOf(answer.value), groups: apiGroupsOf(answer.value), products: new Map(), ids: apiIdsOf(answer.value), ...(catalog ? { catalog } : {}) };
+      this.apiNamesFailed.delete(input.botId);
       this.apiNames.delete(input.botId);
-      this.apiNames.set(input.botId, { at: Date.now(), names: apiNamesOf(answer.value), reviewed: reviewedReadsOf(answer.value), groups: apiGroupsOf(answer.value), products: new Map(), ids: apiIdsOf(answer.value), ...(catalog ? { catalog } : {}) });
-      while (this.apiNames.size > API_NAMES_MAX) this.apiNames.delete(this.apiNames.keys().next().value!);
+      this.apiNames.set(input.botId, entry);
+      while (this.apiNames.size > API_NAMES_MAX) {
+        const oldest = this.apiNames.keys().next().value!;
+        this.apiNames.delete(oldest);
+        this.apiNamesByCatalog.delete(oldest);
+      }
+      if (catalog) {
+        const byCatalog = this.apiNamesByCatalog.get(input.botId) ?? new Map<string, ApiNamesEntry>();
+        byCatalog.delete(catalog);
+        byCatalog.set(catalog, entry);
+        while (byCatalog.size > API_LIST_CATALOGS_MAX) byCatalog.delete(byCatalog.keys().next().value!);
+        this.apiNamesByCatalog.set(input.botId, byCatalog);
+      }
     } catch {
       // a name is a nicety: the row reads a generic name without it
+      this.noteApiListFailure(input.botId, catalog);
     } finally {
       this.apiNamesPending.delete(input.botId);
     }

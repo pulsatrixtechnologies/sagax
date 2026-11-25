@@ -1,5 +1,5 @@
 // Slice 5: Perspicax MCP for the person who speaks (server/perspicax/perspicax-mcp.ts).
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import voiceFixture from "../fixtures/perspicax-voice-tools.json" with { type: "json" };
 import type { McpAuditRecord } from "../mcp/mcp-permissions.ts";
@@ -1755,6 +1755,88 @@ describe("PerspicaxMcp apiListForTurn (D-20261119-087, #5105)", () => {
     perspicax.state.apis = ["acme_psa_service", "nimbus_backup"];
     expect(await aTurn(h, "g3")).toEqual(["acme_psa_service", "nimbus_backup"]);
     expect(perspicax.state.apiListCalls).toBe(3);
+  });
+});
+
+describe("PerspicaxMcp apiListForTurn keeps what it read (#5325)", () => {
+  // Perspicax with a catalog per role: tools/list and api_list follow
+  // `state.apis`; `state.failing` makes api_list answer an error.
+  function served(apis: string[]) {
+    const state = { apis, apiListCalls: 0, failing: false };
+    const mcp = ({ body }: { body: any }) => {
+      if (body?.id === undefined) return new Response(null, { status: 202 });
+      const tools = ["api_list", ...state.apis.map((id) => `${id}_query`)].map((name) => ({ name, inputSchema: { type: "object" } }));
+      const apiList = body.method === "tools/call" && body.params?.name === "api_list";
+      if (apiList) state.apiListCalls += 1;
+      const result = body.method === "tools/list" ? { tools }
+        : apiList && state.failing ? { isError: true, content: [{ type: "text", text: "api_list is not available now." }] }
+        : body.method === "tools/call" ? { content: [{ type: "text", text: JSON.stringify({ apis: state.apis.map((id) => ({ id })) }) }] }
+        : {};
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "s" } });
+    };
+    return { state, mcp };
+  }
+  async function aTurn(h: ReturnType<typeof harness>, generation: string) {
+    await h.mcp.prepareTurn({ threadId: "t1", generation, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.ensureTurnSessions("t1", generation);
+    await h.mcp.apiListForTurn({ threadId: "t1", generation, botId: "x" });
+    const ids = [...(h.mcp.servedApis("x")?.ids ?? [])].sort();
+    await h.mcp.endGeneration("t1", generation);
+    return ids;
+  }
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("keeps a failed api_list read: the next turns neither read it again nor wait, until it is old", async () => {
+    const perspicax = served(["acme_psa_service"]);
+    perspicax.state.failing = true;
+    const h = harness({ mcp: perspicax.mcp });
+    expect(await aTurn(h, "g1")).toEqual([]);
+    expect(perspicax.state.apiListCalls).toBe(1);
+    expect(await aTurn(h, "g2")).toEqual([]);
+    expect(await aTurn(h, "g3")).toEqual([]);
+    expect(perspicax.state.apiListCalls).toBe(1);
+    expect(h.mcp.servedApis("x")).toBeUndefined();
+    // once the kept failure is old, the next turn reads again, and an answer is kept as before
+    perspicax.state.failing = false;
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now + 61_000);
+    expect(await aTurn(h, "g4")).toEqual(["acme_psa_service"]);
+    expect(perspicax.state.apiListCalls).toBe(2);
+    expect(await aTurn(h, "g5")).toEqual(["acme_psa_service"]);
+    expect(perspicax.state.apiListCalls).toBe(2);
+  });
+
+  it("keeps a failed read of a changed catalog too, and still reads at once when the catalog changes again", async () => {
+    const perspicax = served(["acme_psa_service", "nimbus_backup"]);
+    const h = harness({ mcp: perspicax.mcp });
+    expect(await aTurn(h, "g1")).toEqual(["acme_psa_service", "nimbus_backup"]);
+    perspicax.state.apis = ["nimbus_backup"];
+    perspicax.state.failing = true;
+    await aTurn(h, "g2");
+    await aTurn(h, "g3");
+    expect(perspicax.state.apiListCalls).toBe(2);
+    perspicax.state.apis = ["acme_psa_service"];
+    perspicax.state.failing = false;
+    expect(await aTurn(h, "g4")).toEqual(["acme_psa_service"]);
+    expect(perspicax.state.apiListCalls).toBe(3);
+  });
+
+  it("a bot alternating between two roles reads api_list once per role, never at each alternation", async () => {
+    const admin = ["acme_psa_service", "acme_psa_time", "nimbus_backup"];
+    const member = ["nimbus_backup"];
+    const perspicax = served(admin);
+    const h = harness({ mcp: perspicax.mcp });
+    expect(await aTurn(h, "g1")).toEqual(admin);
+    perspicax.state.apis = member;
+    expect(await aTurn(h, "g2")).toEqual(member);
+    expect(perspicax.state.apiListCalls).toBe(2);
+    perspicax.state.apis = admin;
+    expect(await aTurn(h, "g3")).toEqual(admin);
+    perspicax.state.apis = member;
+    expect(await aTurn(h, "g4")).toEqual(member);
+    perspicax.state.apis = admin;
+    expect(await aTurn(h, "g5")).toEqual(admin);
+    expect(perspicax.state.apiListCalls).toBe(2);
   });
 });
 

@@ -447,6 +447,11 @@ plus runtime observation.
   from the one of the last read (a product given or taken away); otherwise
   it is read beside the turn every 30 minutes as before. A switch of the bot
   applies at the next selection.
+- The answer is also kept per tools/list (4 per bot, 30 minutes): a bot that
+  alternates between two roles takes back the answer of the role it returns
+  to, with no read. A read that failed, or did not answer within the wait,
+  is kept 60 s for that tools/list: until then no turn reads it again or
+  waits for it (#5325).
 - Unknown (a solo server, no read yet, or a read that did not answer): the
   folders stay as installed. No card, no setting, no init.
 - Tests: `server/index-leaves/scopedPluginFolders.test.ts` (every engine,

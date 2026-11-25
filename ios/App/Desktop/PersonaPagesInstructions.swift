@@ -259,7 +259,7 @@ struct PersonaPersonalityPage: View {
                 if soul != nil {
                     DesktopMarkdownField(
                         text: Binding(get: { draft }, set: { change($0) }),
-                        placeholder: AppStrings.localized("Who this bot is and the rules it never breaks. Keep it short; put step-by-step procedure into a skill."),
+                        placeholder: AppStrings.localized("Who this bot is, its persona and how it speaks. Rules go in Rules; a procedure goes in a skill."),
                         minHeight: 220, invalid: over, disabled: resolving || !canEdit,
                         accessibilityLabel: AppStrings.localized("Standing instructions (SOUL.md)"), identifier: "desktop-panel-soul"
                     ) {
@@ -285,7 +285,7 @@ struct PersonaPersonalityPage: View {
 
     /// The info button: what SOUL.md is, and where it is mirrored.
     private var help: Text {
-        var text = Text(verbatim: "\(AppStrings.localized("Who this bot is and the rules it never breaks.")) \(AppStrings.localized("Read by the bot on every turn."))")
+        var text = Text(verbatim: "\(AppStrings.localized("Who this bot is: its identity, its persona and its voice. A rule goes in Rules, a procedure in a skill, a reference in the bot folder.")) \(AppStrings.localized("Read by the bot on every turn."))")
         if let file = soul?.file, !file.isEmpty {
             text = text + Text(verbatim: " \(AppStrings.localized("Mirrored to")) ") + Text(verbatim: file).font(Theme.mono(12)) + Text(verbatim: ".")
         }

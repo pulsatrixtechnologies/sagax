@@ -240,7 +240,7 @@ function IconPill<T extends string>({ label, value, options, onPick, disabled, d
     onPick(next);
     setChosen(next);
     window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setChosen(null), 720);
+    timer.current = window.setTimeout(() => setChosen(null), 480);
   };
   const onKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const at = Math.max(0, options.findIndex((option) => option.value === value));
@@ -387,7 +387,7 @@ function AddShapePanel({ onAdd, onGenerate, disabled }: { onAdd: (text: string) 
         </section>
       )}
       <section className="flex flex-col gap-2" data-mascot-add-import="">
-        <p id={`${ids}-lead`} className="m-0 text-[12.5px] leading-[18px] text-ink-secondary">{t("mascotPicker.add.importLead")}</p>
+        <p id={`${ids}-lead`} className="m-0 text-[12px] leading-[18px] text-ink-secondary">{t("mascotPicker.add.importLead")}</p>
         <div className="relative" onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
           <textarea
             className={cn(field, "resize-none whitespace-pre font-mono text-[12px] leading-[18px]")}
@@ -479,7 +479,7 @@ function SkinsList({ character, look, color, owlSkin, unlocks, disabled, onPick 
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-[13px] leading-[18px] text-ink">{name}</span>
-                  {lock.locked && <span className="text-[11.5px] leading-4 text-ink-secondary" data-skin-unlock-hint="">{hint}</span>}
+                  {lock.locked && <span className="text-[11px] leading-4 text-ink-secondary" data-skin-unlock-hint="">{hint}</span>}
                 </span>
                 {lock.locked ? <Lock size={13} className="shrink-0 text-ink-tertiary" aria-hidden="true" /> : checked ? <Check size={14} className="shrink-0 text-ink" aria-hidden="true" /> : null}
               </button>

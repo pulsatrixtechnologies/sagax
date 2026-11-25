@@ -134,24 +134,26 @@
 .mp-glyph * { transform-box: fill-box; transform-origin: center; }
 
 /*
- * The icons move once when their segment is hovered, focused or just chosen
- * (data-live, set by the pill). The upstream picker's icons are still
- * drawings; these small moves are this app's own.
+ * The icons move once, a little, when their segment is hovered, focused or
+ * just chosen (data-live, set by the pill), and never under reduced motion.
+ * The upstream picker's icons are still drawings: these moves are this
+ * app's own (an agent's choice for the owner to see, #5369), kept sober: a
+ * blink, a few degrees, two pixels, under half a second, no loop.
  */
 @media (prefers-reduced-motion: no-preference) {
-  .mp-seg[data-live] .mp-glyph[data-glyph="eyes-neutral"] rect { animation: mp-blink 520ms ease-in-out 1; }
-  .mp-seg[data-live] .mp-glyph[data-glyph="eyes-happy"] { animation: mp-hop 520ms ease-out 1; }
-  .mp-seg[data-live] .mp-glyph[data-glyph="face-flat"] { animation: mp-nod 560ms ease-in-out 1; }
-  .mp-seg[data-live] .mp-glyph[data-glyph="face-fluffy"] .mp-fur { animation: mp-ruffle 640ms ease-in-out 1; }
-  .mp-seg[data-live] .mp-glyph[data-glyph="face-glass"] .mp-glint { animation: mp-glint 700ms ease-in-out 1; }
-  .mp-seg[data-live] .mp-glyph[data-glyph="skins"] { animation: mp-sway 640ms ease-in-out 1; }
+  .mp-seg[data-live] .mp-glyph[data-glyph="eyes-neutral"] rect { animation: mp-blink 420ms ease-in-out 1; }
+  .mp-seg[data-live] .mp-glyph[data-glyph="eyes-happy"] { animation: mp-hop 420ms ease-out 1; }
+  .mp-seg[data-live] .mp-glyph[data-glyph="face-flat"] { animation: mp-nod 460ms ease-in-out 1; }
+  .mp-seg[data-live] .mp-glyph[data-glyph="face-fluffy"] .mp-fur { animation: mp-ruffle 460ms ease-in-out 1; }
+  .mp-seg[data-live] .mp-glyph[data-glyph="face-glass"] .mp-glint { animation: mp-glint 460ms ease-in-out 1; }
+  .mp-seg[data-live] .mp-glyph[data-glyph="skins"] { animation: mp-sway 460ms ease-in-out 1; }
 }
-@keyframes mp-blink { 0%, 100% { transform: scaleY(1); } 45%, 55% { transform: scaleY(0.12); } }
-@keyframes mp-hop { 0%, 100% { transform: translateY(0); } 35% { transform: translateY(-3px); } 70% { transform: translateY(0.5px); } }
-@keyframes mp-nod { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-9deg); } 65% { transform: rotate(7deg); } }
-@keyframes mp-ruffle { 0%, 100% { transform: rotate(0) scale(1); } 25% { transform: rotate(14deg) scale(1.06); } 60% { transform: rotate(-10deg) scale(1.03); } }
-@keyframes mp-glint { 0%, 100% { transform: rotate(0); opacity: 1; } 50% { transform: rotate(150deg); opacity: 0.35; } }
-@keyframes mp-sway { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-12deg); } 65% { transform: rotate(9deg); } }
+@keyframes mp-blink { 0%, 100% { transform: scaleY(1); } 45%, 55% { transform: scaleY(0.2); } }
+@keyframes mp-hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-2px); } }
+@keyframes mp-nod { 0%, 100% { transform: rotate(0); } 35% { transform: rotate(-5deg); } 70% { transform: rotate(3deg); } }
+@keyframes mp-ruffle { 0%, 100% { transform: rotate(0); } 35% { transform: rotate(7deg); } 70% { transform: rotate(-4deg); } }
+@keyframes mp-glint { 0%, 100% { transform: rotate(0); opacity: 1; } 50% { transform: rotate(24deg); opacity: 0.55; } }
+@keyframes mp-sway { 0%, 100% { transform: rotate(0); } 35% { transform: rotate(-6deg); } 70% { transform: rotate(4deg); } }
 
 /* The small arrow that ties the panel to the mascot above it. */
 .mp-caret {

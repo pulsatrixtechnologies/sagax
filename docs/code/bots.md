@@ -631,25 +631,21 @@ name and label are edited where they show (`InlineEditableText`). The
 description is not a line under the label; `IdentitySection` still edits it.
 There are no Name or Label fields in this panel. The persona editor's
 categories (`src/lib/persona-sections.ts`) start with Overview, then
-Appearance (2026-10-11, `appearance/AppearancePane.tsx`): a preview stage
-(the bot's avatar, which plays its moves on hover and click), the
-mascot's name and Randomize, then the Mascot, Shape (shapes only), Color
-and Skin tabs with Reset at the right of the tab row. Under Mascot: filter
-chips All, Owned, Premium only while one is sold, then one chip per family;
-the To unlock chip is omitted when no listed character is locked; shelves
-Yours and Premium, from `floating-bots/wardrobe.ts`. While a picture
-(dropped or pasted on the avatar) is the bot's avatar, the Mascot tab shows
-a "picture in use" line with "Use the mascot" in place of the gallery.
-There is no source bar (no Generate or Upload control, no search) and no
-strip under the name (2026-11-12). The preview band stacks when the pane
-is narrow (a size container). The gallery lists unlocked characters and
-the character the bot already wears. A locked character stays out. An
-unlocked character saves
-on pick. Clicking the bot's avatar (`BotProfileAvatarCard`,
-in the panel and in the editor's Overview) opens the editor on Appearance;
-there is no avatar popover, and a right click keeps the mascot menu. The
-New bot dialog's draft is not in the store yet, so its avatar shows the same
-pane under it. Details lists Coding,
+Appearance. Appearance is the mascot picker (#5369,
+`floating-bots/MascotPicker.tsx`, described in `docs/mascots.md`): a small
+panel anchored under the bot's mascot, with no window and no preview of its
+own (the mascot above it is the preview). Two tabs, Shapes and Characters,
+a grid, two pills of icons (material and skins, mood), one colour row and a
+gear. While a picture (dropped or pasted on the avatar) is the bot's avatar,
+the panel says so first, with "Use the mascot". There is no source bar (no
+Generate or Upload control, no search) and no strip under the name
+(2026-11-12). A locked character shows with its padlock and is not worn.
+An unlocked character saves on pick. Clicking the bot's avatar
+(`BotProfileAvatarCard`, in the panel and in the editor's Overview) opens
+the bot's page, whose mascot opens the picker; there is no avatar popover,
+and a right click keeps the mascot menu. The New bot dialog's draft is not
+in the store yet, so its avatar opens the same
+picker under it. Details lists Coding,
 Activity, then Routines (`ActivitySection`, `ActivityListModal`,
 `ActivityDetailModal`).
 Coding is code work only: the server marks an entry `coding` from its

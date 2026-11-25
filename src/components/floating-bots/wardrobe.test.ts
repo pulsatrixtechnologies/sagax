@@ -1,13 +1,9 @@
-// The Appearance gallery's catalog rules (wardrobe.ts) and the families the
-// registry carries for them (mascots.tsx).
+// The families the mascot registry carries (mascots.tsx) and the arrow keys
+// across the mascot picker's grid (wardrobe.ts).
 import { describe, expect, it } from "vitest";
-import en from "@/locales/en.json";
-import fr from "@/locales/fr.json";
 import { MASCOTS } from "./mascots";
-import { filterWardrobe, MASCOT_FAMILIES, MASCOT_FAMILY_LABEL, wardrobeFilters, wardrobeShelf, wardrobeShelves, wardrobeStep, type WardrobeEntry } from "./wardrobe";
+import { MASCOT_FAMILIES, wardrobeStep } from "./wardrobe";
 
-
-const ids = (entries: readonly WardrobeEntry[]) => entries.map((entry) => entry.id);
 
 describe("the registry's families", () => {
   it("gives every character a family, Owl and Trombi the classics, the rest by kind", () => {
@@ -28,72 +24,15 @@ describe("the registry's families", () => {
   it("sells nothing and marks nothing new yet", () => {
     expect(MASCOTS.filter((option) => option.premium || option.isNew)).toEqual([]);
   });
-
-  it("names every family in English and French", () => {
-    for (const key of Object.values(MASCOT_FAMILY_LABEL)) {
-      expect(en).toHaveProperty([key]);
-      expect(fr).toHaveProperty([key]);
-    }
-  });
 });
 
-describe("the filter chips", () => {
-  it("offers All, Owned, To unlock and one chip per family in use, no Premium while nothing is sold", () => {
-    expect(wardrobeFilters(MASCOTS)).toEqual(["all", "owned", "locked", "family:classics", "family:shapes", "family:animals"]);
-    expect(wardrobeFilters([{ id: "frog", family: "animals" }])).toEqual(["all", "owned", "locked", "family:animals"]);
-  });
+// [M-20261125-064] [D-20261125-030] The blocks "the filter chips" and "shelves and filters", and "names every
+// family in English and French", are not ported: the chips (All, Owned, To unlock, Premium, one per family) and
+// the shelves (Yours, To unlock, Premium) were the Appearance editor's gallery, which the mascot picker replaced
+// (#5369) with two tabs and one grid. Their functions and their strings are removed with them; what narrows the
+// grid now and where a locked mascot shows is covered by MascotPicker.dom.test.ts and mascots.test.ts.
 
-  it("adds Premium once the registry sells an edition", () => {
-    const sold: WardrobeEntry[] = [...MASCOTS, { id: "axolotl", family: "animals", premium: { price: "$2.99" }, isNew: true }];
-    expect(wardrobeFilters(sold)).toEqual(["all", "owned", "locked", "premium", "family:classics", "family:shapes", "family:animals"]);
-  });
-
-  it("drops the To unlock chip when no listed row is locked", () => {
-    expect(wardrobeFilters(MASCOTS, () => false)).toEqual(["all", "owned", "family:classics", "family:shapes", "family:animals"]);
-    expect(wardrobeFilters(MASCOTS)).toEqual(["all", "owned", "locked", "family:classics", "family:shapes", "family:animals"]);
-  });
-});
-
-describe("shelves and filters", () => {
-  const catalog: WardrobeEntry[] = [
-    ...MASCOTS.map(({ id, family }) => ({ id, family })),
-    { id: "axolotl", family: "animals", premium: { price: "$2.99" } },
-    { id: "robo", family: "shapes", premium: { price: "$1.99" } },
-  ];
-  // the bot wears the owl; Trombi and Bunbu were earned; Robo was bought
-  const unlocked = new Set(["owl", "trombi", "bunbu", "robo"]);
-  const lockedOf = (entry: WardrobeEntry) => !unlocked.has(entry.id);
-  const run = (filter: Parameters<typeof filterWardrobe>[1]) => ids(filterWardrobe(catalog, filter, lockedOf));
-
-  it("puts an unlocked entry on Yours, a locked one on To unlock, and an unbought paid edition on Premium", () => {
-    expect(wardrobeShelf({ id: "owl", family: "classics" }, false)).toBe("yours");
-    expect(wardrobeShelf({ id: "shiba", family: "animals" }, true)).toBe("locked");
-    expect(wardrobeShelf({ id: "axolotl", family: "animals", premium: { price: "$2.99" } }, true)).toBe("premium");
-    expect(wardrobeShelf({ id: "robo", family: "shapes", premium: { price: "$1.99" } }, false)).toBe("yours");
-  });
-
-  it("splits the catalog into shelves in registry order and draws no empty shelf", () => {
-    expect(wardrobeShelves(catalog, lockedOf).map(({ shelf, entries }) => [shelf, ids(entries)])).toEqual([
-      ["yours", ["owl", "trombi", "bunbu", "robo"]],
-      ["locked", ["crab", "shape", "shiba", "grump", "ogre", "frog"]],
-      ["premium", ["axolotl"]],
-    ]);
-    expect(wardrobeShelves(MASCOTS, () => false).map(({ shelf }) => shelf)).toEqual(["yours"]);
-    expect(wardrobeShelves([], lockedOf)).toEqual([]);
-  });
-
-  it("keeps what each chip names", () => {
-    expect(run("all")).toEqual(ids(catalog));
-    expect(run("owned")).toEqual(["owl", "trombi", "bunbu", "robo"]);
-    expect(run("locked")).toEqual(["crab", "shape", "shiba", "grump", "ogre", "frog"]);
-    expect(run("premium")).toEqual(["axolotl", "robo"]);
-    expect(run("family:classics")).toEqual(["owl", "trombi"]);
-    expect(run("family:shapes")).toEqual(["shape", "robo"]);
-    expect(run("family:animals")).toEqual(["crab", "bunbu", "shiba", "grump", "ogre", "frog", "axolotl"]);
-  });
-});
-
-describe("arrow keys across the tiles", () => {
+describe("arrow keys across the cells", () => {
   it("steps one tile across, one row down and up, and stays at the edges", () => {
     // 8 tiles in rows of 4
     expect(wardrobeStep(0, 8, 4, "ArrowRight")).toBe(1);
@@ -108,5 +47,9 @@ describe("arrow keys across the tiles", () => {
     expect(wardrobeStep(3, 8, 0, "ArrowDown")).toBe(4);
     expect(wardrobeStep(0, 8, 4, "Enter")).toBeNull();
     expect(wardrobeStep(0, 0, 4, "ArrowRight")).toBeNull();
+    // the picker's grid: rows of 5, the last row short (the plus at its end)
+    expect(wardrobeStep(2, 12, 5, "ArrowDown")).toBe(7);
+    expect(wardrobeStep(9, 12, 5, "ArrowDown")).toBe(9);
+    expect(wardrobeStep(11, 12, 5, "ArrowUp")).toBe(6);
   });
 });

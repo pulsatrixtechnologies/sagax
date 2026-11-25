@@ -206,7 +206,8 @@ describe("floating bots: the fly-away setting", () => {
     expect(settings).not.toMatch(/from\s+"@\/components\/floating-bots\//);
     const view = readFileSync(join(here, "../components/floating-bots/FloatingBotView.tsx"), "utf8");
     expect(view).not.toMatch(/style === "3d"/);
-    const editor = readFileSync(join(here, "../components/floating-bots/MascotLookEditor.tsx"), "utf8");
-    expect(editor).not.toMatch(/data-character-style/);
+    // the mascot picker (#5369) stands where the editor (MascotLookEditor.tsx) stood: no 2D / 3D style choice in it either
+    const picker = readFileSync(join(here, "../components/floating-bots/MascotPicker.tsx"), "utf8");
+    expect(picker).not.toMatch(/data-character-style/);
   });
 });

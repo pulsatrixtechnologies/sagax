@@ -63,9 +63,10 @@ export function MascotPickerPopover({ anchorRef, onClose, onUseMascot, ...picker
     };
   }, [anchorRef]);
 
-  // the panel takes the focus when it opens and gives it back to the mascot
+  // the panel takes the focus when it opens and gives it back to what opened it: the mascot, or the Appearance row
   useEffect(() => {
-    const opener = anchorRef.current;
+    const focused = document.activeElement;
+    const opener = focused instanceof HTMLElement && focused !== document.body ? focused : anchorRef.current;
     panel.current?.focus({ preventScroll: true });
     return () => { if (opener?.isConnected) opener.focus({ preventScroll: true }); };
   }, [anchorRef]);
@@ -74,7 +75,7 @@ export function MascotPickerPopover({ anchorRef, onClose, onUseMascot, ...picker
     <AnchoredPopover anchorRef={anchorRef} popoverRef={panel} side="bottom" align="start" gap={10} role="dialog" tabIndex={-1} aria-label={t("botProfile.tab.appearance")} data-mascot-picker-popover="" className={`${MENU_BOX} outline-none`}>
       <span ref={caret} className="mp-caret" aria-hidden="true" />
       {onUseMascot && (
-        <div className="flex items-center gap-3 px-3 pb-1 pt-3 text-[12.5px] leading-[18px] text-ink-secondary" data-appearance-picture="">
+        <div className="flex items-center gap-3 px-3 pb-1 pt-3 text-[12px] leading-[18px] text-ink-secondary" data-appearance-picture="">
           <span className="min-w-0 flex-1">{t("appearance.pictureInUse")}</span>
           <button type="button" onClick={onUseMascot} className="shrink-0 rounded-full bg-control px-3 py-1.5 text-ink outline-none hover:bg-raised-hover focus-visible:ring-2 focus-visible:ring-accent">
             {t("botPanel.avatar.useMascot")}

@@ -22,7 +22,8 @@ import {
 } from "../../shared/mascot-look";
 import { MASCOTS, mascotFor } from "./floating-bots/mascots";
 import { CHARACTER_LABEL, CRAB_SKIN_LABEL } from "./floating-bots/mascot-look-labels";
-import { colorGroupsFor, skinTierTabs } from "./floating-bots/editor-tabs";
+import { skinTierTabs } from "./floating-bots/editor-tabs";
+import { pickerControls } from "./floating-bots/mascot-picker";
 import { CrabMascot, crabExpressionForMood, crabHexOf } from "./CrabMascot";
 import { crabSkinId, crabSkinMarks, crabSkinPaint } from "./skin-fx/crab-skins";
 import {
@@ -111,7 +112,8 @@ describe("Crab's look", () => {
     expect(mascotFor({ character: "crab" }).id).toBe("crab");
     expect(MASCOTS.find((entry) => entry.id === "crab")?.capabilities.wings).toBe(false);
     expect(CHARACTER_LABEL.crab).toBe("floatingBots.mascot.crab");
-    expect(colorGroupsFor("crab", "orange")).toContain("clay");
+    // [D-20261125-028] the Clay palette's tab left the screen with the palettes: the character takes the picker's colour row
+    expect(pickerControls("crab", { materials: true }).colors).toBe(true);
     expect(APP_ICON_CHOICES.some((choice) => choice.art.kind === "crab")).toBe(true);
     expect(DEFAULT_CHARACTERS).not.toContain("crab");
     for (const skin of CRAB_SKINS) expect(skinTier("crab", skin), skin).toBe(CRAB_SKIN_TIER[skin]);

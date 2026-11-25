@@ -14,7 +14,8 @@ import { contrastRatio, MASCOT_COLOR_HEX } from "../../shared/mascot-colors";
 import { botMascotLook, CHARACTER_PAINT, completeMascotLook, LEGACY_OGRE_SKINS, mascotLookSchema, OGRE_DEFAULT_COLOR, OGRE_SKIN_TIER, OGRE_SKINS } from "../../shared/mascot-look";
 import { MASCOTS, mascotFor } from "./floating-bots/mascots";
 import { CHARACTER_LABEL, OGRE_SKIN_LABEL } from "./floating-bots/mascot-look-labels";
-import { colorGroupsFor, skinTierTabs } from "./floating-bots/editor-tabs";
+import { skinTierTabs } from "./floating-bots/editor-tabs";
+import { pickerControls } from "./floating-bots/mascot-picker";
 import { OgreMascot, ogreExpressionForMood } from "./OgreMascot";
 import { ogreSkinId, ogreSkinLayers, ogreSkinPaint } from "./skin-fx/ogre-skins";
 import { SHAPE_EXPRESSIONS } from "./shape-engine";
@@ -218,7 +219,8 @@ describe("Ogre's look", () => {
     expect(mascotFor({ character: "ogre" }).id).toBe("ogre");
     expect(MASCOTS.find((entry) => entry.id === "ogre")?.capabilities).toMatchObject({ walk: true, wings: false });
     expect(CHARACTER_LABEL.ogre).toBe("floatingBots.mascot.ogre");
-    expect(colorGroupsFor("ogre", "green")).toContain("clay");
+    // [D-20261125-028] the Clay palette's tab left the screen with the palettes: the character takes the picker's colour row
+    expect(pickerControls("ogre", { materials: true }).colors).toBe(true);
     expect(APP_ICON_CHOICES.some((choice) => choice.art.kind === "ogre")).toBe(true);
     const rewarded = ACHIEVEMENTS.flatMap((item) => item.rewards.map(rewardKey));
     expect(rewarded).toContain("character:ogre");

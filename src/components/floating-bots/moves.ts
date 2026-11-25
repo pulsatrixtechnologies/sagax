@@ -1,6 +1,6 @@
-// The moves a character can play on request: the Appearance gallery's Moves row
-// (MascotLookEditor.tsx) and the desktop mascot's "Moves" menu offer the
-// same list, with the same names.
+// The moves a character can play on request: the bot page's hero mascot
+// (MascotHero.tsx) and the desktop mascot's "Moves" menu play the same
+// list, with the same names.
 import type { LocaleKey } from "@/locales";
 import type { ShapeMove } from "@/components/shape-engine";
 import { MAUS_WING_MOTIONS } from "@/lib/mascot";

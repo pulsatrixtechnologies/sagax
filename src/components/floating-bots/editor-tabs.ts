@@ -1,11 +1,10 @@
-// The Appearance gallery's tabs, as pure functions (MascotLookEditor.tsx): skins
-// grouped by rarity (Common, Rare, Epic, Legendary) and colors grouped by
-// palette (Vivid, Pastel, Deep, Neon, Neutral). The gallery opens on the tab
-// of the current choice and follows it when it changes elsewhere (Reset).
-import { MASCOT_COLOR_GROUPS, mascotColorGroup, paletteSwatches, type MascotColorGroup, type MascotColorName } from "../../../shared/mascot-colors";
+// A character's skins grouped by rarity (Common, Rare, Epic, Legendary), as a
+// pure function: the groups of the mascot picker's skins list (MascotPicker.tsx).
+// It also grouped the colors by palette for the Appearance editor's tabs,
+// until the picker's colour row replaced them (#5369).
 import type { SkinTier } from "../../../shared/mascot-look";
 
-/** The rarity tabs, in order. */
+/** The rarities, in order. */
 export const SKIN_TIERS: readonly SkinTier[] = ["common", "rare", "epic", "legendary"];
 
 export interface TierTab<S extends string> {
@@ -14,48 +13,10 @@ export interface TierTab<S extends string> {
   count: number;
 }
 
-/** A character's skins by rarity, in the picker's order; a rarity with no skin has no tab. */
+/** A character's skins by rarity, in the picker's order; a rarity with no skin has no group. */
 export function skinTierTabs<S extends string>(skins: readonly S[], tierOf: Readonly<Record<S, SkinTier>>): TierTab<S>[] {
   return SKIN_TIERS.map((tier) => {
     const inTier = skins.filter((skin) => tierOf[skin] === tier);
     return { tier, skins: inTier, count: inTier.length };
   }).filter((tab) => tab.count > 0);
-}
-
-/** The tab the picker opens on: the current skin's rarity, else the first tab. */
-export function skinTabFor<S extends string>(selected: S | null | undefined, skins: readonly S[], tierOf: Readonly<Record<S, SkinTier>>): SkinTier {
-  const tabs = skinTierTabs(skins, tierOf);
-  const tier = selected != null && (skins as readonly string[]).includes(selected) ? tierOf[selected] : undefined;
-  return tabs.find((tab) => tab.tier === tier)?.tier ?? tabs[0]?.tier ?? "common";
-}
-
-export interface ColorTab {
-  group: MascotColorGroup;
-  colors: MascotColorName[];
-}
-
-/** The palette tabs, each with its colors in the swatch row's order; `groups` narrows them (Clay is for Shapes). */
-export function colorTabs(groups: readonly MascotColorGroup[] = MASCOT_COLOR_GROUPS): ColorTab[] {
-  return MASCOT_COLOR_GROUPS.filter((group) => groups.includes(group)).map((group) => ({ group, colors: paletteSwatches(group) }));
-}
-
-/** The palettes a character offers: Clay only for Shapes, Shiba, Grump, Ogre and Frog, or for a bot that already wears a Clay color. */
-export function colorGroupsFor(character: string, color: string | null | undefined): MascotColorGroup[] {
-  const own = mascotColorGroup(color);
-  return MASCOT_COLOR_GROUPS.filter((group) => group !== "clay" || character === "shape" || character === "shiba" || character === "grump" || character === "ogre" || character === "frog" || character === "crab" || own === "clay");
-}
-
-/** The palette tab the picker opens on: the current color's own (an unknown color opens Vivid). */
-export function colorTabFor(color: string | null | undefined): MascotColorGroup {
-  return mascotColorGroup(color);
-}
-
-/** Moving across a tab list with the arrow keys, Home and End (wraps around). */
-export function nextTab<T>(tabs: readonly T[], current: T, key: string): T | null {
-  const index = tabs.indexOf(current);
-  if (key === "ArrowRight") return tabs[(index + 1) % tabs.length];
-  if (key === "ArrowLeft") return tabs[(index - 1 + tabs.length) % tabs.length];
-  if (key === "Home") return tabs[0];
-  if (key === "End") return tabs[tabs.length - 1];
-  return null;
 }

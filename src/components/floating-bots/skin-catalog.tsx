@@ -1,5 +1,4 @@
-// Each character's skins and how one is previewed (split out of
-// MascotLookEditor.tsx): the list, the rarities, the names, and the real
+// Each character's skins and how one is previewed: the list, the rarities, the names, and the real
 // character drawn in a skin. The mascot picker's skins list and the page's
 // hero share it.
 import type { ReactNode } from "react";

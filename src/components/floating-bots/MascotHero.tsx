@@ -17,8 +17,6 @@ import { characterMoves, type OwlMove } from "./moves";
 import { MascotLookPreview } from "./MascotLookPreview";
 import { useMascotHeroSlot } from "./mascot-hero-slot";
 
-export type { PickerPatch as MascotLookPatch } from "./mascot-picker";
-export { CHARACTER_LABEL, SHAPE_LABEL, SHAPE_SKIN_LABEL, TROMBI_SKIN_LABEL, BUNBU_SKIN_LABEL, SHIBA_SKIN_LABEL, GRUMP_SKIN_LABEL, OGRE_SKIN_LABEL, FROG_SKIN_LABEL, CRAB_SKIN_LABEL, SKIN_TIER_LABEL, OWL_SKIN_LABEL, COLOR_GROUP_LABEL } from "./mascot-look-labels";
 
 export interface MascotHeroProps {
   bot: { id?: string; name?: string; color: MausColor; mascotSkin?: MascotSkinId | null; mascotLook?: MascotLook | null };

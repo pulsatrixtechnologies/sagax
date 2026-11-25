@@ -311,7 +311,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
           !resolveBotSkills(state.bot.id, assignedForTurn).some((entry: { name: string; enabled: boolean }) => entry.name === skill.name && !entry.enabled)),
       );
     const repliedText = promptWithReply(
-      state.skillAuthoring ? expandLearnTurnText(skillCommandText) : skillCommandText,
+      state.skillAuthoring ? expandLearnTurnText(state.resolvedImages.text, skillCommandText) : skillCommandText,
       state.opts?.replyTo,
       botUserName(state.bot),
     );

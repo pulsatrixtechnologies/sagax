@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
+import { SAVE_RUN_AS_SKILL_LINE } from "../shared/learn-request.ts";
 import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
 
 it("dispatches setup and canonical standing instructions through the real isolated app", async () => {
@@ -34,6 +35,20 @@ it("dispatches setup and canonical standing instructions through the real isolat
     expect(JSON.stringify(bare.prompt)).toContain("Set yourself up. Ask me what you need to know");
     expect(JSON.stringify(bare.prompt)).toContain("[Current time:");
 
+    await api("PATCH", "/api/config", { features: { skillAuthoring: false } });
+    const disabled = await turn("/learn record the harvest");
+    expect(JSON.stringify(disabled.prompt)).toContain("/learn record the harvest");
+    expect(JSON.stringify(disabled.prompt)).not.toContain("[/learn]");
+
+    await api("PATCH", "/api/config", { features: { skillAuthoring: true } });
+    for (const request of ["/learn record the harvest", `${SAVE_RUN_AS_SKILL_LINE}\nrecord the harvest`]) {
+      const learned = await turn(request);
+      expect(JSON.stringify(learned.prompt)).toContain("[Current time:");
+      expect(JSON.stringify(learned.prompt)).toContain("[/learn]");
+      expect(JSON.stringify(learned.prompt)).toContain("record the harvest");
+      expect(learned.systemPrompt).not.toContain("The user explicitly asked you to set yourself up");
+    }
+
     await api("PATCH", `/api/bots/${bot.id}`, { description: "Garden helper", soul: "Only water the fixture garden after approval." });
     writeFileSync(join(fixture.info.dataDir, "bots", bot.id, "SOUL.md"), "UNAPPROVED MIRROR INSTRUCTIONS");
     const configured = await turn("What is your job?");
@@ -46,9 +61,10 @@ it("dispatches setup and canonical standing instructions through the real isolat
     expect((await api("GET", `/api/bots/${bot.id}/history`)).rows).toEqual(expect.arrayContaining([
       expect.objectContaining({ field: "soul" }),
     ]));
-    const messages = await runControlOmb(["messages", "--bot", bot.id, "--limit", "10"], { env });
+    const messages = await runControlOmb(["messages", "--bot", bot.id, "--limit", "40"], { env });
     expect(JSON.stringify(messages)).toContain("hello from fake claude");
     expect(JSON.stringify(messages)).toContain('"/setup"');
+    expect(JSON.stringify(messages)).toContain('"/learn record the harvest"');
   } finally {
     await fixture.close();
   }

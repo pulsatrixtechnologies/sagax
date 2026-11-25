@@ -1,11 +1,15 @@
-/** Isolated gallery for headless captures of the composer's mode menu (#4900,
- * #5088): the real composer field (COMPOSER_PILL), the real chip
- * (ModelPickerTrigger) reading the mode's name, and the real ModelPanel with
- * its modes (Auto, Fast, Expert, Heavy, Build, Reasoning, All models) in the
+/** Isolated gallery for headless captures of the chat bar and its mode menu
+ * (#4900, #5088, #5372): the real composer field (COMPOSER_PILL) holding the
+ * +, the field and the voice button; under it the quiet row with the real
+ * chip (ModelPickerTrigger) reading the mode and its reasoning level, and the
+ * real context and usage meter (ComposerMeterView); the real ModelPanel with
+ * its modes (Auto, Fast, Expert, Heavy, Favorites, Reasoning, All models) in the
  * model menu's box, its sections built by the real buildModelPickerSections
  * from demo accounts (two Claude accounts, one more signed out, Grok, OpenAI).
  * Synthetic data only. Not shipped in the app.
- * ?skin=<id>&lang=<code>&mode=auto|fast|expert|heavy|build|pinned&view=short|all
+ * ?skin=<id>&lang=<code>&mode=auto|fast|expert|heavy|pinned&view=short|all
+ * &open=0 (the bar at rest, no menu) &meter=context|usage (a detail open)
+ * &place=left|right (the bar at a side of the window)
  * (the capture hovers a row with a real pointer, as a person would) */
 import { StrictMode, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -20,7 +24,9 @@ import { buildModelPickerSections } from "../components/ModelPicker.tsx-parts/bu
 import { MENU_BOX } from "../components/menu-look";
 import { cn } from "../lib/cn";
 import { loadLocale, t } from "../lib/i18n";
-import { modeName, type ModelMode } from "../lib/model-mode";
+import { chatBarChipLabel, type ModelMode } from "../lib/model-mode";
+import { ComposerMeterView } from "../components/ComposerMeter";
+import { MENU_ROW } from "../components/menu-look";
 import { trackInputModality } from "../lib/input-modality";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import type { ModeModel, ModeResolution } from "../../shared/model-mode";
@@ -38,6 +44,10 @@ const current = (params.get("mode") ?? "auto") as ModelMode | "pinned";
 const view = params.get("view") === "all" ? "all" : "short";
 // place=left: a composer at the window's left, so the cascade has the room to open to the right (#5338)
 const atLeft = params.get("place") === "left";
+// place=right: a bar at the window's right, where the cascade has to open to the left
+const atRight = params.get("place") === "right";
+const menuOpen = params.get("open") !== "0";
+const meterOpen = params.get("meter") === "context" ? "context" as const : params.get("meter") === "usage" ? "usage" as const : null;
 
 const engine = (instanceId: string, driverKind: string, displayName: string, email: string | undefined, options: Array<[string, string]>, authenticated = true): InstanceInfo => ({
   instanceId, displayName, driverKind, access: "subscription",
@@ -92,11 +102,11 @@ function Gallery() {
     myEngines: null, ranOnName: () => "", favoriteKeys: stars,
   }).menuSections;
   const pinnedLabel = "Claude Opus 5.5 · ada.admin@acme.test";
-  const chip = current === "pinned" ? "Claude Opus 5.5" : modeName(current);
+  const chip = current === "pinned" ? "Claude Opus 5.5" : chatBarChipLabel(current, current === "auto" ? undefined : resolutions[current].effort);
   return (
     <div className="flex min-h-screen flex-col bg-app p-4 text-ink sm:p-8">
-      <div className={cn("relative mt-auto flex w-full min-w-0 flex-col justify-end pt-[560px]", atLeft ? "mr-auto max-w-[420px]" : "mx-auto max-w-[760px]")}>
-        <div data-model-menu="" data-gallery-menu="" style={{ width: MENU_WIDTH }} className={cn("absolute bottom-[58px] right-0 z-10 py-1 text-popover-ink", MENU_BOX)}>
+      <div className={cn("relative mt-auto flex w-full min-w-0 flex-col justify-end pt-[560px]", atLeft ? "mr-auto max-w-[600px]" : atRight ? "ml-auto max-w-[600px]" : "mx-auto max-w-[760px]")}>
+        {menuOpen && <div data-model-menu="" data-gallery-menu="" style={{ width: MENU_WIDTH }} className={cn("absolute bottom-[34px] left-0 z-10 py-1 text-popover-ink", MENU_BOX)}>
           <ModelPanel
             sections={sections}
             onPick={() => undefined}
@@ -109,7 +119,7 @@ function Gallery() {
             view={view}
             modes={{ current: current === "pinned" ? null : current, resolutions, onPick: () => undefined, ...(current === "pinned" ? { pinnedLabel } : {}) }}
           />
-        </div>
+        </div>}
         <div data-tour="composer" className={COMPOSER_PILL}>
           <div className="flex items-end gap-1">
             <ComposerPlusMenu items={[
@@ -117,8 +127,33 @@ function Gallery() {
               { id: "teach", label: t("composer.plus.teach"), icon: <RecordMark />, onSelect: () => {} },
             ]} />
             <textarea rows={1} placeholder="Message Wren · Assistant" className="block min-h-6 w-full flex-1 resize-none bg-transparent chat-input-text px-1 py-1.5 placeholder:text-ink-secondary focus:outline-none" />
-            <span data-gallery-chip="" className="flex items-center"><Chip label={chip} /></span>
             <span className="flex size-7 items-center justify-center rounded-full bg-ink/[0.06] text-ink-secondary"><Mic size={16} aria-hidden="true" /></span>
+          </div>
+        </div>
+        {/* the quiet row under the box (ComposerUnderRow.tsx): the chip, then the meter at its end */}
+        <div data-composer-under-row="" className="@container/composer relative z-[1] w-full">
+          <div className="flex min-h-7 items-center gap-2 px-2 pt-1">
+            <span data-gallery-chip="" className="flex items-center"><Chip label={chip} /></span>
+            <span className="ml-auto flex min-w-0 items-center">
+              <ComposerMeterView
+                initialOpen={meterOpen}
+                context={{ percent: 42, detail: t("chat.usage.contextOfWindow", { tokens: "84k", percent: "42", window: "200k" }) }}
+                usage={{
+                  percent: 89, tone: "warning", account: "Claude · ada@example.com Max",
+                  windows: [
+                    { key: "weekly", label: `${t("planUsage.weekly")} · ${t("planUsage.resetsIn", { when: "2d 4h" })}`, value: t("planUsage.used", { used: 89 }) },
+                    { key: "five-hour", label: `${t("planUsage.fiveHour")} · ${t("planUsage.resetsIn", { when: "2h 30m" })}`, value: t("planUsage.used", { used: 31 }) },
+                  ],
+                }}
+                contextActions={<button type="button" className={MENU_ROW}>{t("contextWarning.compactNow")}</button>}
+                usageActions={() => (
+                  <>
+                    <button type="button" role="menuitem" className={MENU_ROW}>{t("sendBlock.switchEngine")}</button>
+                    <button type="button" role="menuitem" className={MENU_ROW}>{t("chat.notice.weekly.more")}</button>
+                  </>
+                )}
+              />
+            </span>
           </div>
         </div>
       </div>

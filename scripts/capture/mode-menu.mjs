@@ -3,8 +3,9 @@
  * Headless screenshots of the composer's mode menu (#4900, #5088;
  * M-20261123-040, M-20261123-045, M-20261123-047) through the gallery
  * src/gallery/mode-menu.tsx (real composer, chip, ModelPanel with its modes
- * and real menu sections): the rows (Auto, Fast, Expert, Heavy, Build,
- * Reasoning, All models) with a tooltip, Reasoning greyed under a mode that
+ * and real menu sections): the chat bar at rest with its chip and its
+ * context and usage meter under the box (#5372), the rows (Auto, Fast,
+ * Expert, Heavy, Favorites, Reasoning, All models) with a tooltip, Reasoning greyed under a mode that
  * sets its own level, the reasoning levels, and each step of All models
  * (providers, accounts, models, a provider with one account going straight
  * to its models), a pinned model. Since #5338 (M-20261125-035,
@@ -32,10 +33,15 @@ const lang = arg("--lang", "en");
 const english = lang === "en";
 // `steps`: the rows a person clicks, in order, before the shot
 const shots = [
+  // the chat bar (#5372): one box, the chip and the meter in the quiet row under it
+  { name: "00-bar-rest", query: "mode=expert&open=0" },
+  { name: "00-bar-narrow", query: "mode=expert&open=0", width: 400 },
+  { name: "00-bar-narrowest", query: "mode=expert&open=0", width: 330 },
+  { name: "00-meter-context", query: "mode=expert&open=0&meter=context" },
+  { name: "00-meter-usage", query: "mode=expert&open=0&meter=usage" },
   { name: "01-menu-auto", query: "mode=auto" },
   { name: "02-menu-fast-tooltip", query: "mode=auto&hover=fast", tip: english ? "Quick responses · Grok 4 Fast" : undefined },
   { name: "03-menu-expert-reasoning-imposed", query: "mode=expert" },
-  { name: "04-menu-build", query: "mode=build&hover=build", tip: english ? "A model made for code · Grok Code 2" : undefined },
   { name: "05-reasoning-levels", query: "mode=auto", steps: ['[data-mode-row="reasoning"]'] },
   { name: "06-all-models-providers", query: "mode=auto", steps: ['[data-mode-row="all"]'] },
   { name: "07-all-models-accounts", query: "mode=auto", steps: ['[data-mode-row="all"]', '[data-model-cascade-provider="anthropic"]'] },
@@ -46,11 +52,11 @@ const shots = [
   // the whole path at once (D-20261125-012): the menu, the providers, the accounts, the models
   { name: "12-cascade-full-path", query: "mode=auto&place=left", side: "right", levels: ["root", "providers", "accounts", "models"], steps: ['[data-mode-row="all"]', '[data-model-cascade-provider="anthropic"]', "[data-model-cascade-account] >> nth=1"] },
   { name: "13-cascade-hover", query: "mode=auto&place=left", side: "right", levels: ["root", "providers", "accounts", "models"], rests: ['[data-mode-row="all"]', '[data-model-cascade-provider="anthropic"]', "[data-model-cascade-account] >> nth=0"] },
-  { name: "14-cascade-keyboard", query: "mode=auto&place=left", side: "right", levels: ["root", "providers", "accounts", "models"], keys: ["End", "ArrowRight", "ArrowDown", "ArrowDown", "ArrowRight", "ArrowRight"] },
-  { name: "15-cascade-escape-one-level", query: "mode=auto&place=left", side: "right", levels: ["root", "providers", "accounts"], keys: ["End", "ArrowRight", "ArrowDown", "ArrowDown", "ArrowRight", "ArrowRight", "Escape"] },
+  { name: "14-cascade-keyboard", query: "mode=auto&place=left", side: "right", levels: ["root", "providers", "accounts", "models"], keys: ["End", "ArrowRight", "ArrowRight", "ArrowRight"] },
+  { name: "15-cascade-escape-one-level", query: "mode=auto&place=left", side: "right", levels: ["root", "providers", "accounts"], keys: ["End", "ArrowRight", "ArrowRight", "ArrowRight", "Escape"] },
   { name: "16-cascade-pinned-path", query: "mode=pinned&place=left", side: "right", levels: ["root", "providers", "accounts", "models"], steps: ['[data-mode-row="all"]', '[data-model-cascade-provider="anthropic"]', "[data-model-cascade-account] >> nth=0"] },
-  // the composer's usual place, the chip at its right: no room on the right for the path, the levels open to the left of the menu
-  { name: "17-cascade-flipped-left", query: "mode=auto", side: "left", levels: ["root", "providers", "accounts", "models"], steps: ['[data-mode-row="all"]', '[data-model-cascade-provider="anthropic"]', "[data-model-cascade-account] >> nth=1"] },
+  // a bar at the window's right: no room on the right for the path, the levels open to the left of the menu
+  { name: "17-cascade-flipped-left", query: "mode=auto&place=right", side: "left", levels: ["root", "providers", "accounts", "models"], steps: ['[data-mode-row="all"]', '[data-model-cascade-provider="anthropic"]', "[data-model-cascade-account] >> nth=1"] },
   // a window too narrow for the path on either side: each level stops at the window's margin, over a part of the one before
   { name: "18-cascade-narrow-window", query: "mode=auto", width: 1000, cramped: true, levels: ["root", "providers", "accounts", "models"], steps: ['[data-mode-row="all"]', '[data-model-cascade-provider="anthropic"]', "[data-model-cascade-account] >> nth=1"] },
 ];

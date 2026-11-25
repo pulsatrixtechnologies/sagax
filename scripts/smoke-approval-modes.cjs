@@ -219,9 +219,8 @@ app.whenReady().then(async () => {
     console.log(JSON.stringify({ mode, native, privateGrant: true, newThreadInherits: true, firstThreadFollows: Boolean(firstThread), turnSettled: true }));
   }
   await assert.rejects(coordinator.request(child, id, "custom"), /only for Codex/);
-  // An existing conversation follows its bot's level, live (#1169), unless
-  // it keeps a level of its own (a thread exception). The private
-  // per-thread grant still answers for a thread on the bot's provider.
+  // Existing conversations follow the bot's level (#4200). The private
+  // grant naming an existing thread still checks the bot's provider.
   for (const [instanceId, model] of [["claude", "claude-sonnet-5"], ["codex", "gpt-6-astra"], ["grok-reads", "grok-4.6"], ["agy", "gemini-3.8-flash-high"]]) {
     const scoped = (await api("/api/bots", "POST", { name: "Existing thread", modelSelection: { instanceId, model } })).body.bot;
     await coordinator.request(child, scoped.id, "ask");
@@ -235,6 +234,13 @@ app.whenReady().then(async () => {
     if (instanceId === "claude") {
       assert.equal((await api(`/api/bots/${scoped.id}/tasks/${other.threadId}`, "PATCH", { approvalMode: "edits" })).status, 200);
       assert.equal((await api(`/api/bots/${scoped.id}/tasks/${other.threadId}`, "PATCH", { approvalMode: "ask", modelSelection: { instanceId: "codex", model: "gpt-6-astra" } })).status, 200);
+      // A level selected in a thread updates the bot (#4200). Restore its
+      // Full grant before testing a different provider on this thread.
+      const changed = await readScoped();
+      assert.equal(changed.approvalMode, "ask");
+      assert.equal(changed.modelSelection.instanceId, "claude");
+      assert.equal(changed.tasks.find((task) => task.threadId === other.threadId).modelSelection.instanceId, "codex");
+      await coordinator.request(child, scoped.id, "full");
       await assert.rejects(coordinator.request(child, scoped.id, "full", { threadId: other.threadId }), /bot's provider/);
       assert.equal((await api(`/api/bots/${scoped.id}/tasks/${other.threadId}`, "PATCH", { approvalMode: "edits" })).status, 400);
     }
@@ -247,9 +253,7 @@ app.whenReady().then(async () => {
     }
     await coordinator.request(child, scoped.id, "full", { threadId: old.threadId });
     await until(async () => threadLevel(await readScoped(), old.threadId) === "full");
-    // Setting the bot's level makes every thread follow it again, the
-    // Claude case's other thread too, whose engine change had kept Ask
-    // (#1169, store.patchBot).
+    // Both threads now follow Full, including the one using Codex.
     const otherLevel = "full";
     assert.equal(threadLevel(await readScoped(), other.threadId), otherLevel);
     await assert.rejects(coordinator.request(child, scoped.id, "full", { threadId: "missing-thread" }), /bot settings/);
@@ -269,26 +273,28 @@ app.whenReady().then(async () => {
     console.log(JSON.stringify({ provider: instanceId, existingThread: "full", otherThread: otherLevel, privateGrant: true, turnSettled: true }));
   }
   const pendingCard = (bot) => bot.messages.find((message) => message.card?.requestId && !message.card.answered && !message.card.dismissed)?.card;
-  // Composer grants are independent: an Ask default is not a prerequisite
-  // trip through settings, and a thread may use a different provider.
-  const direct = (await api("/api/bots", "POST", { name: "Composer scoped access", modelSelection: { instanceId: "claude", model: "claude-sonnet-5" } })).body.bot;
+  // A composer change sets one level for this bot. Refreshing permissions
+  // still targets a specific thread and checks its provider.
+  const direct = (await api("/api/bots", "POST", { name: "Composer access", modelSelection: { instanceId: "codex", model: "gpt-6-astra" } })).body.bot;
   await coordinator.request(child, direct.id, "ask");
-  const selected = (await api(`/api/bots/${direct.id}/tasks`, "POST", { title: "Select Full here" })).body.task;
-  const sibling = (await api(`/api/bots/${direct.id}/tasks`, "POST", { title: "Keep Ask here" })).body.task;
+  const selected = (await api(`/api/bots/${direct.id}/tasks`, "POST", { title: "Codex conversation" })).body.task;
+  const sibling = (await api(`/api/bots/${direct.id}/tasks`, "POST", { title: "Claude conversation" })).body.task;
+  assert.equal((await api(`/api/bots/${direct.id}/tasks/${sibling.threadId}`, "PATCH", { modelSelection: { instanceId: "claude", model: "claude-sonnet-5" } })).status, 200);
   const committed = await coordinator.request(child, direct.id, "full", { threadId: selected.threadId, threadOnly: true });
-  assert.equal(committed.approvalMode, "ask");
-  assert.equal(threadLevel(committed, selected.threadId), "full");
-  assert.equal(threadLevel(committed, sibling.threadId), "ask");
-  await assert.rejects(coordinator.request(child, direct.id, "full", { threadId: "missing", threadOnly: true }), /existing thread/);
-  await coordinator.request(child, direct.id, "ask", { threadId: selected.threadId, threadOnly: true });
-  await api(`/api/bots/${direct.id}/tasks/${selected.threadId}`, "PATCH", { modelSelection: { instanceId: "codex", model: "gpt-6-astra" } });
-  const custom = await coordinator.request(child, direct.id, "custom", { threadId: selected.threadId, threadOnly: true });
-  assert.equal(custom.approvalMode, "ask");
+  assert.equal(committed.approvalMode, "full");
+  assert.ok(everyThreadAt(committed, "full"));
+  const refresh = (threadId) => ({ threadId, threadOnly: true, refreshPermissions: true });
+  await assert.rejects(coordinator.request(child, direct.id, "full", refresh("missing")), /before refreshing a thread/);
+  const custom = await coordinator.request(child, direct.id, "custom");
+  assert.equal(custom.approvalMode, "custom");
   assert.equal(threadLevel(custom, selected.threadId), "custom");
-  const downgraded = await coordinator.request(child, direct.id, "ask", { threadId: selected.threadId, threadOnly: true });
-  assert.equal(threadLevel(downgraded, selected.threadId), "ask");
+  await assert.rejects(coordinator.request(child, direct.id, "custom", refresh(sibling.threadId)), /provider does not support/);
+  const refreshed = await coordinator.request(child, direct.id, "custom", refresh(selected.threadId));
+  assert.equal(threadLevel(refreshed, selected.threadId), "custom");
+  const downgraded = await coordinator.request(child, direct.id, "ask");
   assert.equal(downgraded.approvalMode, "ask");
-  console.log(JSON.stringify({ composerGrant: true, defaultRemainsAsk: true, customOnDifferentThreadProvider: true, committedReply: true }));
+  assert.ok(everyThreadAt(downgraded, "ask"));
+  console.log(JSON.stringify({ composerGrant: true, siblingsFollow: true, refreshChecksProvider: true, committedReply: true }));
   const parallel = (await api("/api/bots", "POST", { name: "Parallel permission fixture", modelSelection: { instanceId: "grok-delete", model: "grok-4.6" } })).body.bot;
   await coordinator.request(child, parallel.id, "ask");
   const working = (await api(`/api/bots/${parallel.id}/tasks`, "POST", { title: "Already running" })).body.task;
@@ -300,16 +306,16 @@ app.whenReady().then(async () => {
   const modesBefore = await parallelModes();
   await assert.rejects(coordinator.request(child, parallel.id, "full", { allThreads: true }), /active turns/);
   assert.deepEqual(await parallelModes(), modesBefore);
-  await assert.rejects(coordinator.request(child, parallel.id, "full", { threadId: working.threadId, threadOnly: true }), /Stop this thread/);
-  const separate = await coordinator.request(child, parallel.id, "full", { threadId: idle.threadId, threadOnly: true });
+  await assert.rejects(coordinator.request(child, parallel.id, "ask", refresh(working.threadId)), /Stop this thread/);
+  const separate = await coordinator.request(child, parallel.id, "ask", refresh(idle.threadId));
   assert.equal(separate.tasks.find(task => task.threadId === working.threadId).busy, true);
   assert.equal(threadLevel(separate, working.threadId), "ask");
-  assert.equal(threadLevel(separate, idle.threadId), "full");
+  assert.equal(threadLevel(separate, idle.threadId), "ask");
   // The card is answered in its own conversation, as the app does
   // (src/state/store/dispatch-send.ts): the bot's selected thread is another.
   assert.equal((await api(`/api/threads/${working.threadId}/respond`, "POST", { requestId: held.requestId, behavior: "deny" })).body.outcome, "rejected");
   await until(async () => !(await api("/api/bots?messages=0")).body.bots.find(bot => bot.id === parallel.id).busy);
-  console.log(JSON.stringify({ composerGrantWhileSiblingBusy: true, siblingNotInterrupted: true }));
+  console.log(JSON.stringify({ permissionRefreshWhileSiblingBusy: true, siblingNotInterrupted: true }));
   // The fake reviewer only approves the two known reads under native Auto.
   // Their actual MCP calls reach this real isolated server. This verifies the
   // routing contract, not the availability/quality of Grok's hosted reviewer.

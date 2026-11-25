@@ -340,7 +340,7 @@ describe("control-omb ui drives the real renderer", () => {
       await expect.poll(() => evaluate(`document.querySelector('[data-models-page]').textContent`)).toContain("azure-chat");
       await ui("screenshot", info.ui, "--out", join(evidenceDir, "azure-models.png"));
       await evaluate(`document.querySelector('[aria-label="Close settings"]').click(); true`);
-      await clickWhenShown('main [data-composer-actions] button[data-tour="model"]');
+      await clickWhenShown('main [data-composer-model-chip] button[data-tour="model"]');
       await openProviderModels(info.ui, `server:${instance.providerAccount?.serverId ?? instance.instanceId}`);
       expect(await evaluate(`document.querySelector('[data-model-menu]').textContent`)).toContain("Azure Foundry");
       await evaluate(`document.querySelector('[data-model-option="azure-chat"]').scrollIntoView({ block: "center" }); true`);
@@ -471,8 +471,8 @@ describe("control-omb ui drives the real renderer", () => {
     const options = models.instances.find((instance: any) => instance.instanceId === originalBot.modelSelection.instanceId).models.options;
     const nextModel = options.find((option: any) => option.id !== originalModel);
     // #2106: the chat bar shows the model chip; a click on it opens the
-    // model menu (ComposerActionBar.tsx, ModelPickerTrigger.tsx).
-    const modelChip = "main [data-composer-actions] button[data-tour=\"model\"]";
+    // model menu (ComposerUnderRow.tsx, ModelPickerTrigger.tsx).
+    const modelChip = "main [data-composer-model-chip] button[data-tour=\"model\"]";
     await expect.poll(async () => (await ui("eval", info.ui, "--js", `String(Boolean(document.querySelector(${JSON.stringify(modelChip)})))`)).result, { timeout: 10_000 }).toBe("true");
     await ui("eval", info.ui, "--js", `document.querySelector(${JSON.stringify(modelChip)}).click(); true`);
     await ui("screenshot", info.ui, "--out", join(evidenceDir, "before-model-menu.png"));

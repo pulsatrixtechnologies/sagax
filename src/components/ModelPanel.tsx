@@ -23,8 +23,9 @@
 // row that opened it, listing only what can run a turn now
 // (src/lib/model-menu.ts modelCascade). A click, a rest of the pointer or the
 // right arrow opens a level; Escape or the left arrow closes the deepest one.
-// The starred favorites lead the
-// provider level and the star still adds or removes one. Account, Runs with
+// The starred favorites sit in the menu itself, under the modes and the
+// heading "Favorites" (M-20261125-074); the star of All models still adds or
+// removes one. Account, Runs with
 // and Manage models stay in the footer; a model turned off is turned back on
 // in Manage models, the menu no longer counts them.
 import { useEffect, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
@@ -202,7 +203,8 @@ export function ModelPanel(props: ModelPanelProps) {
     : at.panel === "accounts" ? [{ panel: "providers" }, at]
     : [{ panel: "providers" }, ...(viaAccount ? [{ panel: "accounts", provider: at.provider } as MenuPanel] : []), at];
   const inAll = levels[0]?.panel === "providers";
-  const cascadeFavorites = inAll ? favoriteRows.filter((row) => !row.unavailable) : [];
+  // M-20261125-074: the favorites sit in the menu itself, under the modes; one that cannot run now is absent
+  const menuFavorites = modes ? favoriteRows.filter((row) => !row.unavailable) : [];
   const viewRows: ModelMenuRow[] = modes ? (atAccount?.models.map((one) => one.data) ?? []) : !all ? [] : section?.rows ?? [];
   const searchable = (modes ? at.panel === "models" : all) && viewRows.length > PANEL_SEARCH_FROM;
   const typed = searchable ? query.trim() : "";
@@ -275,7 +277,7 @@ export function ModelPanel(props: ModelPanelProps) {
   const cascadeLead = modes && inAll ? leadRows : [];
   const rovingRows = modes ? listedRows : all ? [...lead, ...listedRows] : [...(autoRow ? [autoRow] : []), ...lead, ...shortModels];
   // in the mode menu each level roves on its own rows: the models of an account, or the rows that lead the providers
-  const providerLevelRows = [...cascadeLead, ...cascadeFavorites];
+  const providerLevelRows = cascadeLead;
   const modelRow = (row: ModelMenuRow, group?: string, level?: MenuPanel) => {
     const roving = level?.panel === "providers" ? providerLevelRows : rovingRows;
     const rovingHasCurrent = (modes || all ? false : autoOn) || roving.some((candidate) => candidate.current);
@@ -395,6 +397,35 @@ export function ModelPanel(props: ModelPanelProps) {
     </label>
   );
 
+  // M-20261125-074: the person's favorite models in the mode menu, under the
+  // heading "Favorites" (sentence case): one click runs the model; the star
+  // that adds or removes one stays in All models
+  const menuFavoriteRows = menuFavorites.length > 0 ? (
+    <div data-mode-favorites="">
+      <div data-mode-favorites-heading="" className={GROUP_HEADING}>{t("model.favorites")}</div>
+      {menuFavorites.map((row) => (
+        <div key={row.key} className={PANEL_ROW}>
+          <button type="button" role="radio" aria-checked={row.current} disabled={disabled}
+            data-model-panel-row={row.key} data-mode-favorite={row.key} data-model-option={row.modelId}
+            title={[row.title ?? row.label, row.account].filter(Boolean).join(" · ")}
+            tabIndex={row.current ? 0 : -1}
+            onMouseDown={(event) => event.preventDefault()}
+            onPointerEnter={(event) => restOn(event, { panel: "root" }, false)}
+            onClick={() => onPick(row)}
+            className={PANEL_ROW_BUTTON}>
+            <span aria-hidden="true" className={cn("flex size-4 shrink-0 items-center justify-center", row.current ? "text-popover-ink" : "text-popover-ink-secondary")}>
+              <Star size={15} strokeWidth={1.75} />
+            </span>
+            <span className="min-w-0 flex-1 truncate">{row.label}</span>
+            {row.account && <span data-model-row-account className="max-w-[45%] shrink-0 truncate pl-1 text-right text-[12px] text-popover-ink-secondary">{row.account}</span>}
+            <span aria-hidden="true" className={ROW_SIDE_SLOT} />
+            <span aria-hidden="true" className={ROW_ICON_SLOT}>{row.current && <Check size={14} className="text-popover-accent" />}</span>
+          </button>
+        </div>
+      ))}
+    </div>
+  ) : undefined;
+
   // the mode menu's levels (D-20261125-012): each one's rows, drawn beside the row that opened it
   const levelLabel = (level: MenuPanel) => (level.panel === "reasoning" ? t("model.reasoning") : level.panel === "providers" ? t("model.auto.rail")
     : level.panel === "accounts" ? atProvider?.label ?? "" : viaAccount ? `${atProvider?.label ?? ""} · ${atAccount?.label ?? ""}` : atProvider?.label ?? "");
@@ -425,20 +456,13 @@ export function ModelPanel(props: ModelPanelProps) {
       return (
         <>
           {cascadeLead.map((row) => modelRow(row, undefined, level))}
-          {cascadeFavorites.length > 0 && (
-            <div data-model-cascade-favorites="">
-              <div className={GROUP_HEADING}>{t("model.favorites")}</div>
-              {cascadeFavorites.map((row) => modelRow(row, "favorites", level))}
-              <div role="separator" className="mx-2 my-1 border-t border-popover-hairline" />
-            </div>
-          )}
           {cascade.map((provider) => {
             const on = cascadeCurrent?.provider.id === provider.id;
             const opened = atProvider?.id === provider.id;
             return (
               <div key={provider.id} className={cn(PANEL_ROW, opened && "bg-popover-hover")}>
                 <button type="button" aria-haspopup="menu" aria-expanded={opened} data-model-panel-row={`provider:${provider.id}`} data-model-cascade-provider={provider.id}
-                  tabIndex={on || (!cascadeCurrent && !cascadeLead.length && !cascadeFavorites.length && provider === cascade[0]) ? 0 : -1}
+                  tabIndex={on || (!cascadeCurrent && !cascadeLead.length && provider === cascade[0]) ? 0 : -1}
                   onMouseDown={(event) => event.preventDefault()}
                   onPointerEnter={(event) => restOn(event, openProvider(provider), true)}
                   onKeyDown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); go(openProvider(provider)); } }}
@@ -544,6 +568,7 @@ export function ModelPanel(props: ModelPanelProps) {
         {modes ? (
           <ModeMenu current={modes.current} resolutions={modes.resolutions} onPick={modes.onPick} disabled={disabled}
             onModeRest={(event) => restOn(event, { panel: "root" }, false)}
+            favorites={menuFavoriteRows}
             reasoning={showSettings ? { row: reasoningState, label: reasoningLabel, open: at.panel === "reasoning", onOpen: () => go({ panel: "reasoning" }), onRest: reasoningState.disabled ? (event) => restOn(event, { panel: "root" }, false) : (event) => restOn(event, { panel: "reasoning" }, true) } : undefined}
             allModels={{ label: modes.pinnedLabel, open: inAll, onOpen: () => go({ panel: "providers" }), onRest: (event) => restOn(event, { panel: "providers" }, true) }} />
         ) : !all ? (

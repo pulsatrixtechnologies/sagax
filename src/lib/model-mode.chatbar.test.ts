@@ -27,7 +27,7 @@ describe("the chat bar's modes", () => {
     expect(shownMode({ auto: true, mode: "build" })).toBe("auto");
     expect(shownMode({ auto: true, mode: "expert" })).toBe("expert");
     expect(shownMode({ auto: true })).toBe("auto");
-    expect(shownMode({ auto: false })).toBeNull();
+    expect(shownMode({})).toBeNull();
     expect(modeName("build")).toBe("Auto");
   });
 

@@ -18,6 +18,7 @@ import { ComposerMentionMenu } from "./ComposerMentionMenu";
 import { ComposerPendingStrip } from "./ComposerPendingStrip";
 import { ComposerEditor } from "./ComposerEditor";
 import { ComposerActionBar } from "./ComposerActionBar";
+import { ComposerUnderRow } from "./ComposerUnderRow";
 import { ComposerWarningDialogs } from "./ComposerWarningDialogs";
 import { composeMessage } from "@/lib/composer-attachments";
 import type { MemeAttachmentPick } from "../MemePicker";
@@ -264,15 +265,14 @@ export function ComposerShell({
           channelMode={channelMode}
           config={config}
           composerAria={composerAria}
+          below={bot && !group && !remoteClient
+            ? <ComposerUnderRow bot={bot} threadId={threadId} modelMenu={modelMenu} composerRowRef={composerRowRef} />
+            : undefined}
         >
           <ComposerActionBar
             bot={bot}
             group={group}
-            remoteClient={remoteClient}
             locked={locked}
-            threadId={threadId}
-            modelMenu={modelMenu}
-            composerRowRef={composerRowRef}
             dictating={dictating}
             voiceNoting={voiceNoting}
             recording={recording}

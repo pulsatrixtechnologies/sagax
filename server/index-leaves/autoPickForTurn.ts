@@ -86,7 +86,9 @@ function autoPickForTurn(input: {
   // own engine rule: a call turn takes the pick as a typed turn does, #4888).
   // With nothing usable for the mode the bot's Auto reads the request as before.
   const modes = input.withModes ? { modes: resolveModes(request) } : {};
-  if (isForcedModelMode(bot.modelSelection.mode)) {
+  // M-20261125-073: Build left the chat bar; a bot or a conversation still set
+  // on it runs as Auto (the request is read), and nothing stored is rewritten
+  if (isForcedModelMode(bot.modelSelection.mode) && bot.modelSelection.mode !== "build") {
     const picked = pickModeModel(request, bot.modelSelection.mode);
     if (picked) return { payer, pick: onAccount(picked), ...modes };
   }

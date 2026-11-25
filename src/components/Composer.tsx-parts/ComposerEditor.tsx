@@ -70,6 +70,7 @@ export function ComposerEditor({
   composerAria,
   onSendMeme,
   plusRows,
+  below,
   children,
 }: {
   bot?: Bot;
@@ -120,6 +121,8 @@ export function ComposerEditor({
   onSendMeme?: (attachment: MemeAttachmentPick) => void;
   /** The + menu's rows that a narrow capsule folds into it (#4093). */
   plusRows?: (close: () => void) => ReactNode;
+  /** The quiet row under the box (the model chip, the context and usage meter). */
+  below?: ReactNode;
   children?: ReactNode;
 }) {
   const [memesOpen, setMemesOpen] = useState(false);
@@ -149,7 +152,8 @@ export function ComposerEditor({
       <div
         aria-hidden
         data-composer-backdrop
-        className="pointer-events-none absolute -left-[50vw] -right-[50vw] -bottom-4 top-1/2 bg-app [[data-page-stage-chat]_&]:hidden"
+        // from the box's top radius down (22 px, half of a one-line box): the row under the box sits on it too
+        className="pointer-events-none absolute -left-[50vw] -right-[50vw] -bottom-4 top-[22px] bg-app [[data-page-stage-chat]_&]:hidden"
       />
     {/* One row while it fits: chips, editor, mic. Below the container
         width where the chips and the placeholder cannot share a line,
@@ -277,6 +281,7 @@ export function ComposerEditor({
       {children}
     </div>
     </div>
+    {below}
     </div>
   );
 }

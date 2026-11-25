@@ -569,6 +569,7 @@ describe("no admin gate on what stays in the person's own space (decided 2026-10
 /** Surfaces #2106 owns or sits next to: must stay unified-chat clean. */
 const MODEL_PICKER_OWNED = [
   "src/components/Composer.tsx-parts/ComposerActionBar.tsx",
+  "src/components/Composer.tsx-parts/ComposerUnderRow.tsx",
   "src/components/ModelPicker.tsx",
   "src/components/ModelPicker.tsx-parts",
   "src/components/ModelMenu.tsx",
@@ -623,8 +624,9 @@ describe("the owner unified chat guards (#2106)", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("ComposerActionBar restores a visible model chip (no headless chat-bar picker)", () => {
-    const bar = readRoot("src/components/Composer.tsx-parts/ComposerActionBar.tsx");
+  // M-20261125-074: the chip sits in the row under the message box
+  it("the row under the message box holds a visible model chip (no headless chat-bar picker)", () => {
+    const bar = readRoot("src/components/Composer.tsx-parts/ComposerUnderRow.tsx");
     expect(bar).toMatch(/#2106/);
     expect(bar).toMatch(/<ModelPicker inComposer/);
     expect(bar).not.toMatch(/headless/);

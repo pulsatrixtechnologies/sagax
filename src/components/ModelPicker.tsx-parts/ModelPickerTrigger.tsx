@@ -118,12 +118,13 @@ export function ModelPickerTrigger({
     aria-haspopup="listbox"
     title={bot.busy ? `${composerLabel}${followLine}\n${t(threadId ? "model.threadBusy" : "model.busy")}` : `${composerLabel}${followLine}`}
     className={cn(
-      "flex max-w-full items-center gap-1 rounded-lg px-1.5 py-1 text-[13px] text-ink-secondary hover:bg-raised hover:text-ink disabled:cursor-not-allowed disabled:opacity-50",
+      // M-20261125-074: under the message box, in small quiet text
+      "flex max-w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px] leading-5 text-ink-secondary hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-50",
       isUltracodeEffort(selection.effort) && "ultracode-effort-chip",
     )}
   >
     <span className="truncate">{composerLabel}</span>
-    <ChevronDown size={14} className={cn("shrink-0 transition-transform", menu && "rotate-180")} />
+    <ChevronDown size={12} className={cn("shrink-0 transition-transform", menu && "rotate-180")} />
   </button>
 ) : listChip ? (
   // Settings > Models list cell: the engine mark and the whole model name

@@ -628,6 +628,34 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     expect(audit.filter((row) => row.action === "org.settings" && row.actor.via === "console").map((row) => row.changed[0])).toEqual(expect.arrayContaining(["allowFullAccess", "allowedEngines", "ownAccountsOutsideList", "pluginMarketplaces", "defaults"]));
   }, 60_000);
 
+  it("C5: the organization's engines: what each row is, a key set and cleared, a catalog engine never removed (#5351)", async () => {
+    const caps = await admin("GET", "capabilities", ALICE);
+    expect(caps.body.routes).toEqual(expect.arrayContaining(["GET engines", "POST engines/{id}/remove", "POST engines/{id}/key", "POST engines/{id}/key/remove"]));
+    const listed = await admin("GET", "engines", ALICE);
+    expect(listed.status, listed.text).toBe(200);
+    expect(listed.body.engines.find((engine: { id: string }) => engine.id === "claude")).toMatchObject({ source: "catalog", removable: false, takesKey: false });
+    expect(listed.body.engines.find((engine: { id: string }) => engine.id === "openrouter")).toMatchObject({ source: "catalog", removable: false, takesKey: true, orgKey: false });
+    expect((await admin("GET", "engines", MONA)).body.code).toBe("forbidden_role");
+    expect((await admin("POST", "engines/openrouter/key", MONA, { key: "console-test-key-0001" })).body.code).toBe("forbidden_role");
+
+    expect((await admin("POST", "engines/claude/remove", ALICE)).body).toMatchObject({ code: "catalog_engine" });
+    expect((await admin("POST", "engines/claude/key", ALICE, { key: "console-test-key-0001" })).body).toMatchObject({ code: "engine_takes_no_key" });
+    expect((await admin("POST", "engines/openrouter/key", ALICE, { key: "short" })).body).toMatchObject({ code: "engine_key_shape" });
+
+    const saved = await admin("POST", "engines/openrouter/key", ALICE, { key: "console-test-key-0001" });
+    expect(saved.status, saved.text).toBe(200);
+    expect(saved.body.configured).toBe(true);
+    expect(saved.body.engines.find((engine: { id: string }) => engine.id === "openrouter")).toMatchObject({ orgKey: true });
+    expect(saved.text).not.toContain("console-test-key-0001");
+    await expect.poll(async () => (await admin("GET", "audit?category=engine&limit=50", ALICE)).text).toContain("engines.key.set");
+    expect((await admin("GET", "audit?category=engine&limit=50", ALICE)).text).not.toContain("console-test-key-0001");
+
+    const cleared = await admin("POST", "engines/openrouter/key/remove", ALICE);
+    expect(cleared.status, cleared.text).toBe(200);
+    expect(cleared.body.configured).toBe(false);
+    expect(cleared.body.engines.find((engine: { id: string }) => engine.id === "openrouter")).toMatchObject({ orgKey: false });
+  });
+
   it("C5: the vault export policy (2026-10-18), and a pairing code is no recent sign-in", async () => {
     // on by default; the console and Settings > Organization both carry it
     expect((await admin("GET", "settings", ALICE)).body.org).toMatchObject({ allowVaultExport: true });

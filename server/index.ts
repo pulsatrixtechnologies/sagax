@@ -1459,6 +1459,7 @@ import { routineScheduleLabel } from "./org/org-admin-schedule.ts";
 import { routinesRoutes, type RoutinesDeps } from "./org/org-admin-routines.ts";
 import { routineRunsRoutes, type RoutineRunsDeps } from "./org/org-admin-runs.ts";
 import { opsRoutes, type ConnectionsView, type OpsDeps } from "./org/org-admin-ops.ts";
+import { enginesRoutes, orgEngineRow, type EnginesDeps } from "./org/org-admin-engines.ts";
 import { createOrgImportRoute } from "./org/org-import-routes.ts";
 import { sandboxdKeySource } from "./sandbox/sandboxd-auth.ts";
 import { sandboxBackendFor, sandboxRouteFromEnv } from "./sandbox/sandbox-route.ts";
@@ -1570,7 +1571,7 @@ import { createPlanHistoryStore } from "./usage/plan-history.ts";
 import { createKeysTestRoutes } from "./routes/keys-test.ts";
 import { createDecisionsRoutes } from "./routes/decisions.ts";
 import { createAdminActivityRoutes } from "./routes/admin-activity.ts";
-import { createInstancesRoutes, instancesInView, removeAddedAccount, type AddedAccountRemovalDeps } from "./routes/instances.ts";
+import { createInstancesRoutes, instancesInView, removeAccountMovingBots, removeAddedAccount, saveOrgEngineKey, type AddedAccountRemovalDeps } from "./routes/instances.ts";
 import { accountOwnedBy, accountOwnerOf, allowedWithOwnedAccounts, describeUnownedAccount, unownedAddedAccounts } from "./engines/account-owner.ts";
 import { accountWords } from "../shared/model-accounts.ts";
 import { providerOfInstance } from "../shared/model-provider.ts";
@@ -33293,6 +33294,29 @@ function orgConsolePeople(): Array<{ principalId: string; disabled: boolean }> {
     .map((entry) => ({ principalId: entry.principalId!, disabled: Boolean(entry.disabled) }));
 }
 
+/** The organization's engines the console adds to and removes from
+ * (server/org/org-admin-engines.ts, #5351). The rows are the ones GET
+ * capabilities lists, less the voice and media rows (not bot engines). */
+const orgEngineDriver = (instanceId: string): string => providerConfigs()[instanceId]?.driver ?? registry.get(instanceId)?.driverKind ?? "";
+const orgEnginesDeps: EnginesDeps = {
+  engines: () => {
+    const configs = providerConfigs();
+    return orgAdminEngines()
+      .filter((engine: { voice?: boolean; image?: boolean }) => !engine.voice && !engine.image)
+      .map((engine: Parameters<typeof orgEngineRow>[0]) => orgEngineRow(engine, orgEngineDriver(engine.id), configs[engine.id]?.access));
+  },
+  refusal: () => (hostedModels ? HOSTED_PROVIDER_SETTINGS_ERROR : null),
+  remove: async (instanceId) => {
+    const { removed, plan } = await removeAccountMovingBots({ ...addedAccountRemoval, accountMoves: accountMovesHost() }, instanceId);
+    return removed.ok ? { ok: true, ...(plan ? { moved: plan.moves, noEngine: plan.noEngine } : {}) } : removed;
+  },
+  setKey: (instanceId, key) => saveOrgEngineKey({
+    cfg, saveConfig, loadConfig, broadcast, configStatus, providerConfigs, reloadProviders,
+    getProviderConfigBusy: addedAccountRemoval.getProviderConfigBusy,
+    setProviderConfigBusy: addedAccountRemoval.setProviderConfigBusy,
+  }, instanceId, orgEngineDriver(instanceId), key),
+};
+
 /** The console's Overview (server/org/org-admin-overview.ts). */
 const orgOverviewDeps = {
   version: releaseVersion,
@@ -34428,6 +34452,7 @@ const orgAdmin = createOrgAdminRoutes({
     ...routineRunsRoutes(orgRoutineRunsDeps),
     ...routinesRoutes(orgRoutinesDeps),
     ...opsRoutes(orgOpsDeps),
+    ...enginesRoutes(orgEnginesDeps),
     ...computersRoutes(orgComputersDeps),
   ],
   // The console's file browser (Perspicax 2026-10-08, slice 1: read only).

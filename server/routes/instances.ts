@@ -208,6 +208,59 @@ export async function removeAddedAccount(
   }
 }
 
+/** Removes an account as DELETE /api/instances/:id does, its bots moved
+ * first as the confirmation showed (2026-11-18). Shared with the console's
+ * POST engines/{id}/remove (server/org/org-admin-engines.ts, #5351). */
+export async function removeAccountMovingBots(
+  deps: AddedAccountRemovalDeps & Pick<InstancesRouteDeps, "accountMoves">,
+  instanceId: string,
+): Promise<{ removed: AddedAccountRemoval; plan: Awaited<ReturnType<AccountMovesHost["plan"]>> | null }> {
+  const plan = deps.accountMoves && Object.hasOwn(persistableInstanceConfigs(deps.cfg), instanceId)
+    ? await deps.accountMoves.plan({ person: null, leaving: [instanceId], sameProvider: sameProviderAccounts(deps.cfg, instanceId), moveDefault: true })
+    : null;
+  const removed = await removeAddedAccount(deps, instanceId, {
+    beforeRemove: async () => { if (plan) deps.accountMoves!.apply(plan, [instanceId], { forget: true, moveDefault: true }); },
+  });
+  return { removed, plan };
+}
+
+export type ConfigEngineKeyDeps = Pick<InstancesRouteDeps,
+  "cfg" | "saveConfig" | "loadConfig" | "broadcast" | "configStatus" | "providerConfigs" | "reloadProviders" | "getProviderConfigBusy" | "setProviderConfigBusy">;
+
+/** Writes a key engine's key in the server's configuration, as the provider
+ * card does. Empty clears it. */
+function applyConfigEngineKey(deps: Pick<ConfigEngineKeyDeps, "cfg" | "saveConfig" | "loadConfig" | "broadcast" | "configStatus">, target: Extract<NonNullable<ReturnType<typeof engineKeyTarget>>, { kind: "config" }>, key: string): void {
+  deps.saveConfig(configKeyPatch(target, key));
+  Object.assign(deps.cfg, deps.loadConfig());
+  deps.broadcast({ kind: "config", ...deps.configStatus() });
+}
+
+/** The organization's key of a key engine, set from the console (POST
+ * engines/{id}/key, #5351): the same checks, the same store and the same
+ * reload as a key pasted on the provider card. Never answers the key. */
+export async function saveOrgEngineKey(deps: ConfigEngineKeyDeps, instanceId: string, driver: string, raw: string): Promise<{ ok: true; configured: boolean } | { ok: false; status: number; error: string; code?: string }> {
+  const target = engineKeyTarget(instanceId, driver);
+  if (!target || target.kind !== "config") return { ok: false, status: 400, error: "This engine takes no organization key.", code: "engine_takes_no_key" };
+  let key: string;
+  try {
+    key = normalizeEngineKey(raw);
+  } catch (error) {
+    return { ok: false, status: 400, error: error instanceof EngineKeyError ? error.message : "Enter the access key as a single line, between 8 and 400 characters.", code: "engine_key_shape" };
+  }
+  if (deps.getProviderConfigBusy()) return { ok: false, status: 409, error: "provider settings are already being updated" };
+  deps.setProviderConfigBusy(true);
+  const enginesBefore = engineLaunches(deps.providerConfigs());
+  try {
+    applyConfigEngineKey(deps, target, key);
+    await deps.reloadProviders(enginesBefore);
+    return { ok: true, configured: key.length > 0 };
+  } catch {
+    return { ok: false, status: 500, error: "The access key could not be saved. Try again." };
+  } finally {
+    deps.setProviderConfigBusy(false);
+  }
+}
+
 function viewerOf(auth: RequestAuth): string | null {
   return auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() || null : null;
 }
@@ -354,9 +407,7 @@ export function createInstancesRoutes(deps: InstancesRouteDeps): RouteHandler {
       const enginesBefore = engineLaunches(deps.providerConfigs());
       try {
         if (target.kind === "config") {
-          deps.saveConfig(configKeyPatch(target, key));
-          Object.assign(deps.cfg, deps.loadConfig());
-          deps.broadcast({ kind: "config", ...deps.configStatus() });
+          applyConfigEngineKey(deps, target, key);
         } else if ("hermes" in target) {
           const envName = hermesProviderEnv(provider);
           if (!envName) return json(res, 400, { error: "Unknown provider.", code: "engine_key_provider" });
@@ -642,12 +693,7 @@ export function createInstancesRoutes(deps: InstancesRouteDeps): RouteHandler {
       // #4415 refused while a bot used it; 2026-11-18 (owner rule): its bots
       // move as the confirmation showed, then it goes, in one gesture
       const viewer = viewerOf(auth);
-      const plan = deps.accountMoves && Object.hasOwn(persistableInstanceConfigs(deps.cfg), instanceId)
-        ? await deps.accountMoves.plan({ person: null, leaving: [instanceId], sameProvider: sameProviderAccounts(deps.cfg, instanceId), moveDefault: true })
-        : null;
-      const removed = await removeAddedAccount(deps, instanceId, {
-        beforeRemove: async () => { if (plan) deps.accountMoves!.apply(plan, [instanceId], { forget: true, moveDefault: true }); },
-      });
+      const { removed, plan } = await removeAccountMovingBots(deps, instanceId);
       if (!removed.ok) return json(res, removed.status, removed.body);
       return json(res, 200, { instances: await deps.instancesForViewer(viewer), ...(plan ? { moved: plan.moves, noEngine: plan.noEngine } : {}) });
     }

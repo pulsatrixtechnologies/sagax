@@ -961,6 +961,48 @@ Answers `{ok, latencyMs, reason, label}`, for example
 
 Each test has 10 s. Audited `connections.test`.
 
+## Engines (2026-11-25, #5351)
+
+The organization-wide engines the console adds to and removes from. Never
+a person's own account or server.
+
+| Method and path | Role | What |
+|---|---|---|
+| `GET engines` | admin | the organization's engines, each saying what it is |
+| `POST engines/{id}/remove` | admin | remove an added account |
+| `POST engines/{id}/key` | admin | set the organization's key of a key engine, `{ "key" }` |
+| `POST engines/{id}/key/remove` | admin | clear that key |
+
+### `GET engines`
+
+`{ "engines": [{ "id", "name", "kind", "installed", "auth", "orgKey", "source", "removable", "takesKey" }] }`
+
+- `source`: `catalog` is an engine this server always carries (the
+  subscription engines and the key engines); `added` is an account added
+  beside a provider's first one (`claude-<uuid>`, `chatgpt-<uuid>`,
+  `antigravity-<uuid>`, a named Claude account).
+- `removable`: `POST engines/{id}/remove` takes it (an added account).
+- `takesKey`: the engine has one place for the organization's key in the
+  server's configuration. `orgKey` says a key serves it, never the key.
+
+### `POST engines/{id}/remove`
+
+Removes an added account as `DELETE /api/instances/:id` does: its bots move
+first. Answers `{ "ok": true, "moved"?, "noEngine"?, "engines" }`. A catalog
+engine is `400 catalog_engine` (it is turned off in `allowedEngines`,
+`POST settings`). Audited `engines.remove`.
+
+### `POST engines/{id}/key`, `POST engines/{id}/key/remove`
+
+The key is one line, 8 to 400 characters. Saved where the Settings screen
+saves it, then the providers reload. Answers `{ "configured", "engines" }`;
+the key is never answered, logged or written in the audit row. An engine
+with no organization key is `400 engine_takes_no_key`. Audited
+`engines.key.set` and `engines.key.remove`.
+
+A workspace whose provider settings are managed for it answers `403` to the
+three writes.
+
 ## Usage and cost
 
 `GET usage` (above) carries the settled `engine`, `model` and

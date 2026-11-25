@@ -96,6 +96,31 @@ describe("threads location: one place at a time", () => {
     for (const id of ["run", "client"]) expect(on).not.toContain(`data-sidebar-thread-row="${id}"`);
   });
 
+  // #5289 review: the rows must stay (the background sweep archives a
+  // finished bot thread after 30 minutes) and must never push the person's
+  // own threads out of the first rows.
+  it("Show Bot threads on: swept bot threads stay as rows, and the person's rows are the ones shown with it off", () => {
+    prefs.location = "sidebar";
+    const mine = Array.from({ length: 8 }, (_, i) => ({ threadId: `mine-${i}`, title: `Mine ${i}`, createdAt: 10 + i }));
+    const tickets = Array.from({ length: 8 }, (_, i) => ({ threadId: `ticket-${i}`, title: `Ticket ${i}`, createdAt: 100 + i, archivedAt: 200 + i, autoArchived: true as const,
+      openedBy: { botId: "nimbus", name: "Nimbus", kind: "work" as const, at: 100 + i } }));
+    const putAway = { threadId: "put-away", title: "Put away", createdAt: 300, archivedAt: 301, openedBy: { botId: "nimbus", name: "Nimbus", kind: "work" as const, at: 300 } };
+    const busy: Bot = { ...bot, threadId: "mine-7", projects: [], tasks: [...mine, ...tickets, putAway] };
+    const rowsOf = (html: string) => [...html.matchAll(/data-sidebar-thread-row="([^"]+)"/g)].map((match) => match[1]);
+    const list = () => rowsOf(renderToStaticMarkup(createElement(StoreProvider, null, createElement(BotThreadList, { bot: busy, selected: true }))));
+    const off = list();
+    expect(off.filter((id) => id.startsWith("ticket") || id === "put-away")).toEqual([]);
+    expect(off.length).toBe(6);
+    prefs.botThreads = true;
+    const on = list();
+    // every row of the person shown with it off is still shown
+    expect(on.filter((id) => id.startsWith("mine")).sort()).toEqual([...off].sort());
+    // the six newest bot threads, although the sweep archived them
+    expect(on.filter((id) => id.startsWith("ticket")).sort()).toEqual(["ticket-2", "ticket-3", "ticket-4", "ticket-5", "ticket-6", "ticket-7"]);
+    // the one the person archived stays put away
+    expect(on).not.toContain("put-away");
+  });
+
   it("With threads off neither place shows threads", () => {
     prefs.show = false;
     for (const location of ["header", "sidebar"] as const) {

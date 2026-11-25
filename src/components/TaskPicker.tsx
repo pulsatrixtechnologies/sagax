@@ -8,7 +8,7 @@ import { copyText } from "@/lib/copy-text";
 import { openTeamBotFromThread, teamBotSourceAllowed } from "@/lib/teambot-from-thread";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronLeft, Layers, MessagesSquare, MoreHorizontal, Plus, Search } from "lucide-react";
-import { backgroundThreads, personThreads, type ThreadListChoice } from "../../shared/background-threads";
+import { backgroundThreads, listedRows, personThreads, type ThreadListChoice } from "../../shared/background-threads";
 import { useSidebarBotThreads } from "@/lib/sidebar-bot-threads";
 import { api, type Bot, type BotProject, type Group, type GroupTaskUpdatePatch, type Task } from "@/state/store";
 import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
@@ -627,7 +627,7 @@ export function ThreadsOffReturnLink({ bot }: { bot: Bot }) {
  * is the one on screen), newest first. With the person's Show Bot threads
  * choice on, the threads bots opened are listed too (#5289). */
 export function botPickerThreads(bot: Pick<Bot, "tasks" | "threadId">, choice?: ThreadListChoice): Task[] {
-  return orderedThreadList(personThreads(bot.tasks ?? [], bot.threadId, choice));
+  return orderedThreadList(listedRows(personThreads(bot.tasks ?? [], bot.threadId, choice), choice));
 }
 
 /** The header picker's "Show background" list: newest first. */

@@ -2278,7 +2278,12 @@ shares nothing (2026-10-02). Keep these rules, covered by
   thread list (sidebar tree and header picker), under their title with the
   "opened by" byline, and no longer repeated under "Show background". A
   routine run, a results thread and an AI client's conversation never move
-  (`shared/background-threads.ts`, `ThreadListChoice`).
+  (`shared/background-threads.ts`, `ThreadListChoice`). On, those rows stay:
+  a thread the background sweep archived (`autoArchived`) is drawn as an open
+  row (`listedRows`), and only the person's own Archive puts it away. In the
+  sidebar tree they fold after six rows of their own, so the person's first
+  six rows are the ones shown with the choice off. Archive all and Delete
+  all keep to the person's own threads, on or off.
 - Server: bots take no access from a section. At boot each legacy shared
   section became bot grants once (`sectionShareGrants`, marker
   `botSharesMigratedAt` in `section-channels.json`); the records stay and

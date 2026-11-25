@@ -7,7 +7,8 @@
 // conversation. On also lists the threads bots opened on a bot (a hand-off,
 // start_thread) in that bot's normal thread list, sidebar and header picker
 // (#5289, shared/background-threads.ts); off keeps them behind "Show
-// background". The choice follows the person to every device through the
+// background". On, a thread the background sweep archived stays a row, and
+// those rows fold after six of their own, beside the person's six. The choice follows the person to every device through the
 // synced preferences (shared/user-preferences.ts), and a bot changes it
 // through the settings tool (appearance.sidebarBotThreads).
 import { localChoice } from "./local-choice";

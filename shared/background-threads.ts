@@ -71,6 +71,25 @@ function listedBotThread(origin: BackgroundOrigin | null, choice?: ThreadListCho
   return choice?.botThreads === true && (origin === "handoff" || origin === "bot-opened");
 }
 
+/** A thread a bot opened that the person's choice puts in the normal list. */
+export function isListedBotThread(task: BackgroundTaskFacts, choice?: ThreadListChoice): boolean {
+  return listedBotThread(backgroundOrigin(task), choice);
+}
+
+/** The rows as the list draws them. The background sweep archives a finished
+ * bot thread after its idle delay (server/threads/background-sweep.ts, marked
+ * autoArchived): that is the background rule's housekeeping, not the person's
+ * Archive. With Show Bot threads on, such a thread is drawn as an open row,
+ * so a ticket's thread stays in the list; one the person archived themselves
+ * (the server then clears autoArchived) stays archived. Nothing is written:
+ * only the copy handed to the list loses the sweep's archive. */
+export function listedRows<T extends BackgroundTaskFacts & { archivedAt?: number; autoArchived?: unknown }>(tasks: readonly T[], choice?: ThreadListChoice): T[] {
+  if (choice?.botThreads !== true) return [...tasks];
+  return tasks.map((task) => task.archivedAt !== undefined && task.autoArchived === true && isListedBotThread(task, choice)
+    ? { ...task, archivedAt: undefined, autoArchived: undefined }
+    : task);
+}
+
 /** The threads a person's thread list shows: their own conversations, plus
  * the one on screen (opened from a card or a link), unless it is a routine
  * run, whose home stays its run card. With Show Bot threads on, the threads

@@ -19,6 +19,7 @@ import { ComposerPendingStrip } from "./ComposerPendingStrip";
 import { ComposerEditor } from "./ComposerEditor";
 import { ComposerActionBar } from "./ComposerActionBar";
 import { ComposerUnderRow } from "./ComposerUnderRow";
+import { ComposerMeter } from "../ComposerMeter";
 import { ComposerWarningDialogs } from "./ComposerWarningDialogs";
 import { composeMessage } from "@/lib/composer-attachments";
 import type { MemeAttachmentPick } from "../MemePicker";
@@ -266,7 +267,8 @@ export function ComposerShell({
           config={config}
           composerAria={composerAria}
           below={bot && !group && !remoteClient
-            ? <ComposerUnderRow bot={bot} threadId={threadId} modelMenu={modelMenu} composerRowRef={composerRowRef} />
+            ? <ComposerUnderRow bot={bot} threadId={threadId} modelMenu={modelMenu} composerRowRef={composerRowRef}
+                meter={<ComposerMeter bot={bot} threadId={threadId} />} />
             : undefined}
         >
           <ComposerActionBar

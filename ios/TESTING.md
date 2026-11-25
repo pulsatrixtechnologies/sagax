@@ -421,7 +421,7 @@ usually the whole diagnosis:
 
 - **Desktop/server log:** the sidecar and harness record the stream opening and
   closing. No opening entry means the request never arrived.
-- **Xcode console**, subsystem `com.openmausbot.companion`: `opening stream`,
+- **Xcode console**, subsystem `ca.pulsatrix.sagax`: `opening stream`,
   then `stream live, resumed=…`, then `hydrated N bots`. Whichever of those is
   missing is where it stopped.
 

@@ -336,6 +336,7 @@ sees them:
 - `_openmausbot._tcp`: the Bonjour service type the desktop advertises.
 - `/.well-known/openmausbot/environment`: the environment probe every
   released server answers (`/.well-known/sagax/` exists only from 0.4.0).
+- `openmaus.grok/1`: the bot starter document format shared with the desktop and server.
 - The health body's `app: "openmausbot"`.
 - `omb_pair_`: the pairing credential prefix.
 - `openmausbot-phone-credential-v1` and `OpenMausBot phone credential v1`:
@@ -345,7 +346,8 @@ sees them:
 - `openmausbot.sidebarCollapsedSections.v1` and
   `openmausbot.sidebarSectionOrder.v1` preference keys.
 
-No visible text names the upstream: the install hint says
+About credits the upstream project in English and French as required by
+`docs/code/repository.md`. The install hint says
 `sagax browser install` (the `sagax` bin of the npm package).
 
 `scripts/check-ios-bundle-names.sh path/to/Sagax.app` fails on any other

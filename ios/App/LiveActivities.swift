@@ -23,7 +23,7 @@ import os
 import UIKit
 import CompanionCore
 
-private let activityLog = Logger(subsystem: "com.openmausbot.companion", category: "live-activity")
+private let activityLog = Logger(subsystem: "ca.pulsatrix.sagax", category: "live-activity")
 
 /// ActivityKit's content/alert API is iOS 16.2, so the whole coordinator is
 /// gated and simply never built on anything older. Those phones keep the app;

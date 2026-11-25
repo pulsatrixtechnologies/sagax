@@ -61,6 +61,12 @@ let vaultAnswer: unknown = null;
 let skillsAnswer: unknown = null;
 /** Who the server says the viewer is (null: no viewer, as a solo install). */
 let viewerAnswer: unknown = null;
+/** What the server lists for routines once a test has stated runs (#5236): the
+ * app reads the listing again one second after it opens, and the gallery's
+ * own listing has no run, so it took the test's runs away on a slow runner. */
+let routinesAnswer: unknown = null;
+/** How many times the page read the routines listing since it was mounted. */
+let routinesListings = 0;
 /** The messages the page sent to a bot (#4098: New outcome). */
 const sentMessages: Array<{ path: string; body: Record<string, unknown> }> = [];
 
@@ -124,6 +130,10 @@ beforeAll(async () => {
     if (serversAnswer && url.pathname === "/api/mcp/servers") return Promise.resolve(json(serversAnswer));
     if (vaultAnswer && url.pathname.endsWith("/credentials/list")) return Promise.resolve(json(vaultAnswer));
     if (skillsAnswer && /\/api\/bots\/[^/]+\/skills$/.test(url.pathname)) return Promise.resolve(json(skillsAnswer));
+    if (url.pathname === "/api/routines") {
+      routinesListings += 1;
+      if (routinesAnswer) return Promise.resolve(json(routinesAnswer));
+    }
     return Promise.resolve(fixture.answer(url.pathname) ?? json({ error: "not in this gallery" }, 404));
   });
   if (!("checkVisibility" in Element.prototype)) Object.defineProperty(Element.prototype, "checkVisibility", { configurable: true, value: () => true });
@@ -139,12 +149,14 @@ afterEach(() => {
   vaultAnswer = null;
   skillsAnswer = null;
   viewerAnswer = null;
+  routinesAnswer = null;
   sentMessages.length = 0;
 });
 
 async function mount(locale: "en" | "fr", org = true) {
   setLocale(locale);
   fixture = editBotFixture(org);
+  routinesListings = 0;
   // the organization probe is cached once per page: ask again for this fixture
   await loadPerspicaxOrg(true);
   host = document.createElement("div");
@@ -1118,9 +1130,15 @@ describe("the Outcomes tab (#4098, first lot: read from the routines that exist)
   const waitingRun = { id: "run-w", routineId: "r2", routineName: "Veille", botId: "scout", target: "bot", runOn: "maus", manual: false, status: "waiting", scheduledFor: NOW - 3_600_000, createdAt: NOW - 3_600_000, startedAt: NOW - 3_600_000, attention: "Which source should replace the one that closed?" };
   const doneRun = { id: "run-d", routineId: "r1", routineName: "Résumé", botId: "scout", target: "bot", runOn: "maus", manual: false, status: "completed", scheduledFor: NOW - 7_200_000, createdAt: NOW - 7_200_000, startedAt: NOW - 7_200_000, finishedAt: NOW - 7_000_000, output: "Twelve emails read. Two need a reply today." };
 
-  async function openOutcomes(runs: unknown[]) {
-    await act(async () => { dispatch({ type: "routinesHydrated", routines: fixture.routines, runs } as never); });
+  /** The routines and runs of a test, in the store and in the server's listing alike (#5236). */
+  async function hydrateRoutines(routines: unknown[], runs: unknown[]) {
+    routinesAnswer = { routines, runs };
+    await act(async () => { dispatch({ type: "routinesHydrated", routines, runs } as never); });
     await settle();
+  }
+
+  async function openOutcomes(runs: unknown[]) {
+    await hydrateRoutines(fixture.routines, runs);
     return home("outcomes");
   }
 
@@ -1161,9 +1179,12 @@ describe("the Outcomes tab (#4098, first lot: read from the routines that exist)
     expect(host.querySelector("[data-persona-modal]")!.getAttribute("data-bot-profile-subpage-current")).toBe("routines");
 
     const again = await openOutcomes([waitingRun, doneRun]);
+    // #5236: the app reads the server's listing one second after it opens. The
+    // card must still be there once that listing has landed, on every runner.
+    await until(() => routinesListings > 0);
+    expect(routinesListings).toBeGreaterThan(0);
+    await settle();
     await click(again.querySelector<HTMLElement>('[data-outcome-row="routine:r2"] button[aria-expanded]'), "row r2");
-    // The card is lazy-loaded. Twelve event-loop ticks do not guarantee the
-    // chunk has arrived while other workers are compiling on the runner.
     const cardSelector = '[data-outcome-row="routine:r2"] [data-outcome-open] [data-ask-card]';
     await expect.poll(async () => {
       await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
@@ -1187,8 +1208,7 @@ describe("the Outcomes tab (#4098, first lot: read from the routines that exist)
       }
       await mount(locale);
       const reached = { ...fixture.routines[0]!, id: "rg", enabled: false, goal: { text: "Publish the onboarding guide", status: "achieved", achievedAt } };
-      await act(async () => { dispatch({ type: "routinesHydrated", routines: [reached], runs: [{ ...doneRun, routineId: "rg" }] } as never); });
-      await settle();
+      await hydrateRoutines([reached], [{ ...doneRun, routineId: "rg" }]);
       const node = await home("outcomes");
       const row = node.querySelector<HTMLElement>('[data-outcome-row="routine:rg"]')!;
       const day = new Date(achievedAt).toLocaleDateString(locale, { month: "short", day: "numeric" });
@@ -1248,8 +1268,7 @@ describe("the Outcomes tab (#4098, first lot: read from the routines that exist)
         host.remove();
       }
       await mount(locale);
-      await act(async () => { dispatch({ type: "routinesHydrated", routines: [], runs: [] } as never); });
-      await settle();
+      await hydrateRoutines([], []);
       const node = await home("outcomes");
       const panel = node.querySelector<HTMLElement>('[data-bot-profile-panel="outcomes"]')!;
       expect(panel.querySelector("[data-outcome-row]")).toBeNull();

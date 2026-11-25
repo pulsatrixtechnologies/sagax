@@ -6,7 +6,9 @@
 // opens on itself or on a peer (start_thread, run_with_engine), an AI
 // client's conversation over MCP (send_prompt). Those are background
 // threads: never rows in the person's thread list, reached from the card
-// that reports them, or from the list's "Show background" filter. The
+// that reports them, or from the list's "Show background" filter; the
+// threads bots opened become rows once the person turns "Show Bot threads"
+// on (off by default, #5289). The
 // server archives them once they are finished and idle
 // (server/threads/background-sweep.ts); nothing is deleted.
 //
@@ -56,18 +58,57 @@ export function isBackgroundThread(task: BackgroundTaskFacts): boolean {
   return backgroundOrigin(task) !== null;
 }
 
+/** The person's "Show Bot threads" choice (Settings > Appearance > Sidebar,
+ * off by default, #5239) as the thread lists read it (#5289). On, a thread a
+ * bot opened (a teammate's hand-off, start_thread) is a row of the bot's
+ * normal list, under its title, and leaves "Show background". A routine run,
+ * a results thread and an AI client's conversation never move. */
+export interface ThreadListChoice {
+  botThreads?: boolean;
+}
+
+function listedBotThread(origin: BackgroundOrigin | null, choice?: ThreadListChoice): boolean {
+  return choice?.botThreads === true && (origin === "handoff" || origin === "bot-opened");
+}
+
+/** A thread a bot opened that the person's choice puts in the normal list. */
+export function isListedBotThread(task: BackgroundTaskFacts, choice?: ThreadListChoice): boolean {
+  return listedBotThread(backgroundOrigin(task), choice);
+}
+
+/** The rows as the list draws them. The background sweep archives a finished
+ * bot thread after its idle delay (server/threads/background-sweep.ts, marked
+ * autoArchived): that is the background rule's housekeeping, not the person's
+ * Archive. With Show Bot threads on, such a thread is drawn as an open row,
+ * so a ticket's thread stays in the list; one the person archived themselves
+ * (the server then clears autoArchived) stays archived. Nothing is written:
+ * only the copy handed to the list loses the sweep's archive. */
+export function listedRows<T extends BackgroundTaskFacts & { archivedAt?: number; autoArchived?: unknown }>(tasks: readonly T[], choice?: ThreadListChoice): T[] {
+  if (choice?.botThreads !== true) return [...tasks];
+  return tasks.map((task) => task.archivedAt !== undefined && task.autoArchived === true && isListedBotThread(task, choice)
+    ? { ...task, archivedAt: undefined, autoArchived: undefined }
+    : task);
+}
+
 /** The threads a person's thread list shows: their own conversations, plus
  * the one on screen (opened from a card or a link), unless it is a routine
- * run, whose home stays its run card. */
-export function personThreads<T extends BackgroundTaskFacts & { threadId: string }>(tasks: readonly T[], openThreadId?: string): T[] {
-  return tasks.filter((task) => !task.routineRunId && (task.threadId === openThreadId || !isBackgroundThread(task)));
+ * run, whose home stays its run card. With Show Bot threads on, the threads
+ * bots opened too (#5289). */
+export function personThreads<T extends BackgroundTaskFacts & { threadId: string }>(tasks: readonly T[], openThreadId?: string, choice?: ThreadListChoice): T[] {
+  return tasks.filter((task) => {
+    if (task.routineRunId) return false;
+    if (task.threadId === openThreadId) return true;
+    const origin = backgroundOrigin(task);
+    return origin === null || listedBotThread(origin, choice);
+  });
 }
 
 /** The "Show background" filter: every background thread except routine
- * runs, whose home is the run history and the run card. */
-export function backgroundThreads<T extends BackgroundTaskFacts & { threadId: string }>(tasks: readonly T[]): T[] {
+ * runs, whose home is the run history and the run card, and except the
+ * threads Show Bot threads already lists. */
+export function backgroundThreads<T extends BackgroundTaskFacts & { threadId: string }>(tasks: readonly T[], choice?: ThreadListChoice): T[] {
   return tasks.filter((task) => {
     const origin = backgroundOrigin(task);
-    return origin !== null && origin !== "routine-run";
+    return origin !== null && origin !== "routine-run" && !listedBotThread(origin, choice);
   });
 }

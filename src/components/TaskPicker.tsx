@@ -8,7 +8,8 @@ import { copyText } from "@/lib/copy-text";
 import { openTeamBotFromThread, teamBotSourceAllowed } from "@/lib/teambot-from-thread";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronLeft, Layers, MessagesSquare, MoreHorizontal, Plus, Search } from "lucide-react";
-import { backgroundThreads, personThreads } from "../../shared/background-threads";
+import { backgroundThreads, listedRows, personThreads, type ThreadListChoice } from "../../shared/background-threads";
+import { useSidebarBotThreads } from "@/lib/sidebar-bot-threads";
 import { api, type Bot, type BotProject, type Group, type GroupTaskUpdatePatch, type Task } from "@/state/store";
 import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { llmThreadTitlesEnabled } from "@/lib/feature-flags";
@@ -623,14 +624,15 @@ export function ThreadsOffReturnLink({ bot }: { bot: Bot }) {
  * an organization server with private threads, narrows to the viewer's own),
  * the person's own conversations only (shared/background-threads.ts: never a
  * routine run, a hand-off, a thread a bot opened or an AI client's, unless it
- * is the one on screen), newest first. */
-export function botPickerThreads(bot: Pick<Bot, "tasks" | "threadId">): Task[] {
-  return orderedThreadList(personThreads(bot.tasks ?? [], bot.threadId));
+ * is the one on screen), newest first. With the person's Show Bot threads
+ * choice on, the threads bots opened are listed too (#5289). */
+export function botPickerThreads(bot: Pick<Bot, "tasks" | "threadId">, choice?: ThreadListChoice): Task[] {
+  return orderedThreadList(listedRows(personThreads(bot.tasks ?? [], bot.threadId, choice), choice));
 }
 
 /** The header picker's "Show background" list: newest first. */
-export function botPickerBackground(bot: Pick<Bot, "tasks">): Task[] {
-  return orderedThreadList(backgroundThreads(bot.tasks ?? []));
+export function botPickerBackground(bot: Pick<Bot, "tasks">, choice?: ThreadListChoice): Task[] {
+  return orderedThreadList(backgroundThreads(bot.tasks ?? [], choice));
 }
 
 export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen?: boolean }) {
@@ -640,6 +642,9 @@ export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen
   // In the chat header mode only (useThreadsMode): the sidebar mode lists a
   // bot's threads under its row instead, and one conversation has none.
   const threadsMode = useThreadsMode();
+  // Settings > Appearance > Sidebar, "Show Bot threads" (off by default):
+  // on, the threads bots opened are rows of this list (#5289)
+  const listChoice: ThreadListChoice = { botThreads: useSidebarBotThreads() };
   const [folderSaving, setFolderSaving] = useState(false);
   const [folderError, setFolderError] = useState<string | null>(null);
   if (threadsMode !== "header") return null;
@@ -691,8 +696,8 @@ export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen
     <>
     <ConversationTaskPicker
       threadId={bot.threadId}
-      tasks={botPickerThreads(bot)}
-      background={botPickerBackground(bot)}
+      tasks={botPickerThreads(bot, listChoice)}
+      background={botPickerBackground(bot, listChoice)}
       busy={false}
       folders={bot.projects ?? []}
       newButton={(close) => <div className="mt-1 border-t border-popover-hairline">

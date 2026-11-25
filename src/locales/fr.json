@@ -5116,7 +5116,7 @@
   "settings.accountMenuAbove.title": "Afficher le menu du compte au-dessus de mon nom",
   "settings.allHistory.show": "Afficher la ligne Tout l'historique dans le panneau du bot",
   "settings.allHistory.title": "Afficher tout l'historique",
-  "settings.sidebarBotThreads.show": "Afficher la section Fils entre bots dans la barre latérale",
+  "settings.sidebarBotThreads.show": "Afficher la section Fils entre bots dans la barre latérale, et les fils ouverts par des bots dans la liste des fils de chaque bot",
   "settings.sidebarBotThreads.title": "Afficher les fils entre bots",
   "settings.showSuggestions.show": "Afficher la carte Suggestions dans le panneau du bot",
   "settings.showSuggestions.title": "Afficher les suggestions",

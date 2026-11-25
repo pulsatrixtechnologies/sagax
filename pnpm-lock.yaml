@@ -155,8 +155,8 @@ importers:
         specifier: 1.31.1
         version: 1.31.1
       open-bot-avatar:
-        specifier: 0.4.0
-        version: 0.4.0
+        specifier: 0.5.1
+        version: 0.5.1
       papaparse:
         specifier: ^5.7.1
         version: 5.7.1
@@ -4266,8 +4266,8 @@ packages:
   onnxruntime-web@1.31.1:
     resolution: {integrity: sha512-5GeH+bWQ+HxM10z7erGlsWqryrwMbSvm/1tkIsKTT48g0fI19VXVVC435t4t7VsPdSQeS7NmuZPXrQ73k82URw==}
 
-  open-bot-avatar@0.4.0:
-    resolution: {integrity: sha512-xJk8b8Fuixditl2QPut/t3NBtdf9bBgd78REjclrkGplh8MFQZBQJes8+yssIyjcTnZS944XHr1qSPbBoDzC4w==}
+  open-bot-avatar@0.5.1:
+    resolution: {integrity: sha512-Bu2ViCtE4CCzyICuL49o+I899xlLKkDuiuKAiE+VxVc3oYuzXz9MzSOwCMS6EFQi2NrAYWmUKl2EIQjPvGtBpQ==}
 
   oxc-parser@0.156.0:
     resolution: {integrity: sha512-7JhjgOfZjrIFJH5TlHrpRua864Si5GvwrPr5+eIRCY2sszhKXo6pyhP0HQKOGTtfO4UowwZ72XTGba0+lZphOQ==}
@@ -9302,7 +9302,7 @@ snapshots:
       platform: 1.3.6
       protobufjs: 7.6.6
 
-  open-bot-avatar@0.4.0: {}
+  open-bot-avatar@0.5.1: {}
 
   oxc-parser@0.156.0:
     dependencies:

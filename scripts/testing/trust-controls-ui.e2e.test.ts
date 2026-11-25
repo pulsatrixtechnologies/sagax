@@ -117,7 +117,13 @@ describe("trust controls in the real renderer", () => {
     await click("Tools");
     await click("Team map");
     const openMemory = async () => {
-      await evaluate(`(() => { const menu = document.querySelector('[data-team-key=""] details'); if (!menu) throw new Error('No General team menu'); if (!menu.open) menu.querySelector('summary').click(); return true; })()`);
+      await expect.poll(() => evaluate(`(() => {
+        const menu = document.querySelector('[data-team-key=""] details');
+        const summary = menu?.querySelector('summary');
+        if (!summary) return false;
+        if (!menu.open) summary.click();
+        return menu.open;
+      })()`), { timeout: 10_000 }).toBe(true);
       await click("Unassigned team memory");
     };
     await openMemory();

@@ -300,17 +300,18 @@ it("keeps the team computer for a report turn, and answers without it once it is
   // listing can be held open, to keep a Boat account change in flight.
   const boxes: Array<{ id: string; name: string; state: string }> = [];
   let gone = false;
-  let hold: { held?: () => void; release?: Promise<void> } | null = null;
+  const rotatedToken = "box_rotated_fixture";
+  let listingHeld = false;
+  let releaseListing!: () => void;
+  const listingGate = new Promise<void>((resolve) => { releaseListing = resolve; });
   const upstream = createServer(async (req, res) => {
     const path = new URL(req.url ?? "/", "http://fixture").pathname;
     let raw = ""; for await (const part of req) raw += part;
     const body = raw ? JSON.parse(raw) : {};
     res.setHeader("content-type", "application/json");
-    if (path === "/boxes" && req.method === "GET" && hold?.release) {
-      const { held, release } = hold;
-      hold = null;
-      held?.();
-      await release;
+    if (path === "/boxes" && req.method === "GET" && req.headers.authorization === `Bearer ${rotatedToken}`) {
+      listingHeld = true;
+      await listingGate;
     }
     if (path === "/boxes" && req.method === "POST") {
       const box = { id: `bx_${boxes.length + 23456789}`, name: body.name, state: "idle" };
@@ -362,21 +363,31 @@ it("keeps the team computer for a report turn, and answers without it once it is
     // The Boat account is being changed — any turn on that computer is
     // refused until it is done. Ben's run (on no computer) crashes
     // meanwhile; the Chief's report turn runs without the computer.
-    let releaseListing = () => {};
-    const listingHeld = new Promise<void>((resolve) => {
-      hold = { held: resolve, release: new Promise<void>((done) => { releaseListing = done; }) };
-    });
-    const changing = api("PUT", "/api/config", { box: { token: "box_rotated_fixture" } });
-    await listingHeld;
-    await control(["send", "--bot", team.ben.id, "--text", "Draft the vendor letter."]);
-    await reportRan("Ben's run in its thread #Draft the vendor letter. failed");
-    const duringChange = await dump(incidents);
-    expect(Object.keys(duringChange.mcpConfig.mcpServers)).not.toContain("computer");
-    // The turn's surface section changed since the last copy, so it comes
-    // in the turn's own context update, not in the cached system prompt.
-    expect(JSON.stringify(duringChange.prompt)).toContain("your computer could not be prepared for it (Boat account settings are being updated");
-    expect((await control(["wait", "--bot", chief.id, "--task", incidents, "--timeout", "30"])).status).toBe("settled");
-    releaseListing();
+    // A settled chat can still be releasing its team computer. The config
+    // route checks that ownership both before and after validating the key.
+    const computerIdle = () => expect.poll(async () =>
+      (await api("GET", "/api/computers/boxes")).instances, { timeout: 20_000 }).toMatchObject([
+      { boxId: boxes[0]!.id, orphaned: false, inUse: false },
+    ]);
+    await computerIdle();
+    const changing = api("PUT", "/api/config", { box: { token: rotatedToken } });
+    try {
+      await Promise.race([
+        expect.poll(() => listingHeld, { timeout: 20_000 }).toBe(true),
+        changing.then(() => { throw new Error("Boat account changed before its credential check was held"); }),
+      ]);
+      await control(["send", "--bot", team.ben.id, "--text", "Draft the vendor letter."]);
+      await reportRan("Ben's run in its thread #Draft the vendor letter. failed");
+      const duringChange = await dump(incidents);
+      expect(Object.keys(duringChange.mcpConfig.mcpServers)).not.toContain("computer");
+      // The turn's surface section changed since the last copy, so it comes
+      // in the turn's own context update, not in the cached system prompt.
+      expect(JSON.stringify(duringChange.prompt)).toContain("your computer could not be prepared for it (Boat account settings are being updated");
+      expect((await control(["wait", "--bot", chief.id, "--task", incidents, "--timeout", "30"])).status).toBe("settled");
+      await computerIdle();
+    } finally {
+      releaseListing();
+    }
     await changing;
 
     // The machine disappears. Cara's run cannot start on it: since #2695

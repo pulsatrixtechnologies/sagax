@@ -1,17 +1,14 @@
-// The page's top bar (#2313, split from BotProfilePage for #1383): Share and
-// the round close button together at the top right, as the reference's
-// stage header (#4420); a sub-page is a modal over the page (#4470), so the
-// bar has no link back. They stay put while the page scrolls, centred like the sidebar head's
-// search and + circles. Grok Bot (JC 2026-11-08): the bar
-// floats over the banner, clear, so the banner and the mascot scroll away
-// under it whole; once the name has scrolled under it, the bar turns into a
-// blurred strip of the page's ground with the small mascot and the name.
-// Nothing is ever cut by an opaque coloured band.
+// The top of the bot page (#2313, split from BotProfilePage for #1383): no
+// bar. Share and the round close button float together at the top right, as
+// the reference's stage header (#4420), and nothing else is drawn there: no
+// mascot, no name, no section, no ground and no rule, at the top of the page
+// or once it has scrolled (owner, 2026-11-25, #5371; this replaces the
+// blurred strip with the small mascot and the name of 2026-11-08). A
+// sub-page is a modal over the page (#4470), so there is no link back. The
+// row is clear and takes no room in the flow: the banner and the page scroll
+// under the two buttons, whole.
 import type { Bot } from "@/state/store";
-import { cn } from "@/lib/cn";
 import { useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
-import { BotAvatar } from "@/components/Avatar";
-import { splitBotNameTitle } from "../../bot-settings/bot-name-title";
 import { useCaptionChrome, useMacInsetChrome } from "../../DesktopCapabilities";
 import { WindowCloseButton } from "../../WindowCloseButton";
 import { ShareBotButton } from "../ShareBotButton";
@@ -26,7 +23,7 @@ export function BotProfileInsetStrip() {
   return <div aria-hidden="true" data-bot-profile-inset-strip="" className="content-topbar-strip h-9 shrink-0 bg-app" {...dragProps} />;
 }
 
-export function BotProfileTopBar({ bot, onClose, shareShown, shareGrants, shareVisibility, shareOpen, onShareOpenChange, condensed }: {
+export function BotProfileTopBar({ bot, onClose, shareShown, shareGrants, shareVisibility, shareOpen, onShareOpenChange }: {
   bot: Bot;
   onClose: () => void;
   shareShown: boolean;
@@ -36,47 +33,25 @@ export function BotProfileTopBar({ bot, onClose, shareShown, shareGrants, shareV
   shareVisibility: boolean;
   shareOpen: boolean;
   onShareOpenChange: (open: boolean) => void;
-  /** The name has scrolled under the bar: show the small mascot and the name on a blurred ground. */
-  condensed: boolean;
 }) {
   const { noDragStyle, controlsShiftStyle, dragProps, dragStyle } = useCaptionChrome();
-  // On the sidebar head's centre line with its circles' size: one 48px row
-  // in the title bar (macOS inset or the browser's dots, no logo), else a
-  // 56px row.
-  const { macInset, browser } = useMacInsetChrome();
-  const showLogo = useShowSidebarLogo();
-  const titleBarHead = (macInset || browser) && !showLogo;
-  const name = splitBotNameTitle(bot.name, bot.title).name;
 
   return (
     <div
       data-bot-profile-topbar=""
-      data-bot-profile-topbar-condensed={condensed ? "" : undefined}
       {...dragProps}
       style={dragStyle}
-      className={cn(
-        // sticky in the scroll, taking no room in the flow: the banner starts under it
-        "sticky top-0 z-20 flex shrink-0 items-center justify-between gap-2 px-3 transition-[background-color,box-shadow] duration-150",
-        titleBarHead ? "-mb-12 h-12" : "-mb-14 h-14",
-        condensed ? "bg-app/85 shadow-[0_1px_0_var(--color-hairline-weak)] backdrop-blur-md" : "bg-transparent",
-      )}
+      // sticky in the scroll, taking no room in the flow: the banner starts
+      // under it. Its height is the frame's shared header height, so the two
+      // circles sit as far under the window's top edge as every other round
+      // control of the top row (owner, 2026-11-25, #5379).
+      className="sticky top-0 z-20 -mb-(--app-topbar-height) h-(--app-topbar-height) flex shrink-0 items-center justify-end gap-2 bg-transparent px-3"
     >
-      {/* the left: the condensed header; on a phone it clears the sidebar's toggle */}
-      <div className="flex min-w-0 flex-1 items-center gap-2 max-sm:pl-11">
-        {/* the condensed header: the small mascot and the name, once the hero is gone */}
-        <div
-          data-bot-profile-condensed=""
-          aria-hidden={condensed ? undefined : "true"}
-          className={cn("flex min-w-0 items-center gap-2 transition-opacity duration-150", condensed ? "opacity-100" : "pointer-events-none opacity-0")}
-        >
-          <BotAvatar bot={bot} size={26} />
-          <span className="min-w-0 truncate text-[14px] font-medium leading-5 text-ink">{name}</span>
-        </div>
-      </div>
       <div data-bot-profile-topbar-actions="" className="flex shrink-0 items-center gap-2" style={controlsShiftStyle ?? noDragStyle}>
         {/* Share (Grok Bot): the popover where the people and groups the
-            bot is shared with are managed, the one place for it; then the
-            round close button, the last control of the bar (#4420). */}
+            bot is shared with are managed, the one place for it, a round
+            icon button, never the word; then the round close button, the
+            last control (#4420). */}
         {shareShown && <ShareBotButton bot={bot} open={shareOpen} onOpenChange={onShareOpenChange} grants={shareGrants} visibility={shareVisibility} />}
         <WindowCloseButton onClose={onClose} place="relative shrink-0" />
       </div>

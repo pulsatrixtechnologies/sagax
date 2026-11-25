@@ -673,20 +673,6 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
 
   const { heroSlot, hero } = useBotProfileHero({ bot, derived, onOpenAppearance: shown("appearance") ? () => openCategory("appearance") : undefined });
 
-  // Once the name scrolls under the top bar, the bar turns opaque (blurred)
-  // and shows the small mascot and the name: the content scrolls under it,
-  // never cut by a coloured band (JC 2026-11-08).
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [condensed, setCondensed] = useState(false);
-  const onScroll = () => {
-    const scroller = scrollRef.current;
-    const title = scroller?.querySelector<HTMLElement>("[data-bot-profile-title]");
-    if (!scroller || !title) return;
-    const bar = scroller.querySelector<HTMLElement>("[data-bot-profile-topbar]")?.offsetHeight ?? 56;
-    const titleTop = title.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-    const next = titleTop < bar;
-    setCondensed((prev) => (prev === next ? prev : next));
-  };
 
   return (
     <MascotHeroSlotContext.Provider value={heroSlot}>
@@ -721,9 +707,10 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
       className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-app text-ink outline-none"
     >
       <BotProfileInsetStrip />
-      <div ref={scrollRef} onScroll={onScroll} data-bot-profile-scroll="" className="content-card-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-        {/* The bar floats over the banner (sticky, no height of its own in
-            the flow) and the banner scrolls away under it with the page. */}
+      <div data-bot-profile-scroll="" className="content-card-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        {/* No bar (#5371): Share and the X float at the top right (sticky,
+            no height of their own in the flow) and the banner scrolls away
+            under them with the page. */}
         <BotProfileTopBar
           bot={bot}
           onClose={onClose}
@@ -732,7 +719,6 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
           shareVisibility={shareVisibility}
           shareOpen={shareOpen}
           onShareOpenChange={setShareOpen}
-          condensed={condensed}
         />
         {/* Banner in the mascot's colour from the very top, the mascot over its lower edge. */}
         <div

@@ -5,6 +5,7 @@
 // then five pill tabs at most, each one column of cards (the owner 2026-11-06).
 // Every section of the former editor is still there, on its tab; locked
 // sections are shown with their reason instead of hidden.
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -333,13 +334,42 @@ describe("bot profile page shell", () => {
     const barTag = html.slice(html.lastIndexOf("<", bar), html.indexOf(">", bar) + 1);
     expect(barTag).toContain("sticky top-0");
     expect(barTag).toContain("bg-transparent");
-    expect(barTag).toMatch(/-mb-1[24] h-1[24]/);
+    // the frame's shared header height, so Share and the X sit as far under the top edge as every other round control of the top row (owner, 2026-11-25, #5379)
+    expect(barTag).toContain("-mb-(--app-topbar-height) h-(--app-topbar-height)");
     // never the skin's opaque header nor the banner's top colour
     expect(barTag).not.toContain("content-topbar");
     expect(barHtml).not.toContain("bot-profile-banner-top");
-    // the condensed head (small mascot and the name) is there, hidden until the name scrolls under the bar
-    expect(barHtml).toMatch(/data-bot-profile-condensed="" aria-hidden="true" class="[^"]*opacity-0/);
-    expect(barHtml).toContain(">Pepper<");
+  });
+
+  // Owner, 2026-11-25 (#5371), the reference beside Sagax: "the top bar that
+  // says the bot name and the section is not doing that" there. No bar: the
+  // two round buttons float at the top right and nothing else is drawn, at
+  // the top of the page or once it has scrolled.
+  it("regression #5371: no top bar, only Share and the X floating at the top right, whatever the scroll", () => {
+    const html = render("overview");
+    const bar = at(html, "data-bot-profile-topbar");
+    const banner = at(html, 'data-bot-profile-banner=""');
+    const barHtml = html.slice(bar, banner);
+    const barTag = html.slice(html.lastIndexOf("<", bar), html.indexOf(">", bar) + 1);
+    // no mascot, no name, no section in it
+    expect(barHtml).not.toContain("data-bot-profile-condensed");
+    expect(barHtml).not.toContain("Pepper");
+    expect(barHtml).not.toMatch(/<img|<canvas/);
+    // its only children are the two round controls, at the right
+    expect(barTag).toContain("justify-end");
+    expect(barHtml.match(/<button/g)).toHaveLength(2);
+    expect(barHtml).toContain('data-bot-profile-share=""');
+    expect(barHtml).toContain("data-window-close");
+    // Share stays an icon, never the word
+    const share = at(html, 'data-bot-profile-share=""');
+    expect(html.slice(share, html.indexOf("</button>", share))).not.toMatch(/>\s*Share\s*</);
+    // and no state turns it into a strip: no ground, no blur, no rule under it
+    const source = readFileSync(new URL("../bot-profile/BotProfilePage.tsx-parts/BotProfileTopBar.tsx", import.meta.url), "utf8");
+    const code = source.slice(source.indexOf("export function BotProfileTopBar(")).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+    expect(code).not.toMatch(/condensed|backdrop-blur|shadow-|bg-app|border-b|hairline|BotAvatar/);
+    expect(code).toContain("bg-transparent");
+    const pageSource = readFileSync(new URL("../bot-profile/BotProfilePage.tsx", import.meta.url), "utf8");
+    expect(pageSource).not.toMatch(/setCondensed|condensed=\{/);
   });
 
   it("regression #4470: a link to a sub-page's section opens the bot page with that sub-page as a modal over it, and no link back in the top bar", () => {
@@ -481,7 +511,7 @@ describe("regression #4420: the bot page's header is the reference's", () => {
     expect(share).toBeGreaterThan(actions);
     expect(close).toBeGreaterThan(share);
     expect(close).toBeLessThan(banner);
-    // the left group: no X there any more (the condensed name only)
+    // nothing before the right group: no X, no name (#5371)
     expect(html.slice(bar, actions)).not.toContain("data-window-close");
     // Share is a round icon button with no word (2026-11-19), named for assistive tech
     const shareButton = html.slice(share, html.indexOf("</button>", share));

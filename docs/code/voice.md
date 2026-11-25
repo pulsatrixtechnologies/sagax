@@ -508,3 +508,23 @@ Tests: `server/listening/listening-turn.test.ts`,
 `ios/Tests/CompanionCoreTests/MeetingListeningTests.swift`. Debug captures:
 `-watch-demo meeting|meeting-list|meeting-chat|meeting-start`.
 
+
+## Listening says why nothing is transcribed (2026-11-25, #5377)
+
+Listening in a bot's chat (`src/lib/listening/listening-session.ts`) hears
+through `LiveTranscriber` (`src/lib/voice-mode/stt-stream.ts`), the same
+speech to text as the call and the dictation: the `/voice/listen` socket
+with `purpose=listening`, else each utterance whole to `POST
+/voice/transcribe`. An utterance the voice service refuses comes back
+`failed`; `ListeningChannel.end` (`listening-channel.ts`) used to drop it,
+so the card kept "nobody has spoken yet" while the person spoke. It now
+calls `onFailed` with the transcriber's `uploadError`, and the session puts
+the reason on the card (`live.error`) through `voiceFailureKind` and
+`voiceErrorNote("transcribe-failed", …)` (`voice-mode/failure.ts`): the
+sentences the call and the dictation already say, no sentence of its own.
+The reason stays until words are heard again; a heartbeat the server takes
+does not clear it (the sending's own error is kept apart). With a reason
+and no line yet, `ListeningCard` shows the reason alone. Tests:
+`src/lib/listening/listening-session.refusal.test.ts` (a stand-in voice
+service: no socket, a 503 `out_of_credits`, a 502), and
+`src/components/ListeningCard.dom.test.ts`.

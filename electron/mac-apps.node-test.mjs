@@ -285,7 +285,9 @@ test("helper output maps to a permission state", () => {
   assert.equal(automationStateOf("notRunning"), null);
   assert.equal(automationStateOf("unknown:-50"), null);
   assert.equal(automationHelperPath({ env: { SAGAX_AUTOMATION_HELPER: "/x/helper" }, exists: (file) => file === "/x/helper" }), "/x/helper");
-  assert.equal(automationHelperPath({ env: {}, resourcesPath: "/R", exists: (file) => file === "/R/automation-helper" }), "/R/automation-helper");
+  const resourcesPath = path.join(os.tmpdir(), "app-resources");
+  const packagedHelper = path.join(resourcesPath, "automation-helper");
+  assert.equal(automationHelperPath({ env: {}, resourcesPath, exists: (file) => file === packagedHelper }), packagedHelper);
   assert.equal(automationHelperPath({ env: {}, resourcesPath: undefined, exists: () => false }), null);
 });
 

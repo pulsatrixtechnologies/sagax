@@ -12,7 +12,7 @@ final class ModelAccountsUITests: XCTestCase {
         app.launchArguments = [
             // the steps preview leaves Pepper's turn done, so the model can change
             "-store-preview", "-chat-presentation-preview", "-chat-steps-preview", "-model-accounts-preview",
-            "-AppleLanguages", "(fr)", "-AppleLocale", "fr_CA",
+            "-AppleLanguages", "(fr)", "-AppleLocale", "fr_CA", "-paritySkin", "system",
             "-companion.prefs.activityDetail", "full",
             "-companion.prefs.rosterDensity", "comfortable",
             "-companion.onboarding.welcomeSeen", "YES",

@@ -80,7 +80,7 @@ final class StepsModelMenuUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = [
             "-store-preview", "-chat-presentation-preview", "-chat-steps-preview", "-model-menu-preview",
-            "-AppleLanguages", "(fr)", "-AppleLocale", "fr_CA",
+            "-AppleLanguages", "(fr)", "-AppleLocale", "fr_CA", "-paritySkin", "system",
             "-companion.prefs.activityDetail", "full",
             "-companion.prefs.rosterDensity", "comfortable",
             "-companion.onboarding.welcomeSeen", "YES",

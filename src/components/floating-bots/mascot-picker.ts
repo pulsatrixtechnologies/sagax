@@ -8,6 +8,7 @@ import { MAUS_COLORS, type MausColor } from "@/lib/mascot";
 import { MASCOT_COLOR_NAMES } from "../../../shared/mascot-colors";
 import type { MascotSkinId } from "../../../shared/mascot-skins";
 import { engineLookOf, PUMPKIN_COLOR, SHAPE_MATERIALS, SHAPE_SKINS_IN_BOT_COLOR, withEngineLook, type MascotCharacter, type MascotLook, type MascotShape, type ShapeMaterial } from "../../../shared/mascot-look";
+import { parseEngineAvatar, type EngineAvatarReason } from "../../../shared/engine-avatar-def";
 import type { CompleteLook } from "./mascots";
 
 export const PICKER_TABS = ["shapes", "characters"] as const;
@@ -113,6 +114,18 @@ export function skinPatch(look: CompleteLook, character: MascotCharacter, skin: 
   if (character === "owl") return { mascotSkin: skin as MascotSkinId };
   const next = { ...look, skins: { ...look.skins, [character]: skin } };
   return { mascotLook: (character === "shape" ? withEngineLook(next, { material: "flat" }) : next) as MascotLook };
+}
+
+/**
+ * A definition pasted, typed, dropped or answered by a model, as the bot's
+ * own shape: stored on the look when the engine accepts it (the catalog shape
+ * stays under it, for a platform that cannot draw the definition yet), else
+ * the reasons it is refused.
+ */
+export function pastedShapeLook(look: CompleteLook, text: string): { ok: true; mascotLook: MascotLook } | { ok: false; reasons: EngineAvatarReason[] } {
+  const parsed = parseEngineAvatar(definitionJson(text));
+  if (!parsed.ok) return { ok: false, reasons: parsed.reasons };
+  return { ok: true, mascotLook: { ...look, character: "shape", avatarDef: parsed.def } as MascotLook };
 }
 
 /**

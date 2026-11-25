@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { NOTHING_LOCKED } from "../../../shared/achievements";
+import { LOCKED_UNTIL_LOADED, NOTHING_LOCKED } from "../../../shared/achievements";
 import { resetAchievementsForTests } from "@/lib/achievements";
 import en from "@/locales/en.json";
 import fr from "@/locales/fr.json";
@@ -12,7 +12,9 @@ import { BotAvatar } from "@/components/Avatar";
 import { ShapeMascot } from "@/components/ShapeMascot";
 import { loadBakedStill } from "@/components/shape-stills";
 import { botMascotLook, completeMascotLook, LEGACY_SHAPE_SKINS, LEGACY_TROMBI_SKINS, SHAPE_SKIN_TIER, SHAPE_SKINS, TROMBI_SKIN_TIER, TROMBI_SKINS } from "../../../shared/mascot-look";
-import MascotLookEditor, { SKIN_TIER_LABEL } from "../floating-bots/MascotLookEditor";
+import MascotHero from "../floating-bots/MascotHero";
+import MascotPicker from "../floating-bots/MascotPicker";
+import { SKIN_TIER_LABEL } from "../floating-bots/mascot-look-labels";
 import { SkinnedTrombi } from "./SkinnedTrombi";
 import { fxDetail, fxMoveFor, FX_FULL_MIN } from "./skin-fx";
 import { MoveFx } from "./SkinFx";
@@ -249,29 +251,47 @@ describe("skin ids persist and migrate", () => {
   });
 });
 
-describe("the Appearance gallery's layout", () => {
+describe("the mascot picker's layout", () => {
   beforeEach(() => resetAchievementsForTests({ unlocks: NOTHING_LOCKED }));
-  const render = (mascotLook: unknown, initialTab: "mascot" | "skin" = "mascot") =>
-    renderToStaticMarkup(createElement(MascotLookEditor, { bot: { color: "blue", mascotSkin: "none", mascotLook: botMascotLook(mascotLook) }, onPatch: () => undefined, initialTab }));
+  // This block described the layout of the Appearance editor (a preview band over its tabs). The mock-up the
+  // owner validated replaced it with the mascot picker (#5369): each expectation about the old layout says what
+  // the mock-up asks, with the id beside it.
+  const render = (mascotLook: unknown, initialLayer?: "skins") =>
+    renderToStaticMarkup(createElement(MascotPicker, { bot: { color: "blue", mascotSkin: "none", mascotLook: botMascotLook(mascotLook) }, onPatch: () => undefined, initialLayer }));
 
-  it("sets the preview band full width above the tabs, one grid under them, stacked in a narrow pane", () => {
+  it("has no preview band: the tabs, one grid under them, the pills, then the colours; the stage is the page's own mascot", () => {
+    // [M-20261125-063] "faut pas avoir de visualisateur": the band over the tabs is gone, the bot's mascot above the panel is the preview
     const html = render({ character: "shape" });
-    expect(html).toContain('data-character-row=""');
-    expect(html).toContain('data-mascot-stage=""');
-    // the mascot large on its stage, its name beside it, nothing under it (#4076)
-    expect(html).toMatch(/style="width:170px;height:170px"[^>]*class="relative grid shrink-0 place-items-center/);
-    expect(html).toMatch(/data-mascot-stage=""[\s\S]*data-mascot-name=""/);
+    expect(html).not.toContain("data-character-row");
+    expect(html).not.toContain("data-mascot-stage");
+    expect(html).not.toContain("data-mascot-name");
     expect(html).not.toContain("data-mascot-action");
-    // a 210px row from a 34rem pane (a size container query), stacked under it
-    expect(html).toContain("@[34rem]:h-[210px] @[34rem]:flex-row");
-    expect(html).toMatch(/data-mascot-detail="shape"[\s\S]*data-appearance-tabs=""[\s\S]*data-mascot-browser=""/);
+    // [M-20261125-064] the mock-up's order, top to bottom
+    expect(html).toMatch(/data-mascot-picker-character="shape"[\s\S]*data-mascot-picker-tabs=""[\s\S]*data-mascot-picker-gear=""[\s\S]*data-mascot-picker-grid="shapes"[\s\S]*data-mascot-picker-pills=""[\s\S]*data-mascot-picker-colors=""/);
+    // a fixed panel that the window's edge narrows (it was a 210px row from a 34rem pane, by a container query)
+    expect(html).toContain("w-[440px] max-w-[calc(100vw-16px)]");
+    expect(html).not.toContain("@[34rem]");
+    // the stage: the page's hero, the mascot bare over the bot's name, nothing else under it (#4076)
+    const hero = renderToStaticMarkup(createElement(MascotHero, { bot: { name: "Ada", color: "blue", mascotSkin: "none", mascotLook: botMascotLook({ character: "shape" }) } }));
+    expect(hero).toMatch(/data-mascot-detail="shape"[\s\S]*data-mascot-stage=""[\s\S]*data-mascot-heading=""/);
+    expect(hero).toMatch(/style="width:100px;height:100px"[^>]*class="relative grid shrink-0 place-items-center/);
+    expect(hero).not.toContain("data-mascot-action");
+    expect(hero).not.toContain("data-mascot-randomize");
   });
 
-  it("keeps every gallery tile the same height, locked or not, with no stray shadow on the stage", () => {
+  it("keeps every grid cell the same box, locked or not, with no stray shadow", () => {
+    // [M-20261125-064] the mock-up's grid, five to a row: one cell class and one thumbnail box for all (they were 112px tiles)
+    resetAchievementsForTests({ unlocks: LOCKED_UNTIL_LOADED });
     const html = render({ character: "crab" });
-    const tiles = html.match(/<button[^>]*data-character-option="[^"]+"[^>]*>/g) ?? [];
+    const tiles = html.match(/<button[^>]*data-character-option="[^"]+"[^>]*>(<span[^>]*>)/g) ?? [];
     expect(tiles.length).toBeGreaterThan(1);
-    for (const tile of tiles) expect(tile).toContain("h-[112px]");
+    expect(tiles.some((tile) => tile.includes('data-locked=""'))).toBe(true);
+    expect(tiles.some((tile) => !tile.includes('data-locked=""'))).toBe(true);
+    for (const tile of tiles) {
+      expect(tile).toMatch(/class="mp-cell relative"/);
+      expect(tile).toContain('style="width:52px;height:52px"');
+    }
+    expect(html).toContain("grid grid-cols-5");
     expect(html).not.toContain("blur-[3px]");
   });
 
@@ -283,18 +303,21 @@ describe("the Appearance gallery's layout", () => {
     expect(JSON.stringify(fr)).not.toMatch(/Formes originales/i);
   });
 
-  it("shows each skin as a card with its rarity, previewing it animated, one rarity at a time", () => {
+  it("shows each skin as a card with its rarity, previewing it animated, every rarity in one list", () => {
+    // [D-20261125-029] the skins are the pill's list: all the rarities at once (it was one rarity's tab at a time)
     for (const skin of SHAPE_SKINS) {
-      const html = render({ character: "shape", skins: { shape: skin } }, "skin");
-      expect(html).toMatch(new RegExp(`data-tier="${SHAPE_SKIN_TIER[skin]}"[^>]*data-shape-skin-option="${skin}"`));
-      const cards = html.match(/data-shape-skin-option="/g) ?? [];
-      expect(cards.length).toBe(SHAPE_SKINS.filter((other) => SHAPE_SKIN_TIER[other] === SHAPE_SKIN_TIER[skin]).length);
-      // the open tab's cards play their skins (the Shape row's thumbnails never do)
-      const panel = html.slice(html.indexOf("data-skin-panel"));
+      const html = render({ character: "shape", skins: { shape: skin } }, "skins");
+      expect(html).toContain(`data-skin-option="${skin}" data-tier="${SHAPE_SKIN_TIER[skin]}"`);
+      expect(html).toMatch(new RegExp(`aria-checked="true"[^>]*data-skin-option="${skin}"`));
+      const cards = html.match(/data-skin-option="/g) ?? [];
+      expect(cards.length).toBe(SHAPE_SKINS.length);
+      // the list's cards play their skins (the grid's thumbnails never do)
+      const panel = html.slice(html.indexOf("data-mascot-skins="));
       expect((panel.match(/skin-fx-live/g) ?? []).length).toBe(cards.length);
+      expect(html.slice(0, html.indexOf("data-mascot-skins="))).not.toContain("skin-fx-live");
     }
-    expect(render({ character: "shape", skins: { shape: "galaxy" } }, "skin")).toContain(">Legendary<");
-    for (const skin of TROMBI_SKINS) expect(render({ character: "trombi", skins: { trombi: skin } }, "skin")).toContain(`data-trombi-skin-option="${skin}"`);
+    expect(render({ character: "shape", skins: { shape: "galaxy" } }, "skins")).toContain(">Legendary<");
+    for (const skin of TROMBI_SKINS) expect(render({ character: "trombi", skins: { trombi: skin } }, "skins")).toMatch(new RegExp(`aria-checked="true"[^>]*data-skin-option="${skin}"`));
     for (const key of Object.values(SKIN_TIER_LABEL)) {
       expect(en).toHaveProperty([key]);
       expect(fr).toHaveProperty([key]);

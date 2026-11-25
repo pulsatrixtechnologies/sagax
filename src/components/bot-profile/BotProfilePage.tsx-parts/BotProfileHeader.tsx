@@ -17,7 +17,6 @@ import { personLabel } from "@/lib/human-label";
 import { splitBotNameTitle } from "../../bot-settings/bot-name-title";
 import { useOrgPeople } from "@/lib/perspicax-org";
 import { personaSharingSummary } from "@/lib/bot-sharing";
-import { MAUS_COLORS } from "@/lib/mascot";
 import { avatarImageFrom, dragMayCarryImage } from "@/lib/avatar-input";
 import { botMascotSkin } from "../../../../shared/mascot-skins";
 import { completeMascotLook } from "../../../../shared/mascot-look";
@@ -107,10 +106,7 @@ export function useBotProfileHero({ bot, derived, onOpenAppearance }: {
       shown={heroLook.character}
       shownName=""
       shownLook={heroLook}
-      shownLock={{ locked: false }}
-      tint={MAUS_COLORS[bot.color] ?? MAUS_COLORS.green}
       owlSkin={botMascotSkin(bot.mascotSkin)}
-      previewSkin={null}
       moves={[]}
       owlMotion={null}
       fxMove={null}

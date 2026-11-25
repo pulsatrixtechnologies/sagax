@@ -29,7 +29,7 @@ import { MAUS_COLORS, type MausColor } from "@/lib/mascot";
 import { relativeLuminance } from "../../../shared/mascot-colors";
 import { MASCOT_SKIN_IDS, OWL_SKIN_TIER, botMascotSkin, type MascotSkinId } from "../../../shared/mascot-skins";
 import { completeMascotLook, engineLookOf, SHAPE_MOTIONS, withEngineLook, type MascotCharacter, type MascotLook, type MascotShape, type ShapeMaterial, type ShapeMoodSetting, type ShapeMotion, type SkinTier } from "../../../shared/mascot-look";
-import { parseEngineAvatar, type EngineAvatarReason } from "../../../shared/engine-avatar-def";
+import type { EngineAvatarReason } from "../../../shared/engine-avatar-def";
 import { ShapeMascot } from "@/components/ShapeMascot";
 import { materialsSupported } from "@/components/shape-material";
 import { bakedShapeFor } from "@/components/shape-avatar";
@@ -43,7 +43,7 @@ import "@/components/skin-fx/skin-fx.css";
 import { skinTierTabs } from "./editor-tabs";
 import { CHARACTER_LABEL, OWL_SKIN_LABEL, SHAPE_LABEL, SKIN_TIER_LABEL } from "./mascot-look-labels";
 import { MASCOTS, SHAPE_CHOICES, type CompleteLook } from "./mascots";
-import { bodyColorOf, characterPatch, colorPatch, definitionJson, materialPatch, pickerColor, pickerControls, PICKER_TABS, QUICK_COLORS, shapePatch, skinPatch, tabOf, type PickerPatch, type PickerTab } from "./mascot-picker";
+import { bodyColorOf, characterPatch, colorPatch, materialPatch, pastedShapeLook, pickerColor, pickerControls, PICKER_TABS, QUICK_COLORS, shapePatch, skinPatch, tabOf, type PickerPatch, type PickerTab } from "./mascot-picker";
 import { CHARACTER_SKINS, skinPreview } from "./skin-catalog";
 import { wardrobeStep } from "./wardrobe";
 import "./mascot-picker.css";
@@ -474,7 +474,8 @@ function SkinsList({ character, look, color, owlSkin, unlocks, disabled, onPick 
                 className={cn("skin-card relative flex min-h-11 w-full items-center gap-2.5 rounded-[10px] px-2 py-1 text-left outline-none transition-colors hover:bg-menu-hover focus-visible:bg-menu-hover", checked && "bg-menu-active", lock.locked && "cursor-default")}
               >
                 <span className={cn("grid size-9 shrink-0 place-items-center overflow-hidden", lock.locked && "opacity-60 grayscale")} aria-hidden="true">
-                  {skinPreview(character, skin, look, color as MausColor, 32)}
+                  {/* the owl plays its skin from 36 px up (OWL_DETAIL_MIN_SIZE): it fills its box so every card is a live preview */}
+                  {skinPreview(character, skin, look, color as MausColor, character === "owl" ? 36 : 32)}
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-[13px] leading-[18px] text-ink">{name}</span>
@@ -522,16 +523,26 @@ export default function MascotPicker({ bot, disabled, onPatch: savePatch, onGene
   const anchorOf = { gear: gearRef, skins: skinsRef, add: addRef } satisfies Record<PickerLayer, RefObject<HTMLButtonElement | null>>;
   useLayerDismiss(layer !== null, [layerRef, layer ? anchorOf[layer] : layerRef], () => setLayer(null));
   const toggle = (next: PickerLayer) => setLayer((now) => (now === next ? null : next));
+  const wearsShape = character === "shape";
+  // Shapes is a character an achievement gives: until then its grid shows what waits, and nothing in it is worn or added
+  const shapesLock: LockInfo = wearsShape ? { locked: false } : characterLock(unlocks, "shape");
   // a layer whose trigger is gone (another tab, another character) closes with it
   useEffect(() => {
-    if (layer === "add" && tab !== "shapes") setLayer(null);
+    if (layer === "add" && (tab !== "shapes" || shapesLock.locked)) setLayer(null);
     if (layer === "gear" && !controls.gear) setLayer(null);
-  }, [layer, tab, controls.gear]);
+  }, [layer, tab, controls.gear, shapesLock.locked]);
 
   // a person's own shape (imported, generated, or an earlier drawing that is no catalog shape) is a tile of its own
   const ownShape = look.avatarDef && !bakedShapeFor(look.shape, look.avatarDef) ? look.avatarDef : null;
   const ownShapeName = ownShape ? (ownShape.name ?? t("appearance.shape.own")) : "";
-  const wearsShape = character === "shape";
+  const shapesHint = shapesLock.locked ? lockHint(shapesLock) : "";
+  const shapeCell = (name: string) => ({
+    "data-locked": shapesLock.locked ? "" : undefined,
+    "data-unlock-achievement": shapesLock.locked ? shapesLock.achievement?.id : undefined,
+    "aria-disabled": shapesLock.locked || undefined,
+    "aria-label": shapesLock.locked ? t("appearance.tile.locked", { name, hint: shapesHint }) : name,
+    title: shapesLock.locked ? `${name}. ${shapesHint}` : name,
+  });
   // Trombi is an easter egg: out of the grid until found, unless the bot wears him
   const characters = MASCOTS.filter((option) => option.id !== "shape" && (option.id !== "trombi" || character === "trombi" || !characterLock(unlocks, "trombi").locked));
 
@@ -574,9 +585,9 @@ export default function MascotPicker({ bot, disabled, onPatch: savePatch, onGene
   );
 
   const addDefinition = (text: string): EngineAvatarReason[] | null => {
-    const parsed = parseEngineAvatar(definitionJson(text));
-    if (!parsed.ok) return parsed.reasons;
-    onPatch({ mascotLook: { ...look, character: "shape", avatarDef: parsed.def } as MascotLook });
+    const added = pastedShapeLook(look, text);
+    if (!added.ok) return added.reasons;
+    onPatch({ mascotLook: added.mascotLook });
     setLayer(null);
     return null;
   };
@@ -644,17 +655,19 @@ export default function MascotPicker({ bot, disabled, onPatch: savePatch, onGene
             const on = wearsShape && !ownShape && look.shape === shape;
             const name = t(SHAPE_LABEL[shape]);
             return (
-              <button key={shape} type="button" className="mp-cell" data-mascot-cell="" data-character-shape={shape} aria-pressed={on} aria-label={name} title={name} disabled={disabled} onKeyDown={onCellKey} onClick={() => onPatch(shapePatch(look, shape, bot.color))} {...hover(shape)}>
-                {shapeThumb(shape, shape)}
+              <button key={shape} type="button" className="mp-cell relative" data-mascot-cell="" data-character-shape={shape} aria-pressed={on} {...shapeCell(name)} disabled={disabled} onKeyDown={onCellKey} onClick={() => { if (!shapesLock.locked) onPatch(shapePatch(look, shape, bot.color)); }} {...hover(shape)}>
+                {shapesLock.locked ? <span className="grid place-items-center opacity-60 grayscale">{shapeThumb(shape, shape)}</span> : shapeThumb(shape, shape)}
+                {shapesLock.locked && <LockBadge lock={shapesLock} />}
               </button>
             );
           })}
           {tab === "shapes" && ownShape && (
-            <button type="button" className="mp-cell" data-mascot-cell="" data-own-shape="" aria-pressed={wearsShape} aria-label={t("appearance.shape.ownNamed", { name: ownShapeName })} title={ownShapeName} disabled={disabled} onKeyDown={onCellKey} onClick={() => { if (!wearsShape) onPatch(characterPatch(look, "shape")); }} {...hover("own")}>
-              {shapeThumb("own", look.shape, ownShape)}
+            <button type="button" className="mp-cell relative" data-mascot-cell="" data-own-shape="" aria-pressed={wearsShape} {...shapeCell(t("appearance.shape.ownNamed", { name: ownShapeName }))} title={shapesLock.locked ? `${ownShapeName}. ${shapesHint}` : ownShapeName} disabled={disabled} onKeyDown={onCellKey} onClick={() => { if (!wearsShape && !shapesLock.locked) onPatch(characterPatch(look, "shape")); }} {...hover("own")}>
+              {shapesLock.locked ? <span className="grid place-items-center opacity-60 grayscale">{shapeThumb("own", look.shape, ownShape)}</span> : shapeThumb("own", look.shape, ownShape)}
+              {shapesLock.locked && <LockBadge lock={shapesLock} />}
             </button>
           )}
-          {tab === "shapes" && (
+          {tab === "shapes" && !shapesLock.locked && (
             <button ref={addRef} type="button" className="mp-cell" data-mascot-cell="" data-mascot-add-open="" aria-label={t("mascotPicker.add.title")} title={layer === "add" ? undefined : t("mascotPicker.add.title")} aria-haspopup="dialog" aria-expanded={layer === "add"} disabled={disabled} onKeyDown={onCellKey} onClick={() => toggle("add")}>
               <span className="mp-plus"><Plus size={20} strokeWidth={1.8} aria-hidden="true" /></span>
             </button>
@@ -785,7 +798,7 @@ export default function MascotPicker({ bot, disabled, onPatch: savePatch, onGene
           <SkinsList character={character} look={look} color={body} owlSkin={owlSkin} unlocks={unlocks} disabled={disabled} onPick={(skin) => onPatch(skinPatch(look, character, skin))} />
         </Layer>
       )}
-      {layer === "add" && tab === "shapes" && (
+      {layer === "add" && tab === "shapes" && !shapesLock.locked && (
         <Layer anchorRef={addRef} popoverRef={layerRef} name="add" label={t("mascotPicker.add.title")}>
           <AddShapePanel onAdd={addDefinition} onGenerate={onGenerate} disabled={disabled} />
         </Layer>

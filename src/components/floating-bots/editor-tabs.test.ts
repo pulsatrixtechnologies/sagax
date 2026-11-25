@@ -16,28 +16,36 @@ import { contrastRatio, eyeInkOn, MASCOT_COLOR_GROUPS, MASCOT_COLOR_HEX, MASCOT_
 import { botMascotLook, CRAB_SKIN_TIER, CRAB_SKINS, MASCOT_SHAPES, SHAPE_SKIN_TIER, SHAPE_SKINS, TROMBI_SKIN_TIER, TROMBI_SKINS } from "../../../shared/mascot-look";
 import { botMascotSkin, LEGACY_OWL_SKINS, MASCOT_SKIN_IDS, mascotSkinSchema, OWL_SKIN_TIER } from "../../../shared/mascot-skins";
 import { parseBotProfilePatch } from "../../../server/bots/bot-profile";
-import MascotLookEditor, { EDITOR_TABS, COLOR_GROUP_LABEL, OWL_SKIN_LABEL } from "./MascotLookEditor";
-import { colorTabFor, colorTabs, nextTab, SKIN_TIERS, skinTabFor, skinTierTabs } from "./editor-tabs";
+import MascotPicker, { QUICK_COLOR_LABEL } from "./MascotPicker";
+import { OWL_SKIN_LABEL, SKIN_TIER_LABEL } from "./mascot-look-labels";
+import { SKIN_TIERS, skinTierTabs } from "./editor-tabs";
 
 // the shapes' baked stills, as a page loads them the first time a shape shows (#4145)
 beforeAll(() => loadAllBakedStills());
 
 beforeEach(() => resetAchievementsForTests({ unlocks: NOTHING_LOCKED }));
 
-/** The editor with each of its tabs open in turn: the whole page, then every other tab's grid. */
+/**
+ * The mascot picker (#5369) on a bot, its skins list open: the whole panel.
+ * It stands where the editor's seven tabs stood [M-20261125-064]; the
+ * expectations below that described those tabs say what the validated
+ * mock-up asks instead, each with its id.
+ */
 const render = (bot: { color?: string; mascotSkin?: string; mascotLook?: unknown }) =>
-  EDITOR_TABS.map((initialTab, index) => {
-    const html = renderToStaticMarkup(
-      createElement(MascotLookEditor, {
-        bot: { color: (bot.color ?? "blue") as never, mascotSkin: (bot.mascotSkin ?? "none") as never, mascotLook: botMascotLook(bot.mascotLook) },
-        onPatch: () => undefined,
-        initialTab,
-      }),
-    );
-    if (index === 0) return html;
-    // a tab this character does not offer opens Mascot, already drawn
-    return html.includes(`data-appearance-tab-panel="${initialTab}"`) ? html.slice(html.indexOf('id="appearance-panel-')) : "";
-  }).join("");
+  renderToStaticMarkup(
+    createElement(MascotPicker, {
+      bot: { color: (bot.color ?? "blue") as never, mascotSkin: (bot.mascotSkin ?? "none") as never, mascotLook: botMascotLook(bot.mascotLook) },
+      onPatch: () => undefined,
+      initialLayer: "skins",
+    }),
+  );
+/** The skins list's cards under one rarity. */
+const tierGroup = (html: string, tier: string) => {
+  const from = html.indexOf(`data-skin-tier-group="${tier}"`);
+  if (from < 0) return "";
+  const next = html.indexOf("data-skin-tier-group=", from + 1);
+  return html.slice(from, next < 0 ? undefined : next);
+};
 
 describe("skin tabs", () => {
   it("groups each character's skins by rarity, with a count per tab", () => {
@@ -50,49 +58,53 @@ describe("skin tabs", () => {
     expect(skinTierTabs(SHAPE_SKINS, SHAPE_SKIN_TIER).flatMap((tab) => tab.skins)).toEqual([...SHAPE_SKINS]);
   });
 
-  it("opens on the current skin's rarity, and on the first tab for an unknown one", () => {
-    expect(skinTabFor("galaxy", SHAPE_SKINS, SHAPE_SKIN_TIER)).toBe("legendary");
-    expect(skinTabFor("gold", TROMBI_SKINS, TROMBI_SKIN_TIER)).toBe("rare");
-    expect(skinTabFor("spirit", MASCOT_SKIN_IDS, OWL_SKIN_TIER)).toBe("legendary");
-    expect(skinTabFor("plasma" as never, SHAPE_SKINS, SHAPE_SKIN_TIER)).toBe("common");
-    expect(skinTabFor(null, SHAPE_SKINS, SHAPE_SKIN_TIER)).toBe("common");
+  it("shows the current skin as worn under its rarity, and the first skin for an unknown one", () => {
+    // [D-20261125-029] no rarity tab to open on: the list shows every rarity at once, the worn skin checked under its own
+    const worn = (html: string, tier: string) => /aria-checked="true"[^>]*data-skin-option="([a-z-]+)"/.exec(tierGroup(html, tier))?.[1];
+    expect(worn(render({ mascotLook: { character: "shape", skins: { shape: "galaxy" } } }), "legendary")).toBe("galaxy");
+    expect(worn(render({ mascotLook: { character: "trombi", skins: { trombi: "gold" } } }), "rare")).toBe("gold");
+    expect(worn(render({ mascotSkin: "spirit" }), "legendary")).toBe("spirit");
+    expect(worn(render({ mascotLook: { character: "shape", skins: { shape: "plasma" } } }), "common")).toBe(SHAPE_SKINS[0]);
+    expect(worn(render({ mascotLook: { character: "shape" } }), "common")).toBe(SHAPE_SKINS[0]);
+    // one skin worn, never two
+    expect(render({ mascotLook: { character: "shape", skins: { shape: "galaxy" } } }).match(/aria-checked="true"[^>]*data-skin-option=/g)).toHaveLength(1);
   });
 
   it("hides a rarity with no skin", () => {
     const tabs = skinTierTabs(["a", "b"] as const, { a: "common", b: "epic" });
     expect(tabs.map((tab) => tab.tier)).toEqual(["common", "epic"]);
-    expect(skinTabFor("b", ["a", "b"] as const, { a: "common", b: "epic" })).toBe("epic");
+    expect(SKIN_TIERS).toEqual(["common", "rare", "epic", "legendary"]);
   });
 
-  it("moves between tabs with the arrow keys, Home and End", () => {
-    expect(nextTab(SKIN_TIERS, "common", "ArrowRight")).toBe("rare");
-    expect(nextTab(SKIN_TIERS, "common", "ArrowLeft")).toBe("legendary");
-    expect(nextTab(SKIN_TIERS, "legendary", "ArrowRight")).toBe("common");
-    expect(nextTab(SKIN_TIERS, "epic", "Home")).toBe("common");
-    expect(nextTab(SKIN_TIERS, "rare", "End")).toBe("legendary");
-    expect(nextTab(SKIN_TIERS, "rare", "Enter")).toBeNull();
-  });
+  // [D-20261125-029] "moves between tabs with the arrow keys, Home and End" is not ported: the rarity
+  // tabs it moved across (and the palette tabs) left the screen, the skins are one list. The picker's own
+  // two tabs move with the arrow keys (MascotPicker.dom.test.ts, "switches tabs with the arrow keys").
 
-  it("renders the open tab only, selected and labelled with its count", () => {
+  it("renders every rarity at once, each headed by its name and count, every skin under its own", () => {
+    // [D-20261125-029] one list in place of one rarity tab at a time
     const html = render({ mascotLook: { character: "shape", skins: { shape: "neon" } } });
-    expect(html).toMatch(/role="tab"[^>]*aria-selected="true"[^>]*aria-label="Epic, 4 skins"[^>]*data-tab="epic"/);
-    expect(html).toContain('data-skin-panel="epic"');
+    expect([...html.matchAll(/data-skin-tier-group="([a-z]+)"/g)].map((match) => match[1])).toEqual([...SKIN_TIERS]);
+    expect(tierGroup(html, "epic")).toMatch(/<span>Epic<\/span><span[^>]*>4<\/span>/);
+    expect(tierGroup(html, "epic")).toMatch(/aria-checked="true"[^>]*data-skin-option="neon"/);
     for (const skin of SHAPE_SKINS) {
-      if (SHAPE_SKIN_TIER[skin] === "epic") expect(html).toContain(`data-shape-skin-option="${skin}"`);
-      else expect(html).not.toContain(`data-shape-skin-option="${skin}"`);
+      for (const tier of SKIN_TIERS) {
+        if (SHAPE_SKIN_TIER[skin] === tier) expect(tierGroup(html, tier), skin).toContain(`data-skin-option="${skin}"`);
+        else expect(tierGroup(html, tier), skin).not.toContain(`data-skin-option="${skin}"`);
+      }
     }
-    expect(render({ mascotSkin: "galaxy" })).toContain('data-skin-panel="legendary"');
-    expect(render({ mascotLook: { character: "trombi", skins: { trombi: "glitch" } } })).toContain('data-skin-panel="epic"');
+    expect(tierGroup(render({ mascotSkin: "galaxy" }), "legendary")).toMatch(/aria-checked="true"[^>]*data-skin-option="galaxy"/);
+    expect(tierGroup(render({ mascotLook: { character: "trombi", skins: { trombi: "glitch" } } }), "epic")).toMatch(/aria-checked="true"[^>]*data-skin-option="glitch"/);
   });
 
-  it("has English and French names for the rarities, palettes and owl skins", () => {
-    for (const key of [...Object.values(COLOR_GROUP_LABEL), ...Object.values(OWL_SKIN_LABEL), "mascot.tier.tabs", "mascot.tier.tab", "mascot.color.groups", "mascot.color.use"]) {
+  it("has English and French names for the rarities, the owl skins and the picker's colours", () => {
+    // [D-20261125-028] the palettes' names and the rarity tabs' labels left with their tabs; the colour row's eleven names took their place
+    for (const key of [...Object.values(SKIN_TIER_LABEL), ...Object.values(OWL_SKIN_LABEL), ...Object.values(QUICK_COLOR_LABEL), "mascotPicker.color.custom", "mascotPicker.color.reset", "mascot.skin.title"]) {
       expect(en).toHaveProperty([key]);
       expect(fr).toHaveProperty([key]);
     }
     expect(fr["mascot.tier.epic"]).toBe("Épique");
     expect(fr["mascot.tier.legendary"]).toBe("Légendaire");
-    expect(fr["mascot.color.group.vivid"]).toBe("Vives");
+    expect(fr["mascotPicker.color.teal"]).toBe("Sarcelle");
   });
 });
 
@@ -118,18 +130,26 @@ describe("color palettes", () => {
     expect(new Set(values).size).toBe(values.length);
   });
 
-  it("opens on the current color's palette; an unknown color opens Vivid", () => {
-    expect(colorTabFor("mint")).toBe("pastel");
-    expect(colorTabFor("navy")).toBe("deep");
-    expect(colorTabFor("volt")).toBe("neon");
-    expect(colorTabFor("black")).toBe("neutral");
-    expect(colorTabFor("chartreuse")).toBe("vivid");
-    expect(colorTabFor(undefined)).toBe("vivid");
-    expect(colorTabs().map((tab) => tab.group)).toEqual([...MASCOT_COLOR_GROUPS]);
-    const html = render({ color: "lavender" });
-    expect(html).toContain('data-color-panel="pastel"');
-    expect(html).toMatch(/aria-checked="true"[^>]*aria-label="Use lavender mascot color"/);
-    expect(html).not.toContain('data-mascot-color="green"');
+  it("keeps a color of any palette on the bot and shows it on the free colour ring; a quick colour is pressed", () => {
+    // [D-20261125-028] [M-20261125-061] no palette tab to open on: the 63 colours left the screen for the row of
+    // eleven, the free colour and the way back; a bot wearing one of the older colours keeps it and sees it
+    expect(mascotColorGroup("mint")).toBe("pastel");
+    expect(mascotColorGroup("navy")).toBe("deep");
+    expect(mascotColorGroup("volt")).toBe("neon");
+    expect(mascotColorGroup("black")).toBe("neutral");
+    expect(mascotColorGroup("chartreuse")).toBe("vivid");
+    expect(mascotColorGroup(undefined)).toBe("vivid");
+    for (const color of ["lavender", "mint", "navy", "volt", "black"] as const) {
+      const html = render({ color });
+      expect(html, color).toMatch(/data-on="" data-mascot-color-custom=""/);
+      expect(html.toLowerCase(), color).toContain(`value="${MASCOT_COLOR_HEX[color].toLowerCase()}"`);
+      expect(html, color).not.toMatch(/data-mascot-color="[a-z]+"[^>]*aria-pressed="true"/);
+      expect(html.match(/data-mascot-color="/g), color).toHaveLength(11);
+    }
+    const quick = render({ color: "teal" });
+    expect(quick).toMatch(/data-mascot-color="teal"[^>]*aria-label="Teal"[^>]*aria-pressed="true"/);
+    expect(quick).not.toMatch(/data-on="" data-mascot-color-custom=""/);
+    expect(quick).not.toContain("data-color-panel");
   });
 
   it("keeps a shape's eyes readable on every color (3:1 at least)", () => {
@@ -201,7 +221,8 @@ describe("owl skins by rarity", () => {
 
   it("shows the owl's skins as rarity cards with their animated preview", () => {
     const html = render({ mascotSkin: "holo" });
-    expect(html).toMatch(/data-tier="legendary"[^>]*data-mascot-skin-option="holo"/);
+    // [D-20261125-029] the cards are the rows of the pill's skins list
+    expect(html).toMatch(/data-skin-option="holo" data-tier="legendary"/);
     expect(html).toContain('aria-checked="true" aria-label="Holographic, Legendary"');
     expect(html).toMatch(/data-owl-skin="spirit" data-owl-fx="live"/);
   });
@@ -222,7 +243,7 @@ describe("Shape grid thumbnails", () => {
     }
     // the body is the bot's own colour, one flat fill: each tile is the engine's still in it (#4145)
     const plain = render({ color: "mint", mascotLook: { character: "shape", skins: { shape: "plain" } } });
-    const grid = plain.slice(plain.indexOf("data-character-shape"), plain.indexOf("data-color-tabs"));
+    const grid = plain.slice(plain.indexOf("data-character-shape"), plain.indexOf("data-mascot-picker-pills"));
     const stills = [...grid.matchAll(/<img src="data:image\/svg\+xml;charset=utf-8,([^"]+)"/g)].map((m) => decodeURIComponent(m[1]!));
     expect(stills).toHaveLength(MASCOT_SHAPES.length);
     for (const still of stills) expect(still.toLowerCase()).toContain(`fill="${MASCOT_COLOR_HEX.mint.toLowerCase()}"`);

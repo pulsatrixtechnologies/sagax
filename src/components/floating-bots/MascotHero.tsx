@@ -7,7 +7,7 @@
 // page's header, with the character registry.
 import { useState } from "react";
 import { t } from "@/lib/i18n";
-import { MAUS_COLORS, type MausColor, type MausMotion } from "@/lib/mascot";
+import type { MausColor, MausMotion } from "@/lib/mascot";
 import { botMascotSkin, type MascotSkinId } from "../../../shared/mascot-skins";
 import { completeMascotLook, type MascotLook } from "../../../shared/mascot-look";
 import type { FxMoveRequest } from "@/components/skin-fx/skin-fx";
@@ -58,10 +58,7 @@ export default function MascotHero({ bot, onOwlMove }: MascotHeroProps) {
       shown={shown}
       shownName={shownName}
       shownLook={look}
-      shownLock={{ locked: false }}
-      tint={MAUS_COLORS[bot.color] ?? MAUS_COLORS.green}
       owlSkin={owlSkin}
-      previewSkin={null}
       moves={moves}
       owlMotion={owlMotion}
       fxMove={fxMove}

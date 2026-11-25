@@ -499,7 +499,9 @@ export function ShapeMascot({
   // the Outline skin is drawn flat on purpose; else the depth the person chose (the engine's natural depth is the baked still)
   const chosenDepth = settings.depth === null || settings.depth === SHAPE_DEPTH.natural ? undefined : Math.min(SHAPE_DEPTH.max, Math.max(SHAPE_DEPTH.min, settings.depth));
   const depth = knownSkin === "outline" && !material ? 0 : chosenDepth;
-  const reduced = useReducedMotion();
+  // the person's motion preference for this mascot (the picker's gear, #5369), else the device's
+  const systemReduced = useReducedMotion();
+  const reduced = settings.motion === "reduced" || (settings.motion === "system" && systemReduced);
   const uid = `shape-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   // the still: the shape's baked frames, or (a person's own drawing, the flat Outline skin) inferred once here

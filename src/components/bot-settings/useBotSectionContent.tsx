@@ -42,7 +42,6 @@ import { BotPayerCard } from "./BotPayerSettings";
 import { PaneSection } from "./PaneSection";
 import { SwitchRow } from "../SettingsPrimitives";
 import { TeamBotVaultSection, teamVaultOffered } from "./TeamBotVaultSection";
-import { AppearancePane } from "../appearance/AppearancePane";
 import type { PromptPreviewData } from "./PromptPreview";
 
 /** Which sections this server offers at all (not a permission). Slack is
@@ -297,7 +296,8 @@ export function useBotSectionContent(bot: Bot, {
           </div>
         );
       case "appearance":
-        return <AppearancePane bot={bot} onPatch={derived.patch} />;
+        // no body: the look is set in the mascot picker, under the bot's mascot (#5369)
+        return null;
       case "soul":
         if (!canEditBotField(config, bot, "soul")) return null;
         // #5019: the soul and the rules are two editors; the soul links to Rules

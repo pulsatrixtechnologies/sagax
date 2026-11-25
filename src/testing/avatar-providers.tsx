@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { StoreProvider, useStore } from "../state/store";
-import { AppearancePane } from "../components/appearance/AppearancePane";
+import MascotPicker from "../components/floating-bots/MascotPicker";
+import { MENU_BOX } from "../components/menu-look";
 import { applySkin } from "../lib/skins";
 import "../styles.css";
 
@@ -11,8 +12,8 @@ function Fixture() {
     <div className="mx-auto max-w-2xl">
       <h1 className="mb-2 text-lg font-semibold">Avatar provider verification</h1>
       <p className="mb-4 break-all text-xs text-ink-secondary">Disposable data. Local test API: {new URLSearchParams(location.search).get("base")}</p>
-      {bot ? <AppearancePane bot={bot}
-        onPatch={(patch) => dispatch({ type: "updateBot", botId: bot.id, patch })} /> : <p>Loading…</p>}
+      {bot ? <div className={`${MENU_BOX} w-max`}><MascotPicker bot={bot}
+        onPatch={(patch) => dispatch({ type: "updateBot", botId: bot.id, patch })} /></div> : <p>Loading…</p>}
     </div>
   </main>;
 }

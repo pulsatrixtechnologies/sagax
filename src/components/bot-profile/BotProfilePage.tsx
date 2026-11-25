@@ -53,7 +53,7 @@
 // for opens its tab and its sub-page's modal, scrolled into view. A section this
 // viewer may not change says why (botSectionLock); nothing is hidden for
 // lack of a permission.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Bell, Repeat } from "lucide-react";
 
@@ -109,6 +109,7 @@ import { BotProfileTabBar, useBotProfileSearch } from "./BotProfilePage.tsx-part
 import { BotProfileInsetStrip, BotProfileTopBar } from "./BotProfilePage.tsx-parts/BotProfileTopBar";
 import { AppearanceRow, GROUP_LABEL, SUBPAGE_META, SubPageModal, SubPageRow } from "./BotProfilePage.tsx-parts/subpages";
 import { BotPageModal } from "./BotPageModal";
+import { MascotPickerPopover } from "../floating-bots/MascotPickerPopover";
 import { appearanceRowValue, useBotRowValues } from "./BotProfilePage.tsx-parts/rowValues";
 import { SETTINGS_SWITCH_SEARCH_WORDS, personaSubPageForQuery, settingsSwitchForQuery, type BotProfileSettingsSwitch } from "@/lib/persona-search";
 import { BotUsageBreakdownSection } from "../bot-settings/BotUsageBreakdown";
@@ -195,6 +196,12 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   // The Appearance modal (the mascot editor), opened by the header's mascot
   // (the owner 2026-11-19: no longer a tab).
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  // The header's mascot, which the picker hangs under (found when the picker opens: the hero draws it).
+  const mascotAnchor = useMemo(() => ({
+    get current() {
+      return rootRef.current?.querySelector<HTMLElement>("[data-bot-profile-hero] [data-mascot-stage]") ?? null;
+    },
+  }), []) as RefObject<HTMLElement | null>;
   // A modal the Bot folder's "..." menus open (M-20261119-081): the Skills
   // card ("command": with its Write a command field focused), the Memory page.
   const [knowledgeModal, setKnowledgeModal] = useState<"skills" | "command" | "memory" | null>(null);
@@ -264,13 +271,18 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   const openCategory = (category: PersonaCategory, query?: string, open = true) => {
     setKnowledgeModal(null);
     setSearchRow(null);
-    // Three sections are not rows of a tab: Appearance is the header
-    // mascot's modal; Shared with and Who can see it are in the top bar's
+    // Three sections are not rows of a tab: Appearance is the picker under
+    // the header's mascot; Shared with and Who can see it are in the top bar's
     // Share popover. A search shows them on Enter only, never while typing.
     if (category === "appearance" || category === "sharing" || category === "visibility") {
       if (!open) return;
       setPage(null);
-      if (category === "appearance") { setAppearanceOpen(true); return; }
+      if (category === "appearance") {
+        // the picker hangs under the mascot: the page shows its top
+        scrollRef.current?.scrollTo({ top: 0 });
+        setAppearanceOpen(true);
+        return;
+      }
       setAppearanceOpen(false);
       setShareOpen(true);
       return;
@@ -671,7 +683,9 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   const banner = profileBannerColors(bannerAccent, wearsPicture ? null : mascotDominantColor(bot));
   const bannerStyle = { "--bot-profile-banner-from": banner.from, "--bot-profile-banner-to": banner.to } as CSSProperties;
 
-  const { heroSlot, hero } = useBotProfileHero({ bot, derived, onOpenAppearance: shown("appearance") ? () => openCategory("appearance") : undefined });
+  const { heroSlot, hero } = useBotProfileHero({ bot, derived, // a click on the mascot opens the picker under it; a second click closes it
+    onOpenAppearance: shown("appearance") ? () => (appearanceOpen ? setAppearanceOpen(false) : openCategory("appearance")) : undefined,
+  });
 
   // Once the name scrolls under the top bar, the bar turns opaque (blurred)
   // and shows the small mascot and the name: the content scrolls under it,
@@ -703,12 +717,13 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
       data-persona-modal=""
       data-bot-profile-tab-current={tab}
       data-bot-profile-subpage-current={page ?? undefined}
-      data-bot-profile-modal-open={page || knowledgeModal || appearanceOpen || channel ? "" : undefined}
+      data-bot-profile-modal-open={page || knowledgeModal || channel ? "" : undefined}
+      data-bot-profile-picker-open={appearanceOpen ? "" : undefined}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing) return;
         // Connect apps' window takes its own Escape.
         if (connectAppsOpen) return;
-        // A modal of the page is open: its own Escape closes it (BotPageModal).
+        // A modal of the page is open: its own Escape closes it (BotPageModal); so does the mascot picker's.
         if (page || knowledgeModal || appearanceOpen || channel) return;
         // A popover of the page is open (Share, Add, a pill list): this
         // Escape is its own, so it closes that popover only (its dismiss
@@ -777,14 +792,16 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
           {subPageBody(page)}
         </SubPageModal>
       )}
-      {/* Appearance: the mascot editor, exactly the old tab's content, in the page's shared modal. Its editor draws its own
-          preview (no header slot: the header's mascot is behind this modal and follows each pick). */}
+      {/* Appearance (#5369): the mascot picker, a panel anchored right under the header's mascot, which is its preview
+          and follows each pick. No window: Escape or a press outside closes it. */}
       {appearanceOpen && shown("appearance") && (
-        <BotPageModal id="appearance" title={t("botProfile.tab.appearance")} size="large" onClose={() => setAppearanceOpen(false)}>
-          <MascotHeroSlotContext.Provider value={null}>
-            {block("appearance")}
-          </MascotHeroSlotContext.Provider>
-        </BotPageModal>
+        <MascotPickerPopover
+          bot={bot}
+          anchorRef={mascotAnchor}
+          onPatch={derived.patch}
+          onClose={() => setAppearanceOpen(false)}
+          onUseMascot={wearsPicture ? () => derived.patch({ avatarCrop: "mascot" }) : undefined}
+        />
       )}
       {(knowledgeModal === "skills" || knowledgeModal === "command") && shown("skills") && (
         <BotPageModal id="skills" title={t("botSettings.nav.skills")} size="large" onClose={closeKnowledgeModal}>

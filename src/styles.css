@@ -3060,9 +3060,11 @@ body {
    Tab start inside it); a ring around the entire main panel says nothing,
    its controls keep their own rings (#2136). The keyboard shortcuts sheet's
    list takes focus the same way, so the arrows scroll it (#4097), and so
-   does a modal of the bot page when it opens (#4470). */
+   does a modal of the bot page when it opens (#4470), and the mascot picker
+   under the mascot (#5369). */
 [data-bot-profile-page]:focus-visible,
 [data-bot-page-modal]:focus-visible,
+[data-mascot-picker-popover]:focus-visible,
 [data-shortcut-columns]:focus-visible {
   outline: none;
 }

@@ -4,7 +4,7 @@
 // aligned left and tight. No description line: the bot changes its own
 // description when asked (update_agent_settings). The mascot editor
 // itself is the Appearance modal, opened by a click on the mascot.
-import { lazy, Suspense, useCallback, useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { Lock, Star, UserRound, Users } from "lucide-react";
 
 import { useStore, type Bot } from "@/state/store";
@@ -33,7 +33,7 @@ type Derived = ReturnType<typeof useBotSectionContent>["derived"];
 
 // The character registry and its labels: fetched with the page's hero card,
 // the same chunk the Appearance modal's editor loads.
-const MascotLookEditor = lazy(() => import("../../floating-bots/MascotLookEditor"));
+const MascotHero = lazy(() => import("../../floating-bots/MascotHero"));
 
 /** The header's hero: the mascot, large and bare over the banner, with the
  * name and label stacked under it. A click on the mascot calls
@@ -49,9 +49,6 @@ export function useBotProfileHero({ bot, derived, onOpenAppearance }: {
   const { state, dispatch } = useStore();
   const canName = canEditBotField(state.config, bot, "name");
   const canLabel = canEditBotField(state.config, bot, "title");
-  const [heroTarget, setHeroTarget] = useState<HTMLElement | null>(null);
-  const [heroClaimed, setHeroClaimed] = useState(false);
-  const claimHero = useCallback((claimed: boolean) => setHeroClaimed(claimed), []);
   const heroSources = useAvatarSources(bot, derived.patch);
   const [heroDropping, setHeroDropping] = useState(false);
   // a name stored with its title glued on ("Heron · Chief of Staff")
@@ -94,8 +91,6 @@ export function useBotProfileHero({ bot, derived, onOpenAppearance }: {
     </h2>
   );
   const heroSlot: MascotHeroSlot = {
-    target: heroTarget,
-    claim: claimHero,
     heading: heroTitle,
     profile: true,
     ...(onOpenAppearance ? { onOpen: onOpenAppearance, openLabel: t("botProfile.tab.appearance") } : {}),
@@ -163,14 +158,11 @@ export function useBotProfileHero({ bot, derived, onOpenAppearance }: {
         // the mascot's middle (168px frame) on the banner's lower edge (#4420)
         className={cn("relative -mt-[84px] flex flex-col items-start rounded-[18px]", heroDropping && "ring-2 ring-accent")}
       >
-        <div ref={setHeroTarget} data-bot-profile-hero-slot="" className={heroClaimed ? undefined : "hidden"} />
-        {!heroClaimed && (
+        {(
           heroPicture ? staticHero : (
             <Suspense fallback={staticHero}>
-              <MascotLookEditor
-                heroOnly
+              <MascotHero
                 bot={bot}
-                onPatch={derived.patch}
                 onOwlMove={(kind) => dispatch({ type: "playMascotMotion", botId: bot.id, kind })}
               />
             </Suspense>

@@ -1,0 +1,168 @@
+/*
+ * The mascot picker (MascotPicker.tsx, #5369): the pieces the utilities do
+ * not write, after the open-bot-avatar site's picker (its studio.css): the
+ * grid cell, the colour swatches with their ring, the free colour's rainbow
+ * rim, the icon pills, and the icons' small moves on hover and on a choice.
+ * Colours come from the surface's own tokens and from the bot colours the
+ * component hands in as variables; none is written here.
+ */
+.mascot-picker {
+  --mp-ring: transparent;
+}
+
+/* Five per row; each cell is the hit target, the drawing takes most of it. */
+.mp-cell {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 10 / 9;
+  border-radius: 18px;
+  outline: none;
+  transition: background-color 120ms ease;
+}
+.mp-cell:hover { background: color-mix(in srgb, var(--color-ink) 5%, transparent); }
+.mp-cell[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--color-ink) 9%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-ink) 22%, transparent);
+}
+.mp-cell:focus-visible { box-shadow: inset 0 0 0 2px var(--color-accent); }
+.mp-cell[aria-disabled="true"] { cursor: default; }
+
+/* The circled "+" at the end of the shapes. */
+.mp-plus {
+  display: grid;
+  place-items: center;
+  width: 50%;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, var(--color-ink) 22%, transparent);
+  color: var(--color-ink-tertiary);
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.mp-cell:hover .mp-plus, .mp-cell[aria-expanded="true"] .mp-plus {
+  color: var(--color-ink);
+  border-color: color-mix(in srgb, var(--color-ink) 40%, transparent);
+}
+
+/* A colour: the same ring as a chosen cell, faint on hover. */
+.mp-swatch {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--mp-swatch);
+  box-shadow: 0 0 0 3px var(--menu-fill), 0 0 0 4.5px var(--mp-ring);
+  outline: none;
+  transition: box-shadow 120ms ease;
+}
+@media (hover: hover) {
+  .mp-swatch:hover { --mp-ring: color-mix(in srgb, var(--color-ink) 22%, transparent); }
+}
+.mp-swatch[aria-pressed="true"], .mp-swatch-custom[data-on] { --mp-ring: color-mix(in srgb, var(--color-ink) 55%, transparent); }
+.mp-swatch:focus-visible, .mp-swatch-custom:has(input:focus-visible) { --mp-ring: var(--color-accent); }
+/* a very light or very dark colour keeps an edge on its own ground */
+.mp-swatch[data-edge]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-ink) 22%, transparent);
+}
+
+/* The free colour: a rainbow rim that opens the system colour picker; once picked, its colour fills the middle. */
+.mp-swatch-custom {
+  cursor: pointer;
+  background:
+    radial-gradient(circle, var(--menu-fill) 0 48%, transparent 50%),
+    conic-gradient(var(--mp-rainbow));
+}
+.mp-swatch-custom[data-on] {
+  background:
+    radial-gradient(circle, var(--mp-swatch) 0 52%, transparent 54%),
+    conic-gradient(var(--mp-rainbow));
+}
+.mp-swatch-custom input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Back to the colour the panel opened on: a swatch-sized ring with the rotate icon. */
+.mp-swatch-reset {
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--color-ink-secondary);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-ink) 22%, transparent);
+}
+.mp-swatch-reset:hover:not(:disabled) { color: var(--color-ink); background: color-mix(in srgb, var(--color-ink) 6%, transparent); }
+.mp-swatch-reset:disabled { opacity: 0.35; cursor: default; }
+
+/* The icon pills: the mood as eyes, the material as faces, the chosen segment on a lighter ground. */
+.mp-pill {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-ink) 6%, transparent);
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--color-ink) 10%, transparent);
+}
+.mp-seg {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 28px;
+  border-radius: 999px;
+  color: var(--color-ink-tertiary);
+  outline: none;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.mp-seg:hover { color: var(--color-ink-secondary); }
+.mp-seg[aria-checked="true"], .mp-seg[aria-expanded="true"], .mp-seg[data-on] {
+  color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-ink) 12%, transparent);
+}
+.mp-seg:focus-visible { box-shadow: 0 0 0 2px var(--color-accent); }
+.mp-glyph { width: 18px; height: 18px; overflow: visible; }
+.mp-glyph * { transform-box: fill-box; transform-origin: center; }
+
+/*
+ * The icons move once when their segment is hovered, focused or just chosen
+ * (data-live, set by the pill). The upstream picker's icons are still
+ * drawings; these small moves are this app's own.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .mp-seg[data-live] .mp-glyph[data-glyph="eyes-neutral"] rect { animation: mp-blink 520ms ease-in-out 1; }
+  .mp-seg[data-live] .mp-glyph[data-glyph="eyes-happy"] { animation: mp-hop 520ms ease-out 1; }
+  .mp-seg[data-live] .mp-glyph[data-glyph="face-flat"] { animation: mp-nod 560ms ease-in-out 1; }
+  .mp-seg[data-live] .mp-glyph[data-glyph="face-fluffy"] .mp-fur { animation: mp-ruffle 640ms ease-in-out 1; }
+  .mp-seg[data-live] .mp-glyph[data-glyph="face-glass"] .mp-glint { animation: mp-glint 700ms ease-in-out 1; }
+  .mp-seg[data-live] .mp-glyph[data-glyph="skins"] { animation: mp-sway 640ms ease-in-out 1; }
+}
+@keyframes mp-blink { 0%, 100% { transform: scaleY(1); } 45%, 55% { transform: scaleY(0.12); } }
+@keyframes mp-hop { 0%, 100% { transform: translateY(0); } 35% { transform: translateY(-3px); } 70% { transform: translateY(0.5px); } }
+@keyframes mp-nod { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-9deg); } 65% { transform: rotate(7deg); } }
+@keyframes mp-ruffle { 0%, 100% { transform: rotate(0) scale(1); } 25% { transform: rotate(14deg) scale(1.06); } 60% { transform: rotate(-10deg) scale(1.03); } }
+@keyframes mp-glint { 0%, 100% { transform: rotate(0); opacity: 1; } 50% { transform: rotate(150deg); opacity: 0.35; } }
+@keyframes mp-sway { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-12deg); } 65% { transform: rotate(9deg); } }
+
+/* The small arrow that ties the panel to the mascot above it. */
+.mp-caret {
+  position: absolute;
+  top: -6px;
+  width: 12px;
+  height: 12px;
+  transform: rotate(45deg);
+  background: var(--menu-fill);
+  border-left: 0.5px solid var(--menu-hairline);
+  border-top: 0.5px solid var(--menu-hairline);
+  border-top-left-radius: 3px;
+}
+[data-side="top"] > .mp-caret { display: none; }

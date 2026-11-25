@@ -476,12 +476,14 @@ function BotAvatarImage({
   });
 
   const look = botMascotLook(bot.mascotLook);
+  // a free colour (the mascot picker's ring, #5369) is drawn in place of the bot's named colour
+  const bodyColor = (look.bodyColor ?? bot.color) as MausColor;
   const sidebarGaze = Boolean(sidebarAlive && !mascotProps.animated);
   if (outcome !== "flatImage" && look.character !== "owl") {
     return (
       <CharacterAvatar
         look={look}
-        color={bot.color}
+        color={bodyColor}
         size={size}
         state={mascotProps.state}
         agentState={agentState ?? agentStateForBot(bot)}
@@ -500,7 +502,7 @@ function BotAvatarImage({
         {...mascotProps}
         sidebarGaze={sidebarGaze}
         showMouth={false}
-        color={bot.color}
+        color={bodyColor}
         size={size}
         label={label ?? bot.name}
       />

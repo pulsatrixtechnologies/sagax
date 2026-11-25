@@ -26,7 +26,20 @@ const change = vi.fn();
 const reset = vi.fn();
 const mount = (value: ModeModels = {}) => act(() => root.render(createElement(ModesSettingsView, { value, engines, favorites, onChange: change, onReset: reset, busy: false, error: null })));
 const row = (mode: string) => host.querySelector<HTMLElement>(`[data-mode-setting="${mode}"]`)!;
-const select = (node: Element | null, value: string) => act(() => { const field = node as HTMLSelectElement; field.value = value; field.dispatchEvent(new Event("change", { bubbles: true })); });
+// the settings' own list (PillSelect): its closed control reads the value, its open list the choices
+const control = (scope: Element, marker: string) => scope.querySelector<HTMLButtonElement>(`[${marker}] [data-pill-select]`);
+const shown = (scope: Element, marker: string) => control(scope, marker)?.textContent ?? null;
+const list = (scope: Element, marker: string) => {
+  act(() => control(scope, marker)!.click());
+  const items = [...document.querySelectorAll<HTMLElement>('[role="listbox"] > li')];
+  return { items, options: items.filter((item) => item.getAttribute("role") === "option"), groups: items.filter((item) => item.hasAttribute("data-pill-group")).map((item) => item.textContent) };
+};
+const close = () => act(() => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+const pick = (scope: Element, marker: string, label: string) => {
+  const option = list(scope, marker).options.find((item) => item.textContent === label);
+  expect(option, `the choice "${label}"`).toBeTruthy();
+  act(() => option!.click());
+};
 
 beforeEach(() => {
   setLocale("en");
@@ -57,14 +70,13 @@ describe("Settings > Modes", () => {
   it("lists Auto, Fast, Expert and Heavy, never Build; Auto has a sentence and no control", () => {
     mount();
     expect([...host.querySelectorAll<HTMLElement>("[data-mode-setting]")].map((node) => node.dataset.modeSetting)).toEqual(["auto", "fast", "expert", "heavy"]);
-    expect(row("auto").querySelector("select, button")).toBeNull();
+    expect(row("auto").querySelector("[data-pill-select], button")).toBeNull();
     expect(row("auto").textContent).toContain("On every turn it reads your request");
   });
 
   it("with nothing set, each mode reads Chosen by Sagax and the defaults button has nothing to put back", () => {
     mount();
-    for (const mode of ["fast", "expert"]) expect(row(mode).querySelector<HTMLSelectElement>("[data-mode-model]")!.value).toBe("");
-    expect(row("fast").querySelector("[data-mode-model] option")?.textContent).toBe("Chosen by Sagax");
+    for (const mode of ["fast", "expert"]) expect(shown(row(mode), "data-mode-model")).toBe("Chosen by Sagax");
     expect(row("fast").querySelector("[data-mode-effort]")).toBeNull();
     expect(row("heavy").querySelectorAll("[data-mode-expert]")).toHaveLength(0);
     expect(host.querySelector<HTMLButtonElement>("[data-modes-reset]")!.disabled).toBe(true);
@@ -72,23 +84,25 @@ describe("Settings > Modes", () => {
 
   it("each list offers the favorites first, under Favorites", () => {
     mount();
-    const groups = [...row("expert").querySelectorAll<HTMLOptGroupElement>("[data-mode-model] optgroup")];
-    expect(groups.map((group) => group.label)).toEqual(["Favorites", "All models"]);
-    expect([...groups[0]!.querySelectorAll("option")].map((option) => option.textContent)).toEqual(["GPT-6 Astra · Codex"]);
+    const open = list(row("expert"), "data-mode-model");
+    expect(open.groups).toEqual(["Favorites", "All models"]);
+    expect(open.items.map((item) => item.textContent).slice(0, 3)).toEqual(["Chosen by Sagax", "Favorites", "GPT-6 Astra · Codex"]);
+    close();
   });
 
   it("choosing a model for Fast or Expert saves it; its reasoning is then offered, the mode's own level first", () => {
     mount();
-    select(row("fast").querySelector("[data-mode-model]"), "claude\u0000claude-haiku-4-5");
+    pick(row("fast"), "data-mode-model", "Claude Haiku 4.5 · Claude · ada@acme.test");
     expect(change).toHaveBeenCalledWith({ fast: { instanceId: "claude", model: "claude-haiku-4-5" } });
     mount({ fast: { instanceId: "claude", model: "claude-haiku-4-5" } });
-    const effort = row("fast").querySelector<HTMLSelectElement>("[data-mode-effort]")!;
-    expect([...effort.options].map((option) => option.textContent)).toEqual(["The mode's own level", "Low", "Medium", "High"]);
-    select(effort, "medium");
+    expect(shown(row("fast"), "data-mode-model")).toBe("Claude Haiku 4.5 · Claude · ada@acme.test");
+    expect(list(row("fast"), "data-mode-effort").options.map((option) => option.textContent)).toEqual(["The mode's own level", "Low", "Medium", "High"]);
+    close();
+    pick(row("fast"), "data-mode-effort", "Medium");
     expect(change).toHaveBeenLastCalledWith({ fast: { instanceId: "claude", model: "claude-haiku-4-5", effort: "medium" } });
     // back to Chosen by Sagax: the mode's choice is removed, the others kept
     mount({ fast: { instanceId: "claude", model: "claude-haiku-4-5" }, expert: { instanceId: "codex", model: "gpt-6-astra" } });
-    select(row("fast").querySelector("[data-mode-model]"), "");
+    pick(row("fast"), "data-mode-model", "Chosen by Sagax");
     expect(change).toHaveBeenLastCalledWith({ expert: { instanceId: "codex", model: "gpt-6-astra" } });
   });
 
@@ -100,9 +114,9 @@ describe("Settings > Modes", () => {
   it("Heavy's experts are added and removed one by one, at most five, never the same twice", () => {
     mount({ heavy: [{ instanceId: "claude", model: "claude-opus-5-5" }] });
     expect([...row("heavy").querySelectorAll("[data-mode-expert]")].map((node) => node.querySelector("[data-mode-expert-name]")?.textContent)).toEqual(["Claude Opus 5.5 · Claude · ada@acme.test"]);
-    const add = row("heavy").querySelector<HTMLSelectElement>("[data-mode-expert-add]")!;
-    expect([...add.options].map((option) => option.value)).not.toContain("claude\u0000claude-opus-5-5");
-    select(add, "codex\u0000gpt-6-astra");
+    expect(list(row("heavy"), "data-mode-expert-add").options.map((option) => option.textContent)).not.toContain("Claude Opus 5.5 · Claude · ada@acme.test");
+    close();
+    pick(row("heavy"), "data-mode-expert-add", "GPT-6 Astra · Codex");
     expect(change).toHaveBeenLastCalledWith({ heavy: [{ instanceId: "claude", model: "claude-opus-5-5" }, { instanceId: "codex", model: "gpt-6-astra" }] });
     act(() => row("heavy").querySelector<HTMLButtonElement>("[data-mode-expert-remove]")!.click());
     expect(change).toHaveBeenLastCalledWith({});
@@ -112,7 +126,7 @@ describe("Settings > Modes", () => {
 
   it("a chosen model that is not offered now stays named, and says the mode runs Sagax's choice meanwhile", () => {
     mount({ expert: { instanceId: "gone", model: "old-model" } });
-    expect(row("expert").querySelector<HTMLSelectElement>("[data-mode-model]")!.value).toBe("gone\u0000old-model");
+    expect(shown(row("expert"), "data-mode-model")).toBe("old-model");
     expect(row("expert").querySelector("[data-mode-unavailable]")?.textContent).toContain("not available right now");
   });
 

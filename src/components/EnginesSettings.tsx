@@ -29,6 +29,7 @@ import { boatComputerEnabled, vpsComputerEnabled } from "@/lib/feature-flags";
 import { OrgHostToolsNote, orgRefusesEngine } from "./OrgHostToolsNote";
 import { DescribedRow, FIELD, FoldRow, PILL, PillSelect, SettingsFoldSection, SettingsGroup, Switch } from "./SettingsPrimitives";
 import { AutoModelSettings } from "./settings/AutoModelSettings";
+import { ModesSettings } from "./settings/ModesSettings";
 import { BotModelsSettings } from "./settings/BotModelsSettings";
 import { CacheKeepWarmSettings } from "./CacheKeepWarmSettings";
 import { ModelSwitchesSettings } from "./settings/ModelSwitchesSettings";
@@ -501,6 +502,8 @@ export function EnginesSettings() {
     <div className="flex min-w-0 flex-col gap-6 pb-2" data-models-voice="" data-models-page="">
       {/* #1675: Bot models first (defaults + table + bulk) */}
       <BotModelsSettings />
+      {/* M-20261125-074: the person's own modes (the model of Fast and Expert, Heavy's experts) */}
+      <ModesSettings />
       {/* #2175: a heading with a disclosure, its content sibling groups: never a card in a card */}
       <SettingsFoldSection cardId="models.advanced" groupId="models-advanced" title={t("models.advanced.title")} description={t("models.advanced.help")}>
         <div className="flex flex-col gap-6" data-models-advanced="">

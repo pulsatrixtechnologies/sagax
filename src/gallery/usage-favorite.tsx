@@ -8,9 +8,9 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { Gauge } from "lucide-react";
 import { SidebarPopoverMenu, type SidebarMenuItem } from "../components/SidebarPopoverMenu";
-import { PlanUsageView } from "../components/PlanUsage";
-import { usageLines, usageSummary } from "../lib/account-menu";
-import { connectedPlanRows, type PlanUsageReport } from "../lib/plan-usage";
+import { AccountLimits, PlanUsageView } from "../components/PlanUsage";
+import { usageSummary } from "../lib/account-menu";
+import { accountRowName, connectedPlanRows, type PlanUsageReport } from "../lib/plan-usage";
 import { toggleUsageFavorite, useUsageFavorite, writeUsageFavorite } from "../lib/usage-favorite";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -36,12 +36,6 @@ function Gallery() {
   const favorite = useUsageFavorite();
   const rows = connectedPlanRows(report);
   const summary = usageSummary(rows, favorite);
-  const lines = usageLines(rows, {
-    weekly: t("planUsage.weekly"),
-    fiveHour: t("planUsage.fiveHour"),
-    used: (used) => t("planUsage.used", { used }),
-    resetsIn: (when) => t("planUsage.resetsIn", { when }),
-  }, NOW);
   const items: SidebarMenuItem[] = [{
     key: "usage",
     label: t("sidebar.account.usage"),
@@ -51,20 +45,14 @@ function Gallery() {
       ? t("sidebar.account.usageTooltip", { account: summary.account, percent: summary.percent })
       : t("sidebar.account.usageTooltipBare", { percent: summary.percent }),
     submenu: [
-      ...lines.map((line, index) => ({
-        key: line.key, label: line.label, subtitle: line.subtitle, value: line.value, info: true,
-        ...(lines.findIndex((other) => other.planId === line.planId) === index ? {
-          favorite: {
-            on: favorite === line.planId,
-            label: t(favorite === line.planId ? "usage.favorite.remove" : "usage.favorite.add", { name: line.planName ?? line.label }),
-            onToggle: () => toggleUsageFavorite(line.planId!),
-          },
-        } : {}),
+      ...rows.filter((row) => row.state === "windows").map((row) => ({
+        key: row.id, label: accountRowName(row),
+        node: <AccountLimits provider={row} name={accountRowName(row)} favorite={{ id: favorite, onToggle: toggleUsageFavorite }} />,
       })),
       { key: "month-cost", label: t("sidebar.account.monthCost"), value: "5,26 $", info: true, foot: true },
       { key: "view-usage", label: t("sidebar.account.viewUsage"), separatorBefore: true, foot: true, onSelect: () => {} },
     ],
-    submenuWidth: 228,
+    submenuWidth: 320,
     onSelect: () => {},
   }];
   return (

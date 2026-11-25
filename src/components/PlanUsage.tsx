@@ -300,15 +300,22 @@ function asOfText(asOf: string | null): string | null {
  * short window and the week on the grid every row shares. A failed read
  * stays inside this row: one short muted line under the bars (or in their
  * place when no figure was ever read) with a small retry button; the last
- * figures stay, with "as of <time>". */
-function AccountLimits({ provider, favorite, loading, onRefresh }: { provider: PlanRow } & Pick<PlanUsageViewProps, "favorite" | "loading" | "onRefresh">) {
+ * figures stay, with "as of <time>". The account menu's Usage and the chat
+ * bar's usage detail draw the same row (M-20261125-084): one row per
+ * account, never one per window. */
+export function AccountLimits({ provider, name, favorite, loading, onRefresh }: {
+  provider: PlanRow;
+  /** The row's name where the provider is not said around it (the account
+   * menu's Usage, the chat bar's usage detail: "Claude · ada@acme.example"). */
+  name?: string;
+} & Partial<Pick<PlanUsageViewProps, "favorite" | "loading" | "onRefresh">>) {
   const meters = provider.state === "error" ? [] : planMeters(provider);
   const line = provider.state === "error" ? provider.message : provider.note;
   const asOf = asOfText(provider.asOf ?? null);
   return (
     <LimitRow
       data-plan-row={provider.id}
-      name={provider.name}
+      name={name ?? provider.name}
       detail={provider.plan}
       accessory={favorite ? <FavoriteStar provider={provider} favorite={favorite} /> : null}
     >

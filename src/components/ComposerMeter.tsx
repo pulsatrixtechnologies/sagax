@@ -19,13 +19,15 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { contextHalf, usageHalf, usageTone, type UsageTone } from "@/lib/composer-meter";
 import { useEngineLimits } from "@/lib/limit-resets";
-import { accountRowName, formatResetDistance, humanPlanName } from "@/lib/plan-usage";
+import { accountRowName, type PlanRow } from "@/lib/plan-usage";
+import { toggleUsageFavorite, useUsageFavorite } from "@/lib/usage-favorite";
 import { contextDetail } from "@/lib/usage";
 import { weeklyLimitNotice } from "@/lib/usage-notices";
 import type { Bot } from "@/state/store";
 import { useEnginePlanRows } from "./ChatUsageNotices";
 import { useCompact } from "./ContextWarning";
 import { EngineLimitActions, useEngineLimitDetail } from "./LimitResetContinue";
+import { AccountLimits } from "./PlanUsage";
 import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "./menu-look";
 
 const RING = 14;
@@ -49,6 +51,8 @@ const HALF = "flex h-full items-center gap-1.5 whitespace-nowrap px-2 tabular-nu
 const FIGURE = "@max-[22rem]/composer:hidden";
 const TONE: Record<UsageTone, string> = { quiet: "", warning: "text-warning", danger: "text-danger" };
 const DETAIL = cn(MENU_SURFACE, MENU_FIT_ROW, "absolute bottom-full right-0 z-40 mb-1.5 max-w-[min(320px,calc(100vw-16px))]");
+/** The usage detail holds an account's row, its two windows side by side. */
+const USAGE_DETAIL = "w-[min(340px,calc(100vw-16px))] max-w-none";
 
 export type MeterHalf = "context" | "usage";
 
@@ -59,9 +63,12 @@ export interface ComposerMeterViewProps {
   usage?: {
     percent: number;
     tone: UsageTone;
-    /** "Claude · ada@acme.example Max". */
-    account: string;
-    windows: Array<{ key: string; label: string; value: string }>;
+    /** The account that serves the bot: one row, its provider and address,
+     * its two windows side by side (M-20261125-084), the row of Settings >
+     * Usage limits. */
+    row: PlanRow;
+    /** The account's star (the plan the account menu's Usage row shows). */
+    favorite?: { id: string | null; onToggle: (planId: string) => void };
     line?: string | null;
     /** The limit is near: the line shows in the detail too. */
     near?: boolean;
@@ -136,14 +143,8 @@ export function ComposerMeterView({ context, usage, contextActions, usageActions
         </div>
       )}
       {shown === "usage" && usage && (
-        <div role="menu" aria-label={usageAria} data-composer-meter-detail="usage" className={DETAIL}>
-          <p data-composer-meter-account="" className="truncate px-2 pt-1">{usage.account}</p>
-          {usage.windows.map((window) => (
-            <p key={window.key} data-composer-meter-window={window.key} className="flex items-baseline justify-between gap-4 px-2 py-0.5 text-[13px] tabular-nums">
-              <span className="min-w-0 truncate text-ink-secondary">{window.label}</span>
-              <span className="shrink-0">{window.value}</span>
-            </p>
-          ))}
+        <div role="menu" aria-label={usageAria} data-composer-meter-detail="usage" className={cn(DETAIL, USAGE_DETAIL)}>
+          <AccountLimits provider={usage.row} name={accountRowName(usage.row)} favorite={usage.favorite} />
           {usage.near && usage.line && <p data-composer-meter-limit="" className="px-2 py-1 tabular-nums">{usage.line}</p>}
           {usageActions?.(() => setOpen(null))}
         </div>
@@ -167,26 +168,15 @@ export function ComposerMeter({ bot, threadId }: { bot: Bot; threadId: string })
   const usage = usageHalf(rows);
   const detail = useEngineLimitDetail({ limit, weekly: weeklyLimitNotice(rows), botId: bot.id, threadId, messages: own ? bot.messages : undefined });
   const compact = useCompact();
-  const now = Date.now();
-  const plan = usage ? humanPlanName(usage.row.plan) ?? usage.row.plan : null;
-  const windows = usage ? ([["weekly", t("planUsage.weekly"), usage.row.weekly], ["five-hour", t("planUsage.fiveHour"), usage.row.fiveHour]] as const)
-    .filter(([, , window]) => window.available && window.usedPercent !== null)
-    .map(([key, label, window]) => {
-      const when = formatResetDistance(window.resetsAt, now);
-      return {
-        key,
-        label: when ? `${label} · ${t("planUsage.resetsIn", { when })}` : label,
-        value: t("planUsage.used", { used: Math.round(Math.min(100, Math.max(0, window.usedPercent ?? 0))) }),
-      };
-    }) : [];
+  const favorite = useUsageFavorite();
   return (
     <ComposerMeterView
       context={context ? { percent: context.percent, detail: task?.usage ? contextDetail(task.usage) : null } : undefined}
       usage={usage ? {
         percent: usage.percent,
         tone: usageTone({ near: detail.near, weeklyNotice: Boolean(detail.weekly), hard: detail.hard }),
-        account: [accountRowName(usage.row), plan].filter(Boolean).join(" "),
-        windows,
+        row: usage.row,
+        favorite: { id: favorite, onToggle: toggleUsageFavorite },
         line: detail.line,
         near: detail.near,
       } : undefined}

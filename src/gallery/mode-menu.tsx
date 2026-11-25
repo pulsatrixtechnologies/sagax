@@ -27,6 +27,7 @@ import { loadLocale, t } from "../lib/i18n";
 import { chatBarChipLabel, type ModelMode } from "../lib/model-mode";
 import { ComposerMeterView } from "../components/ComposerMeter";
 import { MENU_ROW } from "../components/menu-look";
+import type { PlanRow } from "../lib/plan-usage";
 import { trackInputModality } from "../lib/input-modality";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import type { ModeModel, ModeResolution } from "../../shared/model-mode";
@@ -90,6 +91,12 @@ function Chip({ label }: { label: string }) {
   });
 }
 
+const meterWindow = (used: number, hours: number) => ({ available: true, remainingPercent: 100 - used, usedPercent: used, resetsAt: new Date(Date.parse("2026-11-25T17:00:00Z") + hours * 3_600_000).toISOString() });
+const meterRow: PlanRow = {
+  id: "claude", name: "ada@example.com", driver: "claude", plan: "Max", state: "windows", access: "subscription", instanceId: "claude", instanceIds: ["claude"],
+  message: null, fiveHour: meterWindow(31, 2.5), weekly: meterWindow(89, 52), extra: [], models: [],
+};
+
 function Gallery() {
   const autoOn = current !== "pinned";
   const selection = { instanceId: "claude-team", model: "claude-opus-5-5", ...(autoOn ? { auto: true as const } : {}), ...(autoOn && current !== "auto" ? { mode: current } : {}) };
@@ -139,11 +146,7 @@ function Gallery() {
                 initialOpen={meterOpen}
                 context={{ percent: 42, detail: t("chat.usage.contextOfWindow", { tokens: "84k", percent: "42", window: "200k" }) }}
                 usage={{
-                  percent: 89, tone: "warning", account: "Claude · ada@example.com Max",
-                  windows: [
-                    { key: "weekly", label: `${t("planUsage.weekly")} · ${t("planUsage.resetsIn", { when: "2d 4h" })}`, value: t("planUsage.used", { used: 89 }) },
-                    { key: "five-hour", label: `${t("planUsage.fiveHour")} · ${t("planUsage.resetsIn", { when: "2h 30m" })}`, value: t("planUsage.used", { used: 31 }) },
-                  ],
+                  percent: 89, tone: "warning", row: meterRow, favorite: { id: "claude", onToggle: () => undefined },
                 }}
                 contextActions={<button type="button" className={MENU_ROW}>{t("contextWarning.compactNow")}</button>}
                 usageActions={() => (

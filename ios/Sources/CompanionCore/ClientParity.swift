@@ -119,6 +119,12 @@ public extension CompanionClient {
         try await send(makeRequest("GET", "/api/me/preferences"), as: UserPreferences.self)
     }
 
+    func composerModePreview(botId: String, threadId: String?) async throws -> ComposerModes.Preview {
+        guard Self.validRouteID(botId) else { throw APIError.badURL }
+        let query = threadId.map { [URLQueryItem(name: "threadId", value: $0)] } ?? []
+        return try await send(makeRequest("GET", "/api/bots/\(botId)/auto-model", query: query), as: ComposerModes.Preview.self)
+    }
+
     /// `GET /api/me/models`, the `favoriteModels` field: the person's starred
     /// models as `"<engine>/<model>"`, oldest first. Nil where the server has
     /// no such record for this session (404 or 403): the stars stay on the device.

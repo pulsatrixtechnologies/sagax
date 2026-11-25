@@ -8,8 +8,8 @@ final class ComposerModesTests: XCTestCase {
         XCTAssertNil(ComposerModes.mode(of: ModelSelection(instanceId: "claude", model: "opus")))
         XCTAssertEqual(ComposerModes.mode(of: ModelSelection(instanceId: "claude", model: "opus", auto: true)), .auto)
         XCTAssertEqual(ComposerModes.mode(of: ModelSelection(instanceId: "claude", model: "opus", auto: true, mode: "heavy")), .heavy)
-        // Build is gone: a stored one reads as plain Auto; a mode without Auto is a pinned model
-        XCTAssertEqual(ComposerModes.mode(of: ModelSelection(instanceId: "claude", model: "opus", auto: true, mode: "build")), .auto)
+        // Build round-trips from desktop; a mode without Auto is a pinned model
+        XCTAssertEqual(ComposerModes.mode(of: ModelSelection(instanceId: "claude", model: "opus", auto: true, mode: "build")), .build)
         XCTAssertNil(ComposerModes.mode(of: ModelSelection(instanceId: "claude", model: "opus", mode: "fast")))
     }
 
@@ -27,10 +27,117 @@ final class ComposerModesTests: XCTestCase {
     }
 
     func testTheSelectionKeepsTheModeOnTheWayBack() throws {
-        let decoded = try JSONDecoder().decode(ModelSelection.self, from: Data(#"{"instanceId":"claude","model":"opus","auto":true,"mode":"heavy"}"#.utf8))
-        XCTAssertEqual(decoded.mode, "heavy")
+        let decoded = try JSONDecoder().decode(ModelSelection.self, from: Data(#"{"instanceId":"claude","model":"opus","auto":true,"mode":"build"}"#.utf8))
+        XCTAssertEqual(decoded.mode, "build")
         let again = try JSONDecoder().decode(ModelSelection.self, from: JSONEncoder().encode(decoded))
-        XCTAssertEqual(again.mode, "heavy")
+        XCTAssertEqual(again.mode, "build")
+    }
+
+    func testAvailableModesAndImposedReasoning() throws {
+        let preview = try JSONDecoder().decode(ComposerModes.Preview.self, from: Data(#"{"modes":{"expert":{"effort":"high","pick":{"instanceId":"one","model":"m"}},"build":{"pick":null}}}"#.utf8))
+        XCTAssertEqual(ComposerModes.offered(nil), [.auto, .fast, .expert, .heavy, .build])
+        XCTAssertEqual(ComposerModes.offered(preview), [.auto, .expert])
+        var selection = ModelSelection(instanceId: "one", model: "m", auto: true, mode: "expert")
+        let imposed = ComposerModes.reasoning(selection: selection, instances: [], preview: preview)
+        XCTAssertTrue(imposed.shown)
+        XCTAssertTrue(imposed.disabled)
+        XCTAssertEqual(imposed.value, "high")
+        XCTAssertTrue(imposed.choices.isEmpty)
+        selection.mode = "fast"
+        XCTAssertFalse(ComposerModes.reasoning(selection: selection, instances: [], preview: preview).shown)
+    }
+
+    func testAutoAndBuildUseTheLevelsOfTheirResolvedModel() {
+        var instance = engine("coder", family: "coding", email: nil, models: [("code", "Code")])
+        instance.capabilities = InstanceCapabilities(effortLevels: ["low", "high"])
+        instance.models.options[0].defaultEffort = "high"
+        let pick = ComposerModes.Preview.Pick(instanceId: "coder", model: "code")
+        let preview = ComposerModes.Preview(modes: ["build": .init(pick: pick)], pick: pick)
+        var selection = ModelSelection(instanceId: "fallback", model: "old", effort: "invalid", auto: true)
+        let automatic = ComposerModes.reasoning(selection: selection, instances: [instance], preview: preview)
+        XCTAssertTrue(automatic.shown)
+        XCTAssertFalse(automatic.disabled)
+        XCTAssertNil(automatic.value)
+        XCTAssertEqual(automatic.choices, [nil, "low", "high", UltracodeEffort.id])
+        selection.mode = "build"
+        let build = ComposerModes.reasoning(selection: selection, instances: [instance], preview: preview)
+        XCTAssertEqual(build.value, "high")
+        XCTAssertEqual(build.choices, ["low", "high", UltracodeEffort.id])
+        selection.effort = "low"
+        XCTAssertEqual(ComposerModes.reasoning(selection: selection, instances: [instance], preview: preview).value, "low")
+    }
+
+    func testLocalServersAndFollowRespectModelAvailability() {
+        var local = engine("local", family: "local", email: nil, models: [("one", "One"), ("two", "Two")])
+        local.models.options[0].local = true
+        local.models.options[0].server = "Studio"
+        local.models.options[1].local = true
+        let work = engine("claude-work", family: "claudeAgent", email: nil, models: [("opus", "Opus")])
+        let all = manual([work, local], selection: ModelSelection(instanceId: "claude-work", model: "opus"), favorites: ["claude-work/opus"])
+        let list = ComposerModes.usable(all, thisComputer: "This computer", excluded: [.init(instanceId: "claude-work", model: "opus", reason: "refused")])
+        XCTAssertTrue(list.top.isEmpty)
+        XCTAssertTrue(list.favorites.isEmpty)
+        XCTAssertEqual(list.providers.map(\.label), ["Local"])
+        let accounts = list.providers[0].accounts
+        XCTAssertEqual(accounts.map(\.label), ["Studio", "This computer"])
+        XCTAssertNil(accounts[0].rows[0].detail)
+    }
+
+    func testVariantsChangeTheVariantAndPreserveTheAccount() {
+        var instance = engine("code", family: "code", email: nil, models: [("m", "Code")])
+        instance.capabilities = InstanceCapabilities(modelVariants: true)
+        instance.models.options[0].variants = [.init(id: "deep", label: "Deep")]
+        var selection = ModelSelection(instanceId: "code", model: "m")
+        selection.accountPinned = true
+        let row = ComposerModes.reasoning(selection: selection, instances: [instance], preview: nil)
+        XCTAssertTrue(row.shown)
+        XCTAssertEqual(row.choices, [nil, "deep"])
+        let pick = row.choosing("deep", in: selection)
+        XCTAssertEqual(pick.variant, "deep")
+        XCTAssertEqual(pick.accountPinned, true)
+        XCTAssertNil(pick.effort)
+    }
+
+    func testTheSameOrganizationCatalogUsesEachPersonsCredentials() {
+        let instances = [engine("work", family: "grokAgent", email: nil, authenticated: false, models: [("one", "One"), ("two", "Two")])]
+        func access(_ turns: String) -> [MyEngine] {
+            [.init(instanceId: "work", driver: "grokAgent", displayName: "Grok", installed: true, subscription: .init(supported: true, signedIn: turns == "subscription"), myKey: false, orgKey: false, myTurns: turns)]
+        }
+        let signedIn = ComposerModes.organizationInstances(instances, mine: access("subscription"), models: ["work": ["two"]], allowed: [], ownOutside: true)
+        XCTAssertEqual(signedIn.first?.models.options.map(\.id), ["two"])
+        XCTAssertTrue(ComposerModes.organizationInstances(instances, mine: access("none"), models: [:], allowed: nil, ownOutside: true).isEmpty)
+        XCTAssertTrue(ComposerModes.organizationInstances(instances, mine: access("subscription"), models: [:], allowed: [], ownOutside: false).isEmpty)
+    }
+
+    func testRunnableCascadeAndBackNavigation() {
+        let instances = [
+            engine("work", family: "claudeAgent", email: "work@example.test", models: [("opus", "Opus")]),
+            engine("home", family: "claudeAgent", email: "home@example.test", models: [("opus", "Opus")]),
+            engine("old", family: "claudeAgent", email: nil, authenticated: false, models: [("opus", "Opus")]),
+            engine("grok", family: "grok", email: nil, models: [("g", "G")]),
+            engine("gone", family: "offline", email: nil, state: "missing", models: [("g", "G")])
+        ]
+        let all = manual(instances, selection: ModelSelection(instanceId: "work", model: "opus"))
+        let list = ComposerModes.usable(all, thisComputer: "This computer")
+        let limited = ComposerModes.usable(all, thisComputer: "This computer", excluded: [.init(instanceId: "work", model: nil, reason: "limit")])
+        XCTAssertEqual(limited.providers[0].accounts.map(\.id), ["home"])
+        XCTAssertEqual(list.providers.map(\.id), ["Claude", "Grok"])
+        XCTAssertEqual(list.providers[0].accounts.map(\.id), ["work", "home"])
+        XCTAssertTrue(list.providers[0].current)
+        XCTAssertFalse(list.providers[0].accounts[0].rows[0].pinAccount)
+        XCTAssertTrue(list.providers[0].accounts[1].rows[0].pinAccount)
+        let alternative = ModelPickerRules.selectionForPick(ModelSelection(instanceId: "work", model: "opus"), instance: instances[1], model: "opus", pinAccount: true)
+        XCTAssertEqual(alternative.accountPinned, true)
+        XCTAssertEqual(alternative.instanceId, "home")
+        XCTAssertEqual(ComposerModes.open(list.providers[0]), .accounts("Claude"))
+        XCTAssertEqual(ComposerModes.open(list.providers[1]), .models("Grok", "grok"))
+        XCTAssertEqual(ComposerModes.back(.models("Grok", "grok"), providers: list.providers), .providers)
+        XCTAssertEqual(ComposerModes.back(.models("Claude", "home"), providers: list.providers), .accounts("Claude"))
+        XCTAssertEqual(ComposerModes.back(.accounts("Claude"), providers: list.providers), .providers)
+        XCTAssertEqual(ComposerModes.settle(.accounts("Grok"), providers: list.providers), .models("Grok", "grok"))
+        XCTAssertEqual(ComposerModes.settle(.models("Claude", "old"), providers: list.providers), .accounts("Claude"))
+        XCTAssertEqual(ComposerModes.settle(.accounts("gone"), providers: list.providers), .providers)
+        XCTAssertEqual(ComposerModes.back(.reasoning, providers: list.providers), .root)
     }
 
     private func engine(_ id: String, family: String, email: String?, state: String = "available", authenticated: Bool = true, models: [(String, String)]) -> Instance {

@@ -2,18 +2,17 @@ import XCTest
 
 /// M-20261119-015: two Claude accounts of one person, each with its own list
 /// (the bundled -model-accounts-preview fleet). Each provider page names its
-/// account, every row says the account it runs on, and a model only the team
-/// account offers wears "Accès spécial". With TEST_RUNNER_SAGAX_SHOTS set,
+/// accounts, and only the team account lists its exclusive model. With TEST_RUNNER_SAGAX_SHOTS set,
 /// each screen is also saved as a PNG.
 final class ModelAccountsUITests: XCTestCase {
     @MainActor
-    func testEachAccountSaysItsModelsAndTheTeamOnlyModelWearsTheBadge() {
+    func testEachAccountListsItsOwnModelsAndTheSharedModelUnderBoth() {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = [
             // the steps preview leaves Pepper's turn done, so the model can change
             "-store-preview", "-chat-presentation-preview", "-chat-steps-preview", "-model-accounts-preview",
-            "-AppleLanguages", "(fr)", "-AppleLocale", "fr_CA",
+            "-AppleLanguages", "(fr)", "-AppleLocale", "fr_CA", "-paritySkin", "system",
             "-companion.prefs.activityDetail", "full",
             "-companion.prefs.rosterDensity", "comfortable",
             "-companion.onboarding.welcomeSeen", "YES",
@@ -41,27 +40,24 @@ final class ModelAccountsUITests: XCTestCase {
         let open = app.buttons["model-menu-open"]
         XCTAssertTrue(open.waitForExistence(timeout: 10))
         open.tap()
-        // the short menu: the model in use says its account
         let all = app.buttons["model-all"]
         XCTAssertTrue(all.waitForExistence(timeout: 5))
-        let current = app.buttons["model-row.current"]
-        if current.exists { XCTAssertTrue(current.label.contains("ada@example.com"), current.label) }
-        shot("model-accounts-short", app)
         all.tap()
-
-        let team = app.buttons["model-provider.preview-team"]
-        XCTAssertTrue(team.waitForExistence(timeout: 5), "a segment per account")
-        XCTAssertTrue(team.label.contains("ada.admin@acme.test"), team.label)
-        XCTAssertTrue(app.buttons["model-provider.preview"].label.contains("ada@example.com"), app.buttons["model-provider.preview"].label)
-        XCTAssertTrue(app.buttons["model-row.preview.claude-opus-4-5"].waitForExistence(timeout: 5))
+        app.buttons["model-provider.Claude"].tap()
+        let personal = app.buttons["model-account.preview"]
+        let team = app.buttons["model-account.preview-team"]
+        XCTAssertTrue(personal.waitForExistence(timeout: 5))
+        XCTAssertTrue(personal.label.contains("ada@example.com"))
+        XCTAssertTrue(team.label.contains("ada.admin@acme.test"))
+        shot("model-accounts", app)
+        personal.tap()
+        XCTAssertTrue(app.buttons["model-row.preview/claude-opus-4-5"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["model-row.preview/claude-mythos-5-2"].exists)
         shot("model-accounts-personal", app)
+        app.buttons["model-menu-back"].tap()
         team.tap()
-        let mythos = app.buttons["model-row.preview-team.claude-mythos-5-2"]
-        XCTAssertTrue(mythos.waitForExistence(timeout: 5))
-        XCTAssertTrue(mythos.label.contains("Accès spécial"), mythos.label)
-        let shared = app.buttons["model-row.preview-team.claude-opus-4-5"]
-        XCTAssertTrue(shared.exists)
-        XCTAssertFalse(shared.label.contains("Accès spécial"), shared.label)
+        XCTAssertTrue(app.buttons["model-row.preview-team/claude-mythos-5-2"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["model-row.preview-team/claude-opus-4-5"].exists)
         shot("model-accounts-team", app)
     }
 

@@ -1,23 +1,16 @@
-// The composer's mode menu on the phone and the iPad (#5091, the desktop's
-// #5088, owner 2026-11-19, M-20261119-077, D-20261119-083): Auto, Fast,
-// Expert, Heavy, then Manual (the person's own pinned model). A mode never
-// names a model: the server maps it, every turn, to the best models the
-// person can use (server/models/model-mode.ts). It rides the Auto flag
-// (`auto: true` plus `mode`), as on the desktop (shared/model-mode.ts).
-// Manual is every model, the starred favorites first, then each provider
-// and each account it runs on.
+// Composer mode selection and model menu navigation on iPhone and iPad.
 import Foundation
 
 public enum ComposerMode: String, CaseIterable, Hashable, Sendable {
-    case auto, fast, expert, heavy
+    case auto, fast, expert, heavy, build
 
     /// The modes that pick a model by their own rule (everything but Auto).
-    public static let forced: [ComposerMode] = [.fast, .expert, .heavy]
+    public static let forced: [ComposerMode] = [.fast, .expert, .heavy, .build]
 }
 
 public enum ComposerModes {
     /// The mode a selection is in: nil for a model the person pinned (Manual).
-    /// A stored value that is no mode (Build, gone) reads as plain Auto.
+    /// A stored value that is no mode reads as plain Auto.
     public static func mode(of selection: ModelSelection) -> ComposerMode? {
         guard selection.auto == true else { return nil }
         if let raw = selection.mode, let mode = ComposerMode(rawValue: raw), mode != .auto { return mode }
@@ -167,5 +160,172 @@ public enum ComposerModes {
             return accounts.isEmpty ? nil : ManualProvider(key: provider.key, label: provider.label, accounts: accounts)
         }
         return ManualList(top: keep(list.top, nil), favorites: keep(list.favorites, nil), providers: providers)
+    }
+}
+
+extension ComposerModes {
+    public struct Preview: Decodable, Sendable {
+        public struct Pick: Decodable, Sendable {
+            public var instanceId: String
+            public var model: String
+        }
+        public struct Resolution: Decodable, Sendable {
+            public var pick: Pick?
+            public var effort: String?
+        }
+        public struct Excluded: Decodable, Sendable {
+            public var instanceId: String
+            public var model: String?
+            public var reason: String
+        }
+        public var excluded: [Excluded]?
+        public var modes: [String: Resolution]?
+        public var pick: Pick?
+    }
+
+    public static func offered(_ preview: Preview?) -> [ComposerMode] {
+        ComposerMode.allCases.filter { $0 == .auto || preview?.modes == nil || preview?.modes?[$0.rawValue]?.pick != nil }
+    }
+
+    public struct Reasoning: Equatable, Sendable {
+        public var shown: Bool
+        public var disabled: Bool
+        public var value: String?
+        public var choices: [String?]
+        public var variants: [ModelVariantOption]?
+
+        public func label(_ level: String?, automatic: Bool) -> String {
+            if let variants {
+                guard let level else { return String(localized: "Use session setting") }
+                return variants.first { $0.id == level }.map(ModelVariantRules.label) ?? level
+            }
+            guard let level else { return automatic ? String(localized: "Auto") : String(localized: "Default") }
+            let name = UltracodeEffort.label(level)
+            return Bundle.main.localizedString(forKey: "model.effortLevel.\(level)", value: name, table: nil)
+        }
+
+        public func choosing(_ level: String?, in selection: ModelSelection) -> ModelSelection {
+            var next = selection
+            if variants != nil {
+                next.variant = level
+                next.effort = nil
+            } else { next.effort = level }
+            return next
+        }
+    }
+
+    public static func reasoning(selection: ModelSelection, instances: [Instance], preview: Preview?) -> Reasoning {
+        let mode = mode(of: selection)
+        let resolution = mode.flatMap { preview?.modes?[$0.rawValue] }
+        if mode == .fast || mode == .expert || mode == .heavy {
+            return Reasoning(shown: resolution?.effort != nil, disabled: true, value: resolution?.effort, choices: [])
+        }
+        let pick = resolution?.pick ?? (mode == .auto ? preview?.pick : nil)
+        let instance = instances.first { $0.instanceId == (pick?.instanceId ?? selection.instanceId) }
+        let option = instance?.models.options.first { $0.id == (pick?.model ?? selection.model) }
+        if instance?.capabilities?.modelVariants == true {
+            let variants = option?.variants ?? []
+            let value = selection.variant
+            return Reasoning(shown: !variants.isEmpty || value != nil, disabled: false, value: value, choices: [nil] + variants.map { $0.id }, variants: variants)
+        }
+        let engine = instance?.capabilities?.effortLevels ?? []
+        let levels = ModelEffort.pickerLevels(option, engine: engine)
+        guard !levels.isEmpty else { return Reasoning(shown: false, disabled: true, choices: []) }
+        let fallback = mode == .auto ? nil : ModelEffort.defaultLevel(option, engine: engine)
+        let chosen = selection.effort.flatMap { levels.contains($0) ? $0 : nil }
+        return Reasoning(shown: true, disabled: false, value: chosen ?? fallback,
+                         choices: (fallback == nil ? [nil] : []) + levels.map(Optional.some))
+    }
+
+    public enum Panel: Hashable {
+        case root, reasoning, providers, accounts(String), models(String, String)
+    }
+
+    public static func open(_ provider: ManualProvider) -> Panel {
+        guard provider.accounts.count == 1, let account = provider.accounts.first else { return .accounts(provider.id) }
+        return .models(provider.id, account.id)
+    }
+
+    public static func settle(_ panel: Panel, providers: [ManualProvider]) -> Panel {
+        switch panel {
+        case let .accounts(id):
+            return providers.first { $0.id == id }.map(open) ?? .providers
+        case let .models(id, account):
+            guard let provider = providers.first(where: { $0.id == id }) else { return .providers }
+            return provider.accounts.contains { $0.id == account } ? panel : open(provider)
+        default: return panel
+        }
+    }
+
+    public static func back(_ panel: Panel, providers: [ManualProvider]) -> Panel {
+        switch panel {
+        case let .models(id, _):
+            return providers.first { $0.id == id }?.accounts.count ?? 0 > 1 ? .accounts(id) : .providers
+        case .accounts: return .providers
+        default: return .root
+        }
+    }
+
+    /// The person's credentials decide which organization engines and Grok subscription models run.
+    public static func organizationInstances(_ instances: [Instance], mine: [MyEngine], models: [String: Set<String>], allowed: [String]?, ownOutside: Bool) -> [Instance] {
+        instances.compactMap { instance in
+            let access = mine.first { $0.instanceId == instance.instanceId }
+            let own = access?.myTurns == "key" || access?.myTurns == "subscription"
+            guard ModelPickerRules.engineAllowed(allowed, instance.instanceId) || (own && ownOutside) else { return nil }
+            if let access, access.unavailable || (!own && access.myTurns != "org-key") { return nil }
+            var offered = instance
+            if let ids = models[instance.instanceId], !ids.isEmpty {
+                offered.models.options.removeAll { $0.custom != true && !ids.contains($0.id) }
+            }
+            return offered
+        }
+    }
+
+    public static func usable(_ list: ManualList, thisComputer: String, excluded: [Preview.Excluded]? = nil) -> ManualList {
+        let exclusions = (excluded ?? []).filter { ["limit", "reconnect", "credentials", "refused", "modelOff", "policy"].contains($0.reason) }
+        func excludedFromMenu(_ row: ModelMenuRow) -> Bool {
+            exclusions.contains { $0.instanceId == row.instanceId && ($0.model == nil || $0.model == row.modelId) }
+        }
+        var result = list
+        result.providers = list.providers.compactMap { provider in
+            var next = provider
+            next.accounts = provider.accounts.compactMap { account in
+                guard account.state == nil else { return nil }
+                var runnable = account
+                runnable.rows = account.rows.filter { !$0.notResponding && !excludedFromMenu($0) }
+                return runnable.rows.isEmpty ? nil : runnable
+            }
+            if next.key != ModelMenu.localSectionKey {
+                var seen = Set<String>()
+                for account in next.accounts.indices {
+                    for index in next.accounts[account].rows.indices {
+                        guard let model = next.accounts[account].rows[index].modelId else { continue }
+                        next.accounts[account].rows[index].pinAccount = !seen.insert(model).inserted
+                    }
+                }
+            } else {
+                let rows = next.accounts.flatMap { $0.rows }
+                var servers: [ManualAccount] = []
+                for var row in rows {
+                    let server = row.detail ?? ""
+                    row.detail = nil
+                    if let index = servers.firstIndex(where: { $0.id == server }) {
+                        servers[index].rows.append(row)
+                    } else {
+                        servers.append(ManualAccount(instanceId: server, label: server.isEmpty ? thisComputer : server, rows: [row]))
+                    }
+                }
+                next.accounts = servers
+            }
+            return next.accounts.isEmpty ? nil : next
+        }
+        let keys = Set(result.providers.flatMap { $0.accounts.flatMap { $0.rows.map { $0.key } } })
+        result.favorites = list.favorites.filter { keys.contains($0.key) }
+        result.top = list.top.filter { row in
+            guard !row.notResponding, !excludedFromMenu(row) else { return false }
+            guard let instance = row.instanceId, let model = row.modelId else { return true }
+            return keys.contains(ModelFavorites.key(instanceId: instance, modelId: model))
+        }
+        return result
     }
 }

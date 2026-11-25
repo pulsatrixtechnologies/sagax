@@ -6,8 +6,9 @@ public enum ModelPickerRules {
     /// `modelSelectionForPick`: switching models never carries an opaque
     /// variant from the previous model; the effort stays on the same engine
     /// when the new model takes it (`ModelEffort`).
-    public static func selectionForPick(_ selection: ModelSelection, instance: Instance, model: String) -> ModelSelection {
+    public static func selectionForPick(_ selection: ModelSelection, instance: Instance, model: String, pinAccount: Bool = false) -> ModelSelection {
         var next = ModelSelection(instanceId: instance.instanceId, model: model)
+        if pinAccount { next.accountPinned = true }
         if instance.instanceId == selection.instanceId {
             if instance.capabilities?.modelVariants == true {
                 if model == selection.model, let variant = selection.variant { next.variant = variant }

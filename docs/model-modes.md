@@ -106,12 +106,12 @@ mode back), `server/index-leaves/autoPickForTurn.mode.test.ts`,
 `src/components/ModelPicker.interaction.test.ts`. Captures:
 `scripts/capture/mode-menu.mjs`.
 
-iPhone and iPad (#5091): the same menu (`ModelMenuSheet.swift`,
-`DesktopModelMenu.swift`; the rules in CompanionCore `ComposerModes.swift`).
-Manual is `ComposerModes.manual`, the port of `manualProviders`: the bot's
-model and the starred favorites first, then each provider and each of its
-accounts with its state (Signed out, Not responding), a signed-out account
-kept with its heading. The Heavy row (`HeavyTeamRowView.swift`, the state
+On iPhone and iPad, `ModelMenuSheet.swift` and `DesktopModelMenu.swift` use
+the same `ComposerModes` selection, reasoning and navigation rules. The
+server preview is scoped to the open thread. All models preserves the bot
+model and favorites above the runnable providers. `ComposerModesTests` covers
+Build persistence, mode availability and the cascade (#5245).
+The Heavy row (`HeavyTeamRowView.swift`, the state
 `HeavyTeamLine.swift`) draws the server's Heavy run (#5089) like the
 desktop's (#5090); the engine stays on the server. Tests:
 `ComposerModesTests.swift`; capture: `-mascotGallery heavy` in the

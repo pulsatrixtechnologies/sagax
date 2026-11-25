@@ -3536,6 +3536,19 @@ final class Session: ObservableObject {
 
     /// The model catalog lives on the paired computer because availability
     /// depends on which engines are installed and signed in there.
+    func composerModelInstances(config: ConfigStatus?) async -> [Instance] {
+        let instances = await modelInstances()
+        guard surfaceGate.allows(.people) else { return instances }
+        let mine = (try? await settingsClient?.myEngines())?.engines ?? []
+        var models: [String: Set<String>] = [:]
+        for engine in mine where engine.driver == "grokAgent" && engine.myTurns == "subscription" {
+            if let ids = try? await settingsClient?.personalModelIds(instanceId: engine.id) {
+                models[engine.id] = Set(ids)
+            }
+        }
+        return ComposerModes.organizationInstances(instances, mine: mine, models: models, allowed: config?.allowedEngines, ownOutside: config?.ownAccountsOutsideList == true)
+    }
+
     func modelInstances() async -> [Instance] {
         #if DEBUG
         // M-20261119-015: -model-accounts-preview adds a second Claude account with its own list

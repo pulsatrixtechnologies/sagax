@@ -3502,8 +3502,10 @@ conversation ID (copy); then Hide from sidebar (eye-slash) and Delete (trash,
 red). Sagax draws it with the menu family's one look (`menu-look.tsx`) and
 keeps what it already had, each in its own section: New thread first, Edit
 bot, Share, Make primary bot, Put on the desktop, the bulk thread actions and
-Archive. Copy link is the app's own `sagax://bot/<id>` link (`botRefUrl`,
-opened by `openChatLink`). Mark as Unread flags the conversation the bot is on,
+Archive. Copy link and Copy conversation ID are not in Sagax's menu (owner,
+2026-11-25, #5373): the bot's `sagax://bot/<id>` link (`botRefUrl`, opened by
+`openChatLink`) is copied from the Share bubble of the bot page and from the
+bot's "..." menu. Mark as Unread flags the conversation the bot is on,
 so the row's dot stays until the bot is opened. New window is hidden where no
 second window can open (a phone).
 

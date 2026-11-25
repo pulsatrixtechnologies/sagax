@@ -15256,8 +15256,6 @@
   "botProfile.review.update": "Update",
   "botProfile.review.decline": "Decline",
   "botProfile.review.openInChat": "Open in chat",
-  "botProfile.review.emptyTitle": "You're all caught up",
-  "botProfile.review.emptyLine": "What the bot learns from use shows up here before it applies it.",
   "botProfile.review.error": "Could not record this decision.",
   "botProfile.skills.addLibrary": "From the library",
   "botProfile.skills.addLibraryDescription": "A skill your library already holds",

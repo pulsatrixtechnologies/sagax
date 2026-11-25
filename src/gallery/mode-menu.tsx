@@ -36,6 +36,8 @@ trackInputModality();
 document.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
 const current = (params.get("mode") ?? "auto") as ModelMode | "pinned";
 const view = params.get("view") === "all" ? "all" : "short";
+// place=left: a composer at the window's left, so the cascade has the room to open to the right (#5338)
+const atLeft = params.get("place") === "left";
 
 const engine = (instanceId: string, driverKind: string, displayName: string, email: string | undefined, options: Array<[string, string]>, authenticated = true): InstanceInfo => ({
   instanceId, displayName, driverKind, access: "subscription",
@@ -93,7 +95,7 @@ function Gallery() {
   const chip = current === "pinned" ? "Claude Opus 5.5" : modeName(current);
   return (
     <div className="flex min-h-screen flex-col bg-app p-4 text-ink sm:p-8">
-      <div className="relative mx-auto mt-auto flex w-full max-w-[760px] min-w-0 flex-col justify-end pt-[560px]">
+      <div className={cn("relative mt-auto flex w-full min-w-0 flex-col justify-end pt-[560px]", atLeft ? "mr-auto max-w-[420px]" : "mx-auto max-w-[760px]")}>
         <div data-model-menu="" data-gallery-menu="" style={{ width: MENU_WIDTH }} className={cn("absolute bottom-[58px] right-0 z-10 py-1 text-popover-ink", MENU_BOX)}>
           <ModelPanel
             sections={sections}

@@ -27,14 +27,28 @@ reads each request.
 Sagax maps every mode, on every turn, to the best models the person can use:
 their connected providers and accounts, and their local models.
 
-**Reasoning** is a row that shows the level in use and opens, in place, the
+**Reasoning** and **All models** open cascading submenus (owner 2026-11-25,
+M-20261125-035, D-20261125-011, D-20261125-012, #5338): the menu stays on
+screen and each level opens beside the row that opened it, so the whole path
+reads at once (menu, providers, accounts, models). Nothing replaces the menu
+and there is no back row. A click, a rest of the pointer or the right arrow
+opens a level; Escape or the left arrow closes the deepest one and the focus
+returns to the row that opened it. The first level picks the side for the
+whole path (the left when the right cannot hold it and the left has more
+room) and the next levels keep going that way; in a window too narrow for
+the path a level stops at the window's margin, over a part of the one before
+it. One shell draws a level (`src/components/ModeMenuLevel.tsx`), placed by
+the menu family's submenu positioner (`submenuPlace`). On iPhone and iPad the
+same path is the system's nested menus (see `ios/App/Features/Chat`).
+
+**Reasoning** is a row that shows the level in use and opens, beside the menu, the
 levels the model in use takes (`modelEffortLevels`, so they follow the model).
 Under a mode that sets its own level (Fast, Expert, Heavy) the row is greyed
 and shows the level the mode imposes. A model that takes no level has no row.
 Under Auto, the row reads Auto until the person chooses a level. Choosing Auto again lets each turn use its mode's level. Build shows its model's default until the person chooses a level.
 
 **All models** is the person's own model. Its row names the pinned model while
-it runs and opens a cascade of three panels, each with a back row: the
+it runs and opens a cascade of three levels, each beside the one before: the
 provider, then the account, then the model. A provider with a single account
 goes straight to its models. Only what can run a turn now is listed: an
 account signed out or not responding, a model turned off and a provider left
@@ -43,7 +57,7 @@ provider: the models of this computer and of the local servers, each server
 (or the person who shares it) where an account would be. A model two accounts
 offer is listed under each, and the copy under an account the menu does not
 lead with forces that account (as the Account line does). The starred
-favorites lead the provider panel and the star still adds or removes one,
+favorites lead the provider level and the star still adds or removes one,
 synced across the person's devices. Nothing else of the panel is lost (one
 component, `src/components/ModelPanel.tsx` with `modes`): the Account and Runs
 with lines and "Manage models" stay in the footer. Auto's "Optimize for" is no

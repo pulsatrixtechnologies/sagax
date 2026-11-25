@@ -14,15 +14,20 @@
 // (ModeMenu.tsx, the rows of shared/mode-menu.ts, the same as the Perspicax
 // console's): Auto, Fast, Expert, Heavy, Build, then Reasoning, then All
 // models (D-20261124-002: Auto's Optimize for is no row of this menu, it is
-// set in Manage models and in a bot's Model cell of Settings). Reasoning and All models open in place, a back
-// row at the top: Reasoning lists the levels of the model in use; All models
-// is a cascade, the provider, then the account (skipped when the provider has
-// one), then the model, listing only what can run a turn now
-// (src/lib/model-menu.ts modelCascade). The starred favorites lead the
-// provider panel and the star still adds or removes one. Account, Runs with
+// set in Manage models and in a bot's Model cell of Settings). Reasoning and
+// All models open beside the menu, which stays on screen (owner 2026-11-25,
+// M-20261125-035, D-20261125-012, #5338: cascading submenus, ModeMenuLevel.tsx,
+// no page replacing the menu and no back row): Reasoning lists the levels of
+// the model in use; All models is a cascade, the provider, then the account
+// (skipped when the provider has one), then the model, each level beside the
+// row that opened it, listing only what can run a turn now
+// (src/lib/model-menu.ts modelCascade). A click, a rest of the pointer or the
+// right arrow opens a level; Escape or the left arrow closes the deepest one.
+// The starred favorites lead the
+// provider level and the star still adds or removes one. Account, Runs with
 // and Manage models stay in the footer; a model turned off is turned back on
 // in Manage models, the menu no longer counts them.
-import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { Check, ChevronLeft, ChevronRight, Search, Star } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -32,8 +37,10 @@ import { isUltracodeEffort } from "../../shared/ultracode-effort";
 import { AUTO_OPTIMIZE_VALUES, type AutoOptimize } from "../../shared/model-auto-optimize";
 import type { EffortLevel } from "../../shared/wire";
 import { filterModelSections, modelCascade, type ModelMenuRow, type ModelMenuSection } from "@/lib/model-menu";
-import { currentInCascade, openProvider, panelBack, reasoningRow, settlePanel, type MenuPanel, type ReasoningRow } from "../../shared/mode-menu";
+import { currentInCascade, openProvider, panelBack, providerOpens, reasoningRow, settlePanel, type MenuPanel, type ReasoningRow } from "../../shared/mode-menu";
 import { ModeMenu, type ModeMenuProps } from "./ModeMenu";
+import { ModeMenuLevel } from "./ModeMenuLevel";
+import { CLOSE_DELAY_MS, OPEN_DELAY_MS } from "./SidebarPopoverMenu";
 import { runsWithOptionLabel, runsWithShown, type RunsWithChoice } from "@/lib/runs-with";
 import { ModelMenuSettings, type ContextSizeChoice } from "./ModelMenuSettings";
 import { foldItems, foldMoreLabel } from "./ShowMoreFold";
@@ -121,6 +128,21 @@ export const ROW_ICON_SLOT = "flex size-7 shrink-0 items-center justify-center";
 const PANEL_ROW = "group flex h-9 items-center gap-1 rounded-lg hover:bg-popover-hover focus-within:bg-popover-hover";
 const PANEL_ROW_BUTTON = "flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg pl-2 text-left text-[13px] text-popover-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50";
 
+/** The room All models asks of one side of the menu before it opens there: its three levels (providers, accounts, models) side by side. */
+const CASCADE_ROOM = 900;
+
+/** Two places of the cascade are the same level. */
+function samePanel(a: MenuPanel, b: MenuPanel): boolean {
+  return a.panel === b.panel && ("provider" in a ? a.provider : "") === ("provider" in b ? b.provider : "") && ("account" in a ? a.account : "") === ("account" in b ? b.account : "");
+}
+/** The row that opens a level, as a selector (the level is placed beside it and the focus returns to it). */
+function levelAnchor(level: MenuPanel, viaAccount: boolean): string {
+  if (level.panel === "reasoning") return '[data-mode-row="reasoning"]';
+  if (level.panel === "accounts" || (level.panel === "models" && !viaAccount)) return `[data-model-cascade-provider=${JSON.stringify(level.provider)}]`;
+  if (level.panel === "models") return `[data-model-cascade-account=${JSON.stringify(level.account)}]`;
+  return '[data-mode-row="all"]';
+}
+
 /** Arrow keys over the radios of a group: moves the focus and picks, Home and End go to either end. */
 function arrowRadios(event: KeyboardEvent<HTMLElement>, selector: string, orientation: "horizontal" | "vertical" | "both") {
   const forward = event.key === "ArrowDown" || event.key === "ArrowRight";
@@ -146,8 +168,11 @@ export function ModelPanel(props: ModelPanelProps) {
   const leadRows = top.filter((row) => row.kind === "follow" || row.kind === "keep");
   const favoriteRows = sections.find((section) => section.key === "favorites")?.rows ?? [];
   const [all, setAll] = useState(openOn === "all" && !modes);
-  // the mode menu's panels: the rows, the reasoning levels, or a step of All models
+  // the mode menu's deepest level open: none (the rows alone), the reasoning levels, or a step of All models
   const [panel, setPanel] = useState<MenuPanel>(() => (modes && openOn === "all" ? { panel: "providers" } : { panel: "root" }));
+  // a click or a key moves the focus into the level it opens; a rest of the pointer leaves it where it is
+  const [focusLevel, setFocusLevel] = useState(() => Boolean(modes) && openOn === "all");
+  const [rest] = useState(() => ({ timer: null as ReturnType<typeof setTimeout> | null }));
   const [chosen, setView] = useState<ViewKey>(() => initialPanelView(sections));
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -171,7 +196,13 @@ export function ModelPanel(props: ModelPanelProps) {
   const atProvider = at.panel === "accounts" || at.panel === "models" ? cascade.find((candidate) => candidate.id === at.provider) : undefined;
   const atAccount = at.panel === "models" ? atProvider?.accounts.find((candidate) => candidate.id === at.account) : undefined;
   const cascadeCurrent = modes && modes.current === null ? currentInCascade(cascade) : undefined;
-  const cascadeFavorites = at.panel === "providers" ? favoriteRows.filter((row) => !row.unavailable) : [];
+  // the levels on screen beside the menu, the nearest first: the whole path stays visible (D-20261125-012)
+  const viaAccount = Boolean(atProvider && providerOpens(atProvider) === "account");
+  const levels: MenuPanel[] = at.panel === "root" ? [] : at.panel === "reasoning" || at.panel === "providers" ? [at]
+    : at.panel === "accounts" ? [{ panel: "providers" }, at]
+    : [{ panel: "providers" }, ...(viaAccount ? [{ panel: "accounts", provider: at.provider } as MenuPanel] : []), at];
+  const inAll = levels[0]?.panel === "providers";
+  const cascadeFavorites = inAll ? favoriteRows.filter((row) => !row.unavailable) : [];
   const viewRows: ModelMenuRow[] = modes ? (atAccount?.models.map((one) => one.data) ?? []) : !all ? [] : section?.rows ?? [];
   const searchable = (modes ? at.panel === "models" : all) && viewRows.length > PANEL_SEARCH_FROM;
   const typed = searchable ? query.trim() : "";
@@ -189,11 +220,13 @@ export function ModelPanel(props: ModelPanelProps) {
   // the focus lands on the model in use (or the search field of a long list)
   useEffect(() => {
     const root = listRef.current?.closest<HTMLElement>("[data-model-panel]");
+    if (modes && panel.panel !== "root") return;
     const target = root?.querySelector<HTMLElement>("[data-model-panel-search]") ?? root?.querySelector<HTMLElement>('[data-model-panel-row][aria-checked="true"]') ?? root?.querySelector<HTMLElement>("[data-model-panel-row]");
     target?.focus({ preventScroll: true });
-    // when the panel opens, and at each step of the mode menu
+    // when the panel opens; a level of the mode menu takes the focus itself (ModeMenuLevel)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [at.panel, atProvider?.id, atAccount?.id]);
+  }, []);
+  useEffect(() => () => { if (rest.timer) clearTimeout(rest.timer); }, [rest]);
   useEffect(() => {
     listRef.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.scrollIntoView?.({ block: "nearest" });
   }, [view]);
@@ -208,20 +241,45 @@ export function ModelPanel(props: ModelPanelProps) {
     setQuery("");
     setExpanded(false);
   };
-  const go = (next: MenuPanel) => {
+  const settle = () => {
+    if (rest.timer) clearTimeout(rest.timer);
+    rest.timer = null;
+  };
+  const go = (next: MenuPanel, focus = true) => {
+    settle();
     setPanel(next);
+    setFocusLevel(focus);
     setQuery("");
+  };
+  /** Escape or the left arrow: the deepest level closes, the focus back on the row that opened it. */
+  const closeLevel = () => {
+    if (typeof document !== "undefined") document.querySelector<HTMLElement>(levelAnchor(at, viaAccount))?.focus({ preventScroll: true });
+    go(panelBack(at, cascade), false);
+  };
+  /** The pointer came on a row. One that opens a level opens it after a
+   * short rest; any row closes what is open past its own level, slowly
+   * enough to forgive a diagonal path to the level beside it. */
+  const restOn = (event: PointerEvent, next: MenuPanel, opens: boolean) => {
+    if (event.pointerType !== "mouse") return;
+    settle();
+    if (opens ? levels.some((level) => samePanel(level, next)) : samePanel(next, at)) return;
+    const depth = next.panel === "root" ? 0 : next.panel === "reasoning" || next.panel === "providers" ? 1 : next.panel === "accounts" ? 2
+      : cascade.some((provider) => provider.id === next.provider && providerOpens(provider) === "account") ? 3 : 2;
+    rest.timer = setTimeout(() => go(next, false), opens && levels.length < depth ? OPEN_DELAY_MS : CLOSE_DELAY_MS);
   };
 
   // every row is one line, the same height: the name and its markers at the left,
   // what the app knows (context size, origin, a warning) muted at the right;
   // M-20261119-015: a row that names its account takes that second line
   // a thread's "use the bot's model" row leads All models, as it led the Manual list
-  const cascadeLead = modes && at.panel === "providers" ? lead : [];
-  const rovingRows = modes ? [...cascadeLead, ...cascadeFavorites, ...listedRows] : all ? [...lead, ...listedRows] : [...(autoRow ? [autoRow] : []), ...lead, ...shortModels];
-  const rovingHasCurrent = (all ? false : autoOn) || rovingRows.some((candidate) => candidate.current);
-  const rovingFirst = rovingRows[0];
-  const modelRow = (row: ModelMenuRow, group?: string) => {
+  const cascadeLead = modes && inAll ? leadRows : [];
+  const rovingRows = modes ? listedRows : all ? [...lead, ...listedRows] : [...(autoRow ? [autoRow] : []), ...lead, ...shortModels];
+  // in the mode menu each level roves on its own rows: the models of an account, or the rows that lead the providers
+  const providerLevelRows = [...cascadeLead, ...cascadeFavorites];
+  const modelRow = (row: ModelMenuRow, group?: string, level?: MenuPanel) => {
+    const roving = level?.panel === "providers" ? providerLevelRows : rovingRows;
+    const rovingHasCurrent = (modes || all ? false : autoOn) || roving.some((candidate) => candidate.current);
+    const rovingFirst = roving[0];
     const starred = favorites.keys.includes(row.key);
     const description = rowDescription(row);
     const check = row.current ? <Check size={14} aria-hidden="true" className="text-popover-accent" /> : null;
@@ -250,6 +308,7 @@ export function ModelPanel(props: ModelPanelProps) {
           disabled={disabled || Boolean(row.unavailable)} title={row.unavailable ?? ([row.title ?? (description ? `${row.label} · ${description}` : undefined), row.account].filter(Boolean).join(" · ") || undefined)}
           tabIndex={row.current || (!rovingHasCurrent && row === rovingFirst) ? 0 : -1}
           onMouseDown={(event) => event.preventDefault()}
+          onPointerEnter={level ? (event) => restOn(event, level, false) : undefined}
           onClick={() => onPick(row)}
           className={cn("flex h-full min-w-0 flex-1 items-center gap-1 rounded-lg pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50", row.unavailable && "opacity-60")}>
           {row.account ? (
@@ -312,6 +371,121 @@ export function ModelPanel(props: ModelPanelProps) {
   const inUse = autoOn ? undefined : providers.flatMap((candidate) => candidate.rows).find((candidate) => candidate.current);
   const accountChoices = inUse?.accountRows && inUse.accountRows.length > 1 ? inUse.accountRows : undefined;
 
+  const searchField = searchable && (
+    <label className="mx-1.5 mb-1 flex shrink-0 items-center gap-2 border-b border-popover-hairline px-2 py-1.5">
+      <Search size={13} aria-hidden="true" className="shrink-0 text-popover-ink-secondary" />
+      <input data-model-panel-search value={query} onChange={(event) => setQuery(event.target.value)}
+        placeholder={t("model.search")} aria-label={t("model.search")}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && query) {
+            event.preventDefault();
+            event.stopPropagation();
+            setQuery("");
+          } else if (event.key === "ArrowDown") {
+            event.preventDefault();
+            (modes ? event.currentTarget.closest("[data-mode-level]") : listRef.current)?.querySelector<HTMLElement>("[data-model-panel-row]:not([disabled])")?.focus();
+          } else if (event.key === "Enter" && typed) {
+            event.preventDefault();
+            const first = shownRows.find((row) => !row.unavailable);
+            if (first) onPick(first);
+            else if (custom) custom.onPick(typed);
+          }
+        }}
+        className="w-full bg-transparent text-[13px] text-popover-ink placeholder:text-popover-placeholder focus:outline-none" />
+    </label>
+  );
+
+  // the mode menu's levels (D-20261125-012): each one's rows, drawn beside the row that opened it
+  const levelLabel = (level: MenuPanel) => (level.panel === "reasoning" ? t("model.reasoning") : level.panel === "providers" ? t("model.auto.rail")
+    : level.panel === "accounts" ? atProvider?.label ?? "" : viaAccount ? `${atProvider?.label ?? ""} · ${atAccount?.label ?? ""}` : atProvider?.label ?? "");
+  const levelRows = (level: MenuPanel): ReactNode => {
+    if (!modes) return null;
+    if (level.panel === "reasoning") {
+      return variantRow ? <div className="px-2 py-1.5">{variantRow}</div> : effort && reasoningState.choices.map((choice) => {
+        const on = (choice ?? undefined) === reasoningState.value;
+        return (
+          <div key={choice ?? "default"} className={PANEL_ROW}>
+            <button type="button" role="radio" aria-checked={on} disabled={disabled}
+              data-model-panel-row={`effort:${choice ?? "default"}`} data-model-effort-choice={choice ?? "default"}
+              title={choice === null ? t("model.effort.defaultTitle") : isUltracodeEffort(choice as EffortLevel) ? t("model.effort.ultracodeHint") : t("model.effort.levelTitle", { level: effortLabel(choice as EffortLevel) })}
+              tabIndex={on || (reasoningState.value === undefined && choice === reasoningState.choices[0]) ? 0 : -1}
+              onMouseDown={(event) => event.preventDefault()}
+              // the model's own default level is picked as "no level sent"
+              onClick={() => { effort.onPick(choice === null || (modes.current !== "auto" && choice === effort.modelDefault) ? undefined : choice as EffortLevel); go({ panel: "root" }, false); }}
+              className={PANEL_ROW_BUTTON}>
+              <span className={cn("min-w-0 flex-1 truncate", choice !== null && isUltracodeEffort(choice as EffortLevel) && "ultracode-effort-option")}>{reasoningLabel(choice ?? undefined)}</span>
+              <span aria-hidden="true" className={ROW_SIDE_SLOT} />
+              <span aria-hidden="true" className={ROW_ICON_SLOT}>{on && <Check size={14} className="text-popover-accent" />}</span>
+            </button>
+          </div>
+        );
+      });
+    }
+    if (level.panel === "providers") {
+      return (
+        <>
+          {cascadeLead.map((row) => modelRow(row, undefined, level))}
+          {cascadeFavorites.length > 0 && (
+            <div data-model-cascade-favorites="">
+              <div className={GROUP_HEADING}>{t("model.favorites")}</div>
+              {cascadeFavorites.map((row) => modelRow(row, "favorites", level))}
+              <div role="separator" className="mx-2 my-1 border-t border-popover-hairline" />
+            </div>
+          )}
+          {cascade.map((provider) => {
+            const on = cascadeCurrent?.provider.id === provider.id;
+            const opened = atProvider?.id === provider.id;
+            return (
+              <div key={provider.id} className={cn(PANEL_ROW, opened && "bg-popover-hover")}>
+                <button type="button" aria-haspopup="menu" aria-expanded={opened} data-model-panel-row={`provider:${provider.id}`} data-model-cascade-provider={provider.id}
+                  tabIndex={on || (!cascadeCurrent && !cascadeLead.length && !cascadeFavorites.length && provider === cascade[0]) ? 0 : -1}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onPointerEnter={(event) => restOn(event, openProvider(provider), true)}
+                  onKeyDown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); go(openProvider(provider)); } }}
+                  onClick={() => go(openProvider(provider))}
+                  className={PANEL_ROW_BUTTON}>
+                  <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center">{mark(provider.id === "local" ? "computer" : provider.id)}</span>
+                  <span className="min-w-0 flex-1 truncate">{provider.label}</span>
+                  <span aria-hidden="true" className={ROW_SIDE_SLOT}>{on && <Check size={14} className="text-popover-accent" />}</span>
+                  <span aria-hidden="true" className={ROW_ICON_SLOT}><ChevronRight size={14} className="text-popover-ink-secondary" /></span>
+                </button>
+              </div>
+            );
+          })}
+          {cascade.length === 0 && <p data-model-cascade-empty="" className="px-3 py-4 text-center text-[12.5px] text-popover-ink-secondary">{t("model.cascade.none")}</p>}
+        </>
+      );
+    }
+    if (level.panel === "accounts") {
+      return atProvider?.accounts.map((account) => {
+        const on = cascadeCurrent?.provider.id === atProvider.id && cascadeCurrent.account.id === account.id;
+        const open = (): MenuPanel => ({ panel: "models", provider: atProvider.id, account: account.id });
+        const opened = atAccount?.id === account.id;
+        return (
+          <div key={account.id} className={cn(PANEL_ROW, opened && "bg-popover-hover")}>
+            <button type="button" aria-haspopup="menu" aria-expanded={opened} data-model-panel-row={`account:${account.id}`} data-model-cascade-account={account.id}
+              tabIndex={on || (cascadeCurrent?.provider.id !== atProvider.id && account === atProvider.accounts[0]) ? 0 : -1}
+              onMouseDown={(event) => event.preventDefault()}
+              onPointerEnter={(event) => restOn(event, open(), true)}
+              onKeyDown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); go(open()); } }}
+              onClick={() => go(open())}
+              className={PANEL_ROW_BUTTON}>
+              <span className="min-w-0 flex-1 truncate">{account.label}</span>
+              <span aria-hidden="true" className={ROW_SIDE_SLOT}>{on && <Check size={14} className="text-popover-accent" />}</span>
+              <span aria-hidden="true" className={ROW_ICON_SLOT}><ChevronRight size={14} className="text-popover-ink-secondary" /></span>
+            </button>
+          </div>
+        );
+      });
+    }
+    return (
+      <>
+        {listedRows.map((row) => modelRow(row, `${atProvider?.id}:${atAccount?.id}`, level))}
+        {shownRows.length === 0 && <p className="px-3 py-4 text-center text-[12.5px] text-popover-ink-secondary">{t("model.noMatch")}</p>}
+      </>
+    );
+  };
+
   return (
     <div data-model-panel className="flex min-h-0 flex-col text-popover-ink">
       {all && (
@@ -338,14 +512,7 @@ export function ModelPanel(props: ModelPanelProps) {
         </div>
       )}
 
-      {modes ? at.panel !== "root" && (
-        <button type="button" data-model-panel-back={at.panel} id={modelsId} onMouseDown={(event) => event.preventDefault()} onClick={() => go(panelBack(at, cascade))}
-          className={cn(HEADING, "flex w-full items-center gap-1 text-left outline-none hover:text-popover-ink focus-visible:ring-2 focus-visible:ring-focus")}>
-          <ChevronLeft size={13} aria-hidden="true" />
-          <span className="truncate">{at.panel === "reasoning" ? t("model.reasoning") : at.panel === "providers" ? t("model.auto.rail") : at.panel === "accounts" ? atProvider?.label : atProvider && atProvider.accounts.length > 1 ? `${atProvider.label} · ${atAccount?.label ?? ""}` : atProvider?.label}</span>
-          {at.panel === "reasoning" && !variantRow && <span className="ml-auto min-w-0 truncate pl-3">{t("model.effort.slowerHint")}</span>}
-        </button>
-      ) : all ? (
+      {modes ? null : all ? (
         <button type="button" data-model-panel-back id={modelsId} title={t("model.favorites")} onMouseDown={(event) => event.preventDefault()} onClick={() => showAll(false)}
           className={cn(HEADING, "flex w-full items-center gap-1 text-left outline-none hover:text-popover-ink focus-visible:ring-2 focus-visible:ring-focus")}>
           <ChevronLeft size={13} aria-hidden="true" />
@@ -354,40 +521,18 @@ export function ModelPanel(props: ModelPanelProps) {
       ) : (
         <div className={HEADING} id={modelsId}>{t("model.settings.model")}</div>
       )}
-      {searchable && (
-        <label className="mx-1.5 mb-1 flex shrink-0 items-center gap-2 border-b border-popover-hairline px-2 py-1.5">
-          <Search size={13} aria-hidden="true" className="shrink-0 text-popover-ink-secondary" />
-          <input data-model-panel-search value={query} onChange={(event) => setQuery(event.target.value)}
-            placeholder={t("model.search")} aria-label={t("model.search")}
-            onKeyDown={(event) => {
-              if (event.key === "Escape" && query) {
-                event.preventDefault();
-                event.stopPropagation();
-                setQuery("");
-              } else if (event.key === "ArrowDown") {
-                event.preventDefault();
-                listRef.current?.querySelector<HTMLElement>("[data-model-panel-row]:not([disabled])")?.focus();
-              } else if (event.key === "Enter" && typed) {
-                event.preventDefault();
-                const first = shownRows.find((row) => !row.unavailable);
-                if (first) onPick(first);
-                else if (custom) custom.onPick(typed);
-              }
-            }}
-            className="w-full bg-transparent text-[13px] text-popover-ink placeholder:text-popover-placeholder focus:outline-none" />
-        </label>
-      )}
-      <div className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-1.5 pb-1", modes ? "max-h-[min(400px,52dvh)]" : "max-h-[min(264px,36dvh)]", modes && at.panel === "root" && "pt-0.5")} data-model-panel-scroll>
-      <div ref={listRef} role="radiogroup" aria-labelledby={modes && at.panel === "root" ? undefined : modelsId} aria-label={modes && at.panel === "root" ? t("model.mode.menu") : undefined} data-model-panel-list data-mode-panel={modes ? at.panel : undefined}
+      {!modes && searchField}
+      <div className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-1.5 pb-1", modes ? "max-h-[min(400px,52dvh)] pt-0.5" : "max-h-[min(264px,36dvh)]")} data-model-panel-scroll>
+      <div ref={listRef} role="radiogroup" aria-labelledby={modes ? undefined : modelsId} aria-label={modes ? t("model.mode.menu") : undefined} data-model-panel-list data-mode-panel={modes ? "root" : undefined}
         onKeyDown={(event) => {
-          // the left arrow steps back out of a panel of the mode menu
-          if (modes && at.panel !== "root" && event.key === "ArrowLeft" && !(event.target instanceof HTMLInputElement)) {
+          // Escape on the mode menu closes the deepest level open beside it (a rest of the pointer opened it) before the menu
+          if (modes && at.panel !== "root" && event.key === "Escape") {
             event.preventDefault();
             event.stopPropagation();
-            go(panelBack(at, cascade));
+            closeLevel();
             return;
           }
-          if (event.key === "ArrowUp" && searchable && document.activeElement === listRef.current?.querySelector("[data-model-panel-row]")) {
+          if (!modes && event.key === "ArrowUp" && searchable && document.activeElement === listRef.current?.querySelector("[data-model-panel-row]")) {
             event.preventDefault();
             event.stopPropagation();
             listRef.current?.closest("[data-model-panel]")?.querySelector<HTMLElement>("[data-model-panel-search]")?.focus();
@@ -396,84 +541,11 @@ export function ModelPanel(props: ModelPanelProps) {
           arrowRadios(event, "[data-model-panel-row]", "vertical");
         }}
         className="shrink-0">
-        {modes && at.panel === "root" ? (
+        {modes ? (
           <ModeMenu current={modes.current} resolutions={modes.resolutions} onPick={modes.onPick} disabled={disabled}
-            reasoning={showSettings ? { row: reasoningState, label: reasoningLabel, onOpen: () => go({ panel: "reasoning" }) } : undefined}
-            allModels={{ label: modes.pinnedLabel, onOpen: () => go({ panel: "providers" }) }} />
-        ) : modes && at.panel === "reasoning" ? (
-          variantRow ? <div className="px-2 py-1.5">{variantRow}</div> : effort && reasoningState.choices.map((level) => {
-            const on = (level ?? undefined) === reasoningState.value;
-            return (
-              <div key={level ?? "default"} className={PANEL_ROW}>
-                <button type="button" role="radio" aria-checked={on} disabled={disabled}
-                  data-model-panel-row={`effort:${level ?? "default"}`} data-model-effort-choice={level ?? "default"}
-                  title={level === null ? t("model.effort.defaultTitle") : isUltracodeEffort(level as EffortLevel) ? t("model.effort.ultracodeHint") : t("model.effort.levelTitle", { level: effortLabel(level as EffortLevel) })}
-                  tabIndex={on || (reasoningState.value === undefined && level === reasoningState.choices[0]) ? 0 : -1}
-                  onMouseDown={(event) => event.preventDefault()}
-                  // the model's own default level is picked as "no level sent"
-                  onClick={() => { effort.onPick(level === null || (modes.current !== "auto" && level === effort.modelDefault) ? undefined : level as EffortLevel); go({ panel: "root" }); }}
-                  className={PANEL_ROW_BUTTON}>
-                  <span className={cn("min-w-0 flex-1 truncate", level !== null && isUltracodeEffort(level as EffortLevel) && "ultracode-effort-option")}>{reasoningLabel(level ?? undefined)}</span>
-                  <span aria-hidden="true" className={ROW_SIDE_SLOT} />
-                  <span aria-hidden="true" className={ROW_ICON_SLOT}>{on && <Check size={14} className="text-popover-accent" />}</span>
-                </button>
-              </div>
-            );
-          })
-        ) : modes && at.panel === "providers" ? (
-          <>
-            {cascadeLead.map((row) => modelRow(row))}
-            {cascadeFavorites.length > 0 && (
-              <div data-model-cascade-favorites="">
-                <div className={GROUP_HEADING}>{t("model.favorites")}</div>
-                {cascadeFavorites.map((row) => modelRow(row, "favorites"))}
-                <div role="separator" className="mx-2 my-1 border-t border-popover-hairline" />
-              </div>
-            )}
-            {cascade.map((provider) => {
-              const on = cascadeCurrent?.provider.id === provider.id;
-              return (
-                <div key={provider.id} className={PANEL_ROW}>
-                  <button type="button" aria-haspopup="menu" data-model-panel-row={`provider:${provider.id}`} data-model-cascade-provider={provider.id}
-                    tabIndex={on || (!cascadeCurrent && !cascadeLead.length && !cascadeFavorites.length && provider === cascade[0]) ? 0 : -1}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onKeyDown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); go(openProvider(provider)); } }}
-                    onClick={() => go(openProvider(provider))}
-                    className={PANEL_ROW_BUTTON}>
-                    <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center">{mark(provider.id === "local" ? "computer" : provider.id)}</span>
-                    <span className="min-w-0 flex-1 truncate">{provider.label}</span>
-                    <span aria-hidden="true" className={ROW_SIDE_SLOT}>{on && <Check size={14} className="text-popover-accent" />}</span>
-                    <span aria-hidden="true" className={ROW_ICON_SLOT}><ChevronRight size={14} className="text-popover-ink-secondary" /></span>
-                  </button>
-                </div>
-              );
-            })}
-            {cascade.length === 0 && <p data-model-cascade-empty="" className="px-3 py-4 text-center text-[12.5px] text-popover-ink-secondary">{t("model.cascade.none")}</p>}
-          </>
-        ) : modes && at.panel === "accounts" ? (
-          atProvider?.accounts.map((account) => {
-            const on = cascadeCurrent?.provider.id === atProvider.id && cascadeCurrent.account.id === account.id;
-            const open = (): MenuPanel => ({ panel: "models", provider: atProvider.id, account: account.id });
-            return (
-              <div key={account.id} className={PANEL_ROW}>
-                <button type="button" aria-haspopup="menu" data-model-panel-row={`account:${account.id}`} data-model-cascade-account=""
-                  tabIndex={on || (cascadeCurrent?.provider.id !== atProvider.id && account === atProvider.accounts[0]) ? 0 : -1}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onKeyDown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); go(open()); } }}
-                  onClick={() => go(open())}
-                  className={PANEL_ROW_BUTTON}>
-                  <span className="min-w-0 flex-1 truncate">{account.label}</span>
-                  <span aria-hidden="true" className={ROW_SIDE_SLOT}>{on && <Check size={14} className="text-popover-accent" />}</span>
-                  <span aria-hidden="true" className={ROW_ICON_SLOT}><ChevronRight size={14} className="text-popover-ink-secondary" /></span>
-                </button>
-              </div>
-            );
-          })
-        ) : modes ? (
-          <>
-            {listedRows.map((row) => modelRow(row, `${atProvider?.id}:${atAccount?.id}`))}
-            {shownRows.length === 0 && <p className="px-3 py-4 text-center text-[12.5px] text-popover-ink-secondary">{t("model.noMatch")}</p>}
-          </>
+            onModeRest={(event) => restOn(event, { panel: "root" }, false)}
+            reasoning={showSettings ? { row: reasoningState, label: reasoningLabel, open: at.panel === "reasoning", onOpen: () => go({ panel: "reasoning" }), onRest: reasoningState.disabled ? (event) => restOn(event, { panel: "root" }, false) : (event) => restOn(event, { panel: "reasoning" }, true) } : undefined}
+            allModels={{ label: modes.pinnedLabel, open: inAll, onOpen: () => go({ panel: "providers" }), onRest: (event) => restOn(event, { panel: "providers" }, true) }} />
         ) : !all ? (
           <>
             {autoRow && modelRow({ ...autoRow, label: t("model.auto.label"), kind: "auto" })}
@@ -510,6 +582,41 @@ export function ModelPanel(props: ModelPanelProps) {
         </button>
       )}
       </div>
+
+      {modes && levels.map((level, index) => (
+        <ModeMenuLevel key={`${level.panel}:${"provider" in level ? level.provider : ""}:${"account" in level ? level.account : ""}`} level={level.panel}
+          anchor={levelAnchor(level, viaAccount)} label={levelLabel(level)} room={level.panel === "reasoning" ? 0 : CASCADE_ROOM} focus={focusLevel && index === levels.length - 1}
+          onPointerEnter={settle}
+          onKeyDown={(event) => {
+            const typing = event.target instanceof HTMLInputElement;
+            // Escape or the left arrow closes one level, the deepest; the menu and the levels before it stay
+            if ((event.key === "Escape" && !event.defaultPrevented) || (event.key === "ArrowLeft" && !typing)) {
+              event.preventDefault();
+              event.stopPropagation();
+              closeLevel();
+              return;
+            }
+            if (event.key === "ArrowUp" && level.panel === "models" && searchable && document.activeElement === event.currentTarget.querySelector("[data-model-panel-row]")) {
+              event.preventDefault();
+              event.stopPropagation();
+              event.currentTarget.querySelector<HTMLElement>("[data-model-panel-search]")?.focus();
+              return;
+            }
+            arrowRadios(event, "[data-model-panel-row]", "vertical");
+          }}>
+          {level.panel === "reasoning" && (
+            <div className={cn(HEADING, "flex items-baseline gap-3")}>
+              <span className="shrink-0">{t("model.reasoning")}</span>
+              {!variantRow && <span className="ml-auto min-w-0 truncate">{t("model.effort.slowerHint")}</span>}
+            </div>
+          )}
+          {level.panel === "models" && searchField}
+          <div role="radiogroup" aria-label={levelLabel(level)} data-mode-panel={level.panel}
+            className="max-h-[min(400px,52dvh)] min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5">
+            {levelRows(level)}
+          </div>
+        </ModeMenuLevel>
+      ))}
 
       {hasReasoning && (
         // M-20261119-051: every level the model takes stays whole at the menu's

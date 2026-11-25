@@ -20,6 +20,20 @@ import type { PlanRow, PlanWindow } from "@/lib/plan-usage";
 describe("submenuPlace", () => {
   const row = { left: 6, right: 234, top: 400 };
 
+  it("#5338: the next level of a cascade keeps going the way the cascade goes, and stops at the window's margin instead of folding back over the path", () => {
+    const viewport = { width: 1280, height: 900 };
+    const from = { left: 600, right: 820, top: 400 };
+    // room on both sides: the right by default, the left when the cascade already goes left
+    expect(submenuPlace(from, { width: 220, height: 120 }, viewport).left).toBe(816);
+    expect(submenuPlace(from, { width: 220, height: 120 }, viewport, "left").left).toBe(600 + 4 - 220);
+    expect(submenuPlace(from, { width: 220, height: 120 }, viewport, "right").left).toBe(816);
+    // out of room that way: at the margin, over a part of the level before it, never back on the other side of it
+    expect(submenuPlace({ left: 100, right: 320, top: 400 }, { width: 220, height: 120 }, viewport, "left").left).toBe(12);
+    expect(submenuPlace({ left: 900, right: 1120, top: 400 }, { width: 220, height: 120 }, viewport, "right").left).toBe(1280 - 12 - 220);
+    // a single submenu (no cascade) still flips to the other side of its row
+    expect(submenuPlace({ left: 900, right: 1120, top: 400 }, { width: 220, height: 120 }, viewport).left).toBe(900 + 4 - 220);
+  });
+
   it("overlaps its row by 4px and starts level with it", () => {
     expect(submenuPlace(row, { width: 228, height: 120 }, { width: 1280, height: 900 })).toEqual({ left: 230, top: 400, maxHeight: 900 - 56 - 12 });
   });

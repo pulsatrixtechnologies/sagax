@@ -39,8 +39,18 @@ if ((Split-Path $app -Leaf) -ne 'Sagax.exe' -or !$app.StartsWith("$env:LOCALAPPD
 }
 Write-Output "Per-user registration and both shortcuts verified for version $env:EXPECTED_VERSION."
 Assert-ReleaseSignature $app
-node scripts/verify/release/verify-win-natives.mjs (Split-Path $app) $arch
-if ($LASTEXITCODE -ne 0) { throw 'Native binary architecture validation failed.' }
+# NSIS writes its signed uninstaller beside the unpacked application after setup.
+# The package verifier checks the original payload, which excludes that executable.
+$uninstaller = Join-Path (Split-Path $app) 'Uninstall Sagax.exe'
+Assert-ReleaseSignature $uninstaller
+$held = Join-Path $env:RUNNER_TEMP 'signed-uninstaller.exe'
+Move-Item -LiteralPath $uninstaller -Destination $held
+try {
+  node scripts/verify/release/verify-win-natives.mjs (Split-Path $app) $arch
+  if ($LASTEXITCODE -ne 0) { throw 'Native binary architecture validation failed.' }
+} finally {
+  Move-Item -LiteralPath $held -Destination $uninstaller
+}
 # Keep application output private. Report only the status of the fresh-profile launch.
 $smoke = @(node scripts/smoke-packaged-launch.mjs --app $app 2>&1)
 if ($LASTEXITCODE -ne 0 -or !($smoke -match 'packaged launch ok in .*fresh userData.*http://127\.0\.0\.1:')) {

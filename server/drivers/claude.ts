@@ -9,7 +9,7 @@
 //     computer through server/harness-mcp-proxy.ts computer) as the one
 //     stdio `computer` server in turn.integrations.localComputer
 import { createHash, randomBytes } from "node:crypto";
-import { chmodSync, readFileSync, unlinkSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmdirSync, unlinkSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -829,7 +829,17 @@ export async function createPermissionBroker(opts: {
   // deny nobody could explain. Keep the turn fail-closed on total failure,
   // but leave an actionable diagnostic either way.
   let server: ReturnType<typeof createNetServer> | null = null;
-  for (const [index, candidate] of opts.socketPaths.entries()) {
+  const maxPathBytes = process.platform === "linux" ? 107 : 103;
+  let candidates = process.platform === "win32" ? opts.socketPaths
+    : opts.socketPaths.filter((path) => Buffer.byteLength(path) <= maxPathBytes);
+  // The OS temp folder itself can exceed sun_path. Each broker owns its
+  // final fallback directory, even across simultaneous turns.
+  let privateDir: string | undefined;
+  if (opts.socketPaths.length > 0 && candidates.length === 0) {
+    privateDir = mkdtempSync("/tmp/omb-perm-");
+    candidates = [join(privateDir, "broker.sock")];
+  }
+  for (const [index, candidate] of candidates.entries()) {
     const attempt = createNetServer(connectionHandler);
     try {
       unlinkSync(candidate);
@@ -871,7 +881,7 @@ export async function createPermissionBroker(opts: {
     try {
       attempt.close();
     } catch {}
-    if (index === opts.socketPaths.length - 1) {
+    if (index === candidates.length - 1) {
       console.error(`permission broker unavailable on ${candidate}: ${outcome.message}`);
       break;
     }
@@ -879,7 +889,10 @@ export async function createPermissionBroker(opts: {
   // Never hand the proxy an occupied candidate when every bind failed. That
   // could connect it to a stale (or unrelated) listener instead of this
   // broker, defeating the fail-closed boundary.
-  if (!server) throw new Error("claude: permission broker could not bind a local socket");
+  if (!server) {
+    if (privateDir) rmdirSync(privateDir);
+    throw new Error("claude: permission broker could not bind a local socket");
+  }
   const drain = () => {
     for (const p of Array.from(pending.values())) {
       const { behavior, message } = systemEndedReply(p.ask.kind);
@@ -930,6 +943,9 @@ export async function createPermissionBroker(opts: {
       try {
         unlinkSync(boundPath);
       } catch {}
+      if (privateDir) {
+        try { rmdirSync(privateDir); } catch {}
+      }
     },
     /** Where the broker actually listens — argv for the proxy child must
      * use this, not the deterministic base, when a fallback was bound. */

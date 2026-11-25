@@ -4,8 +4,9 @@
 // Enable (or Update) and Decline answer the same card as the chat, so
 // answering in one place settles the other, and a decision taken here
 // leaves one quiet line in the chat. "Open in chat" shows the card itself.
-// Nothing waits: one row that says so.
-import { CircleCheck, MessageSquare, Sparkles } from "lucide-react";
+// Nothing waits: the card is not drawn at all (owner, 2026-11-25,
+// M-20261125-066); it stays only to say an error.
+import { MessageSquare, Sparkles } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -22,8 +23,9 @@ export interface ReviewEntry {
   card?: { threadId: string; requestId: string; messageId: string };
 }
 
-export function ReviewCard({ staged, loading, canDecide, working, error, onDecide, onOpenChat }: {
+export function ReviewCard({ staged, canDecide, working, error, onDecide, onOpenChat }: {
   staged: readonly ReviewEntry[];
+  /** kept for the callers; the card no longer draws a waiting state */
   loading: boolean;
   /** this viewer may answer the cards (the server still checks) */
   canDecide: boolean;
@@ -33,6 +35,7 @@ export function ReviewCard({ staged, loading, canDecide, working, error, onDecid
   onDecide: (entry: ReviewEntry, behavior: "allow" | "deny") => void;
   onOpenChat: (entry: ReviewEntry) => void;
 }) {
+  if (staged.length === 0 && !error) return null;
   return (
     <ProfileCard title={t("botProfile.review.title")} groupId="bot-profile-review">
       {staged.map((entry) => {
@@ -86,11 +89,6 @@ export function ReviewCard({ staged, loading, canDecide, working, error, onDecid
           />
         );
       })}
-      {staged.length === 0 && !loading && (
-        <div data-bot-profile-review-empty="">
-          <CardRow rowId="review-empty" icon={<CircleCheck />} label={t("botProfile.review.emptyTitle")} state={t("botProfile.review.emptyLine")} />
-        </div>
-      )}
       {error && <p role="alert" className="px-4 pb-2 text-[12px] leading-4 text-danger">{error}</p>}
     </ProfileCard>
   );

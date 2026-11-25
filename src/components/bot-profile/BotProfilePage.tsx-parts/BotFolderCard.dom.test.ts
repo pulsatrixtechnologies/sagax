@@ -133,6 +133,11 @@ describe("Knowledge: To review, then the Bot folder (M-20261119-081)", () => {
   });
 
   it("draws To review then the folder, with no Skills card and no Write a command card", async () => {
+    // one learning waits, so the To review card is drawn (M-20261125-066)
+    skillsAnswer = {
+      ...SKILLS,
+      staged: [{ id: "st0", name: "pricing-check", gist: "Compares a quote with the last three prices.", action: "create", sha256: "a".repeat(64), card: { threadId: "th1", requestId: "rq1", messageId: "m1" } }],
+    };
     render();
     await flush();
     const review = q('[data-settings-group="bot-profile-review"]')!;
@@ -143,6 +148,14 @@ describe("Knowledge: To review, then the Bot folder (M-20261119-081)", () => {
     expect(q("[data-skills-section]"), "no Skills card").toBeNull();
     expect(q("[data-write-command]"), "no Write a command card").toBeNull();
     expect(container.textContent).not.toContain("Its work");
+  });
+
+  it("draws no To review card when nothing waits (M-20261125-066)", async () => {
+    render();
+    await flush();
+    expect(q("[data-files-folder]")).not.toBeNull();
+    expect(q('[data-settings-group="bot-profile-review"]')).toBeNull();
+    expect(container.textContent).not.toContain("You're all caught up");
   });
 
   it("the folder's ... menu holds Skills, Learn from use, Write a command, the Memory page, then Upkeep and changes", async () => {
@@ -216,7 +229,8 @@ describe("Knowledge: To review, then the Bot folder (M-20261119-081)", () => {
     const answer = request.mock.calls.find(([path]) => path === "/api/threads/th1/respond");
     expect(answer).toBeDefined();
     expect(JSON.parse(String((answer![1] as RequestInit).body))).toEqual({ requestId: "rq1", behavior: "allow", reviewedSha256: "a".repeat(64), via: "profile" });
-    expect(q("[data-bot-profile-review-empty]")?.textContent).toContain("You're all caught up");
+    // the last learning decided: the To review card leaves (M-20261125-066)
+    expect(q('[data-settings-group="bot-profile-review"]')).toBeNull();
   });
 
   it("reads the skills again when the Skills modal closes (refreshKey)", async () => {

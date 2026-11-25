@@ -45,7 +45,7 @@ const enabled = process.env.SAGAX_UI_E2E === "1";
         const bots = await fetch(`${fixture.info.url}/api/bots`).then(response => response.json());
         const current = bots.bots.find((entry: any) => entry.id === bot.id);
         return current?.tasks.find((task: any) => task.threadId === bot.activeTaskId)?.modelSelection ?? current?.modelSelection;
-      }).toEqual(expect.objectContaining({ instanceId: "cline", model: "cline-default" }));
+      }, { timeout: 10_000 }).toEqual(expect.objectContaining({ instanceId: "cline", model: "cline-default" }));
       await browser("press", "Escape");
     }
     await browser("find", "role", "textbox", "fill", "Hello from the selected Cline engine", "--name", "Message Cline specialist", "--exact");

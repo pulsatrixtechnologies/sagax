@@ -6,6 +6,10 @@ description here and a rule in `AGENTS.md` disagree, the rule wins and this
 text is fixed. A pointer such as `AGENTS.md, "<section>"` in an older comment
 now means the section of that title in one of the files of `docs/code/`.
 
+## Claude permission sockets
+
+On POSIX the Claude permission broker skips socket names over the platform byte limit. When both configured roots are too long, the broker uses a private directory under `/tmp` and removes it on close (#5257).
+
 ## Peer approvals return to the human chat (2026-11-04)
 
 `server/approvals/origin-approvals.ts` links a delegated turn's actionable

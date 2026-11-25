@@ -450,6 +450,38 @@ describe("ClaudeDriver.decodeConfig", () => {
     }
   });
 
+  it.skipIf(process.platform === "win32")("isolates and removes short sockets when both roots exceed the byte limit", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-long-broker-"));
+    const deep = join(dir, "é".repeat(56));
+    mkdirSync(deep);
+    const opts = {
+      socketPaths: [join(deep, "data.sock"), join(deep, "temp.sock")],
+      onAsk: () => {},
+      onResolve: () => {},
+    };
+    const brokers: Awaited<ReturnType<typeof createPermissionBroker>>[] = [];
+    try {
+      for (let i = 0; i < 2; i++) {
+        const broker = await createPermissionBroker(opts);
+        brokers.push(broker);
+        expect(Buffer.byteLength(broker.socketPath)).toBeLessThanOrEqual(103);
+        expect(statSync(dirname(broker.socketPath)).mode & 0o777).toBe(0o700);
+        expect(statSync(broker.socketPath).mode & 0o777).toBe(0o600);
+        const conn = connect(broker.socketPath);
+        try {
+          await new Promise<void>((resolve, reject) => conn.once("connect", resolve).once("error", reject));
+        } finally {
+          conn.destroy();
+        }
+      }
+      expect(dirname(brokers[0]!.socketPath)).not.toBe(dirname(brokers[1]!.socketPath));
+    } finally {
+      for (const broker of brokers) broker.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+    for (const broker of brokers) expect(existsSync(dirname(broker.socketPath))).toBe(false);
+  });
+
   // Windows can't listen on filesystem socket paths at all (EACCES), so the
   // unbindable-first-candidate unit runs on POSIX; the fake-CLI e2e below
   // covers the real pipe fallback on Windows CI.

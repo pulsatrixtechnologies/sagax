@@ -3,7 +3,7 @@
 // writing the whole library index, then two synchronous copies of the tree),
 // so the whole app froze on "+". The install now gives the loop back, and
 // two installs at once keep every skill.
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,10 +30,20 @@ describe("a plugin install does not hold the server", () => {
     const inputs = (prefix: string) => Array.from({ length: 150 }, (_, index) => ({ name: `${prefix}-${index}`, instructions: skillText(`${prefix}-${index}`), source: "catalog", reviewState: "disabled" as const, root }));
     let first: Awaited<ReturnType<typeof installLibrarySkills>> = [];
     let second: Awaited<ReturnType<typeof installLibrarySkills>> = [];
-    const ticks = await ticksDuring(async () => {
+    // Make the install cross multiple time slices even on a fast filesystem.
+    // The competing callback still has to run on the real event loop.
+    let elapsed = 0;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => ++elapsed);
+    let turns = 0;
+    const observeTurn = () => { turns++; observer = setImmediate(observeTurn); };
+    let observer = setImmediate(observeTurn);
+    try {
       [first, second] = await Promise.all([installLibrarySkills(inputs("alpha")), installLibrarySkills(inputs("beta"))]);
-    });
-    expect(ticks).toBeGreaterThan(2);
+    } finally {
+      clearImmediate(observer);
+      clock.mockRestore();
+    }
+    expect(turns).toBeGreaterThan(2);
     expect(first.every((result) => !("error" in result))).toBe(true);
     expect(second.every((result) => !("error" in result))).toBe(true);
     expect(Object.keys(readSkillLibraryIndex(root))).toHaveLength(300);

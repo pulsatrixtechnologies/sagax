@@ -162,17 +162,26 @@ describe("control-omb ui drives the real renderer", () => {
     await ui("type", info.ui, "--name", "Message Pepper", "--text", `${"hay ".repeat(160)}saffron`);
     await ui("press", info.ui, "--keys", "Enter");
     await ui("wait-settle", info.ui, "--timeout", "60");
-    await ui("click", info.ui, "--name", "Find in this conversation");
-    await ui("eval", info.ui, "--js", "document.querySelector('input[aria-label=\"Find in this conversation\"]').select(); true");
-    await ui("press", info.ui, "--keys", "Backspace");
-    await ui("type", info.ui, "--name", "Find in this conversation", "--text", "saffron");
+    const replaceSearch = async (text: string) => {
+      await expect.poll(async () => {
+        try {
+          await ui("click", info.ui, "--name", "Find in this conversation");
+          return true;
+        } catch (error) {
+          if (!(error instanceof Error) || !/covered by <[^>]*achievement-toast/.test(error.message)) throw error;
+          await ui("eval", info.ui, "--js", "document.querySelector('.achievement-toast-close')?.click(); true");
+          return false;
+        }
+      }, { timeout: 10_000 }).toBe(true);
+      await ui("eval", info.ui, "--js", "document.querySelector('input[aria-label=\"Find in this conversation\"]').select(); true");
+      await ui("press", info.ui, "--keys", "Backspace");
+      await ui("type", info.ui, "--name", "Find in this conversation", "--text", text);
+    };
+    await replaceSearch("saffron");
     await expect.poll(highlighted, { timeout: 10_000 }).toBe("saffron");
     expect((await ui("eval", info.ui, "--js", "[...document.querySelectorAll('.chat-text')].find(el => el.textContent.includes('saffron'))?.classList.contains('max-h-40')")).result).toBe(false);
     await expect.poll(async () => (await ui("eval", info.ui, "--js", "(() => { const range = [...CSS.highlights.get('search-result-text')][0]; const bounds = range.startContainer.parentElement.closest('.overflow-y-auto').getBoundingClientRect(); const match = range.getBoundingClientRect(); return match.top >= bounds.top && match.bottom <= bounds.bottom; })()")).result).toBe(true);
-    await ui("click", info.ui, "--name", "Find in this conversation");
-    await ui("eval", info.ui, "--js", "document.querySelector('input[aria-label=\"Find in this conversation\"]').select(); true");
-    await ui("press", info.ui, "--keys", "Backspace");
-    await ui("type", info.ui, "--name", "Find in this conversation", "--text", "fake claude");
+    await replaceSearch("fake claude");
     await expect.poll(highlighted, { timeout: 10_000 }).toBe("fake claude");
     await ui("press", info.ui, "--keys", "Escape");
     await ui("click", info.ui, "--name", "Search bots and messages");

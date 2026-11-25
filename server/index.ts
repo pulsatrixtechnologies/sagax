@@ -15380,7 +15380,7 @@ function audienceChanged(): void {
   }
 }
 // The person drives their server environment desktop: bots' clicks there wait.
-const sandboxControlHolds = new SandboxControlHolds();
+const sandboxControlHolds = new SandboxControlHolds((person) => recordAchievements(person, [{ type: "computer.control" }]));
 // Cloud boot can revoke sessions before routes are registered. Create the
 // viewer manager before installing any revocation callbacks.
 const desktopViewer = createDesktopViewer({
@@ -20486,7 +20486,12 @@ function pendingParallelTask(threadId: string): { bot: BotRecord; task: TaskReco
 function parallelTaskBlocked(botId: string, threadId: string): boolean {
   const task = store.taskByThread(botId, threadId);
   if (!task?.parallelOf) return false;
-  return parallelBlocked({ task, tasks: store.tasks(botId), limit: botMaxParallelPerPerson(store.bot(botId), cfg), busy: (id) => threadBusy(botId, id) });
+  return parallelBlocked({
+    task, tasks: store.tasks(botId), limit: botMaxParallelPerPerson(store.bot(botId), cfg),
+    // As in admission, a pending task has its slot as soon as it leaves the
+    // queue, including the gap before the driver marks its thread busy.
+    busy: (id) => threadBusy(botId, id) || !hasQueuedSteeredMessages(botId, id),
+  });
 }
 
 function patchParallelCard(parentThreadId: string, cardId: string | undefined, patch: Partial<ParallelTaskRef>) {
@@ -37051,6 +37056,7 @@ ROUTES.push(createComputersRoutes({
   vpsStatus: (botId) => vps.vpsComputerStatus(cfg, botId),
   botControlSnapshot: (botId) => botComputerControlSnapshot(botId),
   controlSnapshot: (key) => computerControl.snapshot(key),
+  controlTaken: (auth) => recordAchievements(actorPrincipalId(auth), [{ type: "computer.control" }]),
   controlTake: (key) => computerControl.take(key),
   controlRelease: (key) => computerControl.release(key),
   controlDismissHelp: (key) => computerControl.dismissHelp(key),

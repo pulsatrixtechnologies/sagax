@@ -479,7 +479,6 @@ export function achievementRequestEvents(request: RequestFacts, lookups: Request
   if ((method === "PATCH" && /^\/api\/bots\/[\w-]+\/cards\/[\w-]+$/.test(path)) || (method === "POST" && /^\/api\/(?:bots\/[\w-]+\/(?:respond|requests\/[A-Za-z0-9_-]{16,80})|threads\/[\w-]+\/respond)$/.test(path))) {
     return [{ type: "approval.answered" }];
   }
-  if (method === "POST" && /^\/api\/bots\/[\w-]+\/computer\/control$/.test(path)) return [{ type: "computer.control" }];
   if ((method === "POST" || method === "PUT") && /^\/api\/bots\/[\w-]+\/(?:grants(?:\/[^/]+)?|direct-grants)$/.test(path)) return [{ type: "bot.shared" }];
   if (method === "POST" && path === "/api/people-dms") return [{ type: "dm.sent" }];
   const groupSend = method === "POST" ? path.match(/^\/api\/groups\/([\w-]+)\/messages$/) : null;
@@ -502,12 +501,12 @@ export function slashCommandName(text: string): string | null {
 
 /**
  * The events a message sent to a bot means: a message, a slash command, an
- * attachment (a .zip one too), a parallel task, and on a voice call the call
+ * attachment (a .zip one too), and on a voice call the call
  * itself, its length so far and a polite interruption. `callStarts` remembers
  * when each call was first heard from (bounded by the caller).
  */
 export function achievementSendEvents(
-  input: { text: string; parallel: boolean; voiceCall?: { callId: string; interrupted?: boolean } },
+  input: { text: string; voiceCall?: { callId: string; interrupted?: boolean } },
   callStarts: Map<string, number>,
   at: number,
 ): AchievementEvent[] {
@@ -516,7 +515,6 @@ export function achievementSendEvents(
   if (command) events.push({ type: "message.slash", key: command });
   if (/<attached-(?:image|file)\b/.test(input.text)) events.push({ type: "message.attachment" });
   if (/<attached-file\b[^>]*\.zip["'\s>]/i.test(input.text)) events.push({ type: "message.zip" });
-  if (input.parallel) events.push({ type: "message.parallel" });
   const call = input.voiceCall;
   if (call) {
     if (!callStarts.has(call.callId)) {

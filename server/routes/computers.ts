@@ -62,7 +62,8 @@ export interface ComputersRouteDeps {
   /** Panel GET: resolves bot id through botComputerControlSnapshot. */
   botControlSnapshot(botId: string): object;
   /** Raw control-key snapshot (team owner key or bot id). */
-  controlSnapshot(key: string): object;
+  controlSnapshot(key: string): { held: boolean };
+  controlTaken(auth: RequestAuth): void;
   controlTake(key: string): object;
   controlRelease(key: string): object;
   controlDismissHelp(key: string): object;
@@ -195,8 +196,8 @@ export function createComputersRoutes(deps: ComputersRouteDeps): RouteHandler {
     if (m) {
       const bot = deps.bot(m[1]);
       if (!bot) return json(res, 404, { error: "no such bot" });
-      if (method === "GET") return json(res, 200, deps.botControlSnapshot(bot.id));
-      if (method === "POST") {
+      if (method === "GET" || method === "POST") {
+        if (method === "GET") return json(res, 200, deps.botControlSnapshot(bot.id));
         if (!isJsonContentType(req)) {
           return json(res, 415, { error: "content-type must be application/json" });
         }
@@ -218,6 +219,7 @@ export function createComputersRoutes(deps: ComputersRouteDeps): RouteHandler {
         }
         if (action === "take" && controlLeaseId) {
           const result = deps.controlAcquireLease(controlKey, controlLeaseId);
+          if (result.acquired) deps.controlTaken(auth);
           return json(res, 200, {
             ...result.snapshot,
             owned: result.owned,
@@ -234,7 +236,12 @@ export function createComputersRoutes(deps: ComputersRouteDeps): RouteHandler {
             owned: deps.controlOwnsLease(controlKey, controlLeaseId),
           });
         }
-        if (action === "take") return json(res, 200, deps.controlTake(controlKey));
+        if (action === "take") {
+          const wasHeld = deps.controlSnapshot(controlKey).held;
+          const snapshot = deps.controlTake(controlKey);
+          if (!wasHeld) deps.controlTaken(auth);
+          return json(res, 200, snapshot);
+        }
         if (action === "release") return json(res, 200, deps.controlRelease(controlKey));
         if (action === "dismiss-help") return json(res, 200, deps.controlDismissHelp(controlKey));
         return json(res, 400, { error: "action must be take, release, check, or dismiss-help" });

@@ -174,6 +174,9 @@ posixOnly("busy sends routed by the bot e2e", () => {
     open("main");
     await waitFor(async () => (await messages(bot.threadId)).some((m) => m.role === "bot" && m.text?.startsWith("reply to:") && m.text.includes("You set this message aside")), "the set-aside request's turn");
     await waitFor(async () => (await getBot(bot.id)).busy === false, "every turn to settle");
+    const achievements = (await api("GET", "/api/me/achievements")).body.items;
+    expect(achievements).toContainEqual(expect.objectContaining({ id: "multitasker", unlockedAt: expect.any(Number) }));
+    expect(achievements).toContainEqual(expect.objectContaining({ id: "juggler", current: 2 }));
     const main = await messages(bot.threadId);
     const mainReply = main.find((m) => m.role === "bot" && !m.parallelTask && m.text?.startsWith("reply to:") && !m.text.includes("You set this message aside"));
     expect(mainReply.text).toContain("keep the old function names");

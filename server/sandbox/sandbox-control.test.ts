@@ -20,13 +20,15 @@ function fakeManager() {
 
 describe("taking control of the server environment desktop", () => {
   it("holds while a control view is open, and only then", async () => {
-    const holds = new SandboxControlHolds();
+    const taken: string[] = [];
+    const holds = new SandboxControlHolds(person => taken.push(person));
     const { manager, streams } = fakeManager();
     const target = sandboxDesktopTarget(manager, ALICE, (person) => holds.hold(person));
 
     const watching = await target.resolve({ upgrade: true, control: false });
     await watching.stream!();
     expect(holds.held(ALICE)).toBe(false);
+    expect(taken).toEqual([]);
 
     const controlling = await target.resolve({ upgrade: true, control: true });
     await controlling.stream!();
@@ -34,6 +36,7 @@ describe("taking control of the server environment desktop", () => {
     await second.stream!();
     expect(holds.held(ALICE)).toBe(true);
     expect(holds.held(ALICE.toUpperCase())).toBe(true);
+    expect(taken).toEqual([ALICE]);
 
     streams[1]!.destroy();
     await new Promise((resolve) => setImmediate(resolve));

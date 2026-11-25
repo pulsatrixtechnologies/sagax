@@ -146,10 +146,17 @@ async function startParallelTask(input: {
     byBot: input.byBot,
     ...(host.voiceCalls.active(input.threadId) ? { history: host.callHandoffHistory(bot, input.threadId, anchorId) } : {})
   });
-  const reply = (state: ParallelTaskState) => ({
-    ok: true as const, threadId: input.threadId, message: host.store.messagesFor(input.threadId).find((m) => m.id === anchorId) ?? request ?? card,
-    parallel: { threadId: child.threadId, title, state, cardMessageId: card.id }
-  });
+  const reply = (state: ParallelTaskState) => {
+    if (!input.byBot && state !== "failed") {
+      const person = input.auth ? host.actorPrincipalId(input.auth) : input.principalId;
+      host.recordAchievements(person, [{ type: "message.parallel", id: child.threadId }]);
+    }
+    return {
+      ok: true as const, threadId: input.threadId,
+      message: host.store.messagesFor(input.threadId).find((m) => m.id === anchorId) ?? request ?? card,
+      parallel: { threadId: child.threadId, title, state, cardMessageId: card.id }
+    };
+  };
   // Another pending task holds one of its resources: it waits in that
   // resource's line (parallelResourceBlocked), and the drain starts it after.
   const resourceBusy = parallelResourceBlocked({ task: host.store.taskByThread(bot.id, child.threadId)!, tasks: host.store.tasks(bot.id), busy: (id) => host.threadBusy(bot.id, id) });

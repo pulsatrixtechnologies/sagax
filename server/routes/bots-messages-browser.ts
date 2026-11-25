@@ -58,7 +58,9 @@ async function handleBotBrowser(deps: BotsMessagesRouteDeps, ctx: RouteContext):
           currentBrowserSession(candidate.id, candidate.browserProfile) === browser.session)) {
         return json(res, 409, { error: "Stop every bot using this profile before restarting its browser." });
       }
-      return json(res, 200, await browserLive.action({ viewerId: body.viewerId, botId: bot.id, owner, body }));
+      const result = await browserLive.action({ viewerId: body.viewerId, botId: bot.id, owner, body });
+      if (body.type === "take") deps.recordAchievements(deps.actorPrincipalId(auth), [{ type: "computer.control" }]);
+      return json(res, 200, result);
     }
     return json(res, 405, { error: "method not allowed" });
   }

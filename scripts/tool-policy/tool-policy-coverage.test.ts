@@ -30,6 +30,17 @@ describe("tool policy coverage", () => {
     expect(inventory.map(policyKey)).toContain("POST exact /api/internal/voice-call/end");
   });
 
+  it("inventories both bot computer control methods from the route that serves them", () => {
+    const path = "/api/bots/bot-1/computer/control";
+    for (const [method, tier] of [["GET", "read"], ["POST", "write"]] as const) {
+      expect(inventory.some(row => row.file === "server/routes/computers.ts" && row.kind === "pattern"
+        && row.method === method && new RegExp(row.route).test(path))).toBe(true);
+      expect(policyFor(method, path)).toMatchObject({
+        matched: true, tier, readOnly: method === "GET", scope: `bots:${tier}`, defaultEnabled: true,
+      });
+    }
+  });
+
   it("has a policy row for every route", () => {
     const missing = inventory.filter((r) => !keys.has(policyKey(r))).map((r) => `${policyKey(r)}  (${r.file}:${r.line})`);
     expect(missing, "run: node scripts/tool-policy/generate.ts, then review the new rows").toEqual([]);

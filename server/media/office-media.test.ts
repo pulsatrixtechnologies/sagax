@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import zlib from "node:zlib";
@@ -82,7 +82,8 @@ describe("office documents attached to a message", () => {
     expect(media.text).toBe("Image originale\n[picture 1]\nImage finale & notes\n[picture 2]\nGrille : 3 pts");
     for (const image of media.images) {
       expect(image.path.startsWith(join(dir, ".office"))).toBe(true);
-      expect(statSync(image.path).mode & 0o777).toBe(0o600);
+      expect(readFileSync(image.path)).toEqual(image.index === 1 ? PNG(2) : JPEG);
+      if (process.platform !== "win32") expect(statSync(image.path).mode & 0o777).toBe(0o600);
     }
     const note = officeNote("copie.docx", media, true);
     expect(note).toContain("Its 2 picture(s) are attached to this message as images");

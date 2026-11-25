@@ -94,10 +94,9 @@ describe.each([false, true])("Messaged receipt, threads off, tool calls %s", (to
   });
 });
 
-// #3461: the quiet note the orchestrator reads at its next turn is not drawn
-// in the person's chat (the work view of lot 2 of #3451 will show it).
+// A team note has its own receipt, including when threads are hidden.
 describe("team note row", () => {
-  it("draws nothing, neither a bubble nor its fallback text", () => {
+  it("keeps the recipient and tooltip without rendering the fallback message", () => {
     const markup = render([
       { id: "u", role: "user", kind: "text", text: "fix the login", at } as Message,
       { id: "n", role: "bot", kind: "text", at, text: "You wrote to Devon (Fix the login): Use the main branch.",
@@ -105,7 +104,8 @@ describe("team note row", () => {
       { id: "b", role: "bot", kind: "text", text: "Sent it to the coding session.", at } as Message,
     ]);
     expect(markup).toContain("Sent it to the coding session.");
-    expect(markup).not.toContain("Use the main branch.");
-    expect(markup).not.toContain("data-mid=\"n\"");
+    expect(markup).toContain('data-team-note-open="code-2"');
+    expect(markup).toContain('title="Use the main branch."');
+    expect(markup).not.toContain("You wrote to Devon (Fix the login): Use the main branch.");
   });
 });

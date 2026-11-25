@@ -149,7 +149,8 @@ describe("plugin skills and commands on a turn", () => {
     const discovered = pluginTurnFiles([root]);
     expect(discovered).toHaveLength(45);
     const prompt = capabilityPrompt("grok", [{ key: "packing", name: "Packing", files: discovered.map((file) => ({ ...file, read: () => "Check" })) }]);
-    expect(prompt.byCapability.packing).toMatchObject({ skills: 30, omitted: 15 });
-    expect(prompt.text).toContain("30/45 references");
+    expect(prompt.byCapability.packing).toMatchObject({ skills: 30, named: 15, omitted: 0 });
+    expect(prompt.text).toContain("30/45 references in full, 15 by name below; 0 omitted.");
+    for (const file of discovered) expect(prompt.text).toContain(file.name);
   });
 });

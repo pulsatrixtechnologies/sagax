@@ -353,6 +353,9 @@ export function mascotLook(value) {
     ...(typeof value.eyeColor === "string" && ACCENT_RE.test(value.eyeColor) ? { eyeColor: value.eyeColor.toLowerCase() } : {}),
     ...(isFiniteNumber(value.depth) && value.depth >= 0 && value.depth <= 14 ? { depth: value.depth } : {}),
     ...(typeof value.followPointer === "boolean" ? { followPointer: value.followPointer } : {}),
+    // the mascot picker's settings (#5369)
+    ...(typeof value.bodyColor === "string" && ACCENT_RE.test(value.bodyColor) ? { bodyColor: value.bodyColor.toLowerCase() } : {}),
+    ...(value.motion === "reduced" || value.motion === "full" ? { motion: value.motion } : {}),
   };
 }
 

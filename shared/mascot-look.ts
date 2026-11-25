@@ -517,12 +517,23 @@ export const SHAPE_DEPTH = { min: 0, max: 14, natural: 6 } as const;
 
 const eyeColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/).transform((value) => value.toLowerCase());
 
+/**
+ * How much a mascot moves (the picker's gear, #5369): the device's own
+ * preference, always reduced, or always full. Only a choice other than the
+ * device's is stored.
+ */
+export const SHAPE_MOTIONS = ["system", "reduced", "full"] as const;
+export type ShapeMotion = (typeof SHAPE_MOTIONS)[number];
+
 const ENGINE_LOOK_FIELDS = {
   material: z.enum(SHAPE_MATERIALS),
   mood: z.enum(SHAPE_MOODS),
   eyeColor: eyeColorSchema,
   depth: z.number().min(SHAPE_DEPTH.min).max(SHAPE_DEPTH.max),
   followPointer: z.boolean(),
+  /** A free body colour (#5369), any #rrggbb: drawn in place of the bot's named colour, which stays the nearest name for everything else. */
+  bodyColor: eyeColorSchema,
+  motion: z.enum(["reduced", "full"]),
 } as const;
 type EngineLookKey = keyof typeof ENGINE_LOOK_FIELDS;
 const ENGINE_LOOK_KEYS = Object.keys(ENGINE_LOOK_FIELDS) as EngineLookKey[];
@@ -561,8 +572,14 @@ export const mascotLookSchema = z
     eyeColor: ENGINE_LOOK_FIELDS.eyeColor.optional(),
     depth: ENGINE_LOOK_FIELDS.depth.optional(),
     followPointer: ENGINE_LOOK_FIELDS.followPointer.optional(),
+    /** The mascot picker's settings (#5369); absent is the bot's named colour and the device's motion preference. */
+    bodyColor: ENGINE_LOOK_FIELDS.bodyColor.optional(),
+    motion: ENGINE_LOOK_FIELDS.motion.optional(),
   })
   .strict();
+
+/** Every key a look may carry: a key outside this list is a newer build's. */
+const LOOK_KEYS: ReadonlySet<string> = new Set(Object.keys(mascotLookSchema.shape));
 
 export type MascotLook = z.infer<typeof mascotLookSchema>;
 export type { EngineAvatarDef, ShapeAvatarDef };
@@ -577,6 +594,10 @@ export const DEFAULT_MASCOT_LOOK: MascotLook = Object.freeze({ character: "owl" 
 export function botMascotLook(value: unknown): MascotLook {
   const parsed = mascotLookSchema.safeParse(value);
   if (parsed.success) return parsed.data;
+  // a key this build does not know (a newer build's setting) drops alone: the bot is drawn with what this build knows (#5369)
+  if (value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).some((key) => !LOOK_KEYS.has(key))) {
+    return botMascotLook(Object.fromEntries(Object.entries(value).filter(([key]) => LOOK_KEYS.has(key))));
+  }
   // a person's own shape this build cannot draw drops alone: the bot keeps its character, shape and skins (#4160)
   if (value && typeof value === "object" && "avatarDef" in value) {
     const { avatarDef: _dropped, ...kept } = value as { avatarDef?: unknown };
@@ -638,9 +659,12 @@ export interface EngineLook {
   /** The body's volume (0..14), or null for the engine's natural depth (and the Outline skin's flat body). */
   depth: number | null;
   followPointer: boolean;
+  /** A free body colour as #rrggbb, or null for the bot's named colour. */
+  bodyColor: string | null;
+  motion: ShapeMotion;
 }
 
-export const DEFAULT_ENGINE_LOOK: EngineLook = Object.freeze({ material: "flat", mood: "neutral", eyeColor: null, depth: null, followPointer: true });
+export const DEFAULT_ENGINE_LOOK: EngineLook = Object.freeze({ material: "flat", mood: "neutral", eyeColor: null, depth: null, followPointer: true, bodyColor: null, motion: "system" });
 
 /** The engine's settings of a stored or received look. */
 export function engineLookOf(value: unknown): EngineLook {
@@ -651,6 +675,8 @@ export function engineLookOf(value: unknown): EngineLook {
     eyeColor: look.eyeColor ?? null,
     depth: look.depth ?? null,
     followPointer: look.followPointer ?? DEFAULT_ENGINE_LOOK.followPointer,
+    bodyColor: look.bodyColor ?? null,
+    motion: look.motion ?? DEFAULT_ENGINE_LOOK.motion,
   };
 }
 
@@ -665,7 +691,7 @@ export function withEngineLook<T extends Pick<MascotLook, EngineLookKey>>(look: 
     if (!(key in change)) continue;
     const value = change[key];
     if (value === null || value === undefined || value === DEFAULT_ENGINE_LOOK[key]) delete next[key];
-    else (next as Record<string, unknown>)[key] = key === "eyeColor" ? String(value).toLowerCase() : value;
+    else (next as Record<string, unknown>)[key] = key === "eyeColor" || key === "bodyColor" ? String(value).toLowerCase() : value;
   }
   return next;
 }

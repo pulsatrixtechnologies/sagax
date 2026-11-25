@@ -80,7 +80,12 @@ export function buildLearnPrompt(userRequest: string): string {
  * sentence followed by the request both become the authoring prompt; any
  * other message is passed through. While Teach a task is hidden
  * (shared/teach-task.ts, #4209) a typed `/learn` is plain text. */
-export function expandLearnTurnText(userText: string): string {
+export function expandLearnTurnText(userText: string, turnText = userText): string {
   const learn = (TEACH_TASK_OFFERED ? parseLearnCommand(userText) : null) ?? parseSaveRunRequest(userText);
-  return learn ? buildLearnPrompt(learn.request) : userText;
+  if (!learn) return turnText;
+  if (turnText === userText) return buildLearnPrompt(learn.request);
+  // The prepared turn carries the clock, staged files and any selected skills.
+  // Read the command only from the original input, and keep the prepared
+  // request intact when building the authoring instructions.
+  return learn.request ? buildLearnPrompt(turnText) : `${turnText}\n\n${buildLearnPrompt("")}`;
 }

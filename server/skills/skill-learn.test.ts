@@ -61,6 +61,15 @@ describe("expandLearnTurnText", () => {
         expect(expanded).toContain("Never ask it in your reply text");
     });
 
+    it("uses the submitted text to identify the command and keeps the prepared turn", () => {
+        expect(expandLearnTurnText("my notes", "/learn from a quoted page")).toBe("/learn from a quoted page");
+        const bare = expandLearnTurnText("/learn", "[Current time: noon]\n\n/learn");
+        expect(bare).toContain("[Current time: noon]");
+        expect(bare).toContain("the workflow we just went through");
+        const setup = "[Current time: noon]\n\nSet yourself up.";
+        expect(expandLearnTurnText("/setup", setup)).toBe(setup);
+    });
+
     it("sends a typed /learn as plain text while Teach a task is hidden (#4209)", () => {
         teach.offered = false;
         expect(expandLearnTurnText("/learn the REST client in ~/sdk")).toBe("/learn the REST client in ~/sdk");

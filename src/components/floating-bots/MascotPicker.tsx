@@ -302,7 +302,7 @@ function LockBadge({ lock }: { lock: LockInfo }) {
 }
 
 const THUMB = 52;
-const field = "block w-full rounded-xl border border-hairline-weak bg-inset px-3 py-2 text-[13px] leading-5 text-ink outline-none placeholder:text-ink-tertiary focus:border-hairline";
+const field = "block w-full rounded-xl border border-hairline-weak bg-inset px-3 py-2 text-[13px] leading-5 text-ink outline-none placeholder:text-ink-tertiary";
 const button = "inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-control px-3 text-[13px] leading-4 text-ink outline-none transition-colors hover:bg-raised-hover focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50";
 const primary = "inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-ink px-3 text-[13px] font-medium leading-4 text-app outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-40";
 

@@ -8,6 +8,9 @@
 // click opens the same mascot picker under the draft's avatar.
 // A picture dropped on the avatar, or pasted while it has focus, becomes the
 // bot's picture through the same upload as the Appearance pane (25 MB).
+// A shape mascot drawn large here (88 px and up) is turned by hand, as on the
+// open-bot-avatar site's stage (#5384, floating-bots/use-mascot-turn.tsx): a
+// drag turns it, a press that barely moved is still the click.
 import { useRef, useState } from "react";
 
 import { avatarImageFrom, dragMayCarryImage } from "@/lib/avatar-input";
@@ -20,6 +23,9 @@ import { t } from "@/lib/i18n";
 import { type MausMotion, type MausState } from "@/lib/mascot";
 import { BotAvatar } from "./Avatar";
 import { MascotPickerPopover } from "./floating-bots/MascotPickerPopover";
+import { MascotTurnReset, turnCursor, useMascotTurn } from "./floating-bots/use-mascot-turn";
+import { ShapeStageContext } from "./shape-stage";
+import { completeMascotLook, withEngineLook, type MascotLook } from "../../shared/mascot-look";
 import { useAvatarSources, type AvatarPatch } from "./appearance/AvatarSources";
 
 export function BotProfileAvatarCard({
@@ -56,6 +62,13 @@ export function BotProfileAvatarCard({
   const [dropping, setDropping] = useState(false);
   const avatarRef = useRef<HTMLButtonElement>(null);
   const sources = useAvatarSources(bot, onPatch);
+  // only the large mascot is turned (the engine's live size, ShapeMascot LIVE_MIN); a picture never is
+  const wearsPicture = (bot.avatarCrop ?? "mascot") !== "mascot" && Boolean(bot.avatarUrl);
+  const turn = useMascotTurn({
+    look: size >= 88 ? bot.mascotLook : null,
+    picture: wearsPicture || size < 88,
+    onMood: (mood) => onPatch({ mascotLook: withEngineLook(completeMascotLook(bot.mascotLook), { mood }) as MascotLook }),
+  });
   const open = () => {
     if (draft) setDraftOpen((value) => !value);
     else if (onOpen) onOpen();
@@ -67,6 +80,7 @@ export function BotProfileAvatarCard({
       {/* room above for a move's jump and effects: the panel scrolls, so anything past its top is cut by a straight edge.
           pt-5 from 80px up (panel 92, wizard 104, profile 144) so a jump clears the box. */}
       <div className={cn("flex justify-center pb-0", size >= 80 ? "pt-5" : "pt-3")}>
+        <span className="relative inline-flex" data-mascot-turn={turn.enabled ? (turn.dragging ? "dragging" : "") : undefined}>
         <button
           ref={avatarRef}
           type="button"
@@ -74,6 +88,8 @@ export function BotProfileAvatarCard({
           aria-expanded={draft ? draftOpen : undefined}
           data-avatar-edit=""
           onClick={open}
+          {...turn.handlers}
+          aria-description={turn.enabled ? t("mascotStage.hint") : undefined}
           onContextMenu={onContextMenu}
           onDragOver={(event) => {
             if (sources.busy || !dragMayCarryImage(event.dataTransfer)) return;
@@ -100,8 +116,9 @@ export function BotProfileAvatarCard({
           }}
           title={t("botPanel.avatar.dropOrPaste")}
           data-avatar-dropping={dropping ? "" : undefined}
-          className={cn("rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent", dropping && "ring-2 ring-accent")}
+          className={cn("rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent", turnCursor(turn), dropping && "ring-2 ring-accent")}
         >
+          <ShapeStageContext.Provider value={turn.stage}>
           <BotAvatar
             bot={bot}
             state={activeState}
@@ -110,7 +127,10 @@ export function BotProfileAvatarCard({
             motion={mascotMotion?.kind ?? "none"}
             motionKey={mascotMotion?.nonce ?? 0}
           />
+          </ShapeStageContext.Provider>
         </button>
+        <MascotTurnReset turn={turn} className="-right-3 top-0" />
+        </span>
       </div>
       {sources.error && <p role="alert" className="-mt-1 pb-2 text-center text-[11.5px] text-danger">{sources.error}</p>}
       {draft && draftOpen && (

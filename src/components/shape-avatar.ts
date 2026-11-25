@@ -198,6 +198,8 @@ export interface EngineFrameOptions {
   motionBlend?: AvatarMotionBlend;
   reducedMotion: boolean;
   depth?: number;
+  /** The extra turn a person gave the body by hand (#5384), over the pose's own. */
+  view?: { yaw: number; pitch: number };
 }
 
 /**
@@ -208,14 +210,16 @@ export interface EngineFrameOptions {
  */
 export function engineFrame(def: AvatarDefinition, mood: AvatarMotion, options: EngineFrameOptions): AvatarFrame {
   const depth = options.depth === undefined ? {} : { depth: options.depth };
-  if (mood !== "thinking") return avatarFrame(def, { motion: mood, time: options.time, gaze: options.gaze, motionBlend: options.motionBlend, reducedMotion: options.reducedMotion, ...depth });
+  const turn = options.view;
+  if (mood !== "thinking") return avatarFrame(def, { motion: mood, time: options.time, gaze: options.gaze, motionBlend: options.motionBlend, reducedMotion: options.reducedMotion, ...depth, ...(turn ? { view: turn } : {}) });
   // at rest the eyes take the whole look and the body stays; live, the engine gives the eyes a share and turns the body toward
   // the target, so the target is set further out and the view takes that turn back: the pose is the same either way
   const still = options.reducedMotion;
   const gaze = still ? { x: AT_WORK.gazeX, y: AT_WORK.gazeY } : { x: AT_WORK.gazeX / LOOK.eyes, y: -1 };
-  const view = still
+  const posed = still
     ? { yaw: AT_WORK.yaw, pitch: AT_WORK.pitch }
     : { yaw: AT_WORK.yaw - (gaze.x * LOOK.yaw - LOOK.baseYaw), pitch: AT_WORK.pitch - (-gaze.y * LOOK.pitch - LOOK.basePitch / 2) };
+  const view = turn ? { yaw: posed.yaw + turn.yaw, pitch: posed.pitch + turn.pitch } : posed;
   const body = avatarFrame(def, { state: "idle", mood: "neutral", view, gaze, time: options.time, reducedMotion: still, ...depth });
   const { root } = avatarFrame(def, { state: "thinking", time: options.time, reducedMotion: still, ...depth });
   return { ...body, root, shapes: body.shapes.map((shape) => (shape.kind === "eye" ? { ...shape, mark: underLid(shape.mark, AT_WORK.lids[shape.key === "eye-0" ? 0 : 1]) } : shape)) };

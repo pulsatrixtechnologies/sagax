@@ -56,17 +56,20 @@ interface SavedBot { id: string; name: string; toolScope?: { allow?: string[]; d
     };
     // #2092: the raw lists live behind Advanced; "custom" is the allow-list switch there,
     // "all" is its reset button.
-    const mode = (value: "all" | "custom") => evaluate(`(() => {
+    const mode = (value: "all" | "custom") => expect.poll(() => evaluate(`(() => {
       const fold = document.querySelector('details[data-tool-advanced]');
-      if (!fold) throw new Error('Selection is unavailable'); fold.open = true;
+      if (!fold) return false;
+      fold.open = true;
+      if (fold.querySelector('fieldset')?.disabled) return false;
       if (${JSON.stringify(value)} === 'all') {
         const reset = [...fold.querySelectorAll('button')].find(b => b.textContent.trim() === 'All current tools');
         if (reset) reset.click(); return true;
       }
       const toggle = fold.querySelector('[role="switch"]');
-      if (!toggle || toggle.disabled) throw new Error('Selection is unavailable');
-      if (toggle.getAttribute('aria-checked') !== 'true') toggle.click(); return true;
-    })()`);
+      if (!toggle || toggle.matches(':disabled')) return false;
+      if (toggle.getAttribute('aria-checked') !== 'true') toggle.click();
+      return toggle.getAttribute('aria-checked') === 'true';
+    })()`), { timeout: 10_000 }).toBe(true);
     const fill = async (name: string, text: string) => {
       // Use the native setter for a deterministic React change, as in the
       // existing UI tests; saving still uses the real button and API.

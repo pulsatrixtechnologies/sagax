@@ -3,7 +3,8 @@ import { useState } from "react";
 import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { limitLine, nearLimit, releaseLimit, resetTime, useEngineLimits } from "@/lib/limit-resets";
+import { limitLine, nearLimit, releaseLimit, resetTime, useEngineLimits, type EngineLimit } from "@/lib/limit-resets";
+import type { WeeklyNotice } from "@/lib/usage-notices";
 import { openModelWindow } from "@/lib/model-window";
 import type { Routine } from "@/lib/routines";
 import { api, type Bot } from "@/state/store";
@@ -36,14 +37,98 @@ export function useLimitResetContinue(botId: string | undefined, threadId: strin
   };
 }
 
-/** The quiet limit indicator beside the model picker (JC 2026-11-08: no banner
- * above the chat, ever). A small dot, warning near the limit and danger at it,
- * with the usage line as its tooltip; a click opens a small menu holding the
- * line, the weekly window and "Switch engine". #3552: it is the one place
- * for the detail and the actions (the message box draws no bar for a
- * limit), and "Continue at ..." is offered only at the limit with nothing
- * held: while the server holds the conversation's message for the reset,
- * that is the one way it resumes. Nothing renders when the engine is
+/** What a limit detail says and offers for one engine and one conversation:
+ * the usage line, the weekly notice, whether the limit is near or reached,
+ * and "Continue at ..." (only at the limit with nothing held, #3552). Read by
+ * the chat bar's usage meter and by the limit dot. */
+export function useEngineLimitDetail({ limit, weekly, botId, threadId, messages }: {
+  limit: EngineLimit | undefined;
+  weekly: WeeklyNotice | null;
+  botId?: string;
+  threadId?: string;
+  /** The transcript of the conversation shown (`threadId`), when the caller
+   * has it: a task, a side chat or a preview is not the bot's main thread. */
+  messages?: readonly LimitLineRow[];
+}) {
+  // #3552: "held" is read for the conversation shown, whichever thread it is.
+  // #3624: read as one answer, so another bot's frame renders nothing here
+  const held = useStoreSelector((state) => limitMessageHeld(messages ?? shownMessages(state.bots, botId, threadId)));
+  const continueAt = useLimitResetContinue(botId, threadId, limit?.blocked && !held ? limit.resetsAt ?? undefined : undefined);
+  const near = Boolean(limit && nearLimit(limit));
+  const weeklyLine = weekly ? t(weekly.percent >= 100 ? "chat.notice.weekly.reached" : "chat.notice.weekly", { percent: weekly.percent, name: weekly.name }) : null;
+  const line = near && limit ? limitLine(limit) : weeklyLine;
+  const hard = Boolean(limit?.blocked) || (!near && (weekly?.percent ?? 0) >= 100);
+  return { limit, weekly, near, line, weeklyLine, hard, continueAt };
+}
+
+/** The actions of a limit detail: "Continue at ...", "Try again now",
+ * "Switch engine" and "See usage", each as it always behaved. */
+export function EngineLimitActions({ detail, botId, onDone }: {
+  detail: ReturnType<typeof useEngineLimitDetail>;
+  botId?: string;
+  /** An action was taken: the detail closes. */
+  onDone: () => void;
+}) {
+  const dispatch = useStoreDispatch();
+  const { limit, near, continueAt } = detail;
+  return (
+    <>
+      {near && continueAt && (
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="engine-limit-continue"
+          onClick={() => { continueAt.onClick(); onDone(); }}
+          className={MENU_ROW}
+        >
+          {continueAt.label}
+        </button>
+      )}
+      {limit?.held && (
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="engine-limit-release"
+          onClick={() => {
+            onDone();
+            void releaseLimit(limit.engine)
+              .catch((cause) => dispatch({ type: "error", message: cause instanceof Error ? cause.message : String(cause) }));
+          }}
+          className={MENU_ROW}
+        >
+          {t("chat.limit.tryAgainNow")}
+        </button>
+      )}
+      {botId && (
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="engine-limit-switch"
+          onClick={() => { onDone(); openModelWindow(botId); }}
+          className={MENU_ROW}
+        >
+          {t("sendBlock.switchEngine")}
+        </button>
+      )}
+      <button
+        type="button"
+        role="menuitem"
+        data-testid="engine-limit-usage"
+        onClick={() => { onDone(); dispatch({ type: "toggleAppSettings", open: true, section: "usage" }); }}
+        className={MENU_ROW}
+      >
+        {t("chat.notice.weekly.more")}
+      </button>
+    </>
+  );
+}
+
+/** The quiet limit indicator beside a model picker outside the chat bar (JC
+ * 2026-11-08: no banner above the chat, ever; M-20261125-070: the chat bar
+ * itself shows the usage meter under the message box, ComposerMeter.tsx, and
+ * no dot). A small dot, warning near the limit and danger at it, with the
+ * usage line as its tooltip; a click opens a small menu holding the line,
+ * the weekly window and the actions. Nothing renders when the engine is
  * nowhere near its limit. */
 export function EngineLimitIndicator({
   engine,
@@ -56,22 +141,14 @@ export function EngineLimitIndicator({
   driver?: string;
   botId?: string;
   threadId?: string;
-  /** The transcript of the conversation shown (`threadId`), when the caller
-   * has it: a task, a side chat or a preview is not the bot's main thread. */
   messages?: readonly LimitLineRow[];
 }) {
-  const dispatch = useStoreDispatch();
   const limit = useEngineLimits().find((candidate) => candidate.engine === engine);
   const weekly = useWeeklyLimit(engine, driver ?? limit?.driver);
-  // #3552: "held" is read for the conversation shown, whichever thread it is.
-  // #3624: read as one answer, so another bot's frame renders nothing here
-  const held = useStoreSelector((state) => limitMessageHeld(messages ?? shownMessages(state.bots, botId, threadId)));
-  const continueAt = useLimitResetContinue(botId, threadId, limit?.blocked && !held ? limit.resetsAt ?? undefined : undefined);
+  const detail = useEngineLimitDetail({ limit, weekly, botId, threadId, messages });
   const [open, setOpen] = useState(false);
-  const near = Boolean(limit && nearLimit(limit));
-  if (!near && !weekly) return null;
-  const line = near && limit ? limitLine(limit) : t(weekly!.percent >= 100 ? "chat.notice.weekly.reached" : "chat.notice.weekly", { percent: weekly!.percent, name: weekly!.name });
-  const hard = Boolean(limit?.blocked) || (!near && (weekly?.percent ?? 0) >= 100);
+  const { near, line, weeklyLine, hard } = detail;
+  if (!line) return null;
   return (
     <span data-limit-indicator="" className="absolute -right-0.5 -top-0.5 z-10">
       <button
@@ -90,52 +167,8 @@ export function EngineLimitIndicator({
           className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute bottom-full right-0 mb-1.5")}
         >
           <p className="px-2 py-1 tabular-nums">{line}</p>
-          {near && weekly && <p className="px-2 py-1 text-ink-secondary">{t(weekly.percent >= 100 ? "chat.notice.weekly.reached" : "chat.notice.weekly", { percent: weekly.percent, name: weekly.name })}</p>}
-          {near && continueAt && (
-            <button
-              type="button"
-              role="menuitem"
-              data-testid="engine-limit-continue"
-              onClick={() => { continueAt.onClick(); setOpen(false); }}
-              className={MENU_ROW}
-            >
-              {continueAt.label}
-            </button>
-          )}
-          {limit?.held && (
-            <button
-              type="button"
-              role="menuitem"
-              data-testid="engine-limit-release"
-              onClick={() => {
-                setOpen(false);
-                void releaseLimit(limit.engine)
-                  .catch((cause) => dispatch({ type: "error", message: cause instanceof Error ? cause.message : String(cause) }));
-              }}
-              className={MENU_ROW}
-            >
-              {t("chat.limit.tryAgainNow")}
-            </button>
-          )}
-          {botId && (
-            <button
-              type="button"
-              role="menuitem"
-              data-testid="engine-limit-switch"
-              onClick={() => { setOpen(false); openModelWindow(botId); }}
-              className={MENU_ROW}
-            >
-              {t("sendBlock.switchEngine")}
-            </button>
-          )}
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => { setOpen(false); dispatch({ type: "toggleAppSettings", open: true, section: "usage" }); }}
-            className={MENU_ROW}
-          >
-            {t("chat.notice.weekly.more")}
-          </button>
+          {near && weeklyLine && <p className="px-2 py-1 text-ink-secondary">{weeklyLine}</p>}
+          <EngineLimitActions detail={detail} botId={botId} onDone={() => setOpen(false)} />
         </div>
       )}
     </span>

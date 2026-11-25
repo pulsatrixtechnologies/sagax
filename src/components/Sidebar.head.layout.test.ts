@@ -118,13 +118,34 @@ describe("sidebar head row height", () => {
     expect(styles).toMatch(/\[data-skin="pulsatrix-light"\] \.content-topbar-strip \{[^}]*height: 36px;/);
   });
 
-  it("with no logo, puts search and New in the title bar's 48px row, level with the lights", () => {
+  // Owner, 2026-11-25 (#5379), measured with a ruler: the head's circles sat
+  // 6px under the window's top edge (a 48px row) while every other round
+  // control of the top row sat 10px under it. The title bar's row is now the
+  // frame's shared header height, so the distance is one number everywhere.
+  it("with no logo, puts search and New in the title bar's row, as far from the top edge as every other round control of the top row", () => {
     expect(sidebar).toContain("const titleBarHead = (macInset || browser) && !showLogo;");
     const row = sidebar.match(/export const SIDEBAR_TITLE_ROW = "([^"]+)"/)?.[1];
     expect(row).toBeDefined();
     const rowClasses = classes(row!);
     expect(rowClasses).toContain("items-center");
-    expect(px(rowClasses.find((token) => token.startsWith("h-"))!)).toBe(48);
     expect(rowClasses).toContain("pr-4");
+    // the row's height is the shared token, never a number of its own
+    expect(rowClasses).toContain("h-(--app-topbar-height)");
+    expect(rowClasses.filter((token) => /^(h|min-h|max-h|py|pt|pb|mt|mb|my)-/.test(token))).toEqual(["h-(--app-topbar-height)"]);
+    const topbar = Number.parseInt(styles.match(/--app-topbar-height:\s*(\d+)px;/)![1]!, 10);
+    const circle = px(classes(CIRCLE_BUTTON).find((token) => token.startsWith("size-"))!);
+    expect(px(classes(SIDEBAR_CIRCLE_BUTTON).find((token) => token.startsWith("size-"))!)).toBe(circle);
+
+    // the distance from the top edge to each row's circles
+    const sidebarTitleTop = (topbar - circle) / 2;
+    const headRow = classes(sidebar.match(/export const SIDEBAR_HEAD_ROW = "([^"]+)"/)![1]!);
+    const sidebarHeadTop = (px(headRow.find((token) => token.startsWith("h-"))!) - circle) / 2;
+    const header = classes(chatView.match(/"@container\/chathead ([^"]+)"/)![1]!);
+    const padY = px(header.find((token) => token.startsWith("py-"))!);
+    const chatHeaderTop = (Math.max(px(header.find((token) => token.startsWith("min-h-"))!), padY * 2 + circle) - circle) / 2;
+    // a docked panel's header and a page's header are `.content-topbar`: min-height the same token, centred
+    expect(styles).toMatch(/\n\.content-topbar \{[^}]*min-height: var\(--app-topbar-height\);/);
+    const tops = { sidebarTitleTop, sidebarHeadTop, chatHeaderTop, contentTopbarTop: (topbar - circle) / 2 };
+    expect(tops).toEqual({ sidebarTitleTop: 10, sidebarHeadTop: 10, chatHeaderTop: 10, contentTopbarTop: 10 });
   });
 });

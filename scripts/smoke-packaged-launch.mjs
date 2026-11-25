@@ -47,7 +47,7 @@ const child = spawn(executable, args, {
   env: {
     ...process.env,
     HOME: home,
-    USERPROFILE: process.platform === "win32" ? home : process.env.USERPROFILE,
+    // Windows known folders require the native OS profile. userData and Sagax data remain disposable.
     SAGAX_DATA_DIR: dataDir,
     SAGAX_SMOKE_TEST: "1",
     SAGAX_SMOKE_CUA: "0",

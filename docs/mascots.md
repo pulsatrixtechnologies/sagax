@@ -439,6 +439,9 @@ palette, the rocket and the witch hat with 0.4, the owner's word for
 `shape-object-look.regression.test.ts`), shown before and after in the pull
 request. Its `egg` is kept there without a picker entry, the app's own Egg
 holding that id (#5279).
+The 0.5 line (#5347) changes no drawing of the app: the stills bake to the
+same text, and only the phone's bundled engine is regenerated. Its glass
+material and its states and marks of a host's own are not used here.
 
 ### Files
 

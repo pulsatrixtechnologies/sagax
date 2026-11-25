@@ -759,6 +759,26 @@ describe("Runtime: a teammate's question reaches the requester waiting on it", (
     : a.assignee.botId === "tester" ? "hold" : undefined;
   const runsOf = (w: World, id: string) => w.runner.runs.filter(r => r.a.id === id);
 
+  it("keeps the requester waiting when a teammate needs the person to act on a card", async () => {
+    const w = world((a, input) => a.assignee.botId === "builder" && input.answer === undefined
+      ? { kind: "needs_input", question: "Provide the key", cards: ["credential-card"] } : undefined);
+    const root = w.runtime.begin(beginReq());
+    const builder = ok(w.runtime.enqueue(toBot("builder", root.id)));
+    w.runtime.end(root.id, { ok: true, text: "Handed out" });
+    w.runtime.tick(); await flush();
+    expect(w.store.get(builder.id)?.cards).toEqual(["credential-card"]);
+    w.runtime.tick(); await flush();
+    expect(runsOf(w, root.id)).toHaveLength(0);
+    expect(w.store.get(root.id)?.status).toBe("waiting");
+
+    expect(w.runtime.answer(builder.id, "Key provided")).toBe(true);
+    w.runtime.tick(); await flush();
+    w.runtime.tick(); await flush();
+    expect(runsOf(w, root.id)).toHaveLength(1);
+    expect(runsOf(w, root.id)[0]!.input.settled?.map(child => child.id)).toEqual([builder.id]);
+    invariants(w);
+  });
+
   it("resumes the requester once with the question, keeps the sibling awaited, and resumes it again only when everything settled", async () => {
     const w = world(asks);
     const root = w.runtime.begin(beginReq());

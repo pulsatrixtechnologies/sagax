@@ -32,12 +32,16 @@ $links = foreach ($folder in 'Programs','DesktopDirectory') {
   if ($link.Count -ne 1) { throw "Expected one Sagax shortcut in $folder." }
   $shell.CreateShortcut($link[0].FullName).TargetPath
 }
-if ($links[0] -ne $links[1] -or !(Test-Path -LiteralPath $links[0] -PathType Leaf)) { throw 'Installed shortcut targets disagree or are missing.' }
-$app = (Get-Item -LiteralPath $links[0]).FullName
+$shortcutsValid = ($links[0] -eq $links[1] -and (Test-Path -LiteralPath $links[0] -PathType Leaf))
+$uninstallerPath = [regex]::Match($entry[0].UninstallString, '^"([^"]+)"').Groups[1].Value
+$app = (Get-Item -LiteralPath (Join-Path (Split-Path $uninstallerPath) 'Sagax.exe')).FullName
+$shortcutsValid = $shortcutsValid -and $links[0] -eq $app
+Write-Output "Shortcut targets both resolve to registered application: $shortcutsValid"
+
 if ((Split-Path $app -Leaf) -ne 'Sagax.exe' -or !$app.StartsWith("$env:LOCALAPPDATA\Programs\", [StringComparison]::OrdinalIgnoreCase)) {
   throw 'Unexpected installation path.'
 }
-Write-Output "Per-user registration and both shortcuts verified for version $env:EXPECTED_VERSION."
+Write-Output "Per-user registration verified for version $env:EXPECTED_VERSION."
 Assert-ReleaseSignature $app
 # NSIS writes its signed uninstaller beside the unpacked application after setup.
 # The package verifier checks the original payload, which excludes that executable.
@@ -55,7 +59,9 @@ try {
 $env:ELECTRON_ENABLE_LOGGING = '1'
 $smoke = @(node scripts/smoke-packaged-launch.mjs --app $app 2>&1)
 if ($LASTEXITCODE -ne 0 -or !($smoke -match 'packaged launch ok in .*fresh userData.*http://127\.0\.0\.1:')) {
-  $smoke | ForEach-Object { if ([string]$_ -match '^QA_DIAG [a-zA-Z0-9 =|\-]+$') { Write-Output ([string]$_) } }
+  $smoke | ForEach-Object { if ([string]$_ -match '^QA_DIAG [a-zA-Z0-9 =|@_./:\-]+$') { Write-Output ([string]$_) } }
   throw 'Packaged renderer did not confirm its local server and desktop bridge within 60 seconds.'
 }
 Write-Output 'Packaged renderer reached its local server and exercised the preload bridge and owner-only API.'
+
+if (!$shortcutsValid) { throw 'Installed shortcut targets disagree or are missing.' }

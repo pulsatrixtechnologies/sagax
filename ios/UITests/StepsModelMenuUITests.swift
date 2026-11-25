@@ -37,6 +37,14 @@ final class StepsModelMenuUITests: XCTestCase {
         XCTAssertTrue(app.buttons["model-mode.build"].exists)
         XCTAssertFalse(app.buttons["model-provider.Claude"].exists)
         shot("model-menu-modes", app)
+        let reasoning = app.buttons["model-mode-reasoning"]
+        XCTAssertTrue(reasoning.label.contains("Raisonnement"), reasoning.label)
+        reasoning.tap()
+        shot("model-menu-reasoning", app)
+        let high = app.buttons["model-reasoning.high"]
+        XCTAssertTrue(high.waitForExistence(timeout: 5))
+        XCTAssertEqual(high.label, "Élevé")
+        app.buttons["model-menu-back"].tap()
         all.tap()
         let claude = app.buttons["model-provider.Claude"]
         XCTAssertTrue(claude.waitForExistence(timeout: 5))

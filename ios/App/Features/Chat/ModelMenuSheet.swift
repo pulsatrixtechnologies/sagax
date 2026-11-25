@@ -218,8 +218,12 @@ struct ModelMenuSheet: View {
                         Text(verbatim: levelRow.label(levelRow.value, automatic: mode == .auto))
                         if !levelRow.disabled { Image(systemName: "chevron.right") }
                     }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .foregroundStyle(levelRow.disabled ? Theme.textTertiary : Theme.textPrimary)
                 .disabled(levelRow.disabled)
+                .accessibilityIdentifier("model-mode-reasoning")
             }
         }
         if !manual.providers.isEmpty || !manual.top.isEmpty {

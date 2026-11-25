@@ -213,8 +213,10 @@ struct ComposerMenuPanel<ModelRow: View>: View {
                         Spacer()
                         if level == reasoning.value { Image(systemName: "checkmark").accessibilityHidden(true) }
                     }
+                    .contentShape(Rectangle())
                 }
                 .accessibilityAddTraits(level == reasoning.value ? .isSelected : [])
+                .accessibilityIdentifier("model-reasoning.\(level ?? "default")")
             }
         case .root: EmptyView()
         }
@@ -228,6 +230,7 @@ struct ComposerMenuPanel<ModelRow: View>: View {
                 if current { Image(systemName: "checkmark") }
                 Image(systemName: "chevron.right").foregroundStyle(.secondary)
             }
+            .contentShape(Rectangle())
         }
         .accessibilityAddTraits(current ? .isSelected : [])
     }

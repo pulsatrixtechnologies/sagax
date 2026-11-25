@@ -199,7 +199,9 @@ extension ComposerModes {
                 guard let level else { return String(localized: "Use session setting") }
                 return variants.first { $0.id == level }.map(ModelVariantRules.label) ?? level
             }
-            return level.map(UltracodeEffort.label) ?? (automatic ? String(localized: "Auto") : String(localized: "Default"))
+            guard let level else { return automatic ? String(localized: "Auto") : String(localized: "Default") }
+            let name = UltracodeEffort.label(level)
+            return Bundle.main.localizedString(forKey: "model.effortLevel.\(level)", value: name, table: nil)
         }
 
         public func choosing(_ level: String?, in selection: ModelSelection) -> ModelSelection {

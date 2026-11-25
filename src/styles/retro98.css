@@ -426,9 +426,6 @@
 [data-skin="retro98"] [data-app-shell] main > div:first-child[class*="chathead"] :is(button:has(.lucide-bug), button:has(.lucide-panel-right), button:has(.lucide-share)) {
   display: none !important;
 }
-[data-skin="retro98"] [data-app-shell] main > div:first-child[class*="chathead"] [data-testid="usage-chip"] {
-  display: none !important;
-}
 [data-skin="retro98"] [data-app-shell] main > div.pt-\[52px\] {
   padding-top: 0 !important;
 }

@@ -795,6 +795,13 @@ rename, delete, reorder, move, sort-by-prefix, restore) takes the same right
 as changing a routine of that bot, no admin. Sort by prefix runs only on the
 person's click and answers an Undo. Bots use `folder` on propose_routine.
 
+The bot panel's Upcoming card is flat (#2174): a folder shows as a `[Folder]`
+title prefix and only an empty folder has a header there. A routine is filed
+from that card by its row menu (Move to each folder of the bot, Take out of
+its folder: `folderMoveTargets`, the Routines page's entries) or by dragging
+its row onto an empty folder's header (#5376). Tests:
+`src/components/routines/RoutineUpcomingMove.dom.test.ts`.
+
 ## YAML workflows (2026-10-27)
 
 `PUT /api/me/workflows` saves a file of send, wait and approve steps

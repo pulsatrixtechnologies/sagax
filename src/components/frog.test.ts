@@ -15,7 +15,7 @@ import { MasteryArt } from "./achievements/mastery-art";
 import { contrastRatio, MASCOT_COLOR_HEX } from "../../shared/mascot-colors";
 import { botMascotLook, CHARACTER_PAINT, completeMascotLook, FROG_DEFAULT_COLOR, FROG_SKIN_TIER, FROG_SKINS, LEGACY_FROG_SKINS, mascotLookSchema } from "../../shared/mascot-look";
 import { MASCOTS, mascotFor } from "./floating-bots/mascots";
-import { CHARACTER_LABEL, FROG_SKIN_LABEL } from "./floating-bots/MascotLookEditor";
+import { CHARACTER_LABEL, FROG_SKIN_LABEL } from "./floating-bots/mascot-look-labels";
 import { colorGroupsFor, skinTierTabs } from "./floating-bots/editor-tabs";
 import { FrogMascot, frogExpressionForMood } from "./FrogMascot";
 import { frogSkinId, frogSkinPaint } from "./skin-fx/frog-skins";

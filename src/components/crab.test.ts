@@ -21,7 +21,7 @@ import {
   mascotLookSchema,
 } from "../../shared/mascot-look";
 import { MASCOTS, mascotFor } from "./floating-bots/mascots";
-import { CHARACTER_LABEL, CRAB_SKIN_LABEL } from "./floating-bots/MascotLookEditor";
+import { CHARACTER_LABEL, CRAB_SKIN_LABEL } from "./floating-bots/mascot-look-labels";
 import { colorGroupsFor, skinTierTabs } from "./floating-bots/editor-tabs";
 import { CrabMascot, crabExpressionForMood, crabHexOf } from "./CrabMascot";
 import { crabSkinId, crabSkinMarks, crabSkinPaint } from "./skin-fx/crab-skins";

@@ -13,7 +13,7 @@ import { rewardKey, skinTier } from "../../shared/achievements";
 import { contrastRatio, MASCOT_COLOR_HEX } from "../../shared/mascot-colors";
 import { botMascotLook, CHARACTER_PAINT, completeMascotLook, LEGACY_OGRE_SKINS, mascotLookSchema, OGRE_DEFAULT_COLOR, OGRE_SKIN_TIER, OGRE_SKINS } from "../../shared/mascot-look";
 import { MASCOTS, mascotFor } from "./floating-bots/mascots";
-import { CHARACTER_LABEL, OGRE_SKIN_LABEL } from "./floating-bots/MascotLookEditor";
+import { CHARACTER_LABEL, OGRE_SKIN_LABEL } from "./floating-bots/mascot-look-labels";
 import { colorGroupsFor, skinTierTabs } from "./floating-bots/editor-tabs";
 import { OgreMascot, ogreExpressionForMood } from "./OgreMascot";
 import { ogreSkinId, ogreSkinLayers, ogreSkinPaint } from "./skin-fx/ogre-skins";

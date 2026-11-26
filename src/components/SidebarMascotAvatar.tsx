@@ -41,7 +41,8 @@ export function SidebarMascotAvatar(props: BotAvatarProps & { botId: string }) {
   const mascotRef = useRef<MausAvatarHandle>(null);
   const reduced = useReducedMotion();
   const look = completeMascotLook(botMascotLook(avatarProps.bot.mascotLook));
-  // a shape in a row is the engine's still (#4145): it joins no pointer loop; a tap plays a move on it
+  // a shape joins no pointer loop of the sidebar's: it lives on the engine's own (#5404: its idle life and
+  // the six states, as the large mascot, only while on screen); a tap plays a move on it
   const [tapMove, setTapMove] = useState<FxMoveRequest | null>(null);
   const alive = !reduced && !avatarProps.animated && look.character !== "shape";
 
@@ -105,6 +106,7 @@ export function SidebarMascotAvatar(props: BotAvatarProps & { botId: string }) {
           {...avatarProps}
           fillBox
           sidebarAlive={alive}
+          shapeAlive
           mascotRef={mascotRef}
           characterMove={tapMove ?? avatarProps.characterMove}
         />

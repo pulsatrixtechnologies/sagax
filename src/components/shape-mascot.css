@@ -1,6 +1,16 @@
 /* The mascot shapes (ShapeMascot.tsx) and Trombi as an avatar. The shapes are
-   drawn by the open-bot-avatar engine (#4145): the large ones move on its own
-   canvas, the small ones are still images, so no CSS animates them. */
+   drawn by the open-bot-avatar engine (#4145): the large ones, and the ones
+   of the sidebar (#5404), move on its own loop, the other small ones are
+   still images, so no CSS animates them. */
+
+/* In the sidebar a shape turns from its still image into the moving drawing
+   and back while one looks at it (it comes on screen, takes its turn to
+   live): a press always lands on the mascot itself, never on the drawing
+   that may be swapped under the pointer before the release, so the row
+   keeps its click (#4433). */
+[data-sidebar-mascot] .shape-mascot > :is(img, svg) {
+  pointer-events: none;
+}
 
 /* Trombi's Retro 98 skin, over his own drawing (the others paint him: skin-fx/trombi-skins.tsx) */
 .trombi-skin-retro98 svg.r98-trombi {

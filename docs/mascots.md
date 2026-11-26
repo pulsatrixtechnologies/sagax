@@ -404,7 +404,9 @@ avatar of the same shape, colour and mood, with no animation loop. The large
 mascot (88 px and up, or asked in full) is live: the engine's frames
 (`avatarFrame`) on its one shared clock, written onto one SVG (volume,
 breath, blinks, pointer gaze, the bot's mood: thinking at work, happy when
-done), resting off screen. A bot at rest whose own face is a working one
+done), resting off screen. The mascots of the sidebar (rows, pinned tiles,
+the rail) are live too, whatever their size: see "Sharp and alive in the
+sidebar" below (#5404). A bot at rest whose own face is a working one
 (a pinned face, a bot about code) keeps its own body: the app asks the
 engine's `idle` for the pose its `thinking` held until 0.2 (`engineFrame`:
 turned, tipped up and rolled, the eyes up and away under two lids). The
@@ -466,9 +468,9 @@ Nobody chooses a fixed state and none is stored (the look's schema refuses a
 holds the conversation passes `agentState` with its messages (the sidebar,
 the chat header). A small avatar draws the state's still (`stateStill`: the
 engine's frame at rest, inferred the first time a bot of that shape is in
-that state, then kept; no ribbon); a large one is live (`avatarFrame` with
-the animator's `stateAge`), ribbons drawn with their gradients
-(`shapesMarkup`). A skin never paints a mark (`skinFace` skips `mark-`
+that state, then kept; no ribbon); a large one, and one of the sidebar
+(#5404), is live (`avatarFrame` with the animator's `stateAge`), ribbons
+drawn with their gradients (`shapesMarkup`). A skin never paints a mark (`skinFace` skips `mark-`
 slices): the dots and the exclamation mark take the body's colour. The
 desktop mascot keeps its own clips.
 
@@ -486,7 +488,8 @@ keys it had (`withEngineLook`; `engineLookOf` fills the defaults in):
 
 Fluffy and Glass are painted by the engine itself on its canvas with WebGL2
 (`shape-material.tsx`, `mountAvatar`), loaded the first time a mascot wears
-one; small avatars mount the engine's still. A material takes the bot's
+one; small avatars mount the engine's still, but the sidebar's, which are
+live (#5404). A material takes the bot's
 colour in place of the skin, and plays none of the fourteen moves; without
 WebGL2 the mascot is drawn flat with its skin. The mascot picker (below)
 sets the material, the mood, the pointer the eyes follow and the motion, for
@@ -497,6 +500,74 @@ The six states are never chosen: they follow the bot's activity
 (`electron/floating-bot-window.mjs`) and the phone's model
 (`MascotLook.EngineSettings`) carry the keys; the phone does not draw them
 yet, and the desktop mascot window does not draw the free colour yet.
+
+### Sharp and alive in the sidebar (#5404)
+
+**Sharp.** A body in a material is a canvas the engine sizes itself: the
+width its host is laid out at, times the device pixel ratio
+(`paintCanvas`). It cannot see a CSS transform. The sidebar draws a shape
+1.6 times larger than its portrait so the body fills the box (`BotAvatar`
+`fillBox`, `SHAPE_FILL_SCALE`); that was a `transform: scale(1.6)`, so the
+browser stretched a 104-pixel bitmap over the 166 pixels the pinned tile
+shows on a Retina screen (60 over 96 in a row): blurry, like a small image
+enlarged. The fill is now the mascot's own laid-out size (`avatarFillBox`:
+an absolutely placed box 1.6 times the portrait, about the same point,
+50% across and 38% down; `ShapeMascot` `drawSize`), so the engine paints as
+many pixels as the screen shows. `size` still says what the mascot is (the
+live threshold, a skin's detail): a filled 64 px avatar is no large mascot.
+Never enlarge a mascot with a transform; lay it out at the size it shows.
+
+**Alive.** `SidebarMascotAvatar` asks every shape alive (`BotAvatar`
+`shapeAlive`, `ShapeMascot` `alive`): the idle life (breath, blinks, the
+eyes on the pointer) and the six states with their motion, on the loop the
+large mascot uses, flat (`useLiveShape`) or in a material (the engine's own
+canvas loop). It is still under reduced motion (the bot's Motion setting of
+the picker's gear, else the device's), and a tap still plays its move.
+
+**The seats** (`shape-alive.ts`). A live mascot is redrawn thirty times a
+second, and a sidebar may show dozens: a page gives out `ALIVE_SEATS` seats.
+Only a mascot on screen (or within 100 px of it) asks for one; off screen it
+is the still image. While there are seats for every mascot on screen, all
+of them live all the time. Past that, a bot that is doing something sits
+first, and the mascots at rest take turns: every `ALIVE_TURN_MS`, the one
+that waited longest takes the seat of the one that lived longest, which
+rests as its still (one seat at a time: a body in a material builds its
+mesh when it sits, and several at once made a frame of 70 ms). A material makes no context
+per mascot: the engine paints every Fluffy body through one shared WebGL2
+context, and every Glass body through another. The number of seats comes
+from the measure of `scripts/capture/sidebar-mascot-quality.mjs`
+(`--seats`), which also takes the captures (the tile, a row and the chat
+pill enlarged four times, pixel for pixel) and reads each canvas' pixels
+against the pixels it is shown over.
+
+What it costs, thirty bots, headless Chrome at a device pixel ratio of 2,
+one core = 100% (2026-11-26, the usual window: the tile and six rows
+alive; before: every mascot a still, the page 3 to 5%, the GPU process 1
+to 6%):
+
+| Finish | Skin | Page (renderer) | GPU process | Frames a second |
+|---|---|---|---|---|
+| Flat | dark | 18% | 6% | 60 |
+| Flat | light | 19% | 18% | 60 |
+| Fluffy | dark | 9% | 12% | 60 |
+| Fluffy | light | 8% | 30% | 60 |
+| Glass | dark | 7% | 11% | 60 |
+| Glass | light | 7% | 29% | 60 |
+
+With the thirty bots on screen at once (a window 2400 px tall), eight alive:
+the same figures within a few points and 60 frames a second, but for a
+material in a light skin, which falls to 30 frames a second (GPU process
+about 70%). The cause is the light skins' drop shadow under every mascot
+(`--mascot-filter`, `styles.css`): a body in a material is a canvas, a layer
+of its own, so its shadow is drawn by the compositor, and one canvas that
+changes makes the compositor draw again the shadow of every canvas near it,
+down the whole column (a single live mascot is enough; stills that are
+images, the flat ones, are not concerned). Open as #5414.
+
+Covered by
+`scripts/testing/sidebar-mascot-quality.e2e.test.ts` (a real browser at a
+device pixel ratio of 2: sharpness, motion, reduced motion, the seats),
+`shape-alive.test.ts` and `SidebarMascotAvatar.fill.test.ts`.
 
 ### The mascot picker (#5369)
 
@@ -552,6 +623,7 @@ with a key this build does not know keeps everything else
 | Phone | `ios/Sources/CompanionCore/ShapeEngine*.swift`, `ShapeMascotView.swift` |
 | Captures and cost measure | `scripts/capture/shape-mascots.mjs` |
 | States and look settings (#5349) | `src/lib/mascot.ts` `agentStateForBot`, `shape-avatar.ts` `enginePose` and `stateStill`, `shape-material.tsx`, `scripts/capture/mascot-picker.mjs` |
+| Sharp and alive in the sidebar (#5404) | `Avatar.tsx` `avatarFillBox`, `shape-alive.ts`, `SidebarMascotAvatar.tsx`, `scripts/capture/sidebar-mascot-quality.mjs`, `scripts/testing/sidebar-mascot-quality.e2e.test.ts` |
 | Screenshots (before #4145) | `docs/screenshots/shapes`, `docs/screenshots/shape-engine-v2` |
 | Say and sprout fix (#2981): before/after, rest and orbit move | `docs/screenshots/shapes-say-sprout` |
 | Sprout restored and say mascot look (#3104): before main and after, rest and move | `docs/screenshots/shapes-regression-2026-11-09` |

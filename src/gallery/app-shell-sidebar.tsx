@@ -37,6 +37,7 @@ import { publishLiveFrame } from "../lib/live-events";
 import { longConversation, moreBots, readScene, sceneTeamWork, startWorking } from "./app-shell-scene";
 import type { ServerFrame } from "../../shared/wire";
 import { MASCOT_SHAPES } from "../../shared/mascot-look";
+import { setAliveSeats } from "../components/shape-alive";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -203,7 +204,15 @@ const shapeCount = Math.min(Number(params.get("shapes")) || 0, 80);
 const SHAPE_COLORS = ["blue", "green", "orange", "pink", "teal", "purple", "red", "yellow"];
 // one bot in five wears a premium shape skin
 const SHAPE_SKIN_CYCLE = ["galaxy", "holo", "molten", "neon", "crystal", "circuit", "gold", "chrome"];
-const shaped = (entry: Bot, i: number): Bot => ({ ...entry, color: SHAPE_COLORS[i % SHAPE_COLORS.length]!, mascotLook: { character: "shape", shape: MASCOT_SHAPES[i % MASCOT_SHAPES.length], ...(i % 5 === 2 ? { skins: { shape: SHAPE_SKIN_CYCLE[Math.floor(i / 5) % SHAPE_SKIN_CYCLE.length] } } : {}) } } as Bot);
+// ?material=fluffy|glass (with ?shapes=N): every bot wears that material, the
+// pinned one a cat, the scene the sidebar mascots' sharpness, motion and cost
+// are measured on (scripts/capture/sidebar-mascot-quality.mjs).
+const shapeMaterial = ["fluffy", "glass"].includes(params.get("material") ?? "") ? params.get("material") : null;
+// ?seats=N: how many small mascots live at once, for the measure that chose the page's number (shape-alive.ts)
+if (params.get("seats")) setAliveSeats(Number(params.get("seats")));
+// ?calm=1: no bot of the shapes team is at work (every mascot at rest), to tell the cost of the idle life from a state's
+const calm = params.get("calm") === "1";
+const shaped = (entry: Bot, i: number): Bot => ({ ...entry, ...(calm ? { busy: false, unread: false } : {}), color: SHAPE_COLORS[i % SHAPE_COLORS.length]!, mascotLook: { character: "shape", shape: shapeMaterial && i === 0 ? "cat" : MASCOT_SHAPES[i % MASCOT_SHAPES.length], ...(shapeMaterial ? { material: shapeMaterial } : {}), ...(i % 5 === 2 ? { skins: { shape: SHAPE_SKIN_CYCLE[Math.floor(i / 5) % SHAPE_SKIN_CYCLE.length] } } : {}) } } as Bot);
 const shapeTeam: Bot[] = shapeCount
   ? [
     ...team.map(shaped),

@@ -26,7 +26,7 @@ import { flattenPath } from "../../shared/shape-avatar-outline";
 import { OBJECT_SHAPE_BY_ID } from "../../shared/shape-avatar-presets";
 import type { ShapeAvatarDef } from "../../shared/shape-avatar-def";
 import { resetAchievementsForTests } from "@/lib/achievements";
-import MascotLookEditor from "./floating-bots/MascotLookEditor";
+import MascotPicker from "./floating-bots/MascotPicker";
 import { lookDefinition, shapeDefinition } from "./shape-avatar";
 
 const OWNER = "a shape's look changes only with the owner's word (see the head of this file)";
@@ -65,22 +65,24 @@ describe("every shape keeps its approved look", () => {
     expect(body("sprout"), OWNER).toBe("M50 46C40 40 22 34 14 26C6 18 10 6 24 6C38 6 46 22 50 36C54 22 62 6 76 6C90 6 94 18 86 26C78 34 60 40 50 46L68 50C78 52 84 64 82 76L78 94C76 98 62 100 50 100C38 100 24 98 22 94L18 76C16 64 22 52 32 50Z");
   });
 
-  it("the picker draws every shape at 40 px in a 78 px tile", () => {
+  it("the picker draws every shape at 52 px in its cell, five to a row", () => {
+    // [M-20261125-064] the mock-up the owner validated: the mascot picker's grid (#5369), five shapes to a row, in place
+    // of the Shape tab's 40 px drawings in 78 px tiles. The shapes' own look (outline, size in its box, eyes) is untouched.
     resetAchievementsForTests({ unlocks: NOTHING_LOCKED });
     const html = renderToStaticMarkup(
-      createElement(MascotLookEditor, {
+      createElement(MascotPicker, {
         bot: { color: "blue" as never, mascotSkin: "none" as never, mascotLook: botMascotLook({ character: "shape", shape: "circle" }) },
         onPatch: () => undefined,
-        initialTab: "shape",
+        initialTab: "shapes",
       }),
     );
-    expect(html, OWNER).toContain("minmax(76px,1fr)");
+    expect(html, OWNER).toContain("grid grid-cols-5");
     for (const shape of MASCOT_SHAPES) {
       const at = html.indexOf(`data-character-shape="${shape}"`);
       expect(at, `${shape} tile`).toBeGreaterThan(0);
       const tile = html.slice(html.lastIndexOf("<button", at), html.indexOf("</button>", at));
-      expect(tile, `${shape} tile: ${OWNER}`).toContain("h-[78px]");
-      expect(tile, `${shape} tile: ${OWNER}`).toMatch(new RegExp(`style="width:40px;height:40px" data-shape="${shape}"`));
+      expect(tile, `${shape} tile: ${OWNER}`).toContain('class="mp-cell relative"');
+      expect(tile, `${shape} tile: ${OWNER}`).toMatch(new RegExp(`style="width:52px;height:52px" data-shape="${shape}"`));
     }
   });
 

@@ -18,7 +18,8 @@ import {
 } from "@/lib/mascot";
 import { EXPRESSION_COUNT } from "@/components/CursorAvatar";
 import { OwlAvatar, type OwlAvatarHandle } from "@/components/OwlAvatar";
-import { AppearancePane } from "@/components/appearance/AppearancePane";
+import MascotPicker from "@/components/floating-bots/MascotPicker";
+import { MENU_BOX } from "@/components/menu-look";
 import { OWL_WING_MOVES, type OwlWingMove } from "@/lib/owl/owl-art";
 import { StoreProvider, type Bot } from "@/state/store";
 import { loadAchievements, setAchievementsFetcher } from "@/lib/achievements";
@@ -590,7 +591,9 @@ function PickerScene({ params }: { params: URLSearchParams }) {
     <div data-skin={params.get("theme") ?? "pulsatrix"} className="min-h-screen bg-app p-6 text-ink">
       <div className="mx-auto w-[702px] max-w-full rounded-2xl bg-app px-8 pb-6 pt-4">
         <StoreProvider>
-          <AppearancePane bot={bot} onPatch={(patch) => setBot((current) => ({ ...current, ...patch }))} />
+          <div className={`${MENU_BOX} w-max`}>
+            <MascotPicker bot={bot} onPatch={(patch) => setBot((current) => ({ ...current, ...patch }))} />
+          </div>
         </StoreProvider>
       </div>
     </div>

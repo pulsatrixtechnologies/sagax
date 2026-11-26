@@ -1,14 +1,14 @@
 // The bot's avatar at the top of the bot panel and of the bot's profile page.
 // It plays the bot's moves as they happen (mascotMotion from the store) and
 // opens the bot's profile page when clicked (#2126); on the profile page
-// itself a click goes to Settings > Appearance, where the character, its look
-// and the picture sources live (appearance/AppearancePane).
+// itself a click opens the mascot picker under the mascot
+// (floating-bots/MascotPickerPopover).
 // A right click opens the bot panel's "..." menu where the pointer is. In
 // the New bot dialog the bot is a draft the store does not hold yet, so the
-// click shows the same Appearance pane under the avatar instead.
+// click opens the same mascot picker under the draft's avatar.
 // A picture dropped on the avatar, or pasted while it has focus, becomes the
 // bot's picture through the same upload as the Appearance pane (25 MB).
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { avatarImageFrom, dragMayCarryImage } from "@/lib/avatar-input";
 import { cn } from "@/lib/cn";
@@ -19,7 +19,7 @@ import { useBotEditor } from "./bot-settings/BotEditorContext";
 import { t } from "@/lib/i18n";
 import { type MausMotion, type MausState } from "@/lib/mascot";
 import { BotAvatar } from "./Avatar";
-import { AppearancePane } from "./appearance/AppearancePane";
+import { MascotPickerPopover } from "./floating-bots/MascotPickerPopover";
 import { useAvatarSources, type AvatarPatch } from "./appearance/AvatarSources";
 
 export function BotProfileAvatarCard({
@@ -54,6 +54,7 @@ export function BotProfileAvatarCard({
   const { draft } = useBotEditor();
   const [draftOpen, setDraftOpen] = useState(false);
   const [dropping, setDropping] = useState(false);
+  const avatarRef = useRef<HTMLButtonElement>(null);
   const sources = useAvatarSources(bot, onPatch);
   const open = () => {
     if (draft) setDraftOpen((value) => !value);
@@ -67,6 +68,7 @@ export function BotProfileAvatarCard({
           pt-5 from 80px up (panel 92, wizard 104, profile 144) so a jump clears the box. */}
       <div className={cn("flex justify-center pb-0", size >= 80 ? "pt-5" : "pt-3")}>
         <button
+          ref={avatarRef}
           type="button"
           aria-label={t("botPanel.avatar.edit")}
           aria-expanded={draft ? draftOpen : undefined}
@@ -112,9 +114,13 @@ export function BotProfileAvatarCard({
       </div>
       {sources.error && <p role="alert" className="-mt-1 pb-2 text-center text-[11.5px] text-danger">{sources.error}</p>}
       {draft && draftOpen && (
-        <div data-avatar-appearance="" className="pb-2">
-          <AppearancePane bot={bot} onPatch={onPatch} />
-        </div>
+        <MascotPickerPopover
+          bot={bot}
+          anchorRef={avatarRef}
+          onPatch={onPatch}
+          onClose={() => setDraftOpen(false)}
+          onUseMascot={(bot.avatarCrop ?? "mascot") !== "mascot" ? () => onPatch({ avatarCrop: "mascot" }) : undefined}
+        />
       )}
     </div>
   );

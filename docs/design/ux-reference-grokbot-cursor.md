@@ -380,9 +380,10 @@ avec l'app de référence : #3388 ; ce patron : #3398.
   passe dessous.
 - Onglets en pilules : Général, Objectifs, Connaissances, Analytique (Simple
   masque Analytique). Apparence n'est plus un onglet (owner 2026-11-19, remplace #4420) :
-  c'est une modale que la rangée Apparence de Réglages (M-20261119-081) et la mascotte
-  de l'en-tête ouvrent (infobulle et aria-label « Apparence », curseur main), avec tout
-  le contenu de l'ancien onglet. Rien d'autre ne l'ouvre : la roue dentée du panneau du
+  c'est le sélecteur de mascotte (8.3, #5369), un petit panneau ancré sous la mascotte,
+  que la rangée Apparence de Réglages (M-20261119-081) et la mascotte de l'en-tête
+  ouvrent (infobulle et aria-label « Apparence », curseur main) ; ce n'est plus une
+  modale [M-20261125-063]. Rien d'autre ne l'ouvre : la roue dentée du panneau du
   bot ouvre la page sur Général, sans modale par-dessus (M-20261119-082). Personnalité
   n'a plus de rangée (Connaissances > Dossier du bot > SOUL.md ouvre sa page),
   Partagé avec non plus (la bulle Partager de la barre tient les personnes, les niveaux
@@ -2400,6 +2401,40 @@ for the same reason. Tests: `GuidedTour.test.ts`, `guided-tour.test.ts`.
 
 ### 8.3 Mascottes, formes et bots flottants
 
+#### Sélecteur de mascotte (2026-11-25, #5369)
+
+Décision du propriétaire, maquette validée [M-20261125-063] [M-20261125-064]
+[M-20261125-065] : l'apparence d'un bot se règle dans un petit panneau calqué sur le
+sélecteur du site open-bot-avatar (0.5.1), ancré sous la mascotte de la page du bot.
+Desktop seulement pour l'instant.
+
+- Pas de fenêtre ni d'aperçu : la vraie mascotte au-dessus du panneau sert d'aperçu
+  et change en direct. Chaque choix s'enregistre tout de suite.
+- Deux onglets en pastilles, Formes et Personnages [D-20261125-030], et une roue dentée
+  à droite : « Les yeux suivent le pointeur » et « Mouvement » (Système, Réduit, Complet).
+- Une grille de 5 par rangée, dans la couleur et la matière du bot ; la mascotte portée
+  est entourée ; le nom est en infobulle, jamais en texte. La dernière case des formes
+  est un « + » cerclé, seule entrée pour ajouter une forme [M-20261125-065].
+- Deux pilules d'icônes, sans texte : la matière (unie, peluche, verre) et l'humeur
+  (neutre, joyeuse). Les skins sont fondus avec la matière [D-20261125-029] : le dernier
+  segment de la pilule ouvre la liste des skins par rareté, avec les cadenas et la ligne
+  qui nomme le succès. Un personnage qui n'est pas une forme n'a que ses skins.
+- Une option qui ne s'applique pas est absente, jamais grisée. Seule exception :
+  la flèche de retour, au repos tant que la couleur n'a pas changé.
+- Une seule rangée de couleurs [D-20261125-028] : 11 couleurs rapides, l'anneau de
+  couleur libre, la flèche de retour. Un bot qui porte une ancienne couleur la garde
+  et la voit sur l'anneau.
+- Ont quitté l'écran avec la maquette : la bannière d'aperçu, les sept onglets,
+  « Au hasard », « Réinitialiser », l'aperçu des six états, le volume, la couleur des
+  yeux, les filtres et les étagères. Les valeurs déjà enregistrées restent dessinées.
+- Choix d'agent, pas encore vus par le propriétaire : le petit mouvement des icônes au
+  survol et au choix (les icônes amont sont fixes), la case choisie en fond arrondi,
+  la matière à gauche et l'humeur à droite, un personnage verrouillé qui ne réagit
+  pas au clic.
+
+Code : `src/components/floating-bots/MascotPicker.tsx`, `MascotPickerPopover.tsx`,
+`mascot-picker.ts`. Détail : `docs/mascots.md`, « The mascot picker ».
+
 #### Shapes set and eyes (2026-10-28)
 
 Decision (maintainer): the Shapes bodies are the bloub network's tables (MIT, NOTICE
@@ -2625,12 +2660,13 @@ Electron restart (no HMR); launch-test them before committing.
   window falls back to the plain owl rather than drawing nothing.
 - The character (owl, Shapes, Trombi, Bunbu, Shiba, Frog) and its look live with the bot
   (`bot.mascotLook`, `shared/mascot-look.ts`, validated by the server), chosen
-  in the persona editor's Appearance gallery (`MascotLookEditor.tsx`) and
+  in the mascot picker (`MascotPicker.tsx`, #5369: see the rules just below) and
   drawn by `BotAvatar` for every bot avatar in the app; never draw a bot's
   mascot outside `BotAvatar`. By default the owl and its Common skins are
-  the bot's to wear. The gallery shows every other character on its To
-  unlock shelf, greyed with its achievement and progress: it can be
-  previewed, not worn. Shapes unlocks with a linked Grok account. Trombi
+  the bot's to wear. The picker shows every other character in its grid,
+  greyed with its padlock, its achievement and progress: it is not worn
+  (and no longer previewed: the picker has no preview). Shapes unlocks with
+  a linked Grok account; locked, every shape carries the padlock and the "+" is absent. Trombi
   stays out of the gallery until its hidden command earns it (an easter egg
   behind a secret achievement; do not write the command down). Bunbu and
   every skin above Common unlock with their achievement. Every skin card

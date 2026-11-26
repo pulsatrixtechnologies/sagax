@@ -13,17 +13,17 @@ describe("the engine's look settings on a bot's look", () => {
 
   it("a look stored before the settings reads as today's drawing, and stays the same object when completed", () => {
     const stored = { character: "shape", shape: "cup", skins: { shape: "gold" } } as const;
-    expect(engineLookOf(stored)).toEqual({ material: "flat", mood: "neutral", eyeColor: null, depth: null, followPointer: true });
+    expect(engineLookOf(stored)).toEqual({ material: "flat", mood: "neutral", eyeColor: null, depth: null, followPointer: true, bodyColor: null, motion: "system" });
     // nothing is added to the look itself: an older build reads it as before
     expect(completeMascotLook(stored)).toEqual({ character: "shape", style: "2d", shape: "cup", skins: { shape: "gold", trombi: "classic", bunbu: "plain", shiba: "plain", grump: "plain", ogre: "plain", frog: "plain", crab: "plain" } });
-    expect(engineLookOf(undefined)).toEqual({ material: "flat", mood: "neutral", eyeColor: null, depth: null, followPointer: true });
+    expect(engineLookOf(undefined)).toEqual({ material: "flat", mood: "neutral", eyeColor: null, depth: null, followPointer: true, bodyColor: null, motion: "system" });
   });
 
   it("keeps every setting through the schema and the complete look", () => {
     const stored = { character: "shape", shape: "star", material: "fluffy", mood: "happy", eyeColor: "#2A8FE8", depth: 10, followPointer: false };
     const parsed = mascotLookSchema.parse(stored);
     expect(parsed).toEqual({ ...stored, eyeColor: "#2a8fe8" });
-    expect(engineLookOf(parsed)).toEqual({ material: "fluffy", mood: "happy", eyeColor: "#2a8fe8", depth: 10, followPointer: false });
+    expect(engineLookOf(parsed)).toEqual({ material: "fluffy", mood: "happy", eyeColor: "#2a8fe8", depth: 10, followPointer: false, bodyColor: null, motion: "system" });
     const complete = completeMascotLook(parsed);
     expect(complete.material).toBe("fluffy");
     expect(complete.mood).toBe("happy");

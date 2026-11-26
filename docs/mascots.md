@@ -151,7 +151,7 @@ open or its bot waits for an approval, never under reduced motion). When
 idle it grooms, flicks its tail, slow blinks, kneads, loafs and hops onto a
 ledge. Events: a head bonk at a nudge, kneading for an achievement, a pounce
 on a new message, curled up before a snooze, a hiss at a refused approval,
-ears flat on an error. The Appearance gallery and the mascot's Moves menu offer
+ears flat on an error. The bot page's mascot and the desktop mascot's Moves menu play
 stretch, groom, knead, pounce, ledge, hiss, bonk, slow blink, tail flick,
 yawn, curl and wave.
 
@@ -419,12 +419,13 @@ into the egg, the hexagon or the triangle, and the dots, mark, badge, rings,
 ribbons and specks beside it; a tap on a shape in the sidebar plays one.
 Colour stays on the bot. Custom definitions on
 `mascotLook.avatarDef` are fitted into the engine's box. That field also
-takes an open-bot-avatar definition as is (#4160): Appearance > Shape >
-Paste a definition takes the JSON the engine's editor or its prompt gives,
+takes an open-bot-avatar definition as is (#4160): the circled "+" at the
+end of the mascot picker's Shapes grid (#5369) takes the JSON the engine's
+editor or its prompt gives (pasted, typed, dropped or chosen as a file),
 checks it with `validateAvatar` (`shared/engine-avatar-def.ts`, again on the
-server through `mascotLookSchema`) and stores it on the look; the Shape grid
-shows it first, by its name, as the chosen shape, and picking a catalog
-shape drops it. The bot's catalog shape stays on the look, so a build or a
+server through `mascotLookSchema`) and stores it on the look; the grid
+shows it after the catalog shapes, named in its tooltip, as the chosen shape,
+and picking a catalog shape drops it. The bot's catalog shape stays on the look, so a build or a
 platform that cannot draw the pasted one shows that shape (a stored
 definition that no longer validates drops alone, never the whole look). The former desktop
 engine (`shape-engine.ts`, `shape-volume.ts`, `shape-motion.ts`) stays as the
@@ -487,12 +488,53 @@ Fluffy and Glass are painted by the engine itself on its canvas with WebGL2
 (`shape-material.tsx`, `mountAvatar`), loaded the first time a mascot wears
 one; small avatars mount the engine's still. A material takes the bot's
 colour in place of the skin, and plays none of the fourteen moves; without
-WebGL2 the mascot is drawn flat with its skin. The editor (Edit bot >
-Appearance, `MascotLookEditor.tsx`) shows the Material, Face and States tabs
-for the shapes only; States previews a state on the stage and saves nothing.
-The desktop window's validator (`electron/floating-bot-window.mjs`) and the
-phone's model (`MascotLook.EngineSettings`) carry the keys; the phone does
-not draw them yet. Captures: `scripts/capture/mascot-settings.mjs`.
+WebGL2 the mascot is drawn flat with its skin. The mascot picker (below)
+sets the material, the mood, the pointer the eyes follow and the motion, for
+the shapes only. The volume (`depth`) and the eye colour (`eyeColor`) are no
+longer set on the screen: a value a bot already stores is kept and drawn.
+The six states are never chosen: they follow the bot's activity
+(`agentStateForBot`). The desktop window's validator
+(`electron/floating-bot-window.mjs`) and the phone's model
+(`MascotLook.EngineSettings`) carry the keys; the phone does not draw them
+yet, and the desktop mascot window does not draw the free colour yet.
+
+### The mascot picker (#5369)
+
+How a bot's look is chosen on the desktop, modelled on the picker of the
+open-bot-avatar site (0.5.1). There is no Appearance window and no preview:
+a click on the bot page's mascot (or the Appearance row of its settings)
+opens a small panel anchored under the mascot (`MascotPickerPopover.tsx`),
+and the mascot above it changes as one picks. Every pick saves at once.
+
+- Two tabs, Shapes and Characters (the owl, Trombi, Bunbu, Shiba, Grump,
+  Ogre, Frog, Crab), and a gear at their right: "Eyes follow the pointer"
+  and "Motion" (System, Reduced, Full; `mascotLook.motion`).
+- A grid, five to a row, in the bot's colour and material, the worn mascot
+  outlined, names as tooltips. A locked character keeps its padlock and its
+  tooltip names the achievement; Shapes locked puts the padlock on every
+  shape and hides the "+". The thumbnails are stills and the one under the
+  pointer comes alive: fifty live mascots cost too much (opening about two
+  seconds in Fluffy and Glass, one engine canvas each; measured by
+  `scripts/capture/mascot-picker.mjs`).
+- The circled "+" ends the Shapes grid: its small panel imports a
+  definition. It also holds Generate when the picker is given `onGenerate`;
+  nothing passes it today, so the panel offers the import alone.
+- Two pills of icons, no text: the material (flat, fluffy, glass, then a
+  last segment that opens the character's skins by rarity, with padlocks and
+  the line that names the achievement) and the mood (neutral, happy). A
+  character that is not a shape gets its skins only. A control that does not
+  apply is absent, never greyed. The icons are the upstream drawings; their
+  small move on hover and on a pick is this app's own (upstream's are still).
+- One colour row: eleven quick colours, the free colour ring
+  (`mascotLook.bodyColor`, any `#rrggbb`; `bot.color` takes the nearest named
+  colour for the banner and accents) and the arrow back to the colour the
+  panel opened on. The 63 colours of the palettes are no longer listed: a bot
+  wearing one keeps it and sees it on the ring.
+
+The rules (what shows, what a pick saves) are in `mascot-picker.ts`, the
+drawing in `MascotPicker.tsx`, the skins in `skin-catalog.tsx`. A look read
+with a key this build does not know keeps everything else
+(`botMascotLook`, `MascotLook` on the phone); a write stays strict.
 
 ### Files
 
@@ -500,7 +542,8 @@ not draw them yet. Captures: `scripts/capture/mascot-settings.mjs`.
 |---|---|
 | Geometry (radii, faces, skins) | `shared/mascot-geometry.json` |
 | Portable definition schema | `shared/shape-avatar-def.ts` |
-| A pasted open-bot-avatar definition (#4160) | `shared/engine-avatar-def.ts`, `MascotLookEditor.tsx` `PasteShape` |
+| A pasted open-bot-avatar definition (#4160) | `shared/engine-avatar-def.ts`, `mascot-picker.ts` `pastedShapeLook`, `MascotPicker.tsx` `AddShapePanel` |
+| The mascot picker (#5369) | `src/components/floating-bots/MascotPicker.tsx`, `MascotPickerPopover.tsx`, `mascot-picker.ts`, `mascot-picker.css`, `skin-catalog.tsx`, `scripts/capture/mascot-picker.mjs` |
 | Object presets (bodies and eyes read from `mascot-geometry.json`) | `shared/shape-avatar-presets.ts` |
 | Generate from a description | `shared/shape-avatar-generate.ts`, `server/media/shape-avatar.ts` |
 | Drawing (the engine's definitions, still and live) | `src/components/shape-avatar.ts`, `ShapeMascot.tsx`, `shared/shape-avatars.json`, `third_party/open-bot-avatar/` |
@@ -508,7 +551,7 @@ not draw them yet. Captures: `scripts/capture/mascot-settings.mjs`.
 | Generate a new shape (dev only, not in the UX) | `scripts/generate-shape.mjs`, `docs/design/shape-generator.md` |
 | Phone | `ios/Sources/CompanionCore/ShapeEngine*.swift`, `ShapeMascotView.swift` |
 | Captures and cost measure | `scripts/capture/shape-mascots.mjs` |
-| States and look settings (#5349) | `src/lib/mascot.ts` `agentStateForBot`, `shape-avatar.ts` `enginePose` and `stateStill`, `shape-material.tsx`, `scripts/capture/mascot-settings.mjs` |
+| States and look settings (#5349) | `src/lib/mascot.ts` `agentStateForBot`, `shape-avatar.ts` `enginePose` and `stateStill`, `shape-material.tsx`, `scripts/capture/mascot-picker.mjs` |
 | Screenshots (before #4145) | `docs/screenshots/shapes`, `docs/screenshots/shape-engine-v2` |
 | Say and sprout fix (#2981): before/after, rest and orbit move | `docs/screenshots/shapes-say-sprout` |
 | Sprout restored and say mascot look (#3104): before main and after, rest and move | `docs/screenshots/shapes-regression-2026-11-09` |

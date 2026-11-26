@@ -168,6 +168,6 @@ When a character lands (`feat/mascot-shiba`, `-grump`, `-ogre`, `-frog`):
    `shared/mascot-unlocks.ts` (Shiba's are already there).
 3. Register its art in `MASTERY_ART` (`src/components/achievements/mastery-art.tsx`).
 4. Call `skinLock(unlocks, "<id>", skin)` and `characterLock(...)` in its
-   picker (`MascotLookEditor.tsx`), as the other characters do: the lock,
+   picker (`floating-bots/MascotPicker.tsx`), as the other characters do: the lock,
    the hint and the progress come with them.
 5. Run `node ios/parity/achievements-catalog.mjs` so the phone gets its names.

@@ -2,7 +2,6 @@ access.engineMissing.owner
 access.worksOn
 approval.action.alwaysAllowCommand
 approval.action.alwaysAllowSession
-approval.action.alwaysDeny
 approval.action.alwaysDenyRuleHint
 approval.always.scopeLine
 approval.pending
@@ -186,7 +185,6 @@ connectApps.detail.appToolsNote
 connectApps.detail.noAccountNeeded
 connectApps.detail.uninstallAppConfirm
 connectApps.filter.category
-connectApps.manage.tab.installed
 connectApps.status.notConnected
 connectApps.subtitle
 connectApps.unavailable.checking
@@ -230,7 +228,6 @@ folder.moveNamed
 folder.namedSettings
 folder.newIn
 folder.newNamed
-groupPanel.folderAdminOnly
 keys.optional
 keys.other.title
 keys.providers.subtitle
@@ -396,16 +393,11 @@ persona.action.rename
 persona.categories
 persona.files.new
 persona.overview.actions
-persona.overview.description
-persona.overview.noDescription
 persona.rules.editorLabel
 persona.rules.over
 persona.rules.sets.title
 persona.searchLabel
-planUsage.connect
 planUsage.empty
-planUsage.noWindows
-planUsage.notSignedIn
 planUsage.subtitle
 planUsage.title
 pro.disclaimer
@@ -497,12 +489,9 @@ settings.engines.subtitle
 settings.experimental.boatComputer
 settings.experimental.boatComputerDetail
 settings.experimental.browserDescription
-settings.experimental.decisionModel
-settings.experimental.meetingNotetakerServerOld
 settings.experimental.routineGroupSettings
 settings.experimental.routineGroupSettingsAria
 settings.experimental.routineGroupSettingsDetail
-settings.experimental.serverOld
 settings.experimental.skillReviewNoEngine
 settings.experimental.vpsComputer
 settings.experimental.vpsComputerDetail
@@ -587,8 +576,6 @@ settings.threadsView.hidden
 settings.toolCalls.show
 settings.universalPins.subtitle
 settings.universalPins.title
-settings.updates.away.short
-settings.updates.channel.short
 settings.updates.latest
 settings.updates.prerelease.subtitle
 settings.userBubbles.aria

@@ -1,5 +1,6 @@
 // Keys of en.json that no shipped source reads, as a literal or as a
-// template on an ancestor (`prefix.${...}`, "prefix." + ...).
+// template on an ancestor (`prefix.${...}`, "prefix." + ...), and that the
+// iPad shell does not copy either.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -35,6 +36,13 @@ export function unreadLocaleKeys(repo: string): string[] {
     for (const match of code.matchAll(template)) prefixes.add(match[1]!);
     for (const match of code.matchAll(plus)) prefixes.add(match[1]!);
   }
+  // The iPad shell copies desktop labels by key (ios/parity/desktop-wording.json,
+  // checked by ios-desktop-wording.test.ts): a key named there is read, even
+  // when no desktop surface shows it any more.
+  try {
+    const ipad = JSON.parse(readFileSync(join(repo, "ios/parity/desktop-wording.json"), "utf8")) as Record<string, string>;
+    for (const [label, key] of Object.entries(ipad)) if (label !== "//") literals.add(key);
+  } catch { /* a checkout without the phone */ }
   const unread: string[] = [];
   for (const key of Object.keys(en)) {
     if (literals.has(key)) continue;

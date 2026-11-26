@@ -24,6 +24,7 @@ import { cleanDisabledModels, cleanFavoriteModels } from "../../shared/offered-m
 import { cleanHarnessDefaults } from "../../shared/harness-matrix.ts";
 import { cleanContextDefaults } from "../../shared/context-size.ts";
 import { cleanAccountSwitchDefaults, type AccountSwitchSetting } from "../../shared/account-switch.ts";
+import { cleanModeModels, modeModelsEmpty, type ModeModels } from "../../shared/mode-models.ts";
 import { writeFileAtomic } from "../atomic.ts";
 
 export const PERSON_SETTINGS_FILE = "person-settings.json";
@@ -52,6 +53,8 @@ export interface PersonSettings {
    * `{ <provider id>: { strategy, threshold } }` (shared/account-switch.ts).
    * Absent when none. */
   accountSwitchByProvider?: Record<string, AccountSwitchSetting>;
+  /** M-20261125-074: the person's own modes (shared/mode-models.ts). */
+  modeModels?: ModeModels;
   /** #1940: days before a pending approval in this person's inbox expires
    * (0 = never). Absent follows the organization setting, then the env /
    * default (7). */
@@ -122,6 +125,7 @@ function parse(value: unknown): PersonSettings {
   const harnessByProvider = cleanHarnessDefaults(raw.harnessByProvider);
   const contextByProvider = cleanContextDefaults(raw.contextByProvider);
   const accountSwitchByProvider = cleanAccountSwitchDefaults(raw.accountSwitchByProvider);
+  const modeModels = cleanModeModels(raw.modeModels);
   const pendingApprovalExpireDays = parseExpireDays(raw.pendingApprovalExpireDays);
   const aboutMe = typeof raw.aboutMe === "string" && raw.aboutMe.length <= ABOUT_ME_MAX ? raw.aboutMe : "";
   const allowPersonalCredentialWhenActingAs = raw.allowPersonalCredentialWhenActingAs === true;
@@ -134,6 +138,7 @@ function parse(value: unknown): PersonSettings {
     ...(Object.keys(harnessByProvider).length ? { harnessByProvider } : {}),
     ...(Object.keys(contextByProvider).length ? { contextByProvider } : {}),
     ...(Object.keys(accountSwitchByProvider).length ? { accountSwitchByProvider } : {}),
+    ...(modeModelsEmpty(modeModels) ? {} : { modeModels }),
     ...(pendingApprovalExpireDays !== undefined ? { pendingApprovalExpireDays } : {}),
     ...(aboutMe ? { aboutMe } : {}),
     ...(allowPersonalCredentialWhenActingAs ? { allowPersonalCredentialWhenActingAs: true } : {}),
@@ -233,6 +238,14 @@ export class PersonSettingsStore {
     const { accountSwitchByProvider: _, ...rest } = current;
     const next = cleanAccountSwitchDefaults(map);
     return this.save(principalId, { ...rest, ...(Object.keys(next).length ? { accountSwitchByProvider: next } : {}) });
+  }
+
+  /** M-20261125-074: the person's own modes, the whole setting (empty: the defaults). */
+  setModeModels(principalId: string, value: unknown): PersonSettings {
+    const current = this.get(principalId);
+    const { modeModels: _, ...rest } = current;
+    const next = cleanModeModels(value);
+    return this.save(principalId, { ...rest, ...(modeModelsEmpty(next) ? {} : { modeModels: next }) });
   }
 
   /** #1940: personal override for pending approval age. `null` clears it

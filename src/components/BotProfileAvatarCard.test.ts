@@ -1,6 +1,6 @@
 // The bot's avatar: a click opens the bot's profile page (#2126; on the page,
 // its Appearance section), a right click keeps the bot panel's menu, and a draft
-// bot (New bot) shows the Appearance pane under its avatar instead.
+// bot (New bot) opens the mascot picker under its avatar instead (#5369).
 //
 // A happy-dom window installed by hand (src/testing/happy-window.ts).
 import { act, createElement } from "react";
@@ -85,19 +85,22 @@ describe("BotProfileAvatarCard", () => {
     expect(fixture.dispatch).not.toHaveBeenCalled();
   });
 
-  it("shows the Appearance pane under a draft's avatar, since the store holds no such bot yet", async () => {
+  it("opens the mascot picker under a draft's avatar, since the store holds no such bot yet", async () => {
+    // [M-20261125-063] the panel "pop directement sous la mascotte": it was the Appearance pane, laid under the avatar
     const card = createElement(BotProfileAvatarCard, { bot: makeBot(), activeState: "idle", mascotMotion: null, onPatch: vi.fn() });
     await act(async () => root.render(createElement(BotEditorContext.Provider, { value: { request: vi.fn(), draft: true } }, card)));
     expect(avatar().getAttribute("aria-expanded")).toBe("false");
     await act(async () => avatar().click());
     expect(fixture.dispatch).not.toHaveBeenCalled();
     expect(avatar().getAttribute("aria-expanded")).toBe("true");
-    // the lazily loaded editor: the mascot gallery, no source switch (#4076)
-    await import("./floating-bots/MascotLookEditor");
-    for (let tick = 0; tick < 50 && !host.querySelector("[data-character-option]"); tick++) await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
-    expect(host.querySelector("[data-character-option]")).not.toBeNull();
-    expect(host.querySelector("[data-appearance-mode]")).toBeNull();
-    await act(async () => avatar().click());
+    // the lazily loaded picker (drawn through a portal): the mascot grid, no source switch (#4076)
+    await import("./floating-bots/MascotPicker");
+    for (let tick = 0; tick < 50 && !document.querySelector("[data-character-option]"); tick++) await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+    expect(document.querySelector("[data-mascot-picker-popover] [data-character-option]")).not.toBeNull();
+    expect(document.querySelector("[data-appearance-mode]")).toBeNull();
     expect(host.querySelector("[data-appearance-pane]")).toBeNull();
+    await act(async () => avatar().click());
+    expect(document.querySelector("[data-mascot-picker-popover]")).toBeNull();
+    expect(avatar().getAttribute("aria-expanded")).toBe("false");
   });
 });

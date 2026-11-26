@@ -70,6 +70,9 @@ export interface SidebarSubmenuEntry {
   trailing?: React.ReactNode;
   /** a line of information, not an action */
   info?: boolean;
+  /** a row its owner draws whole, not an action (Usage ›: an account's row
+   * with its two windows side by side, M-20261125-084) */
+  node?: React.ReactNode;
   /** an info line's star (Usage ›: the plan the Usage row shows). Shown on
    * hover or focus, and always while it is on. */
   favorite?: { on: boolean; label: string; onToggle: () => void };
@@ -126,14 +129,21 @@ export function submenuPlace(
   row: { left: number; right: number; top: number },
   size: { width: number; height: number } | null,
   viewport: { width: number; height: number },
+  /** The way a cascade already goes (#5338): its next level keeps going
+   * that way, and when the window runs out it stops at the window's margin,
+   * over a part of the level before it, instead of folding back over the
+   * whole path. */
+  prefer?: "left" | "right",
 ): SubmenuPlace {
   const margin = SUBMENU_WINDOW_MARGIN;
   const maxHeight = Math.max(0, viewport.height - SUBMENU_WINDOW_TOP - margin);
   const width = size?.width ?? 0;
   const height = Math.min(size?.height ?? 0, maxHeight);
+  const flipped = row.left - SUBMENU_SIDE_OFFSET - width;
   let left = row.right + SUBMENU_SIDE_OFFSET;
-  if (left + width > viewport.width - margin) {
-    const flipped = row.left - SUBMENU_SIDE_OFFSET - width;
+  if (prefer === "left") left = Math.max(margin, flipped);
+  else if (prefer === "right") left = Math.max(margin, Math.min(left, viewport.width - margin - width));
+  else if (left + width > viewport.width - margin) {
     left = flipped >= margin ? flipped : Math.max(margin, viewport.width - margin - width);
   }
   const top = Math.max(SUBMENU_WINDOW_TOP, Math.min(row.top, viewport.height - margin - height));
@@ -186,7 +196,9 @@ export function SubmenuEntryRow({ entry, starSlot, onClose }: { entry: SidebarSu
   return (
     <div className="shrink-0">
       {entry.separatorBefore && <MenuDivider />}
-      {entry.info ? (
+      {entry.node ? (
+        <div data-submenu-node={entry.key}>{entry.node}</div>
+      ) : entry.info ? (
         // the engine and its plan on the first line, the
         // window and its reset on the second; the card grows
         // to its longest row (French included) and, past its
@@ -308,9 +320,10 @@ export function SubmenuEntryRow({ entry, starSlot, onClose }: { entry: SidebarSu
 
 
 /** Opening is quick enough to feel like a hover, closing is slow enough to
- * forgive a diagonal path from the trigger to the menu. */
-const OPEN_DELAY_MS = 80;
-const CLOSE_DELAY_MS = 250;
+ * forgive a diagonal path from the trigger to the menu (the mode menu's
+ * cascade takes the same two, #5338). */
+export const OPEN_DELAY_MS = 80;
+export const CLOSE_DELAY_MS = 250;
 
 export function SidebarPopoverMenu({
   tourId,

@@ -14,7 +14,6 @@ import { useStoreSelector } from "@/state/store-selector";
 import { openBotThread, startNewTopic, type Action, type Bot, type ConfigStatus, type Message } from "@/state/store";
 import type { SideChat } from "./sideChat";
 import { ChatHeaderBar } from "@/components/ChatHeaderBar";
-import { UsageChip } from "@/components/UsageChip";
 
 /** Call overlay strip and the floating bot-pill header (or a side header). */
 export function ChatViewHeader({
@@ -97,7 +96,6 @@ export function ChatViewHeader({
           // buttons clear the 26px overlay while the rest of the layout stays.
           style={controlsShiftStyle}
         >
-          <UsageChip usage={bot.tasks?.find((task) => task.threadId === bot.threadId)?.usage} />
           {/* No Computer button in the header (JC 2026-11-05): Computer
               opens from the bot panel. */}
           {/* The bot panel toggle (owner 2026-11-17): a round panel icon left of

@@ -376,13 +376,18 @@ avec l'app de référence : #3388 ; ce patron : #3398.
   repos), mesuré sur ce qui est dessiné au premier rendu (M-20261119-081,
   `src/components/floating-bots/drawn-inset.ts`). Partager (bouton rond à icône, même disque que Fermer ; infobulle et nom accessible « Partager ») puis le bouton rond Fermer ensemble en
   haut à droite (Partager reste la seule porte du partage des personnes et des
-  groupes) ; la barre devient floue avec la petite mascotte et le nom quand le nom
-  passe dessous.
+  groupes). Aucune barre en haut de la page (owner 2026-11-25, #5371, remplace le
+  2026-11-08) : les deux boutons ronds flottent seuls en haut à droite, sans fond, sans
+  filet, sans mascotte ni nom, en haut de la page comme pendant le défilement ; leur
+  rangée a la hauteur partagée du cadre (`--app-topbar-height`), donc ils sont à la même
+  distance du bord du haut que les autres boutons ronds de la rangée du haut (#5379).
+  Une fois l'en-tête défilé, le nom du bot n'est plus affiché sur la page.
 - Onglets en pilules : Général, Objectifs, Connaissances, Analytique (Simple
   masque Analytique). Apparence n'est plus un onglet (owner 2026-11-19, remplace #4420) :
-  c'est une modale que la rangée Apparence de Réglages (M-20261119-081) et la mascotte
-  de l'en-tête ouvrent (infobulle et aria-label « Apparence », curseur main), avec tout
-  le contenu de l'ancien onglet. Rien d'autre ne l'ouvre : la roue dentée du panneau du
+  c'est le sélecteur de mascotte (8.3, #5369), un petit panneau ancré sous la mascotte,
+  que la rangée Apparence de Réglages (M-20261119-081) et la mascotte de l'en-tête
+  ouvrent (infobulle et aria-label « Apparence », curseur main) ; ce n'est plus une
+  modale [M-20261125-063]. Rien d'autre ne l'ouvre : la roue dentée du panneau du
   bot ouvre la page sur Général, sans modale par-dessus (M-20261119-082). Personnalité
   n'a plus de rangée (Connaissances > Dossier du bot > SOUL.md ouvre sa page),
   Partagé avec non plus (la bulle Partager de la barre tient les personnes, les niveaux
@@ -1858,8 +1863,11 @@ and `sidebar-logo-preferences.test.ts`:
   the glyph in the primary ink, never a dimmer grey on the rail.
   New still opens the compose-to picker (which holds Create new Bot). With a
   title bar (macOS inset lights, or the browser's stand-in dots) and no
-  logo, they sit in the title bar's own 48px row (`SIDEBAR_TITLE_ROW`,
-  `pr-4`), level with the lights, and the tiles start right under. The logo
+  logo, they sit in the title bar's own row (`SIDEBAR_TITLE_ROW`, `pr-4`),
+  whose height is the frame's shared header height (`--app-topbar-height`,
+  56px): the circles sit 10px under the window's top edge, like every other
+  round control of the top row (owner, 2026-11-25, #5379), and the tiles
+  start right under. The logo
   (Settings > Appearance > Sidebar logo) is off unless turned on (`"1"`);
   with it on, or without a title bar, the brand row under the inset strip
   holds them as before (`SIDEBAR_HEAD_ROW`, the chat header's 56px).
@@ -1986,10 +1994,18 @@ Rules that hold at every width:
   medium, no pill fill or ring), on the bar's own ground so it does not sit
   over the messages. A group, a split pane, a coding chat and a bot-to-bot
   window keep the pill either way.
-- Header usage chip: the conversation's size in tokens ("38k uncached"),
-  never a dollar figure, for everyone (owner, D-20261124-014). The exact
-  cost lives in Settings > Usage and in the bot's Activity > Usage (#5224;
-  tokens in place of the amount is an agent's choice).
+- Chat bar (owner 2026-11-25, M-20261125-070 to M-20261125-075, #5372): one
+  box holding the +, the field and one voice button (the mic or the waves,
+  and an arrow); under it a quiet row in small text, the model chip at the
+  left and the context and usage meter at the right. No limit dot and no
+  separate controls under the field. Detail: `docs/model-modes.md`.
+- Usage by account (M-20261125-084): the account menu's Usage and the
+  meter's usage detail draw one row per account, its two windows side by
+  side, as Settings > Usage limits does; never a row per window.
+- No token figure in the header (owner 2026-11-25, M-20261125-076): the
+  conversation's share of its model's window reads in the meter under the
+  message box. The exact cost lives in Settings > Usage and in the bot's
+  Activity > Usage (#5224).
 - Reading column: the transcript, the cards and the composer share one
   column, centred, at most 960px of content inside a 16px gutter on each
   side (Settings > Appearance > Chat width "Wide" and "Full" stay the
@@ -2019,12 +2035,19 @@ Rules that hold at every width:
   row: what the mode does, then the model behind it in secondary ink ("Quick
   responses · Grok 4.7"); a click's own focus stays quiet. Reasoning shows the
   level in use at its right, in 12px secondary ink, and opens the levels of
-  the model in use in place; under Fast, Expert and Heavy it is greyed and
+  the model in use beside the menu; under Fast, Expert and Heavy it is greyed and
   shows the level the mode imposes. All models names the pinned model at its
-  right and opens three panels in place, each under a back row (a chevron and
-  the panel's name in 12px secondary ink): the providers (the favorites first),
-  the provider's accounts, the account's models with a search past eight rows.
-  A provider with one account skips the account panel. Nothing that cannot run
+  right and opens three levels as cascading submenus (owner, 2026-11-25,
+  M-20261125-035, D-20261125-012, #5338): the providers (the favorites first),
+  the provider's accounts, the account's models with a search past eight rows,
+  each in the menu family's box beside the row that opened it, 4px over the
+  box before, level with that row; the menu and the whole path stay on screen,
+  no page replaces the menu and there is no back row. The row whose level is
+  open keeps the hovered fill. A click, a rest of the pointer (80ms to open,
+  250ms to change) or the right arrow opens a level; Escape or the left arrow
+  closes the deepest. The path opens to the right, or to the left when the
+  right cannot hold it and the left has more room.
+  A provider with one account skips the account level. Nothing that cannot run
   is listed and no state ("Off", "Signed out") is written. See
   `docs/model-modes.md`. Tests: `shared/mode-menu.test.ts`,
   `src/components/ModeMenu.dom.test.ts`, `src/components/ModelPanel.modes.test.ts`,
@@ -2385,6 +2408,40 @@ for the same reason. Tests: `GuidedTour.test.ts`, `guided-tour.test.ts`.
 
 ### 8.3 Mascottes, formes et bots flottants
 
+#### Sélecteur de mascotte (2026-11-25, #5369)
+
+Décision du propriétaire, maquette validée [M-20261125-063] [M-20261125-064]
+[M-20261125-065] : l'apparence d'un bot se règle dans un petit panneau calqué sur le
+sélecteur du site open-bot-avatar (0.5.1), ancré sous la mascotte de la page du bot.
+Desktop seulement pour l'instant.
+
+- Pas de fenêtre ni d'aperçu : la vraie mascotte au-dessus du panneau sert d'aperçu
+  et change en direct. Chaque choix s'enregistre tout de suite.
+- Deux onglets en pastilles, Formes et Personnages [D-20261125-030], et une roue dentée
+  à droite : « Les yeux suivent le pointeur » et « Mouvement » (Système, Réduit, Complet).
+- Une grille de 5 par rangée, dans la couleur et la matière du bot ; la mascotte portée
+  est entourée ; le nom est en infobulle, jamais en texte. La dernière case des formes
+  est un « + » cerclé, seule entrée pour ajouter une forme [M-20261125-065].
+- Deux pilules d'icônes, sans texte : la matière (unie, peluche, verre) et l'humeur
+  (neutre, joyeuse). Les skins sont fondus avec la matière [D-20261125-029] : le dernier
+  segment de la pilule ouvre la liste des skins par rareté, avec les cadenas et la ligne
+  qui nomme le succès. Un personnage qui n'est pas une forme n'a que ses skins.
+- Une option qui ne s'applique pas est absente, jamais grisée. Seule exception :
+  la flèche de retour, au repos tant que la couleur n'a pas changé.
+- Une seule rangée de couleurs [D-20261125-028] : 11 couleurs rapides, l'anneau de
+  couleur libre, la flèche de retour. Un bot qui porte une ancienne couleur la garde
+  et la voit sur l'anneau.
+- Ont quitté l'écran avec la maquette : la bannière d'aperçu, les sept onglets,
+  « Au hasard », « Réinitialiser », l'aperçu des six états, le volume, la couleur des
+  yeux, les filtres et les étagères. Les valeurs déjà enregistrées restent dessinées.
+- Choix d'agent, pas encore vus par le propriétaire : le petit mouvement des icônes au
+  survol et au choix (les icônes amont sont fixes), la case choisie en fond arrondi,
+  la matière à gauche et l'humeur à droite, un personnage verrouillé qui ne réagit
+  pas au clic.
+
+Code : `src/components/floating-bots/MascotPicker.tsx`, `MascotPickerPopover.tsx`,
+`mascot-picker.ts`. Détail : `docs/mascots.md`, « The mascot picker ».
+
 #### Shapes set and eyes (2026-10-28)
 
 Decision (maintainer): the Shapes bodies are the bloub network's tables (MIT, NOTICE
@@ -2610,12 +2667,13 @@ Electron restart (no HMR); launch-test them before committing.
   window falls back to the plain owl rather than drawing nothing.
 - The character (owl, Shapes, Trombi, Bunbu, Shiba, Frog) and its look live with the bot
   (`bot.mascotLook`, `shared/mascot-look.ts`, validated by the server), chosen
-  in the persona editor's Appearance gallery (`MascotLookEditor.tsx`) and
+  in the mascot picker (`MascotPicker.tsx`, #5369: see the rules just below) and
   drawn by `BotAvatar` for every bot avatar in the app; never draw a bot's
   mascot outside `BotAvatar`. By default the owl and its Common skins are
-  the bot's to wear. The gallery shows every other character on its To
-  unlock shelf, greyed with its achievement and progress: it can be
-  previewed, not worn. Shapes unlocks with a linked Grok account. Trombi
+  the bot's to wear. The picker shows every other character in its grid,
+  greyed with its padlock, its achievement and progress: it is not worn
+  (and no longer previewed: the picker has no preview). Shapes unlocks with
+  a linked Grok account; locked, every shape carries the padlock and the "+" is absent. Trombi
   stays out of the gallery until its hidden command earns it (an easter egg
   behind a secret achievement; do not write the command down). Bunbu and
   every skin above Common unlock with their achievement. Every skin card

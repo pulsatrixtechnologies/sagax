@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { mascotColorsIn } from "../../shared/mascot-colors";
 import { describe, expect, it } from "vitest";
 
-import { MAUS_COLORS, MAUS_COLOR_NAMES, mausInk, stateForBot, swatchStyle } from "./mascot";
+import { AGENT_STATES, agentStateForBot, MAUS_COLORS, MAUS_COLOR_NAMES, mausInk, stateForBot, swatchStyle } from "./mascot";
 
 describe("stateForBot", () => {
   it("still alerts on a failed tool call when a digest receipt follows it", () => {
@@ -94,5 +94,54 @@ describe("iOS MausPalette", () => {
       if (name === "black") continue;
       expect(hex, name).toBe(MAUS_COLORS[name as keyof typeof MAUS_COLORS]);
     }
+  });
+});
+
+// The engine's six agent states from what the bot really does (#5349, #5276).
+describe("agentStateForBot", () => {
+  const bot = { name: "Atlas" };
+
+  it("rests when nothing is happening, whatever the bot is about", () => {
+    expect(agentStateForBot(bot)).toBe("idle");
+    // a bot about code rests on its working face (stateForBot), but it is not working
+    expect(stateForBot({ name: "Atlas", title: "Developer" })).toBe("working");
+    expect(agentStateForBot({ name: "Atlas", title: "Developer" })).toBe("idle");
+  });
+
+  it("never takes a state from a face the person pinned", () => {
+    for (const pinned of ["working", "thinking", "happy", "curious"]) expect(agentStateForBot({ ...bot, mascotExpression: pinned })).toBe("idle");
+    expect(agentStateForBot({ ...bot, mascotExpression: "sleeping", busy: true })).toBe("thinking");
+  });
+
+  it("thinks while a turn runs and nothing has come out, works once a step is on screen", () => {
+    expect(agentStateForBot({ ...bot, busy: true })).toBe("thinking");
+    expect(agentStateForBot({ ...bot, busy: true, messages: [{ kind: "text" }] })).toBe("thinking");
+    expect(agentStateForBot({ ...bot, busy: true, messages: [{ kind: "text" }, { kind: "activity", tool: { ok: true } }] })).toBe("working");
+    expect(agentStateForBot({ ...bot, busy: true, messages: [{ kind: "activity" }, { kind: "digest" }] })).toBe("working");
+    expect(agentStateForBot({ ...bot, activity: "working" })).toBe("thinking");
+  });
+
+  it("waits while a card waits for the person, before anything else", () => {
+    expect(agentStateForBot({ ...bot, activity: "waiting-on-you", busy: true })).toBe("waiting");
+    expect(agentStateForBot({ ...bot, busy: true, tasks: [{ activity: "waiting-on-you" }] })).toBe("waiting");
+    expect(agentStateForBot({ ...bot, messages: [{ kind: "options" }, { kind: "digest" }] })).toBe("waiting");
+    expect(agentStateForBot({ ...bot, activity: "waiting-on-you", messages: [{ kind: "activity", tool: { ok: false } }] })).toBe("waiting");
+  });
+
+  it("is blocked on a failed step, as the owl alerts", () => {
+    const failed = { ...bot, messages: [{ kind: "activity", tool: { ok: false } }, { kind: "digest" }] };
+    expect(stateForBot(failed)).toBe("alerting");
+    expect(agentStateForBot(failed)).toBe("blocked");
+    expect(agentStateForBot({ ...failed, busy: true })).toBe("blocked");
+  });
+
+  it("is done when a finished turn waits to be read", () => {
+    expect(stateForBot({ ...bot, unread: true })).toBe("notifying");
+    expect(agentStateForBot({ ...bot, unread: true })).toBe("done");
+    expect(agentStateForBot({ ...bot, unread: true, busy: true })).toBe("thinking");
+  });
+
+  it("covers the engine's six states and no other", () => {
+    expect([...AGENT_STATES]).toEqual(["idle", "thinking", "working", "waiting", "blocked", "done"]);
   });
 });

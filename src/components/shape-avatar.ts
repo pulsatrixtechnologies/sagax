@@ -15,7 +15,7 @@
 // bodies are our own, baked from shared/mascot-geometry.json into
 // shared/shape-avatars.json by scripts/bake-engine-shapes.mjs. The gallery's
 // other avatars are shapes of their own in the picker (GALLERY_SHAPES).
-import { avatarFrame, getExample, validateAvatar, type AvatarDefinition, type AvatarFrame, type AvatarMotion, type AvatarMotionBlend, type EyeMark, type FrameShape, type Matrix } from "open-bot-avatar";
+import { avatarFrame, getExample, validateAvatar, type AvatarDefinition, type AvatarFrame, type AvatarMood, type AvatarMotion, type AvatarMotionBlend, type AvatarState, type EyeMark, type FrameShape, type Matrix } from "open-bot-avatar";
 import baked from "../../shared/shape-avatars.json" with { type: "json" };
 import type { MascotShape } from "../../shared/mascot-look.ts";
 import { isEngineAvatarDef, type EngineAvatarDef } from "../../shared/engine-avatar-def.ts";
@@ -146,6 +146,30 @@ export function engineMood(mood: ShapeMood): AvatarMotion {
   if (mood === "thinking" || mood === "working" || mood === "streaming" || mood === "blocked") return "thinking";
   if (mood === "happy") return "happy";
   return "idle";
+}
+
+/**
+ * What a shape draws, in the engine's terms (#5349): the state the bot is in
+ * (from its activity, AgentState in src/lib/mascot.ts), the mood over it, and
+ * `motion`, the app's own pose for a bot at rest (one of the three baked
+ * moods), or null while a state other than idle shows.
+ *
+ * - At rest the bot keeps the face it had: idle, happy, or the at-work pose
+ *   of a bot whose own face is a working one (engineFrame).
+ * - A state from the bot's activity wins over that face.
+ * - The person's mood (happy) shapes the eyes on top of any state; a finished
+ *   turn (done) is happy, as it was before the states.
+ */
+export interface EnginePose {
+  state: AvatarState;
+  mood: AvatarMood;
+  motion: AvatarMotion | null;
+}
+
+export function enginePose(mood: ShapeMood, state: AvatarState = "idle", moodSetting: AvatarMood = "neutral"): EnginePose {
+  if (state !== "idle") return { state, mood: moodSetting === "happy" || state === "done" ? "happy" : "neutral", motion: null };
+  const motion = moodSetting === "happy" ? "happy" : engineMood(mood);
+  return { state: "idle", mood: motion === "happy" ? "happy" : "neutral", motion };
 }
 
 /**
@@ -305,6 +329,33 @@ export function runtimeStill(def: AvatarDefinition, depth?: number): BakedStill 
   return still;
 }
 
+const BY_STATE = new WeakMap<AvatarDefinition, Map<string, StillFrame>>();
+/**
+ * The still of a state other than idle (#5349): the engine's own frame for
+ * it at rest (reduced motion: the marks hold still, no ribbon), drawn the
+ * first time a bot of that shape is in that state and kept. Only the bots
+ * doing something ask for one; a bot at rest keeps its baked still.
+ */
+export function stateStill(def: AvatarDefinition, state: AvatarState, mood: AvatarMood, depth?: number): StillFrame {
+  let byKey = BY_STATE.get(def);
+  if (!byKey) BY_STATE.set(def, (byKey = new Map()));
+  const key = `${state}|${mood}|${depth ?? ""}`;
+  let still = byKey.get(key);
+  if (!still) {
+    const frame = avatarFrame(def, { state, mood, reducedMotion: true, ...(depth === undefined ? {} : { depth }) });
+    still = {
+      paths: frame.paths.map((path): StillPath => [path.id, path.d, path.evenOdd, path.box.w * path.box.h]),
+      root: frame.root,
+      shapes: frame.shapes.filter((shape) => shape.kind !== "ribbon"),
+    };
+    byKey.set(key, still);
+  }
+  return still;
+}
+
+/** Whether a slice is a part of a state's mark (the dots of thinking, the exclamation mark of blocked), not the body. */
+export const isMarkSlice = (shape: FrameShape) => shape.kind === "slice" && shape.key.startsWith("mark-");
+
 const f2 = (n: number) => String(r2(n));
 const matrixAttr = (m: Matrix) => `matrix(${m.join(" ")})`;
 
@@ -324,8 +375,16 @@ export function pathsMarkup(paths: readonly StillPath[], prefix = ""): string {
 export function shapesMarkup(shapes: readonly FrameShape[], ink: string, prefix = ""): string {
   let out = "";
   for (const shape of shapes) {
-    // the engine's ribbons belong to states the app does not ask for
-    if (shape.kind === "ribbon") continue;
+    // a ribbon of the working and done states (live only: a still holds none), filled with its own gradient
+    if (shape.kind === "ribbon") {
+      const { x1, y1, x2, y2, stops } = shape.gradient;
+      const id = `${prefix}${shape.key}`;
+      out +=
+        `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${f2(x1)}" y1="${f2(y1)}" x2="${f2(x2)}" y2="${f2(y2)}">` +
+        stops.map((stop, i) => `<stop offset="${stops.length > 1 ? f2(i / (stops.length - 1)) : "0"}" stop-color="${stop}"/>`).join("") +
+        `</linearGradient><path d="${shape.d}" fill="url(#${id})" transform="${matrixAttr(shape.matrix)}" data-shape-ribbon=""/>`;
+      continue;
+    }
     out += shape.kind === "slice" ? `<use href="#${prefix}${shape.path}" transform="${matrixAttr(shape.matrix)}"/>` : `<g transform="${matrixAttr(shape.matrix)}">${eyeMarkup(shape.mark, ink)}</g>`;
   }
   return out;

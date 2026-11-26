@@ -496,6 +496,48 @@ export const LEGACY_FROG_SKINS: Readonly<Record<string, FrogSkin>> = {
   lava: "molten",
 };
 
+/**
+ * The look settings the open-bot-avatar engine takes per avatar (#5349), for
+ * the mascots it draws (the shapes): the body's finish, how the bot feels,
+ * the eyes' colour, the body's volume and whether the eyes follow the
+ * pointer. Each is stored on the look only when it differs from today's
+ * drawing, so a look nobody touched stays as older builds wrote it. What the
+ * bot is doing (the engine's state) is never stored: the mascot takes it
+ * from the bot's activity.
+ */
+export const SHAPE_MATERIALS = ["flat", "fluffy", "glass"] as const;
+export type ShapeMaterial = (typeof SHAPE_MATERIALS)[number];
+
+/** The engine's moods: neutral (the eyes follow what the bot does, as before), or happy on top of any state. */
+export const SHAPE_MOODS = ["neutral", "happy"] as const;
+export type ShapeMoodSetting = (typeof SHAPE_MOODS)[number];
+
+/** The engine's volume range (its depth option): 0 is flat, 6 its natural depth. */
+export const SHAPE_DEPTH = { min: 0, max: 14, natural: 6 } as const;
+
+const eyeColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/).transform((value) => value.toLowerCase());
+
+/**
+ * How much a mascot moves (the picker's gear, #5369): the device's own
+ * preference, always reduced, or always full. Only a choice other than the
+ * device's is stored.
+ */
+export const SHAPE_MOTIONS = ["system", "reduced", "full"] as const;
+export type ShapeMotion = (typeof SHAPE_MOTIONS)[number];
+
+const ENGINE_LOOK_FIELDS = {
+  material: z.enum(SHAPE_MATERIALS),
+  mood: z.enum(SHAPE_MOODS),
+  eyeColor: eyeColorSchema,
+  depth: z.number().min(SHAPE_DEPTH.min).max(SHAPE_DEPTH.max),
+  followPointer: z.boolean(),
+  /** A free body colour (#5369), any #rrggbb: drawn in place of the bot's named colour, which stays the nearest name for everything else. */
+  bodyColor: eyeColorSchema,
+  motion: z.enum(["reduced", "full"]),
+} as const;
+type EngineLookKey = keyof typeof ENGINE_LOOK_FIELDS;
+const ENGINE_LOOK_KEYS = Object.keys(ENGINE_LOOK_FIELDS) as EngineLookKey[];
+
 const legacy = (table: Readonly<Record<string, string>>) => (value: unknown) => (typeof value === "string" && Object.hasOwn(table, value) ? table[value] : value);
 
 export const mascotLookSchema = z
@@ -524,8 +566,20 @@ export const mascotLookSchema = z
       })
       .strict()
       .optional(),
+    /** The engine's look settings (#5349); absent is today's drawing. */
+    material: ENGINE_LOOK_FIELDS.material.optional(),
+    mood: ENGINE_LOOK_FIELDS.mood.optional(),
+    eyeColor: ENGINE_LOOK_FIELDS.eyeColor.optional(),
+    depth: ENGINE_LOOK_FIELDS.depth.optional(),
+    followPointer: ENGINE_LOOK_FIELDS.followPointer.optional(),
+    /** The mascot picker's settings (#5369); absent is the bot's named colour and the device's motion preference. */
+    bodyColor: ENGINE_LOOK_FIELDS.bodyColor.optional(),
+    motion: ENGINE_LOOK_FIELDS.motion.optional(),
   })
   .strict();
+
+/** Every key a look may carry: a key outside this list is a newer build's. */
+const LOOK_KEYS: ReadonlySet<string> = new Set(Object.keys(mascotLookSchema.shape));
 
 export type MascotLook = z.infer<typeof mascotLookSchema>;
 export type { EngineAvatarDef, ShapeAvatarDef };
@@ -540,10 +594,19 @@ export const DEFAULT_MASCOT_LOOK: MascotLook = Object.freeze({ character: "owl" 
 export function botMascotLook(value: unknown): MascotLook {
   const parsed = mascotLookSchema.safeParse(value);
   if (parsed.success) return parsed.data;
+  // a key this build does not know (a newer build's setting) drops alone: the bot is drawn with what this build knows (#5369)
+  if (value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).some((key) => !LOOK_KEYS.has(key))) {
+    return botMascotLook(Object.fromEntries(Object.entries(value).filter(([key]) => LOOK_KEYS.has(key))));
+  }
   // a person's own shape this build cannot draw drops alone: the bot keeps its character, shape and skins (#4160)
   if (value && typeof value === "object" && "avatarDef" in value) {
     const { avatarDef: _dropped, ...kept } = value as { avatarDef?: unknown };
     return botMascotLook(kept);
+  }
+  // an engine setting this build does not know (a newer build's material) drops alone too (#5349)
+  if (value && typeof value === "object") {
+    const bad = ENGINE_LOOK_KEYS.filter((key) => key in value && !ENGINE_LOOK_FIELDS[key].safeParse((value as Record<string, unknown>)[key]).success);
+    if (bad.length) return botMascotLook(Object.fromEntries(Object.entries(value).filter(([key]) => !(bad as string[]).includes(key))));
   }
   if (!value || typeof value !== "object" || !("skins" in value)) return DEFAULT_MASCOT_LOOK;
   const { skins, ...rest } = value as { skins?: unknown };
@@ -571,7 +634,7 @@ export function botMascotLook(value: unknown): MascotLook {
 }
 
 /** The look with every choice filled in. */
-export function completeMascotLook(value: unknown): Required<Omit<MascotLook, "skins" | "avatarDef">> & {
+export function completeMascotLook(value: unknown): Required<Omit<MascotLook, "skins" | "avatarDef" | EngineLookKey>> & Pick<MascotLook, EngineLookKey> & {
   skins: { shape: ShapeSkin; trombi: TrombiSkin; bunbu: BunbuSkin; shiba: ShibaSkin; grump: GrumpSkin; ogre: OgreSkin; frog: FrogSkin; crab: CrabSkin };
   avatarDef?: MascotAvatarDef;
 } {
@@ -582,7 +645,55 @@ export function completeMascotLook(value: unknown): Required<Omit<MascotLook, "s
     shape: look.shape ?? "circle",
     skins: { shape: look.skins?.shape ?? "plain", trombi: look.skins?.trombi ?? "classic", bunbu: look.skins?.bunbu ?? "plain", shiba: look.skins?.shiba ?? "plain", grump: look.skins?.grump ?? "plain", ogre: look.skins?.ogre ?? "plain", frog: look.skins?.frog ?? "plain", crab: look.skins?.crab ?? "plain" },
     ...(look.avatarDef ? { avatarDef: look.avatarDef } : {}),
+    // the engine's settings only where one is set: the look keeps the keys it was stored with
+    ...Object.fromEntries(ENGINE_LOOK_KEYS.filter((key) => look[key] !== undefined).map((key) => [key, look[key]])),
   };
+}
+
+/** The engine's look settings with every default filled in: what a look nobody touched draws. */
+export interface EngineLook {
+  material: ShapeMaterial;
+  mood: ShapeMoodSetting;
+  /** The eyes' colour as #rrggbb, or null for the skin's own ink. */
+  eyeColor: string | null;
+  /** The body's volume (0..14), or null for the engine's natural depth (and the Outline skin's flat body). */
+  depth: number | null;
+  followPointer: boolean;
+  /** A free body colour as #rrggbb, or null for the bot's named colour. */
+  bodyColor: string | null;
+  motion: ShapeMotion;
+}
+
+export const DEFAULT_ENGINE_LOOK: EngineLook = Object.freeze({ material: "flat", mood: "neutral", eyeColor: null, depth: null, followPointer: true, bodyColor: null, motion: "system" });
+
+/** The engine's settings of a stored or received look. */
+export function engineLookOf(value: unknown): EngineLook {
+  const look = botMascotLook(value);
+  return {
+    material: look.material ?? DEFAULT_ENGINE_LOOK.material,
+    mood: look.mood ?? DEFAULT_ENGINE_LOOK.mood,
+    eyeColor: look.eyeColor ?? null,
+    depth: look.depth ?? null,
+    followPointer: look.followPointer ?? DEFAULT_ENGINE_LOOK.followPointer,
+    bodyColor: look.bodyColor ?? null,
+    motion: look.motion ?? DEFAULT_ENGINE_LOOK.motion,
+  };
+}
+
+/**
+ * A look with some of the engine's settings changed. A setting put back to
+ * its default leaves the look without that key, exactly as it was stored
+ * before the setting existed.
+ */
+export function withEngineLook<T extends Pick<MascotLook, EngineLookKey>>(look: T, change: Partial<EngineLook>): T {
+  const next = { ...look } as T & Record<string, unknown>;
+  for (const key of ENGINE_LOOK_KEYS) {
+    if (!(key in change)) continue;
+    const value = change[key];
+    if (value === null || value === undefined || value === DEFAULT_ENGINE_LOOK[key]) delete next[key];
+    else (next as Record<string, unknown>)[key] = key === "eyeColor" || key === "bodyColor" ? String(value).toLowerCase() : value;
+  }
+  return next;
 }
 
 /** What a character offers in the avatar popover. */

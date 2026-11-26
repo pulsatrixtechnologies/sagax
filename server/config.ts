@@ -666,6 +666,13 @@ const appConfigSchema = z.object({
   })).optional(),
   /** A solo server's person: learned routing among their accounts. Off until set. */
   learnedRouting: z.boolean().optional(),
+  /** M-20261125-074: on a solo server, its person's own modes: the model
+   * (and reasoning) of Fast and Expert, Heavy's experts (shared/mode-models.ts). */
+  modeModels: z.object({
+    fast: z.object({ instanceId: z.string().min(1).max(200), model: z.string().min(1).max(200), effort: z.enum(["none", "low", "medium", "high", "xhigh", "max", "ultracode"]).optional() }).optional(),
+    expert: z.object({ instanceId: z.string().min(1).max(200), model: z.string().min(1).max(200), effort: z.enum(["none", "low", "medium", "high", "xhigh", "max", "ultracode"]).optional() }).optional(),
+    heavy: z.array(z.object({ instanceId: z.string().min(1).max(200), model: z.string().min(1).max(200) })).max(5).optional(),
+  }).optional(),
   /** Historical config section name "box" (the persisted config.json key); the
    * provider is Boat now and the key is kept for compatibility. */
   box: z.object({ token: optionalText }).optional(),
@@ -942,6 +949,8 @@ export interface AppConfig extends HelperConfig {
   accountSwitchByProvider?: Record<string, { strategy: "high-water" | "most-free" | "fill-up"; threshold: number }>;
   /** A solo server's person: learned routing among their accounts. Off until set. */
   learnedRouting?: boolean;
+  /** M-20261125-074: a solo server's person's own modes (shared/mode-models.ts). */
+  modeModels?: import("../shared/mode-models.ts").ModeModels;
   /** Persisted under the historical config key "box" (ascii.dev renamed Box to Boat). */
   box?: { token?: string };
   /** A named host from the user's SSH config. Authentication stays with SSH. */
@@ -2071,6 +2080,7 @@ export function saveConfig(
   if (checkedPatch.contextByProvider !== undefined) disk.contextByProvider = checkedPatch.contextByProvider;
   if (checkedPatch.accountSwitchByProvider !== undefined) disk.accountSwitchByProvider = checkedPatch.accountSwitchByProvider;
   if (checkedPatch.learnedRouting !== undefined) disk.learnedRouting = checkedPatch.learnedRouting;
+  if (checkedPatch.modeModels !== undefined) disk.modeModels = checkedPatch.modeModels;
   if (checkedPatch.identityMigratedAt !== undefined) disk.identityMigratedAt = checkedPatch.identityMigratedAt;
   if (checkedPatch.privateThreadsMigratedAt !== undefined) disk.privateThreadsMigratedAt = checkedPatch.privateThreadsMigratedAt;
   if (checkedPatch.invites !== undefined) disk.invites = checkedPatch.invites;

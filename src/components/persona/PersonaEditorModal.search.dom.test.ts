@@ -173,17 +173,19 @@ describe("bot profile settings search", () => {
     act(() => toggle().click());
     expect(host.querySelector("[data-persona-search]")).toBeNull();
   });
-  it("leads a word of the Appearance modal to it on Enter, the tabs staying on General", () => {
+  it("leads a word of Appearance to the mascot picker on Enter, the tabs staying on General", () => {
     act(() => toggle().click());
     type("mascot");
-    // the mascot is Appearance's, a modal and no tab: the query leads to it, the tab stays on General,
-    // nothing opens while typing (#4470) and Enter opens the modal with its rows marked
+    // the mascot is Appearance's, no tab: the query leads to it, the tab stays on General,
+    // nothing opens while typing (#4470) and Enter opens it.
+    // [M-20261125-063] [M-20261125-064] it is the mascot picker under the mascot now, no window; it holds icons
+    // and no rows of text, so there is no row to mark in it (the modal had its rows marked)
     expect(selectedTab()).toBe("general");
-    expect(document.querySelector('[data-bot-page-modal="appearance"]')).toBeNull();
+    expect(document.querySelector("[data-mascot-picker-popover]")).toBeNull();
     key(input(), "Enter");
-    expect(document.querySelector('[data-bot-page-modal="appearance"]')).not.toBeNull();
+    expect(document.querySelector("[data-mascot-picker-popover]")).not.toBeNull();
+    expect(document.querySelector('[data-bot-page-modal="appearance"]')).toBeNull();
     expect(opened()).not.toContain("appearance");
-    expect(document.querySelector('[data-bot-page-modal="appearance"] [data-bot-profile-section="appearance"]')).not.toBeNull();
     type("");
     expect(host.querySelector("[data-settings-search-miss]")).toBeNull();
   });

@@ -35,7 +35,7 @@ import { CrabMascot } from "@/components/CrabMascot";
 import { CRAB_TRACKS, crabHeldFor, crabMoveFor } from "@/components/crab-moves";
 import { mascotAsleep } from "./sleep";
 import { fxMoveFor, useEquipBurst, useMoveBurst, useReducedMotion, type FxMoveRequest } from "@/components/skin-fx/skin-fx";
-import { completeMascotLook, MASCOT_SHAPES, type MascotCharacter, type MascotLook, type MascotShape } from "../../../shared/mascot-look";
+import { engineLookOf, completeMascotLook, MASCOT_SHAPES, type MascotCharacter, type MascotLook, type MascotShape } from "../../../shared/mascot-look";
 import { createFrameSmoother, type MascotActivity, type MascotFrame, type MascotTask } from "./behavior";
 import Owl25D, { flatTilt, flatTurn } from "./Owl25D";
 import type { FloatingPose } from "./protocol";
@@ -277,13 +277,13 @@ function ShapeRender({ color, look, size, activity, pose, frame, fps, onHitTest 
   const own = useShapeClipMove(activity);
   return (
     <Motion25D size={size} frame={frame} fps={fps} onHitTest={onHitTest}>
-      <ShapeMascot shape={look.shape} skin={look.skins.shape} color={color} size={size * 0.8} mood={shapeMoodForClip(activity, pose)} detail="full" move={own ?? fx} avatarDef={look.avatarDef} label={null} />
+      <ShapeMascot shape={look.shape} skin={look.skins.shape} color={color} size={size * 0.8} mood={shapeMoodForClip(activity, pose)} detail="full" move={own ?? fx} avatarDef={look.avatarDef} engineLook={engineLookOf(look)} label={null} />
     </Motion25D>
   );
 }
 
 function ShapeThumb({ color, look, size }: MascotThumbProps) {
-  return <ShapeMascot shape={look.shape} skin={look.skins.shape} color={color} size={size} animated={false} avatarDef={look.avatarDef} label={null} />;
+  return <ShapeMascot shape={look.shape} skin={look.skins.shape} color={color} size={size} animated={false} avatarDef={look.avatarDef} engineLook={engineLookOf(look)} label={null} />;
 }
 
 /* ------------------------------------------------------------- Trombi */

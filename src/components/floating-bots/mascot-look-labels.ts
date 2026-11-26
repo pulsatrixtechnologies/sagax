@@ -1,8 +1,7 @@
-// Locale key tables of the mascot look editor (split out of MascotLookEditor.tsx).
+// Locale key tables of a bot's look: characters, shapes, skins and rarities (the mascot picker, MascotPicker.tsx).
 
 import type { LocaleKey } from "@/locales";
 import type { MascotSkinId } from "../../../shared/mascot-skins";
-import type { MascotColorGroup } from "../../../shared/mascot-colors";
 import type { MascotCharacter, MascotShape, SkinTier, BUNBU_SKINS, CRAB_SKINS, FROG_SKINS, GRUMP_SKINS, OGRE_SKINS, SHAPE_SKINS, SHIBA_SKINS, TROMBI_SKINS } from "../../../shared/mascot-look";
 
 export const CHARACTER_LABEL = {
@@ -69,8 +68,6 @@ export const SHAPE_LABEL = {
   barbell: "mascot.shape.barbell",
   "watering-can": "mascot.shape.watering-can",
 } satisfies Record<MascotShape, LocaleKey>;
-
-export { SHAPE_MOVE_LABEL } from "./moves";
 
 export const SHAPE_SKIN_LABEL = {
   plain: "mascot.shapeSkin.clay",
@@ -218,11 +215,3 @@ export const OWL_SKIN_LABEL = {
   spirit: "mascot.skin.spirit",
 } satisfies Record<MascotSkinId, LocaleKey>;
 
-export const COLOR_GROUP_LABEL = {
-  vivid: "mascot.color.group.vivid",
-  pastel: "mascot.color.group.pastel",
-  deep: "mascot.color.group.deep",
-  neon: "mascot.color.group.neon",
-  neutral: "mascot.color.group.neutral",
-  clay: "mascot.color.group.clay",
-} satisfies Record<MascotColorGroup, LocaleKey>;

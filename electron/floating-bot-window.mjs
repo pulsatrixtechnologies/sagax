@@ -323,6 +323,8 @@ export function appTheme(value) {
   if (!value || typeof value !== "object" || !APP_SKINS.has(value.skin)) return null;
   return { skin: value.skin, ...(typeof value.accent === "string" && ACCENT_RE.test(value.accent) ? { accent: value.accent } : {}) };
 }
+/** The engine's materials (shared/mascot-look.ts SHAPE_MATERIALS). */
+const SHAPE_MATERIALS = new Set(["flat", "fluffy", "glass"]);
 const skinOf = (value, legacy) => (typeof value === "string" && Object.hasOwn(legacy, value) ? legacy[value] : value);
 
 /** The bot's character and its look (shared/mascot-look.ts): known values only. */
@@ -345,6 +347,15 @@ export function mascotLook(value) {
     ...(SHAPES.has(LEGACY_SHAPES[value.shape] ?? value.shape) ? { shape: LEGACY_SHAPES[value.shape] ?? value.shape } : {}),
     ...(value.character === "shape" && avatarDef(value.avatarDef) ? { avatarDef: avatarDef(value.avatarDef) } : {}),
     ...(Object.keys(cleanSkins).length ? { skins: cleanSkins } : {}),
+    // the engine's look settings (shared/mascot-look.ts, #5349): known values only
+    ...(SHAPE_MATERIALS.has(value.material) ? { material: value.material } : {}),
+    ...(value.mood === "neutral" || value.mood === "happy" ? { mood: value.mood } : {}),
+    ...(typeof value.eyeColor === "string" && ACCENT_RE.test(value.eyeColor) ? { eyeColor: value.eyeColor.toLowerCase() } : {}),
+    ...(isFiniteNumber(value.depth) && value.depth >= 0 && value.depth <= 14 ? { depth: value.depth } : {}),
+    ...(typeof value.followPointer === "boolean" ? { followPointer: value.followPointer } : {}),
+    // the mascot picker's settings (#5369)
+    ...(typeof value.bodyColor === "string" && ACCENT_RE.test(value.bodyColor) ? { bodyColor: value.bodyColor.toLowerCase() } : {}),
+    ...(value.motion === "reduced" || value.motion === "full" ? { motion: value.motion } : {}),
   };
 }
 

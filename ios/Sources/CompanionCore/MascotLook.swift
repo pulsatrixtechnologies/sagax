@@ -377,9 +377,10 @@ public enum CrabSkin: String, CaseIterable, Codable, Sendable {
 }
 
 /// `mascotLook`: which character stands for the bot, and that character's
-/// own look, read exactly as `botMascotLook` reads it. The desktop's schema
-/// is strict: an unknown character, an unknown top-level key, or a
-/// malformed style or shape throws the whole look away (the owl). A skin
+/// own look, read exactly as `botMascotLook` reads it: an unknown character
+/// or a malformed style or shape throws the whole look away (the owl). A
+/// top-level key this build does not know (a newer build's setting) is
+/// ignored alone, and the bot is drawn with what this build knows. A skin
 /// is never worth the character: an unknown skin value, a skin of a newer
 /// character, or a `skins` that is not an object is dropped and the
 /// character keeps its default skin.
@@ -408,10 +409,55 @@ public struct MascotLook: Codable, Hashable, Sendable {
         var isEmpty: Bool { shape == nil && trombi == nil && bunbu == nil && shiba == nil && grump == nil && ogre == nil && frog == nil && crab == nil }
     }
 
+    /// The look settings the open-bot-avatar engine takes per mascot
+    /// (`shared/mascot-look.ts`, #5349): the body's material, the mood, the
+    /// eyes' colour, the body's depth and whether the eyes follow the
+    /// pointer. The desktop draws them; the phone keeps them as they came,
+    /// so a look edited here never loses what the person set there. Known
+    /// values only, as the desktop reads them; one it does not know is
+    /// dropped alone, never the character.
+    public struct EngineSettings: Hashable, Sendable {
+        public static let materials: Set<String> = ["flat", "fluffy", "glass"]
+        public static let moods: Set<String> = ["neutral", "happy"]
+        public static let depthRange: ClosedRange<Double> = 0...14
+
+        public var material: String?
+        public var mood: String?
+        /// `#rrggbb`, lowercase.
+        public var eyeColor: String?
+        public var depth: Double?
+        public var followPointer: Bool?
+        /// A free body colour, `#rrggbb`, lowercase (the desktop's mascot picker).
+        public var bodyColor: String?
+        /// `reduced` or `full`; absent follows the device.
+        public var motion: String?
+        public static let motions: Set<String> = ["reduced", "full"]
+
+        public init(material: String? = nil, mood: String? = nil, eyeColor: String? = nil, depth: Double? = nil, followPointer: Bool? = nil, bodyColor: String? = nil, motion: String? = nil) {
+            self.bodyColor = bodyColor.flatMap { Self.isHex($0) ? $0.lowercased() : nil }
+            self.motion = motion.flatMap { Self.motions.contains($0) ? $0 : nil }
+            self.material = material.flatMap { Self.materials.contains($0) ? $0 : nil }
+            self.mood = mood.flatMap { Self.moods.contains($0) ? $0 : nil }
+            self.eyeColor = eyeColor.flatMap { Self.isHex($0) ? $0.lowercased() : nil }
+            self.depth = depth.flatMap { Self.depthRange.contains($0) ? $0 : nil }
+            self.followPointer = followPointer
+        }
+
+        static func isHex(_ value: String) -> Bool {
+            let scalars = Array(value.unicodeScalars)
+            guard scalars.count == 7, scalars[0] == "#" else { return false }
+            return scalars.dropFirst().allSatisfy { ("0"..."9").contains($0) || ("a"..."f").contains($0) || ("A"..."F").contains($0) }
+        }
+
+        var isEmpty: Bool { material == nil && mood == nil && eyeColor == nil && depth == nil && followPointer == nil && bodyColor == nil && motion == nil }
+    }
+
     public var character: MascotCharacter
     public var style: MascotStyle?
     public var shape: MascotShape?
     public var skins: Skins?
+    /// The engine's look settings, when the person set any (#5349).
+    public var engine: EngineSettings?
     /// A person's own shape (`MascotAvatarDef`): the portable geometry
     /// (`shared/shape-avatar-def.ts`) or a pasted engine definition
     /// (`shared/engine-avatar-def.ts`). Optional; colour stays separate.
@@ -420,12 +466,13 @@ public struct MascotLook: Codable, Hashable, Sendable {
     /// The owl, what every bot wore before characters existed.
     public static let owl = MascotLook(character: .owl)
 
-    public init(character: MascotCharacter, style: MascotStyle? = nil, shape: MascotShape? = nil, skins: Skins? = nil, avatarDef: MascotAvatarDef? = nil) {
+    public init(character: MascotCharacter, style: MascotStyle? = nil, shape: MascotShape? = nil, skins: Skins? = nil, avatarDef: MascotAvatarDef? = nil, engine: EngineSettings? = nil) {
         self.character = character
         self.style = style
         self.shape = shape
         self.skins = skins
         self.avatarDef = avatarDef
+        self.engine = engine.flatMap { $0.isEmpty ? nil : $0 }
     }
 
     private struct Key: CodingKey {
@@ -444,8 +491,7 @@ public struct MascotLook: Codable, Hashable, Sendable {
 
     private static func strict(_ decoder: Decoder) throws -> MascotLook {
         let container = try decoder.container(keyedBy: Key.self)
-        let allowed: Set<String> = ["character", "style", "shape", "skins", "avatarDef"]
-        guard container.allKeys.allSatisfy({ allowed.contains($0.stringValue) }) else { throw Malformed() }
+        // a key this build does not know is a newer build's setting: it is ignored alone, never the whole look
         func optional<T: Decodable>(_ type: T.Type, _ key: String) throws -> T? {
             let k = Key(key)
             guard container.contains(k) else { return nil }
@@ -475,7 +521,17 @@ public struct MascotLook: Codable, Hashable, Sendable {
         if container.contains(Key("avatarDef")), !(try container.decodeNil(forKey: Key("avatarDef"))) {
             avatarDef = try? container.decode(MascotAvatarDef.self, forKey: Key("avatarDef"))
         }
-        return MascotLook(character: character, style: style, shape: shape, skins: skins, avatarDef: avatarDef)
+        // The engine's settings: each one kept when it is a value the desktop takes, dropped alone otherwise.
+        let engine = EngineSettings(
+            material: try? container.decode(String.self, forKey: Key("material")),
+            mood: try? container.decode(String.self, forKey: Key("mood")),
+            eyeColor: try? container.decode(String.self, forKey: Key("eyeColor")),
+            depth: try? container.decode(Double.self, forKey: Key("depth")),
+            followPointer: try? container.decode(Bool.self, forKey: Key("followPointer")),
+            bodyColor: try? container.decode(String.self, forKey: Key("bodyColor")),
+            motion: try? container.decode(String.self, forKey: Key("motion"))
+        )
+        return MascotLook(character: character, style: style, shape: shape, skins: skins, avatarDef: avatarDef, engine: engine)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -484,6 +540,13 @@ public struct MascotLook: Codable, Hashable, Sendable {
         try container.encodeIfPresent(style, forKey: Key("style"))
         try container.encodeIfPresent(shape, forKey: Key("shape"))
         try container.encodeIfPresent(avatarDef, forKey: Key("avatarDef"))
+        try container.encodeIfPresent(engine?.material, forKey: Key("material"))
+        try container.encodeIfPresent(engine?.mood, forKey: Key("mood"))
+        try container.encodeIfPresent(engine?.eyeColor, forKey: Key("eyeColor"))
+        try container.encodeIfPresent(engine?.depth, forKey: Key("depth"))
+        try container.encodeIfPresent(engine?.followPointer, forKey: Key("followPointer"))
+        try container.encodeIfPresent(engine?.bodyColor, forKey: Key("bodyColor"))
+        try container.encodeIfPresent(engine?.motion, forKey: Key("motion"))
         if let skins, !skins.isEmpty {
             var nested = container.nestedContainer(keyedBy: Key.self, forKey: Key("skins"))
             try nested.encodeIfPresent(skins.shape, forKey: Key("shape"))
@@ -511,7 +574,8 @@ public struct MascotLook: Codable, Hashable, Sendable {
             ogreSkin: skins?.ogre ?? .plain,
             frogSkin: skins?.frog ?? .plain,
             crabSkin: skins?.crab ?? .plain,
-            avatarDef: avatarDef
+            avatarDef: avatarDef,
+            engine: engine
         )
     }
 }
@@ -530,8 +594,10 @@ public struct CompleteMascotLook: Hashable, Sendable {
     public var frogSkin: FrogSkin
     public var crabSkin: CrabSkin
     public var avatarDef: MascotAvatarDef?
+    /// The engine's look settings (`MascotLook.EngineSettings`), carried through an edit as they came (#5349).
+    public var engine: MascotLook.EngineSettings?
 
-    public init(character: MascotCharacter, style: MascotStyle = .flat, shape: MascotShape = .circle, shapeSkin: ShapeSkin = .plain, trombiSkin: TrombiSkin = .classic, bunbuSkin: BunbuSkin = .plain, shibaSkin: ShibaSkin = .plain, grumpSkin: GrumpSkin = .plain, ogreSkin: OgreSkin = .plain, frogSkin: FrogSkin = .plain, crabSkin: CrabSkin = .plain, avatarDef: MascotAvatarDef? = nil) {
+    public init(character: MascotCharacter, style: MascotStyle = .flat, shape: MascotShape = .circle, shapeSkin: ShapeSkin = .plain, trombiSkin: TrombiSkin = .classic, bunbuSkin: BunbuSkin = .plain, shibaSkin: ShibaSkin = .plain, grumpSkin: GrumpSkin = .plain, ogreSkin: OgreSkin = .plain, frogSkin: FrogSkin = .plain, crabSkin: CrabSkin = .plain, avatarDef: MascotAvatarDef? = nil, engine: MascotLook.EngineSettings? = nil) {
         self.character = character
         self.style = style
         self.shape = shape
@@ -544,12 +610,13 @@ public struct CompleteMascotLook: Hashable, Sendable {
         self.frogSkin = frogSkin
         self.crabSkin = crabSkin
         self.avatarDef = avatarDef
+        self.engine = engine
     }
 
     /// Back to a stored look, every choice explicit (what the editor saves,
     /// as the desktop's editor does: every character's skin).
     public var stored: MascotLook {
-        MascotLook(character: character, style: style, shape: shape, skins: .init(shape: shapeSkin, trombi: trombiSkin, bunbu: bunbuSkin, shiba: shibaSkin, grump: grumpSkin, ogre: ogreSkin, frog: frogSkin, crab: crabSkin), avatarDef: avatarDef)
+        MascotLook(character: character, style: style, shape: shape, skins: .init(shape: shapeSkin, trombi: trombiSkin, bunbu: bunbuSkin, shiba: shibaSkin, grump: grumpSkin, ogre: ogreSkin, frog: frogSkin, crab: crabSkin), avatarDef: avatarDef, engine: engine)
     }
 
     /// The colour a character wears where the bot gives none it can use:

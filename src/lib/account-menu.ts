@@ -14,7 +14,7 @@
 // Browse bots left for Connect apps' header, Automations for Settings, and
 // Check for updates, Keyboard shortcuts and About for Help. Pure helpers,
 // so the menu's rules are tested without a store or a bridge.
-import { formatResetDistance, type PlanRow } from "./plan-usage";
+import type { PlanRow } from "./plan-usage";
 
 /** No public App Store or TestFlight link for Sagax exists yet: "Get Sagax
  * on mobile" stays out of the menu until one does. */
@@ -66,46 +66,6 @@ export function usageSummary(rows: readonly PlanRow[], favorite: string | null):
   const percent = usagePercent(rows);
   const top = percent === null ? undefined : rows.find((row) => planPercent(row) === percent);
   return { percent, name: null, account: top?.name ?? null };
-}
-
-export interface UsageLine {
-  key: string;
-  /** the plan row this line belongs to (a favorite names it) */
-  planId?: string;
-  /** that plan as people read it ("Grok Ultra") */
-  planName?: string;
-  label: string;
-  subtitle?: string;
-  value: string;
-}
-
-/** The second level's figures: one row per window of each plan: its name and
- * plan, then the window and when it resets, and the percent used. */
-export function usageLines(
-  rows: readonly PlanRow[],
-  labels: { weekly: string; fiveHour: string; used: (percent: number) => string; resetsIn: (when: string) => string },
-  now = Date.now(),
-): UsageLine[] {
-  const lines: UsageLine[] = [];
-  for (const row of rows) {
-    if (row.state !== "windows") continue;
-    const name = row.plan ? `${row.name} ${row.plan}` : row.name;
-    for (const [key, label, window] of [["weekly", labels.weekly, row.weekly], ["five-hour", labels.fiveHour, row.fiveHour]] as const) {
-      if (!window.available || window.usedPercent == null) continue;
-      const when = formatResetDistance(window.resetsAt, now);
-      // #4157: the engine and its plan on the first line, the window and
-      // its reset on the second; the window is never the part that is cut
-      lines.push({
-        key: `${row.id}:${key}`,
-        planId: row.id,
-        planName: name,
-        label: name,
-        subtitle: when ? `${label} · ${labels.resetsIn(when)}` : label,
-        value: labels.used(Math.round(Math.min(100, Math.max(0, window.usedPercent)))),
-      });
-    }
-  }
-  return lines;
 }
 
 /** This person's own space on this computer (the solo server). Switch

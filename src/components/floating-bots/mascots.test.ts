@@ -17,7 +17,9 @@ import { SHAPE_ART } from "@/components/shape-art";
 import { SHAPE_MOVES } from "@/components/shape-engine";
 import { botMascotLook, CHARACTER_PAINT, completeMascotLook, MASCOT_SHAPES, SHAPE_SKINS, TROMBI_SKINS } from "../../../shared/mascot-look";
 import { MASCOTS, mascotFor, motion25dTransform, SHAPE_CHOICES, trombiPoseFor } from "./mascots";
-import MascotLookEditor, { EDITOR_TABS, CHARACTER_LABEL, SHAPE_LABEL, SHAPE_SKIN_LABEL, TROMBI_SKIN_LABEL } from "./MascotLookEditor";
+import MascotPicker from "./MascotPicker";
+import { PICKER_TABS } from "./mascot-picker";
+import { CHARACTER_LABEL, SHAPE_LABEL, SHAPE_SKIN_LABEL, TROMBI_SKIN_LABEL } from "./mascot-look-labels";
 import { REST } from "./clips";
 
 // the shapes' baked stills, as a page loads them the first time a shape shows (#4145)
@@ -114,7 +116,9 @@ describe("a bot's character and its look", () => {
 
   it("is drawn through BotAvatar at every bot avatar call site", () => {
     // a bot's mascot is never drawn straight from the owl or the old cursor body outside these files
-    const allowed = new Set(["Avatar.tsx", "OwlAvatar.tsx", "OwlSkinFx.tsx", "mascots.tsx", "MascotLookEditor.tsx", "FloatingBotWindow.tsx", "AssistantArt.tsx", "RetroAssistant.tsx", "Owl25D.tsx", "CursorAvatar.tsx",
+    const allowed = new Set(["Avatar.tsx", "OwlAvatar.tsx", "OwlSkinFx.tsx", "mascots.tsx",
+      // the skins list's previews (#5369; they were drawn in MascotLookEditor.tsx, which the picker replaced)
+      "skin-catalog.tsx", "FloatingBotWindow.tsx", "AssistantArt.tsx", "RetroAssistant.tsx", "Owl25D.tsx", "CursorAvatar.tsx",
       // an achievement reward's skin preview (the toast, the achievements page), not a bot
       "RewardPreview.tsx",
       // the retro assistant dialogs preview the owl look being picked, not a bot
@@ -178,16 +182,18 @@ describe("the mascot registry", () => {
   });
 });
 
-describe("the Appearance gallery", () => {
+describe("the mascot picker's grid, skins and colours", () => {
   beforeEach(() => resetAchievementsForTests({ unlocks: NOTHING_LOCKED }));
-  /** The editor with each of its tabs open in turn: the whole page, then every other tab's grid. */
+  // This block described the Appearance gallery of the editor (seven tabs, shelves, palettes). The mock-up
+  // the owner validated replaced it with the mascot picker (#5369) [M-20261125-063] [M-20261125-064]: an
+  // expectation about the old screen says what the mock-up asks, with the id beside it; the others are kept.
+  const draw = (mascotLook: Parameters<typeof botMascotLook>[0], mascotSkin: string, extra: object) =>
+    renderToStaticMarkup(createElement(MascotPicker, { bot: { color: "blue", mascotSkin: mascotSkin as never, mascotLook: botMascotLook(mascotLook) }, onPatch: () => undefined, ...extra }));
+  /** The picker with each of its two tabs open in turn, then with its skins list open: all it can show. */
   const render = (mascotLook?: Parameters<typeof botMascotLook>[0], mascotSkin = "none") =>
-    EDITOR_TABS.map((initialTab, index) => {
-      const html = renderToStaticMarkup(createElement(MascotLookEditor, { bot: { color: "blue", mascotSkin: mascotSkin as never, mascotLook: botMascotLook(mascotLook) }, onPatch: () => undefined, initialTab }));
-      if (index === 0) return html;
-      // a tab this character does not offer opens Mascot, already drawn
-      return html.includes(`data-appearance-tab-panel="${initialTab}"`) ? html.slice(html.indexOf('id="appearance-panel-')) : "";
-    }).join("");
+    [...PICKER_TABS.map((initialTab) => draw(mascotLook, mascotSkin, { initialTab })), draw(mascotLook, mascotSkin, { initialLayer: "skins" })].join("");
+  /** The tab the picker opens on by itself. */
+  const opened = (mascotLook?: Parameters<typeof botMascotLook>[0]) => draw(mascotLook, "none", {});
   const enforce = (rewards: string[]) => resetAchievementsForTests({ status: "ready", snapshot: { rewards, items: [] } as unknown as AchievementSnapshot });
 
   afterEach(() => {
@@ -197,43 +203,61 @@ describe("the Appearance gallery", () => {
 
   it("offers the owl its colors and skins when nothing is locked, its moves on the stage only", () => {
     const html = render(undefined);
-    for (const id of ["owl", "crab", "shape", "trombi"]) expect(html).toContain(`data-character-option="${id}"`);
-    expect(html).toContain('data-character-options="owl"');
-    // the skins open on the current one's rarity (none: Common), one tab per rarity
-    for (const skin of ["none", "snowy", "barn", "carbon"]) expect(html).toContain(`data-mascot-skin-option="${skin}"`);
-    expect(html).not.toContain('data-mascot-skin-option="frost"');
-    for (const tier of ["common", "rare", "epic", "legendary"]) expect(html).toMatch(new RegExp(`role="tab"[^>]*data-tab="${tier}"`));
-    expect(html).toContain("data-color-tabs");
+    for (const id of ["owl", "crab", "trombi"]) expect(html).toContain(`data-character-option="${id}"`);
+    // [D-20261125-030] Shapes is a tab of its own, no longer a tile among the characters
+    expect(html).not.toContain('data-character-option="shape"');
+    expect(html).toContain('data-mascot-picker-tab="shapes"');
+    expect(html).toContain('data-mascot-picker-character="owl"');
+    // [D-20261125-029] the skins are one list, every rarity at once (it opened on the current one's rarity, one tab each)
+    for (const skin of ["none", "snowy", "barn", "carbon", "frost"]) expect(html).toContain(`data-skin-option="${skin}"`);
+    for (const tier of ["common", "rare", "epic", "legendary"]) expect(html).toContain(`data-skin-tier-group="${tier}"`);
+    // [D-20261125-028] the colour row in place of the palette tabs
+    expect(html).toContain("data-mascot-picker-colors");
+    expect(html).not.toContain("data-color-tabs");
     expect(html).not.toContain("data-character-style");
     // no moves menu (#4076): the stage plays them
     expect(html).not.toContain("data-character-move");
-    expect(html).not.toContain("data-character-shape");
+    // the owl's panel opens on Characters: no shape in sight until Shapes is opened
+    expect(opened(undefined)).not.toContain("data-character-shape");
   });
 
-  it("lists every character, the locked ones greyed on To unlock, and Trombi only once found", () => {
-    const lockedIds = (html: string) => [...html.matchAll(/data-character-option="([a-z]+)" data-locked=""/g)].map((match) => match[1]);
-    const options = (html: string) => [...html.matchAll(/data-character-option="([a-z]+)"/g)].map((match) => match[1]);
+  it("lists every character, the locked ones greyed with their padlock, and Trombi only once found", () => {
+    const lockedIds = (html: string) => [...new Set([...html.matchAll(/data-character-option="([a-z]+)" data-locked=""/g)].map((match) => match[1]))];
+    const options = (html: string) => [...new Set([...html.matchAll(/data-character-option="([a-z]+)"/g)].map((match) => match[1]))];
+    // [D-20261125-030] Shapes sits under its own tab: its lock is on every shape of that tab
+    const shapesLocked = (html: string) => {
+      const locked = new Set([...html.matchAll(/data-character-shape="([a-z-]+)"[^>]*data-locked=""/g)].map((match) => match[1]));
+      expect([0, MASCOT_SHAPES.length]).toContain(locked.size);
+      return locked.size > 0;
+    };
     enforce([]);
     const html = render(undefined);
-    expect(options(html)).toEqual(MASCOTS.map((entry) => entry.id).filter((id) => id !== "trombi"));
-    expect(lockedIds(html).sort()).toEqual(MASCOTS.map((entry) => entry.id).filter((id) => id !== "owl" && id !== "trombi").sort());
-    expect(html).toContain('data-mascot-shelf="locked"');
-    expect(html).toContain('data-mascot-filter="locked"');
+    expect(options(html)).toEqual(MASCOTS.map((entry) => entry.id).filter((id) => id !== "trombi" && id !== "shape"));
+    expect(lockedIds(html).sort()).toEqual(MASCOTS.map((entry) => entry.id).filter((id) => id !== "owl" && id !== "trombi" && id !== "shape").sort());
+    expect(shapesLocked(html)).toBe(true);
+    // [M-20261125-064] no To unlock shelf and no chip: the padlock is on the tile, and a locked Shapes offers no "+"
+    expect(html).not.toContain("data-mascot-shelf");
+    expect(html).not.toContain("data-mascot-filter");
+    expect(html).toContain("unlock-lock");
+    expect(html).not.toContain("data-mascot-add-open");
     // every rarity of the owl's skins is offered, the locked ones too
-    for (const tier of ["common", "rare", "epic", "legendary"]) expect(html).toMatch(new RegExp(`role="tab"[^>]*data-tab="${tier}"`));
-    expect(html).toContain('data-mascot-skin-option="none"');
-    expect(render(undefined, "chrome")).toContain('data-mascot-skin-option="chrome"');
-    expect(render(undefined, "chrome")).toMatch(/data-locked=""[^>]*data-mascot-skin-option="lightning"/);
+    for (const tier of ["common", "rare", "epic", "legendary"]) expect(html).toContain(`data-skin-tier-group="${tier}"`);
+    expect(html).toContain('data-skin-option="none"');
+    expect(render(undefined, "chrome")).toContain('data-skin-option="chrome"');
+    expect(render(undefined, "chrome")).toMatch(/data-skin-option="lightning"[^>]*data-locked=""/);
+    expect(render(undefined, "chrome")).not.toMatch(/data-skin-option="chrome"[^>]*data-locked=""/);
     // the worn character is never locked, and Trombi shows once worn or found
     expect(lockedIds(render({ character: "crab" }))).not.toContain("crab");
     expect(options(render({ character: "trombi" }))).toContain("trombi");
+    expect(shapesLocked(render({ character: "shape" }))).toBe(false);
     enforce(["character:crab"]);
     expect(lockedIds(render(undefined))).not.toContain("crab");
     setGrokAccountLinked(true);
-    expect(lockedIds(render(undefined))).toContain("shape");
+    expect(shapesLocked(render(undefined))).toBe(true);
     setGrokAccountLinked(false);
     enforce(["character:shape"]);
-    expect(lockedIds(render(undefined))).not.toContain("shape");
+    expect(shapesLocked(render(undefined))).toBe(false);
+    expect(render(undefined)).toContain("data-mascot-add-open");
     // an earned skin brings its character: the crab, worn in Pearl
     enforce(["skin:crab:pearl"]);
     expect(lockedIds(render(undefined))).not.toContain("crab");
@@ -244,9 +268,12 @@ describe("the Appearance gallery", () => {
     for (const shape of MASCOT_SHAPES) expect(html).toContain(`data-character-shape="${shape}"`);
     for (const skin of SHAPE_SKINS) {
       const open = render({ character: "shape", shape: "cloud", skins: { shape: skin } });
-      expect(open, skin).toContain(`data-shape-skin-option="${skin}"`);
+      expect(open, skin).toContain(`data-skin-option="${skin}"`);
+      expect(open, skin).toMatch(new RegExp(`aria-checked="true"[^>]*data-skin-option="${skin}"`));
     }
-    expect(html).not.toContain("data-mascot-skin-option");
+    // nothing of the owl: the list is the shape's own
+    expect(html).toContain('data-mascot-skins="shape"');
+    expect([...new Set([...html.matchAll(/data-skin-option="([a-z-]+)"/g)].map((match) => match[1]))]).toEqual([...SHAPE_SKINS]);
     // the fourteen Shapes moves, in order, each named, played by the stage (no moves menu, #4076)
     const { characterMoves } = await import("./moves");
     const moves = characterMoves(botMascotLook({ character: "shape", shape: "cloud" })).map((move) => move.id);
@@ -254,19 +281,25 @@ describe("the Appearance gallery", () => {
     expect(moves).toHaveLength(14);
     for (const move of SHAPE_MOVES) expect((en as Record<string, string>)[`mascot.shapeMove.${move}`]).toBeTruthy();
     // every shape, each named
-    expect([...html.matchAll(/data-character-shape="([a-z-]+)"/g)].map((m) => m[1])).toEqual([...MASCOT_SHAPES]);
+    expect([...opened({ character: "shape", shape: "cloud" }).matchAll(/data-character-shape="([a-z-]+)"/g)].map((m) => m[1])).toEqual([...MASCOT_SHAPES]);
     expect(html).toContain('aria-label="Pebble"');
     expect(html).toContain('aria-label="Pumpkin"');
     expect(html).toContain('aria-label="Teardrop"');
-    // Clay is the first skin and the Clay palette is offered
-    expect(html).toContain('data-shape-skin-option="plain"');
-    expect(html).toContain('data-tab="clay"');
+    // Clay is the first skin; [D-20261125-028] the colour row is offered in place of the Clay palette's tab
+    expect(SHAPE_SKINS[0]).toBe("plain");
+    expect(html).toMatch(/data-skin-tier-group="common"[\s\S]*?data-skin-option="([a-z-]+)"/);
+    expect(/data-skin-option="([a-z-]+)"/.exec(html)?.[1]).toBe("plain");
+    expect(html).toContain("data-mascot-picker-colors");
+    expect(html.match(/data-mascot-color="/g)).toHaveLength(11 * 3);
   });
 
   it("offers Trombi his skins only, no colors", () => {
     const html = render({ character: "trombi" });
-    for (const skin of TROMBI_SKINS) expect(render({ character: "trombi", skins: { trombi: skin } })).toContain(`data-trombi-skin-option="${skin}"`);
+    for (const skin of TROMBI_SKINS) expect(render({ character: "trombi", skins: { trombi: skin } })).toMatch(new RegExp(`aria-checked="true"[^>]*data-skin-option="${skin}"`));
+    expect(html).toContain('data-mascot-skins="trombi"');
     expect(html).not.toContain("mascot color");
+    expect(html).not.toContain("data-mascot-picker-colors");
+    expect(html).not.toContain("data-mascot-color");
     expect(html).not.toContain("data-character-move");
   });
 });

@@ -118,15 +118,19 @@ async function shots(browser) {
             await page.evaluate(() => { for (const el of document.querySelectorAll("*")) if (el.scrollTop) el.scrollTop = 0; window.scrollTo(0, 0); });
           },
         });
-        // Edit bot > Appearance: the Mascot view, the whole Shape picker (a tall page: every row, the gallery's too), the Skin tab
-        for (const tab of ["mascot", "shape", "skin"]) {
+        // The bot's page > its mascot: the mascot picker open under it (#5369), on its Shapes grid, then with its skins list open
+        for (const view of ["shapes", "skins"]) {
           await shoot({
-            name: `appearance-${tab}`, page: "appearance-editor", query: { shapeSkin: "galaxy" }, ...common, ...(tab === "shape" ? { height: 2600 } : {}),
+            name: `appearance-${view}`, page: "appearance-editor", query: { shapeSkin: "galaxy" }, ...common,
             prepare: async (page) => {
-              await page.waitForSelector("[data-appearance-tab]", { timeout: 60_000 });
-              await page.locator(`[data-appearance-tab="${tab}"]`).first().click();
-              if (tab === "shape") await page.waitForSelector("[data-character-shape]", { timeout: 60_000 });
-              await page.waitForSelector("[data-mascot-stage]", { timeout: 30_000 }).catch(() => {});
+              await page.waitForSelector("[data-bot-profile-hero] [data-mascot-stage]", { timeout: 60_000 });
+              // opened from the page itself: no pointer of the machine moves
+              await page.evaluate(() => document.querySelector("[data-bot-profile-hero] [data-mascot-stage]").click());
+              await page.waitForSelector("[data-mascot-picker-popover] [data-character-shape]", { timeout: 60_000 });
+              if (view === "skins") {
+                await page.locator("[data-mascot-skins-open]").click();
+                await page.waitForSelector("[data-mascot-skins]", { timeout: 30_000 });
+              }
             },
           });
         }

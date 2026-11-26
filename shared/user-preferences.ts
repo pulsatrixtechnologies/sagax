@@ -133,6 +133,11 @@ export const USER_PREFERENCE_KEYS = [
   "sagax.routineScope.v1",
   // the models starred in the composer's model menu (src/lib/model-favorites.ts)
   "sagax.modelFavorites.v1",
+  // the chat bar's voice button: the mode a click starts, "dictation"
+  // (absent) or "conversation", and the dictation's language, "auto"
+  // (absent) or a language code (src/lib/composer-voice.ts)
+  "sagax.composerVoiceMode.v1",
+  "sagax.dictationLanguage.v1",
   // the subscription starred in Usage ›, whose percent the account menu's
   // Usage row shows (src/lib/usage-favorite.ts)
   "sagax.usageFavorite.v1",

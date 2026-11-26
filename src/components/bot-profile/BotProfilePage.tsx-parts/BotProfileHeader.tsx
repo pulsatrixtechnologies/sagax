@@ -4,7 +4,7 @@
 // aligned left and tight. No description line: the bot changes its own
 // description when asked (update_agent_settings). The mascot editor
 // itself is the Appearance modal, opened by a click on the mascot.
-import { lazy, Suspense, useCallback, useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { Lock, Star, UserRound, Users } from "lucide-react";
 
 import { useStore, type Bot } from "@/state/store";
@@ -17,12 +17,12 @@ import { personLabel } from "@/lib/human-label";
 import { splitBotNameTitle } from "../../bot-settings/bot-name-title";
 import { useOrgPeople } from "@/lib/perspicax-org";
 import { personaSharingSummary } from "@/lib/bot-sharing";
-import { MAUS_COLORS } from "@/lib/mascot";
 import { avatarImageFrom, dragMayCarryImage } from "@/lib/avatar-input";
 import { botMascotSkin } from "../../../../shared/mascot-skins";
 import { completeMascotLook } from "../../../../shared/mascot-look";
 import { BOT_PROFILE_LIMITS } from "../../../../shared/bot-profile";
 import { useAvatarSources } from "../../appearance/AvatarSources";
+import { useCaptionChrome } from "../../DesktopCapabilities";
 import { MascotLookPreview } from "../../floating-bots/MascotLookPreview";
 import type { MascotHeroSlot } from "../../floating-bots/mascot-hero-slot";
 import { InlineEditableText } from "../../bot-settings/InlineEditableText";
@@ -33,7 +33,7 @@ type Derived = ReturnType<typeof useBotSectionContent>["derived"];
 
 // The character registry and its labels: fetched with the page's hero card,
 // the same chunk the Appearance modal's editor loads.
-const MascotLookEditor = lazy(() => import("../../floating-bots/MascotLookEditor"));
+const MascotHero = lazy(() => import("../../floating-bots/MascotHero"));
 
 /** The header's hero: the mascot, large and bare over the banner, with the
  * name and label stacked under it. A click on the mascot calls
@@ -49,11 +49,9 @@ export function useBotProfileHero({ bot, derived, onOpenAppearance }: {
   const { state, dispatch } = useStore();
   const canName = canEditBotField(state.config, bot, "name");
   const canLabel = canEditBotField(state.config, bot, "title");
-  const [heroTarget, setHeroTarget] = useState<HTMLElement | null>(null);
-  const [heroClaimed, setHeroClaimed] = useState(false);
-  const claimHero = useCallback((claimed: boolean) => setHeroClaimed(claimed), []);
   const heroSources = useAvatarSources(bot, derived.patch);
   const [heroDropping, setHeroDropping] = useState(false);
+  const { noDragStyle } = useCaptionChrome();
   // a name stored with its title glued on ("Heron · Chief of Staff")
   // shows as two lines too; saving either line writes both fields apart
   const shown = splitBotNameTitle(bot.name, (bot.title ?? ""));
@@ -94,8 +92,6 @@ export function useBotProfileHero({ bot, derived, onOpenAppearance }: {
     </h2>
   );
   const heroSlot: MascotHeroSlot = {
-    target: heroTarget,
-    claim: claimHero,
     heading: heroTitle,
     profile: true,
     ...(onOpenAppearance ? { onOpen: onOpenAppearance, openLabel: t("botProfile.tab.appearance") } : {}),
@@ -112,10 +108,7 @@ export function useBotProfileHero({ bot, derived, onOpenAppearance }: {
       shown={heroLook.character}
       shownName=""
       shownLook={heroLook}
-      shownLock={{ locked: false }}
-      tint={MAUS_COLORS[bot.color] ?? MAUS_COLORS.green}
       owlSkin={botMascotSkin(bot.mascotSkin)}
-      previewSkin={null}
       moves={[]}
       owlMotion={null}
       fxMove={null}
@@ -160,17 +153,18 @@ export function useBotProfileHero({ bot, derived, onOpenAppearance }: {
         }}
         title={t("botPanel.avatar.dropOrPaste")}
         data-avatar-dropping={heroDropping ? "" : undefined}
+        // The mascot overlaps the banner, which is the window's drag handle
+        // (#5371): cut out of it, or the mascot's upper half would move the
+        // window instead of opening Appearance.
+        style={noDragStyle}
         // the mascot's middle (168px frame) on the banner's lower edge (#4420)
         className={cn("relative -mt-[84px] flex flex-col items-start rounded-[18px]", heroDropping && "ring-2 ring-accent")}
       >
-        <div ref={setHeroTarget} data-bot-profile-hero-slot="" className={heroClaimed ? undefined : "hidden"} />
-        {!heroClaimed && (
+        {(
           heroPicture ? staticHero : (
             <Suspense fallback={staticHero}>
-              <MascotLookEditor
-                heroOnly
+              <MascotHero
                 bot={bot}
-                onPatch={derived.patch}
                 onOwlMove={(kind) => dispatch({ type: "playMascotMotion", botId: bot.id, kind })}
               />
             </Suspense>

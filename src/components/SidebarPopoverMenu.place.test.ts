@@ -14,11 +14,24 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { measureRowsFold, SidebarPopoverMenu, submenuPlace, submenuRowsFold, type SidebarMenuItem, type SidebarSubmenuEntry } from "./SidebarPopoverMenu";
-import { usageLines } from "@/lib/account-menu";
 import type { PlanRow, PlanWindow } from "@/lib/plan-usage";
 
 describe("submenuPlace", () => {
   const row = { left: 6, right: 234, top: 400 };
+
+  it("#5338: the next level of a cascade keeps going the way the cascade goes, and stops at the window's margin instead of folding back over the path", () => {
+    const viewport = { width: 1280, height: 900 };
+    const from = { left: 600, right: 820, top: 400 };
+    // room on both sides: the right by default, the left when the cascade already goes left
+    expect(submenuPlace(from, { width: 220, height: 120 }, viewport).left).toBe(816);
+    expect(submenuPlace(from, { width: 220, height: 120 }, viewport, "left").left).toBe(600 + 4 - 220);
+    expect(submenuPlace(from, { width: 220, height: 120 }, viewport, "right").left).toBe(816);
+    // out of room that way: at the margin, over a part of the level before it, never back on the other side of it
+    expect(submenuPlace({ left: 100, right: 320, top: 400 }, { width: 220, height: 120 }, viewport, "left").left).toBe(12);
+    expect(submenuPlace({ left: 900, right: 1120, top: 400 }, { width: 220, height: 120 }, viewport, "right").left).toBe(1280 - 12 - 220);
+    // a single submenu (no cascade) still flips to the other side of its row
+    expect(submenuPlace({ left: 900, right: 1120, top: 400 }, { width: 220, height: 120 }, viewport).left).toBe(900 + 4 - 220);
+  });
 
   it("overlaps its row by 4px and starts level with it", () => {
     expect(submenuPlace(row, { width: 228, height: 120 }, { width: 1280, height: 900 })).toEqual({ left: 230, top: 400, maxHeight: 900 - 56 - 12 });
@@ -88,6 +101,14 @@ const rows = [
   engine("gemini", "Gemini", "Ultra", 23, 5),
   engine("cursor", "Cursor", "Pro Plus", 56, 30),
 ];
+// info lines as a side card draws them: a name, a second line, a figure
+// (since M-20261125-084 the account menu's Usage draws one row per account;
+// the info line stays the card's own row, Cost this month among them)
+const usageLines = (list: typeof rows, labels: { weekly: string; fiveHour: string; used: (percent: number) => string; resetsIn: (when: string) => string }) =>
+  list.flatMap((row) => ([["weekly", labels.weekly, row.weekly, "2d 2h"], ["five-hour", labels.fiveHour, row.fiveHour, "3h"]] as const).map(([key, label, window, when]) => ({
+    key: `${row.id}:${key}`, planId: row.id, planName: `${row.name} ${row.plan}`, label: `${row.name} ${row.plan}`,
+    subtitle: `${label} · ${labels.resetsIn(when)}`, value: labels.used(Math.round(window.usedPercent ?? 0)),
+  })));
 const lines = usageLines(rows, { weekly: "Weekly", fiveHour: "5-hour", used: (n) => `${n}% used`, resetsIn: (when) => `resets in ${when}` });
 
 let host: HTMLDivElement;

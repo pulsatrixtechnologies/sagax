@@ -22,13 +22,14 @@
 //   specks), all from the moves' own timelines (shape-moves.ts).
 import "./shape-mascot.css";
 import { cloneElement, Fragment, isValidElement, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { createAnimator, pointerGaze, type AvatarDefinition, type AvatarMotion, type EyeMark, type FrameShape, type Matrix } from "open-bot-avatar";
+import { avatarFrame, createAnimator, pointerGaze, type AvatarDefinition, type AvatarState, type EyeMark, type FrameShape, type Matrix } from "open-bot-avatar";
 import { requestFrame, subscribeFrames, trackPointer } from "open-bot-avatar/dom";
 import { MAUS_COLORS } from "@/lib/mascot";
 import { cn } from "@/lib/cn";
-import { isBodyShape, MASCOT_SHAPES, SHAPE_SKIN_TIER, SHAPE_SKINS, type BodyShape, type MascotShape, type ShapeSkin, type SkinTier } from "../../shared/mascot-look";
+import { DEFAULT_ENGINE_LOOK, isBodyShape, MASCOT_SHAPES, SHAPE_DEPTH, SHAPE_SKIN_TIER, SHAPE_SKINS, type BodyShape, type EngineLook, type MascotShape, type ShapeSkin, type SkinTier } from "../../shared/mascot-look";
 import type { MascotAvatarDef } from "../../shared/mascot-look";
-import { bakedShapeFor, engineFrame, engineMood, eyeMarkup, lookDefinition, moodFrame, pathsMarkup, runtimeStill, shapesMarkup, stillUrl, type BakedStill, type ShapeMood, type StillFrame, type StillPath } from "./shape-avatar";
+import { bakedShapeFor, engineFrame, enginePose, eyeMarkup, isMarkSlice, lookDefinition, moodFrame, pathsMarkup, runtimeStill, shapesMarkup, stateStill, stillUrl, type BakedStill, type EnginePose, type ShapeMood, type StillFrame, type StillPath } from "./shape-avatar";
+import { ShapeCanvas, useShapeMaterial } from "./shape-material";
 import { mixHex, MOVE_TIMING, ShapeEngine, stillFrame as restFrame, isShapeMove, rainbowStops, type ShapeFrame, type ShapeMove } from "./shape-engine";
 import { loadBakedStill, useBakedStill } from "./shape-stills";
 import { shapeSkinBase, shapeSkinLayers, type ShapeSkinBase, type ShapeSkinLayers } from "./skin-fx/shape-skins";
@@ -44,6 +45,13 @@ export interface ShapeMascotProps {
   color: string;
   size?: number;
   mood?: ShapeMood;
+  /**
+   * What the bot is doing, one of the engine's six states (#5349), from its
+   * activity (agentStateForBot); idle by default. Never a stored choice.
+   */
+  agentState?: AvatarState;
+  /** The look settings the person chose for this mascot (shared/mascot-look.ts engineLookOf); none is today's drawing. */
+  engineLook?: Partial<EngineLook>;
   /** Off draws the still (thumbnails, lists); a move still plays. */
   animated?: boolean;
   /** "static" forces the still at any size (pickers, thumbnails); "full" asks for the live mascot at any size (skin cards, the desktop mascot). */
@@ -116,7 +124,8 @@ export function skinFace(frame: StillFrame): { d: string; transform: string; par
   const area = new Map<string, StillPath>(frame.paths.map((path) => [path[0], path]));
   let best: { path: StillPath; matrix: Matrix } | null = null;
   for (const shape of frame.shapes) {
-    if (shape.kind !== "slice" || /^\d+x\d+$/.test(shape.key)) continue;
+    // a state's mark (the dots of thinking, the exclamation mark of blocked) is no face: a skin paints the body only
+    if (shape.kind !== "slice" || /^\d+x\d+$/.test(shape.key) || isMarkSlice(shape)) continue;
     const path = area.get(shape.path);
     if (path && (!best || path[3] >= best.path[3])) best = { path, matrix: shape.matrix };
   }
@@ -319,7 +328,7 @@ interface LiveInput {
   still: BakedStill | undefined;
   color: string;
   ink: string;
-  mood: AvatarMotion;
+  pose: EnginePose;
   depth: number | undefined;
   followPointer: boolean;
   size: number;
@@ -386,15 +395,19 @@ function useLiveShape(host: React.RefObject<HTMLSpanElement | null>, refs: DrawR
 
         const target = input.followPointer && pointer && rect && rect.width > 0 ? pointerGaze(pointer, rect, { x: input.definition.eyes.x / 100, y: input.definition.eyes.y / 100 }) : null;
         // at work the pose is the app's own over the engine's idle (engineFrame): the engine eases between idle and happy only
-        const step = animator.step({ now: now * 1000, motion: input.mood === "thinking" ? "idle" : input.mood, target, reducedMotion: false });
+        const { pose } = input;
+        const step = animator.step({ now: now * 1000, state: pose.state, mood: pose.mood, target, reducedMotion: false });
         // the move's body (the egg, the hexagon, the triangle) once it has turned more than half way
         const into = playing && input.move ? MOVE_BODY[input.move.clip] : undefined;
         const morphStill = into && playing && playing.morphed >= 0.5 ? morphStills.get(into) : undefined;
         let frame: StillFrame;
         if (morphStill) {
-          frame = moodFrame(morphStill, input.mood);
+          frame = moodFrame(morphStill, pose.motion ?? (pose.mood === "happy" ? "happy" : "idle"));
         } else {
-          const flat = engineFrame(input.definition, input.mood, { motionBlend: step.motionBlend, time, gaze: step.gaze, reducedMotion: false, depth: input.depth });
+          // at rest, the app's own pose (engineFrame); in a state, the engine's own frame for it, its age counted by the animator
+          const flat = pose.motion
+            ? engineFrame(input.definition, pose.motion, { motionBlend: step.motionBlend, time, gaze: step.gaze, reducedMotion: false, depth: input.depth })
+            : avatarFrame(input.definition, { state: pose.state, mood: pose.mood, stateAge: step.stateAge, motionBlend: step.motionBlend, time, gaze: step.gaze, reducedMotion: false, ...(input.depth === undefined ? {} : { depth: input.depth }) });
           frame = { paths: flat.paths.map((path): StillPath => [path.id, path.d, path.evenOdd, path.box.w * path.box.h]), root: flat.root, shapes: flat.shapes };
         }
         if (playing && moves) frame = withEyes(frame, moveEyeOpen(playing, moves.rest));
@@ -461,6 +474,8 @@ export function ShapeMascot({
   color,
   size = 44,
   mood = "idle",
+  agentState = "idle",
+  engineLook,
   animated = true,
   detail,
   move,
@@ -475,25 +490,36 @@ export function ShapeMascot({
   const definition = lookDefinition(known, avatarDef);
   const hex = hexOf(color);
   const paint = shapeSkinPaint(knownSkin, hex);
-  const body = (HEX.test(paint.fill) ? paint.fill : hex).toLowerCase();
-  const ink = (HEX.test(paint.eyes) ? paint.eyes : "#151515").toLowerCase();
-  // the Outline skin is drawn flat on purpose
-  const depth = knownSkin === "outline" ? 0 : undefined;
-  const reduced = useReducedMotion();
+  const settings: EngineLook = { ...DEFAULT_ENGINE_LOOK, ...engineLook };
+  // a material is the engine's own finish (shape-material.tsx): it takes the bot's colour, in place of the skin
+  const material = useShapeMaterial(settings.material);
+  const body = (material ? hex : HEX.test(paint.fill) ? paint.fill : hex).toLowerCase();
+  // the eyes in the colour the person chose, else the skin's own ink
+  const ink = (settings.eyeColor && HEX.test(settings.eyeColor) ? settings.eyeColor : !material && HEX.test(paint.eyes) ? paint.eyes : "#151515").toLowerCase();
+  // the Outline skin is drawn flat on purpose; else the depth the person chose (the engine's natural depth is the baked still)
+  const chosenDepth = settings.depth === null || settings.depth === SHAPE_DEPTH.natural ? undefined : Math.min(SHAPE_DEPTH.max, Math.max(SHAPE_DEPTH.min, settings.depth));
+  const depth = knownSkin === "outline" && !material ? 0 : chosenDepth;
+  // the person's motion preference for this mascot (the picker's gear, #5369), else the device's
+  const systemReduced = useReducedMotion();
+  const reduced = settings.motion === "reduced" || (settings.motion === "system" && systemReduced);
   const uid = `shape-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   // the still: the shape's baked frames, or (a person's own drawing, the flat Outline skin) inferred once here
-  const bakedId: MascotShape | null = depth === 0 ? null : bakedShapeFor(known, avatarDef);
+  const bakedId: MascotShape | null = depth === undefined ? bakedShapeFor(known, avatarDef) : null;
   const baked = useBakedStill(bakedId);
   const still = bakedId ? baked : runtimeStill(definition, depth);
-  const motion = engineMood(mood);
-  const frame = still ? moodFrame(still, motion) : null;
+  // what the bot is doing and how it feels, in the engine's terms; at rest the app's own pose (one of the baked moods)
+  const pose = enginePose(mood, agentState, settings.mood);
+  const motion = pose.motion;
+  const frame = motion ? (still ? moodFrame(still, motion) : null) : stateStill(definition, pose.state, pose.mood, depth);
 
   // a Shapes move plays at any size, then the mascot rests again
   const shapeMove = move && isShapeMove(move.clip) ? { clip: move.clip, key: move.key } : null;
   const [playing, setPlaying] = useState<{ clip: ShapeMove; key: number } | null>(null);
   const timer = useRef(0);
   const play = (clip: ShapeMove, key: number) => {
+    // the moves are written onto the app's own drawing: a body the engine paints in a material plays none
+    if (material) return;
     preloadMoveBody(clip);
     setPlaying({ clip, key });
     window.clearTimeout(timer.current);
@@ -529,14 +555,14 @@ export function ShapeMascot({
     eyes: useRef<SVGGElement>(null),
     front: useRef<SVGGElement>(null),
   };
-  useLiveShape(root, refs, uid, live && frame !== null, {
+  useLiveShape(root, refs, uid, live && frame !== null && !material, {
     definition,
     still,
     color: body,
     ink,
-    mood: motion,
+    pose,
     depth,
-    followPointer,
+    followPointer: followPointer && settings.followPointer,
     size,
     move: playing,
     moveShape: isBodyShape(known) ? known : "circle",
@@ -545,10 +571,12 @@ export function ShapeMascot({
 
   const palette = fxPalette(paint.fx, hex);
   let drawing: ReactNode = null;
-  if (frame) {
+  if (material) {
+    drawing = <ShapeCanvas definition={definition} material={material} color={body} ink={ink} depth={chosenDepth} state={pose.state} mood={pose.mood} followPointer={followPointer && settings.followPointer} live={live} />;
+  } else if (frame) {
     drawing = live || !flatSkin
       ? <ShapeSvg uid={uid} frame={frame} color={body} ink={ink} layers={flatSkin ? null : layers} paint={paint} faceD={faceD} refs={refs} live={live} />
-      : <img src={stillUrl(`${bakedId ?? definition.id}|${depth ?? ""}|${motion}|${body}|${ink}`, frame, body, ink)} alt="" width={size} height={size} draggable={false} decoding="async" className="block h-[84%] w-[84%] select-none" />;
+      : <img src={stillUrl(`${bakedId ?? definition.id}|${depth ?? ""}|${motion ?? `${pose.state}+${pose.mood}`}|${body}|${ink}`, frame, body, ink)} alt="" width={size} height={size} draggable={false} decoding="async" className="block h-[84%] w-[84%] select-none" />;
   }
   return (
     <span
@@ -559,11 +587,13 @@ export function ShapeMascot({
       // turns a still image into the moving drawing, and doing it on
       // pointerdown took the pressed element off the page, so what holds the
       // mascot (a sidebar row, a pinned tile) never got its click
-      onClick={!reduced && (live || animated) && !playing ? () => play("wink", Date.now()) : undefined}
+      onClick={!reduced && (live || animated) && !playing && !material ? () => play("wink", Date.now()) : undefined}
       data-shape={known}
       data-shape-skin={knownSkin}
       data-skin-tier={paint.tier}
-      data-mood={motion}
+      data-mood={motion ?? pose.mood}
+      data-agent-state={pose.state}
+      data-shape-material={settings.material}
       data-fx={full ? "full" : "static"}
       data-shape-drawn={frame ? "" : undefined}
       {...(playing ? { "data-shape-move": playing.clip } : {})}

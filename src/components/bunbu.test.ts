@@ -14,7 +14,8 @@ import { MASCOT_COLOR_HEX } from "../../shared/mascot-colors";
 import { BUNBU_ART, BUNBU_SILHOUETTE, bunbuLipY } from "./bunbu-art";
 import { BUNBU_EARFLOP_CLIP, BunbuMascot, bunbuSkinId, bunbuSkinPaint } from "./BunbuMascot";
 import { bunbuActionFor, bunbuMoodFor, MASCOTS, mascotFor } from "./floating-bots/mascots";
-import MascotLookEditor, { BUNBU_SKIN_LABEL, CHARACTER_LABEL } from "./floating-bots/MascotLookEditor";
+import MascotPicker from "./floating-bots/MascotPicker";
+import { BUNBU_SKIN_LABEL, CHARACTER_LABEL } from "./floating-bots/mascot-look-labels";
 import { skinTierTabs } from "./floating-bots/editor-tabs";
 import { characterMoves } from "./floating-bots/moves";
 
@@ -165,15 +166,22 @@ describe("Bunbu on the desktop and in the popover", () => {
     expect(bunbuActionFor("idle")).toBeNull();
   });
 
-  it("offers its colors, skins by rarity and moves in the Appearance gallery", () => {
+  it("offers its colors, skins by rarity and moves in the mascot picker", () => {
     resetAchievementsForTests({ unlocks: NOTHING_LOCKED });
-    const render = (look: unknown, initialTab: "mascot" | "color" | "skin" = "skin") => renderToStaticMarkup(createElement(MascotLookEditor, { bot: { color: "mint", mascotSkin: "none", mascotLook: botMascotLook(look) }, onPatch: () => undefined, initialTab }));
+    // the mascot picker (#5369) stands where the Appearance gallery's tabs stood [M-20261125-064]: its skins list open
+    const render = (look: unknown) => renderToStaticMarkup(createElement(MascotPicker, { bot: { color: "mint", mascotSkin: "none", mascotLook: botMascotLook(look) }, onPatch: () => undefined, initialLayer: "skins" }));
     const html = render({ character: "bunbu" });
-    expect(render({ character: "bunbu" }, "mascot")).toContain('data-character-option="bunbu"');
-    expect(html).toContain('data-character-options="bunbu"');
-    expect(render({ character: "bunbu" }, "color")).toContain("data-color-tabs");
-    for (const skin of ["plain", "pastel", "night", "plush"]) expect(html).toContain(`data-bunbu-skin-option="${skin}"`);
-    for (const skin of BUNBU_SKINS) expect(render({ character: "bunbu", skins: { bunbu: skin } })).toContain(`data-bunbu-skin-option="${skin}"`);
+    expect(html).toMatch(/data-character-option="bunbu"[^>]*aria-pressed="true"/);
+    expect(html).toContain('data-mascot-picker-character="bunbu"');
+    // [D-20261125-028] the colour row in place of the palette tabs
+    expect(html).toContain("data-mascot-picker-colors");
+    // [D-20261125-029] the skins are the pill's list, every rarity at once
+    expect(html).toContain('data-mascot-skins="bunbu"');
+    for (const skin of ["plain", "pastel", "night", "plush"]) expect(html).toContain(`data-skin-option="${skin}"`);
+    for (const skin of BUNBU_SKINS) {
+      expect(html, skin).toContain(`data-skin-option="${skin}" data-tier="${BUNBU_SKIN_TIER[skin]}"`);
+      expect(render({ character: "bunbu", skins: { bunbu: skin } }), skin).toMatch(new RegExp(`aria-checked="true"[^>]*data-skin-option="${skin}"`));
+    }
     // no moves menu on the page (#4076): the stage plays Bunbu's own moves
     expect(html).not.toContain("data-character-move");
     const moves = characterMoves(botMascotLook({ character: "bunbu" }));

@@ -12,8 +12,9 @@ import { rewardKey, skinTier } from "../../shared/achievements";
 import { contrastRatio, MASCOT_COLOR_HEX } from "../../shared/mascot-colors";
 import { botMascotLook, CHARACTER_PAINT, completeMascotLook, LEGACY_SHIBA_SKINS, mascotLookSchema, SHIBA_DEFAULT_COLOR, SHIBA_SKIN_TIER, SHIBA_SKINS } from "../../shared/mascot-look";
 import { MASCOTS, mascotFor } from "./floating-bots/mascots";
-import { CHARACTER_LABEL, SHIBA_SKIN_LABEL } from "./floating-bots/MascotLookEditor";
-import { colorGroupsFor, skinTierTabs } from "./floating-bots/editor-tabs";
+import { CHARACTER_LABEL, SHIBA_SKIN_LABEL } from "./floating-bots/mascot-look-labels";
+import { skinTierTabs } from "./floating-bots/editor-tabs";
+import { pickerControls } from "./floating-bots/mascot-picker";
 import { ShibaMascot, shibaExpressionForMood } from "./ShibaMascot";
 import { shibaSkinId, shibaSkinPaint, vgaColor } from "./skin-fx/shiba-skins";
 import { SHAPE_EXPRESSIONS } from "./shape-engine";
@@ -152,7 +153,8 @@ describe("Shiba's look", () => {
     expect(mascotFor({ character: "shiba" }).id).toBe("shiba");
     expect(MASCOTS.find((entry) => entry.id === "shiba")?.capabilities.wings).toBe(false);
     expect(CHARACTER_LABEL.shiba).toBe("floatingBots.mascot.shiba");
-    expect(colorGroupsFor("shiba", "orange")).toContain("clay");
+    // [D-20261125-028] the Clay palette's tab left the screen with the palettes: the character takes the picker's colour row
+    expect(pickerControls("shiba", { materials: true }).colors).toBe(true);
     expect(APP_ICON_CHOICES.some((choice) => choice.art.kind === "shiba")).toBe(true);
     const rewarded = ACHIEVEMENTS.flatMap((item) => item.rewards.map(rewardKey));
     expect(rewarded).toContain("character:shiba");

@@ -11,7 +11,7 @@ import type { PageContextRef } from "../../../shared/data-context";
 import { PAGE_CHAT_SURFACE_DEFAULT, type PageChatSurface } from "@/lib/page-chat-layout";
 import { isViewersPrimaryBot } from "@/lib/primary-bot";
 import { viewerActorId } from "@/lib/viewer";
-import { stateForBot } from "@/lib/mascot";
+import { agentStateForBot, stateForBot } from "@/lib/mascot";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { Action, Bot, ConfigStatus, Message } from "@/state/store";
@@ -132,7 +132,7 @@ export function ChatViewPagePanel({
         // passage, and the bot's new version is drawn in place.
         {...(pageAskOffered(canWrite, openPage.botId, bot.id) ? {
           ask: {
-            avatar: <BotAvatar bot={bot} primary={isViewersPrimaryBot(bot, viewerActorId(state.config))} state={stateForBot({ ...bot, messages })} size={28} />,
+            avatar: <BotAvatar bot={bot} primary={isViewersPrimaryBot(bot, viewerActorId(state.config))} state={stateForBot({ ...bot, messages })} agentState={agentStateForBot({ ...bot, messages })} size={28} />,
             botName: bot.name,
             working: bot.busy === true,
             onSend: (text: string, page: PageContextRef) => dispatch(pageAskSend(bot.id, text, page)),
@@ -148,7 +148,7 @@ export function ChatViewPagePanel({
             <PageBotStatus
               status={pageBotStatusLine(messages, bot.busy === true, openPage.openedAt ?? 0)}
               name={bot.name}
-              avatar={<BotAvatar bot={bot} primary={isViewersPrimaryBot(bot, viewerActorId(state.config))} state={stateForBot({ ...bot, messages })} size={22} />}
+              avatar={<BotAvatar bot={bot} primary={isViewersPrimaryBot(bot, viewerActorId(state.config))} state={stateForBot({ ...bot, messages })} agentState={agentStateForBot({ ...bot, messages })} size={22} />}
             />
             {canWrite === false ? (
               <NewConversationInstead onNew={() => dispatch({ type: "newTask", botId: bot.id })} />

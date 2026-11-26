@@ -500,7 +500,9 @@ describe("bot profile page: General cards in place (#3398)", () => {
 
   // the owner 2026-11-19 [M-20261119-023]: Appearance is the header mascot's modal, not a tab;
   // Personality, Shared with and the engine row of Access are gone from General.
-  it("Appearance is a modal opened by the header mascot (tooltip, hand cursor, aria-label), not a tab", async () => {
+  // [M-20261125-063] Appearance was a modal holding the old tab's editor; the mock-up the owner validated makes it the
+  // mascot picker, a panel that "pop directement sous la mascotte", with no window. What opens it is unchanged.
+  it("Appearance is the mascot picker opened under the header mascot (tooltip, hand cursor, aria-label), not a tab", async () => {
     await mount("en");
     const panel = await home("general");
     expect(host.querySelector('[data-bot-profile-tab="appearance"]'), "no Appearance tab").toBeNull();
@@ -516,20 +518,28 @@ describe("bot profile page: General cards in place (#3398)", () => {
     expect(panel.textContent).not.toContain("Who can talk to it, who sets it up");
     mascot!.focus();
     await click(mascot, "the mascot");
-    await until(() => document.querySelector("[data-appearance-reset]"));
-    const modal = document.querySelector<HTMLElement>('[data-bot-page-modal="appearance"]');
-    expect(modal, "the shared modal").not.toBeNull();
-    expect(modal!.querySelector("[data-appearance-pane]"), "the whole editor of the old tab").not.toBeNull();
-    expect(modal!.querySelector("[data-appearance-reset]"), "Reset is in it").not.toBeNull();
-    expect(modal!.contains(document.activeElement) || document.activeElement === document.body, "focus in the modal").toBe(true);
-    await act(async () => { modal!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
+    await until(() => document.querySelector("[data-mascot-picker-popover] [data-mascot-picker]"));
+    expect(document.querySelector('[data-bot-page-modal="appearance"]'), "no window").toBeNull();
+    const panel2 = document.querySelector<HTMLElement>("[data-mascot-picker-popover]");
+    expect(panel2, "the picker's panel").not.toBeNull();
+    expect(panel2!.getAttribute("role")).toBe("dialog");
+    expect(panel2!.getAttribute("aria-label")).toBe(t("botProfile.tab.appearance"));
+    // the picker in place of the old tab's editor: its two tabs, its grid, its colours; [M-20261125-064] no Reset
+    expect(panel2!.querySelectorAll("[data-mascot-picker-tab]").length, "two tabs").toBe(2);
+    expect(panel2!.querySelector("[data-mascot-cell]"), "the grid").not.toBeNull();
+    expect(panel2!.querySelector("[data-mascot-picker-colors]"), "the colours").not.toBeNull();
+    expect(document.querySelector("[data-appearance-pane], [data-appearance-reset]"), "nothing of the old editor").toBeNull();
+    expect(panel2!.contains(document.activeElement) || document.activeElement === document.body, "focus in the panel").toBe(true);
+    await act(async () => { panel2!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
     await settle();
-    expect(document.querySelector('[data-bot-page-modal="appearance"]'), "Escape closed it").toBeNull();
+    expect(document.querySelector("[data-mascot-picker-popover]"), "Escape closed it").toBeNull();
+    expect(document.activeElement, "focus back on the mascot").toBe(mascot);
     expect(host.querySelector("[data-bot-profile-page]"), "the page stays").not.toBeNull();
   });
 
-  // M-20261119-081: General > Settings has an Appearance row again (after Model), opening the same modal as the mascot
-  it("regression M-20261119-081: General > Settings has an Appearance row after Model that opens the mascot editor's modal", async () => {
+  // M-20261119-081: General > Settings has an Appearance row again (after Model), opening what the mascot opens:
+  // [M-20261125-063] the mascot picker under the mascot, where it was the mascot editor's modal
+  it("regression M-20261119-081: General > Settings has an Appearance row after Model that opens the mascot picker", async () => {
     await mount("en");
     const panel = await home("general");
     const settings = panel.querySelector<HTMLElement>('[data-settings-group="bot-profile-group-settings"]')!;
@@ -542,13 +552,14 @@ describe("bot profile page: General cards in place (#3398)", () => {
     expect(row.querySelector("[data-bot-profile-value]")?.textContent, "what it wears").toBeTruthy();
     row.focus();
     await click(row, "the Appearance row");
-    await until(() => document.querySelector("[data-appearance-reset]"));
-    const modal = document.querySelector<HTMLElement>('[data-bot-page-modal="appearance"]');
-    expect(modal, "the mascot editor's modal").not.toBeNull();
-    expect(modal!.querySelector("[data-appearance-pane]")).not.toBeNull();
-    await act(async () => { modal!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
+    await until(() => document.querySelector("[data-mascot-picker-popover] [data-mascot-picker]"));
+    const picker = document.querySelector<HTMLElement>("[data-mascot-picker-popover]");
+    expect(picker, "the mascot picker").not.toBeNull();
+    expect(picker!.querySelector("[data-mascot-picker-grid]")).not.toBeNull();
+    expect(document.querySelector('[data-bot-page-modal="appearance"]'), "no window").toBeNull();
+    await act(async () => { picker!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
     await settle();
-    expect(document.querySelector('[data-bot-page-modal="appearance"]'), "closed").toBeNull();
+    expect(document.querySelector("[data-mascot-picker-popover]"), "closed").toBeNull();
     expect(document.activeElement, "focus back on the row").toBe(row);
   });
 
@@ -563,17 +574,19 @@ describe("bot profile page: General cards in place (#3398)", () => {
     expect(page.hasAttribute("data-bot-profile-modal-open")).toBe(false);
   });
 
-  it("a link to Appearance opens the modal; a link to Shared with opens the Share popover; Personality still opens from its link", async () => {
+  it("a link to Appearance opens the mascot picker; a link to Shared with opens the Share popover; Personality still opens from its link", async () => {
     await mount("en");
     await home("general");
     await act(async () => { dispatch({ type: "personaEditorSection", section: "appearance" } as never); });
     await settle();
-    expect(document.querySelector('[data-bot-page-modal="appearance"]'), "Appearance modal").not.toBeNull();
-    await click(document.querySelector<HTMLElement>('[data-bot-page-modal="appearance"] > [data-dialog-close]'), "close");
+    // [M-20261125-063] the picker under the mascot, no window: it has no close button, a link elsewhere puts it away
+    expect(document.querySelector("[data-mascot-picker-popover]"), "the mascot picker").not.toBeNull();
+    expect(document.querySelector('[data-bot-page-modal="appearance"]'), "no window").toBeNull();
     await act(async () => { dispatch({ type: "personaEditorSection", section: "sharing" } as never); });
     await settle();
     expect(host.querySelector("[data-bot-profile-share]")!.getAttribute("aria-expanded"), "the Share popover").toBe("true");
     expect(document.querySelector("[data-bot-share-popover]"), "its popover").not.toBeNull();
+    expect(document.querySelector("[data-mascot-picker-popover]"), "the picker gave way to the Share popover").toBeNull();
     expect(host.querySelector('[data-bot-page-modal="page-sharing"]'), "no Shared with page").toBeNull();
     await act(async () => { dispatch({ type: "personaEditorSection", section: "soul" } as never); });
     await settle();
@@ -1053,7 +1066,9 @@ const PAGE_SOURCES = [
   "src/components/bot-profile/BotProfilePage.tsx-parts/cards.tsx",
   "src/components/bot-profile/BotProfilePage.tsx-parts/subpages.tsx",
   "src/components/bot-settings/PaneSection.tsx",
-  "src/components/floating-bots/MascotLookEditor.tsx",
+  "src/components/floating-bots/MascotPicker.tsx",
+  "src/components/floating-bots/MascotPickerPopover.tsx",
+  "src/components/floating-bots/MascotHero.tsx",
   "src/components/floating-bots/MascotLookPreview.tsx",
   "src/components/bot-settings/RulesSection.tsx",
   "src/components/bot-settings/RulesSection.tsx-parts/SetRowParts.tsx",

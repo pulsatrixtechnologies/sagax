@@ -14,7 +14,7 @@ import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { MASCOT_SHAPES, SHAPE_SKINS, type MascotShape, type ShapeSkin } from "../../shared/mascot-look";
 import { ShapeMascot, type ShapeMood } from "../components/ShapeMascot";
 import { isShapeMove } from "../components/shape-engine";
-import { SHAPE_LABEL } from "../components/floating-bots/MascotLookEditor";
+import { SHAPE_LABEL } from "../components/floating-bots/mascot-look-labels";
 import { t } from "../lib/i18n";
 import "../styles.css";
 

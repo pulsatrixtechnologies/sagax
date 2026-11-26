@@ -65,7 +65,7 @@ import { makeModelPickerActions, makeToggleMenu } from "./ModelPicker.tsx-parts/
 import { useModelPickerEffects } from "./ModelPicker.tsx-parts/useModelPickerEffects";
 import { modelPickerComposerLabel, modelPickerFollowLine, modelPickerSummary } from "./ModelPicker.tsx-parts/labels";
 import { currentProvider } from "@/lib/model-menu-steps";
-import { modeOfSelection } from "@/lib/model-mode";
+import { chatBarChipLabel, shownMode } from "@/lib/model-mode";
 import type { ModelPanelProps } from "./ModelPanel";
 
 export {
@@ -374,9 +374,16 @@ export function ModelPicker({
   // cascade provider, account, model. The chip names the mode, or the model
   // the person pinned there.
   const modeUi = modes && inComposer && !choose && !viewerLocal && !windowOnly;
-  const composerLabel = choose ? choose.label : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel, accountLabel, modes: modeUi });
+  // M-20261125-074: the chip under the message box names the mode, then the
+  // reasoning level in use: the one the mode imposes (Fast, Expert, Heavy), or
+  // the one the person chose under Auto. M-20261125-073: Build reads as Auto.
+  const modeNow = shownMode(selection);
+  const modeLevel = modeNow === null ? undefined : modeNow === "auto" ? selection.effort : autoStatus?.modes?.[modeNow]?.effort;
+  const composerLabel = choose ? choose.label
+    : modeUi && autoOn && modeNow ? chatBarChipLabel(modeNow, modeLevel)
+    : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel, accountLabel, modes: modeUi });
   const modeMenu: ModelPanelProps["modes"] = modeUi ? {
-    current: modeOfSelection(selection),
+    current: modeNow,
     pinnedLabel: autoOn ? undefined : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel, accountLabel }),
     resolutions: autoStatus?.modes,
     onPick: chooseMode,
@@ -604,8 +611,9 @@ function ModelPickerShell({
       ) : (
         <>
           {trigger}
-          <EngineLimitIndicator engine={limitEngine} botId={bot.id} threadId={threadId ?? bot.threadId}
-            messages={(threadId ?? bot.threadId) === bot.threadId ? bot.messages : undefined} />
+          {/* M-20261125-070: no limit dot in the chat bar; the meter under the box carries it (ComposerMeter) */}
+          {!inComposer && <EngineLimitIndicator engine={limitEngine} botId={bot.id} threadId={threadId ?? bot.threadId}
+            messages={(threadId ?? bot.threadId) === bot.threadId ? bot.messages : undefined} />}
         </>
       )}
 

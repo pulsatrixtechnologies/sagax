@@ -14,6 +14,14 @@ import {
 import { APP_REPOSITORY, DOCS_URL, HELP_CENTER_URL, LICENSE_URL, platformLabel } from "@/lib/app-links";
 import type { UpdaterState } from "@/lib/updater";
 import { setLocale } from "@/lib/i18n";
+import type { PlanRow, PlanWindow } from "@/lib/plan-usage";
+
+const closedWindow: PlanWindow = { available: false, remainingPercent: null, usedPercent: null, resetsAt: null };
+const openWindow = (used: number): PlanWindow => ({ available: true, remainingPercent: 100 - used, usedPercent: used, resetsAt: "2026-10-21T19:40:00Z" });
+const planRow = (patch: Partial<PlanRow>): PlanRow => ({
+  id: "claude", name: "Claude", driver: "claude", plan: "Max", state: "windows", access: "subscription", instanceId: null, instanceIds: [],
+  message: null, fiveHour: closedWindow, weekly: closedWindow, extra: [], models: [], ...patch,
+});
 
 const SOURCE = readFileSync(new URL("./SidebarProfileMenu.tsx", import.meta.url), "utf8");
 const state = (patch: Partial<UpdaterState>): UpdaterState => ({ status: "idle", ...patch }) as UpdaterState;
@@ -174,7 +182,7 @@ describe("profileMenuItems (the reference design's account menu, 2026-10-16)", (
   };
   const items = (patch: Partial<Parameters<typeof profileMenuItems>[0]> = {}) => profileMenuItems({
     usagePercent: 42,
-    usageLines: [{ key: "claude:weekly", label: "Claude Max · Weekly", value: "42% used" }],
+    usageRows: [planRow({ weekly: openWindow(42) })],
     monthCost: "$3.10",
     mobile: false,
     achievementsLabel: "Achievements",
@@ -279,9 +287,9 @@ describe("profileMenuItems (the reference design's account menu, 2026-10-16)", (
       expect(usage.label).toBe("Utilisation");
       expect(usage.value).toBe("42\u00a0%");
       expect(usage.label).toBe("Utilisation");
-      expect(usage.submenu!.map((entry) => entry.key)).toEqual(["claude:weekly", "month-cost", "view-usage"]);
+      expect(usage.submenu!.map((entry) => entry.key)).toEqual(["claude", "month-cost", "view-usage"]);
       expect(usage.submenu!.find((entry) => entry.key === "view-usage")).toMatchObject({ label: "Voir l'utilisation", separatorBefore: true });
-      const bare = items({ usagePercent: null, usageLines: [], monthCost: null }).find((entry) => entry.key === "usage")!;
+      const bare = items({ usagePercent: null, usageRows: [], monthCost: null }).find((entry) => entry.key === "usage")!;
       expect(bare.value).toBeUndefined();
       expect(bare.submenu!.map((entry) => entry.key)).toEqual(["view-usage"]);
     } finally {
@@ -289,29 +297,23 @@ describe("profileMenuItems (the reference design's account menu, 2026-10-16)", (
     }
   });
 
-  it("shows the starred plan's percent without its name, the name in the tooltip, and stars each plan once in Usage ›", () => {
-    const toggled: string[] = [];
-    const lines = [
-      { key: "grok:weekly", planId: "grok", planName: "Grok Ultra", label: "Grok Ultra · Weekly", value: "87% used" },
-      { key: "grok:five-hour", planId: "grok", planName: "Grok Ultra", label: "Grok Ultra · 5-hour", value: "10% used" },
-      { key: "codex:five-hour", planId: "codex", planName: "Codex Business", label: "Codex Business · 5-hour", value: "100% used" },
-    ];
-    const usage = items({
-      usagePercent: 87, usageName: "Grok", usageAccount: "Grok", usageLines: lines,
-      usageFavorite: { id: "grok", onToggle: (id) => toggled.push(id) },
-    }).find((entry) => entry.key === "usage")!;
+  it("shows the starred plan's percent without its name, the name in the tooltip", () => {
+    const rows = [planRow({ id: "grok", name: "Grok", driver: "grok", plan: "Ultra", weekly: openWindow(87), fiveHour: openWindow(10) }), planRow({ id: "codex", name: "Codex", driver: "codex", plan: "Business", fiveHour: openWindow(100) })];
+    const usage = items({ usagePercent: 87, usageName: "Grok", usageAccount: "Grok", usageRows: rows, usageFavorite: { id: "grok", onToggle: noop } }).find((entry) => entry.key === "usage")!;
     expect(usage.value).toBe("87%");
     expect(usage.label).toBe("Usage");
     expect(usage.tooltip).toBe("Usage · Grok · 87%");
-    const stars = usage.submenu!.filter((entry) => entry.favorite);
-    expect(stars.map((entry) => [entry.key, entry.favorite!.on])).toEqual([["grok:weekly", true], ["codex:five-hour", false]]);
-    expect(stars[1]!.favorite!.label).toBe("Show Codex Business in the Usage menu");
-    stars[1]!.favorite!.onToggle();
-    expect(toggled).toEqual(["codex"]);
     // without a favorite: the highest plan's percent, the account it is in the tooltip
-    const top = items({ usagePercent: 100, usageName: null, usageAccount: "Codex Business", usageLines: lines }).find((entry) => entry.key === "usage")!;
+    const top = items({ usagePercent: 100, usageName: null, usageAccount: "Codex Business", usageRows: rows }).find((entry) => entry.key === "usage")!;
     expect(top.value).toBe("100%");
     expect(top.tooltip).toBe("Usage · Codex Business · 100%");
+  });
+
+  it("M-20261125-084: Usage › has one row per account, never one per window", () => {
+    const rows = [planRow({ id: "grok", name: "Grok", driver: "grok", plan: "Ultra", weekly: openWindow(87), fiveHour: openWindow(10) }), planRow({ id: "codex", name: "Codex", driver: "codex", plan: "Business", fiveHour: openWindow(100) }), planRow({ id: "key", name: "Claude (API key)", state: "no-windows" })];
+    const usage = items({ usageRows: rows, usageFavorite: { id: "grok", onToggle: noop } }).find((entry) => entry.key === "usage")!;
+    expect(usage.submenu!.map((entry) => entry.key)).toEqual(["grok", "codex", "month-cost", "view-usage"]);
+    for (const entry of usage.submenu!.slice(0, 2)) expect(entry.node, "the account's row is drawn by the Usage limits row").toBeTruthy();
   });
 
   it("puts Keyboard shortcuts, Release notes, Check for updates and About under Help", () => {

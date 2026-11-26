@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The composer's mode rows (#4900, #5088; owner 2026-11-23, M-20261123-040,
-// M-20261123-045): Auto, Fast, Expert, Heavy, Build, then Reasoning, then All
+// M-20261123-045; Build left on 2026-11-25, M-20261125-073): Auto, Fast, Expert, Heavy, then Reasoning, then All
 // models; a tooltip beside the menu on hover or focus saying what the mode
 // does and which model backs it, a mode with no usable model left out,
 // Reasoning greyed with the imposed level under a mode that sets its own, All
@@ -61,12 +61,12 @@ afterEach(() => {
 });
 
 describe("the mode menu", () => {
-  it("lists Auto, Fast, Expert, Heavy, Build, then Reasoning, then All models, a hairline before each of the two, the mode in use checked, and no model", () => {
+  it("lists Auto, Fast, Expert, Heavy, then Reasoning, then All models, a hairline before each of the two, the mode in use checked, and no model", () => {
     render(base({ current: "auto", reasoning: reasoning({ value: "high" }) }));
-    expect(rows().map((node) => node.textContent)).toEqual(["Auto", "Fast", "Expert", "Heavy", "Build", "ReasoningHIGH", "All models"]);
+    expect(rows().map((node) => node.textContent)).toEqual(["Auto", "Fast", "Expert", "Heavy", "ReasoningHIGH", "All models"]);
     // the hairlines sit right before Reasoning and right before All models
     const order = [...host.querySelectorAll<HTMLElement>("[data-mode-row], [data-mode-separator]")].map((node) => node.dataset.modeRow ?? "separator");
-    expect(order).toEqual(["auto", "fast", "expert", "heavy", "build", "separator", "reasoning", "separator", "all"]);
+    expect(order).toEqual(["auto", "fast", "expert", "heavy", "separator", "reasoning", "separator", "all"]);
     expect(row("auto").getAttribute("aria-checked")).toBe("true");
     expect(row("fast").getAttribute("aria-checked")).toBe("false");
     expect(row("all").getAttribute("aria-checked")).toBe("false");
@@ -96,7 +96,7 @@ describe("the mode menu", () => {
 
   it("a model with no level has no Reasoning row, and no hairline for it", () => {
     render(base({ reasoning: reasoning({ shown: false, choices: [] }) }));
-    expect(rows().map((node) => node.dataset.modeRow)).toEqual(["auto", "fast", "expert", "heavy", "build", "all"]);
+    expect(rows().map((node) => node.dataset.modeRow)).toEqual(["auto", "fast", "expert", "heavy", "all"]);
     expect(host.querySelectorAll("[data-mode-separator]")).toHaveLength(1);
   });
 
@@ -140,12 +140,12 @@ describe("the mode menu", () => {
 
   it("leaves out a mode no model can serve (Auto always stays)", () => {
     render(base({ resolutions: resolutions({ heavy: { mode: "heavy", pick: null } }) }));
-    expect(rows().map((node) => node.dataset.modeRow)).toEqual(["auto", "fast", "expert", "build", "all"]);
+    expect(rows().map((node) => node.dataset.modeRow)).toEqual(["auto", "fast", "expert", "all"]);
   });
 
   it("shows every mode, with the blurb alone in the tooltip, until the server has answered", () => {
     render(base({ resolutions: undefined }));
-    expect(rows().map((node) => node.dataset.modeRow)).toEqual(["auto", "fast", "expert", "heavy", "build", "all"]);
+    expect(rows().map((node) => node.dataset.modeRow)).toEqual(["auto", "fast", "expert", "heavy", "all"]);
     hover(row("expert"));
     expect(tooltip()?.textContent).toBe("Thinks hard");
   });
@@ -173,13 +173,17 @@ describe("the mode menu", () => {
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
-  it("Build is a mode like the others: its tooltip and its pick", () => {
-    const onPick = vi.fn();
-    render(base({ onPick }));
-    hover(row("build"));
-    expect(tooltip()?.textContent).toBe("A model made for code · Grok Code 2");
-    fire(row("build"), "click");
-    expect(onPick).toHaveBeenCalledWith("build");
+  it("M-20261125-073: Build left the menu, even while the server still answers it", () => {
+    render(base({ current: "fast" }));
+    expect(host.querySelector('[data-mode-row="build"]')).toBeNull();
+    expect(host.textContent).not.toContain("Build");
+  });
+
+  it("M-20261125-074: what the panel hands over as favorites sits between the modes and Reasoning, after a hairline", () => {
+    render(base({ reasoning: reasoning({ value: "high" }), favorites: createElement("div", { "data-test-favorites": "" }, "Favorites") }));
+    const order = [...host.querySelectorAll<HTMLElement>("[data-mode-row], [data-mode-separator], [data-test-favorites]")]
+      .map((node) => node.dataset.modeRow ?? ("testFavorites" in node.dataset ? "favorites" : "separator"));
+    expect(order).toEqual(["auto", "fast", "expert", "heavy", "separator", "favorites", "separator", "reasoning", "separator", "all"]);
   });
 
   it("D-20261124-002: nothing sits under the Auto row, the rows are the console's only", () => {

@@ -2,7 +2,7 @@
 // characters the app draws (Avatar.tsx CharacterAvatar), at rest, small,
 // without the app's Avatar module (it carries the app's whole i18n). Loaded
 // after the bar is drawn; until then the bar shows a dot in the bot's color.
-import { completeMascotLook } from "../../shared/mascot-look";
+import { engineLookOf, completeMascotLook } from "../../shared/mascot-look";
 import type { MausColor } from "@/lib/mascot";
 import { BunbuMascot } from "@/components/BunbuMascot";
 import { CrabMascot } from "@/components/CrabMascot";
@@ -19,7 +19,7 @@ export function ReaderMascot({ color, look, size }: { color: string; look?: unkn
   const tint = color as MausColor;
   switch (full.character) {
     case "shape":
-      return <ShapeMascot shape={full.shape} skin={full.skins.shape} color={tint} size={size} animated={false} avatarDef={full.avatarDef} label={null} />;
+      return <ShapeMascot shape={full.shape} skin={full.skins.shape} color={tint} size={size} animated={false} avatarDef={full.avatarDef} engineLook={engineLookOf(full)} label={null} />;
     case "shiba":
       return <ShibaMascot skin={full.skins.shiba} color={tint} size={size} animated={false} label={null} />;
     case "grump":

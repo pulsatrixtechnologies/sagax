@@ -1,4 +1,67 @@
-# Composer modes: Auto, Fast, Expert, Heavy, Build, Reasoning, All models (#4900, #5088)
+# Composer modes: Auto, Fast, Expert, Heavy, Reasoning, All models (#4900, #5088)
+
+## The chat bar of the desktop app (owner 2026-11-25, #5372)
+
+M-20261125-070 to M-20261125-076, M-20261125-084. Desktop only for now: the
+iPhone, the iPad and the console's chat keep the menu described further down
+(Build included) until their own lots.
+
+```
+( + )  Message <bot>                                   ( mic v )
+  [ Expert · High ^ ]                          [ o 42%  |  o 89% ]
+```
+
+- The message box holds the +, the field and one voice button. Under it, a
+  quiet row in small text: the model chip at the left, the context and usage
+  meter at the right (`Composer.tsx-parts/ComposerUnderRow.tsx`).
+- The chip reads the mode then the reasoning level ("Expert · High"), or the
+  model the person pinned. Its menu: Auto, Fast, Expert, Heavy; then
+  "Favorites" (the starred models); then Reasoning; then All models (the
+  cascade); then Manage models. A star in All models adds or removes a
+  favorite (`src/lib/model-favorites.ts`).
+- Build is no row of the chat bar. A bot or a conversation still set on Build
+  reads Auto and runs as Auto; nothing stored is rewritten (an agent's
+  choice). `shared/mode-menu.ts` is unchanged (the console's copy is
+  byte-identical); the desktop list is `CHAT_BAR_MODES` (`src/lib/model-mode.ts`).
+- The meter (`src/components/ComposerMeter.tsx`, rules
+  `src/lib/composer-meter.ts`) replaces the limit dot in the chat bar: two
+  halves, each a ring and its percentage. Left: the share of the model's
+  window this conversation uses. Right: the most advanced limit (5-hour
+  session or week) of the account that serves the bot; only this half takes
+  the dot's warning and danger colours, by the dot's own thresholds. A half
+  with no data is absent. In a narrow box the figures fold and the rings
+  stay. A click opens a detail: the tokens of the total and Compact now; or
+  the account's row (the row of Settings > Usage limits, `AccountLimits` in
+  `PlanUsage.tsx`: provider and address, both windows side by side, its star
+  once), then Continue or Switch engine and See usage. The figures are read
+  when a detail opens and every minute while it is open. The account menu's
+  Usage draws the same row, one per account. The conversation's header shows
+  no token figure any more.
+- The voice button (`src/components/ComposerVoiceButton.tsx`,
+  `src/lib/composer-voice.ts`): the mic for dictation or the waves for the
+  voice conversation; a click starts the mode kept; its arrow opens a menu
+  that chooses between the two, then the microphone with its live level and
+  the dictation's language. The mode and the language are the person's
+  preferences (`sagax.composerVoiceMode.v1`, `sagax.dictationLanguage.v1`).
+  Dictation is the mode until the person chooses (an agent's choice).
+- Settings > Providers > Models > Modes (`settings/ModesSettings.tsx`): the
+  person chooses the model and the reasoning of Fast and Expert, and Heavy's
+  experts; favorites first; one button puts the defaults back. Per person, no
+  admin (`modeModels` of GET/PUT `/api/me/models`, `shared/mode-models.ts`).
+  `pickModeModel` reads it: the chosen model leads and what the mode resolves
+  by itself follows in the chain; a choice that cannot run now leaves the
+  mode on what it resolves by itself; Heavy keeps its leader and seats the
+  chosen experts. With nothing set every mode runs as before. Auto has no
+  setting.
+
+Tests: `src/components/ComposerMeter.dom.test.ts`, `src/lib/composer-meter.test.ts`,
+`src/components/ComposerVoiceButton.dom.test.ts`, `src/lib/composer-voice.test.ts`,
+`src/components/settings/ModesSettings.dom.test.ts`,
+`server/models/model-mode.person.test.ts`, `server/routes/model-switches.test.ts`,
+`src/components/SidebarProfileMenu.usage-rows.dom.test.ts`,
+`src/components/Composer.tsx-parts/ComposerUnderRow.dom.test.ts`.
+
+## The mode menu
 
 The chat bar's model button opens the mode menu. Since the owner's decision of
 2026-11-23 (M-20261123-040, M-20261123-045, M-20261123-047) it is the same
@@ -27,14 +90,28 @@ reads each request.
 Sagax maps every mode, on every turn, to the best models the person can use:
 their connected providers and accounts, and their local models.
 
-**Reasoning** is a row that shows the level in use and opens, in place, the
+**Reasoning** and **All models** open cascading submenus (owner 2026-11-25,
+M-20261125-035, D-20261125-011, D-20261125-012, #5338): the menu stays on
+screen and each level opens beside the row that opened it, so the whole path
+reads at once (menu, providers, accounts, models). Nothing replaces the menu
+and there is no back row. A click, a rest of the pointer or the right arrow
+opens a level; Escape or the left arrow closes the deepest one and the focus
+returns to the row that opened it. The first level picks the side for the
+whole path (the left when the right cannot hold it and the left has more
+room) and the next levels keep going that way; in a window too narrow for
+the path a level stops at the window's margin, over a part of the one before
+it. One shell draws a level (`src/components/ModeMenuLevel.tsx`), placed by
+the menu family's submenu positioner (`submenuPlace`). On iPhone and iPad the
+same path is the system's nested menus (see `ios/App/Features/Chat`).
+
+**Reasoning** is a row that shows the level in use and opens, beside the menu, the
 levels the model in use takes (`modelEffortLevels`, so they follow the model).
 Under a mode that sets its own level (Fast, Expert, Heavy) the row is greyed
 and shows the level the mode imposes. A model that takes no level has no row.
 Under Auto, the row reads Auto until the person chooses a level. Choosing Auto again lets each turn use its mode's level. Build shows its model's default until the person chooses a level.
 
 **All models** is the person's own model. Its row names the pinned model while
-it runs and opens a cascade of three panels, each with a back row: the
+it runs and opens a cascade of three levels, each beside the one before: the
 provider, then the account, then the model. A provider with a single account
 goes straight to its models. Only what can run a turn now is listed: an
 account signed out or not responding, a model turned off and a provider left
@@ -43,7 +120,7 @@ provider: the models of this computer and of the local servers, each server
 (or the person who shares it) where an account would be. A model two accounts
 offer is listed under each, and the copy under an account the menu does not
 lead with forces that account (as the Account line does). The starred
-favorites lead the provider panel and the star still adds or removes one,
+favorites lead the provider level and the star still adds or removes one,
 synced across the person's devices. Nothing else of the panel is lost (one
 component, `src/components/ModelPanel.tsx` with `modes`): the Account and Runs
 with lines and "Manage models" stay in the footer. Auto's "Optimize for" is no

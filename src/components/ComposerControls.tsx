@@ -361,12 +361,17 @@ export function ComposerSendButton({ onClick, disabled, tone, queued, label, tit
   );
 }
 
-/** The CTA seat: Send when something is typed, Voice otherwise, cross-faded. */
+/** The CTA seat: the voice button, and Send beside it once something is
+ * typed. The voice button (its face and its arrow, M-20261125-072) stays in
+ * the box and usable with a draft, as the mic did before it joined this seat
+ * (M-20261125-071: dictation still adds to a draft; #5372 review). The seat
+ * snaps (an animated width would re-wrap the draft on every frame); Send
+ * fades and scales in, compositor only. */
 export function ComposerCtaSeat({ send, voice, typed }: { send: ReactNode; voice: ReactNode; typed: boolean }) {
   return (
-    <span className="relative flex size-7 shrink-0 items-center justify-center" data-composer-cta={typed ? "send" : "voice"}>
-      <span inert={typed} className={cn("absolute inset-0 flex items-center justify-center", GLYPH, seatShown(!typed), typed && "pointer-events-none")}>{voice}</span>
-      <span inert={!typed} className={cn("absolute inset-0 flex items-center justify-center", GLYPH, seatShown(typed), !typed && "pointer-events-none")}>{send}</span>
+    <span className="relative flex h-7 min-w-7 shrink-0 items-center justify-end" data-composer-cta={typed ? "send" : "voice"}>
+      <span className="flex items-center">{voice}</span>
+      <span inert={!typed} className={cn("flex size-7 items-center justify-center transition-[opacity,transform] duration-moderate ease-out-quint motion-reduce:transition-none", seatShown(typed), typed ? "ml-2" : "pointer-events-none absolute inset-y-0 right-0")}>{send}</span>
     </span>
   );
 }

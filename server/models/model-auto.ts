@@ -8,6 +8,7 @@
 // Pure: the engines the payer can use, their model lists and the catalogue
 // facts are passed in as data. Nothing here reads the registry, the network
 // or the clock, so the same inputs always give the same pick.
+import type { ModeModels } from "../../shared/mode-models.ts";
 import type { EffortLevel, ModelSelection } from "../../shared/wire.ts";
 import type { AccountPick } from "../../shared/account-switch.ts";
 import { effortAcceptedByEngine } from "../../shared/ultracode-effort.ts";
@@ -213,6 +214,9 @@ export interface AutoRequest {
   skip?: readonly AutoChainEntry[];
   /** #4329 lot 5: what the bot's owner chose to run with ("Runs with"). */
   harness?: AutoHarnesses;
+  /** M-20261125-074: the owner's own modes (shared/mode-models.ts); absent
+   * or empty: each mode runs what it resolves by itself. */
+  modeModels?: ModeModels;
 }
 
 /** #4329 lot 5: the "Runs with" choices Auto follows, in the resolver's

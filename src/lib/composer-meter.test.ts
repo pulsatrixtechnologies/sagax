@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import type { PlanRow, PlanWindow } from "./plan-usage";
 import { accountRowName } from "./plan-usage";
-import { contextHalf, usageHalf, usageTone } from "./composer-meter";
+import { contextHalf, limitHalf, usageHalf, usageTone } from "./composer-meter";
 
 const window = (used: number | null, resetsAt: string | null = "2026-11-26T15:00:00Z"): PlanWindow => ({ available: used !== null, usedPercent: used, remainingPercent: used === null ? null : 100 - used, resetsAt });
 const row = (over: Partial<PlanRow> = {}): PlanRow => ({
@@ -49,6 +49,26 @@ describe("the usage half", () => {
     expect(usageTone({ near: true, weeklyNotice: false, hard: false })).toBe("warning");
     expect(usageTone({ near: false, weeklyNotice: true, hard: false })).toBe("warning");
     expect(usageTone({ near: true, weeklyNotice: true, hard: true })).toBe("danger");
+  });
+});
+
+// #5372 review: the dot showed from the engine's own limit report, with or
+// without a plan window; the usage half does too
+describe("the usage half from the engine's own limit, when the plan report has no window", () => {
+  it("reads the engine's share from the dot's threshold (90%) and at the limit", () => {
+    expect(limitHalf({ usedPercent: 93.4, blocked: false })).toEqual({ percent: 93 });
+    expect(limitHalf({ usedPercent: 90, blocked: false })).toEqual({ percent: 90 });
+    expect(limitHalf({ usedPercent: 100, blocked: true })).toEqual({ percent: 100 });
+    expect(limitHalf({ usedPercent: 140, blocked: true })).toEqual({ percent: 100 });
+  });
+  it("is absent under the threshold and with no limit: no data, no half", () => {
+    expect(limitHalf({ usedPercent: 89, blocked: false })).toBeNull();
+    expect(limitHalf({ usedPercent: null, blocked: false })).toBeNull();
+    expect(limitHalf(undefined)).toBeNull();
+  });
+  it("an engine refusing work with no window reported has no figure", () => {
+    expect(limitHalf({ usedPercent: null, blocked: true })).toEqual({ percent: null });
+    expect(limitHalf({ usedPercent: 12, blocked: true })).toEqual({ percent: 12 });
   });
 });
 

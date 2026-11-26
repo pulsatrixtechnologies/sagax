@@ -12,12 +12,15 @@
 // then the dot's actions. The figures are read again when a detail opens and
 // every minute while it stays open (D-20261125-014). A half with no data is
 // absent. In a narrow window the pill keeps its two rings, without figures.
+// With no plan window for the engine (an API key account, a plan read that
+// failed), the usage half still shows whenever the dot did: it draws from the
+// engine's own limit, with its line and its actions (#5372 review).
 // Never a banner above the chat. The rules are src/lib/composer-meter.ts.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { contextHalf, usageHalf, usageTone, type UsageTone } from "@/lib/composer-meter";
+import { contextHalf, limitHalf, usageHalf, usageTone, type UsageTone } from "@/lib/composer-meter";
 import { useEngineLimits } from "@/lib/limit-resets";
 import { accountRowName, type PlanRow } from "@/lib/plan-usage";
 import { toggleUsageFavorite, useUsageFavorite } from "@/lib/usage-favorite";
@@ -61,12 +64,14 @@ export interface ComposerMeterViewProps {
   context?: { percent: number; detail: string | null };
   /** Absent: no usage half. `line`: the limit's own sentence near the limit. */
   usage?: {
-    percent: number;
+    /** Null: the engine refuses work and gave no share; a full ring, no figure. */
+    percent: number | null;
     tone: UsageTone;
     /** The account that serves the bot: one row, its provider and address,
      * its two windows side by side (M-20261125-084), the row of Settings >
-     * Usage limits. */
-    row: PlanRow;
+     * Usage limits. Absent when the plan report has no window for the
+     * engine: the half then reads the engine's own limit. */
+    row?: PlanRow;
     /** The account's star (the plan the account menu's Usage row shows). */
     favorite?: { id: string | null; onToggle: (planId: string) => void };
     line?: string | null;
@@ -112,7 +117,7 @@ export function ComposerMeterView({ context, usage, contextActions, usageActions
   if (!context && !usage) return null;
   const shown = open === "context" ? (context ? "context" : null) : open === "usage" ? (usage ? "usage" : null) : null;
   const contextAria = context ? t("composer.meter.contextAria", { percent: context.percent }) : "";
-  const usageAria = usage ? usage.line ?? t("composer.meter.usageAria", { percent: usage.percent }) : "";
+  const usageAria = usage ? usage.line ?? (usage.percent === null ? "" : t("composer.meter.usageAria", { percent: usage.percent })) : "";
   return (
     <span ref={rootRef} data-composer-meter="" role="group" aria-label={t("composer.meter.aria")} className="relative flex items-center">
       <span className="flex h-6 items-center rounded-full border border-hairline/40 text-[12px] leading-4 text-ink-secondary">
@@ -131,8 +136,8 @@ export function ComposerMeterView({ context, usage, contextActions, usageActions
             aria-label={usageAria} title={usageAria}
             onClick={() => setOpen(open === "usage" ? null : "usage")}
             className={cn(HALF, TONE[usage.tone])}>
-            <MeterRing percent={usage.percent} />
-            <span className={FIGURE}>{t("composer.meter.percent", { percent: usage.percent })}</span>
+            <MeterRing percent={usage.percent ?? 100} />
+            {usage.percent !== null && <span className={FIGURE}>{t("composer.meter.percent", { percent: usage.percent })}</span>}
           </button>
         )}
       </span>
@@ -144,7 +149,7 @@ export function ComposerMeterView({ context, usage, contextActions, usageActions
       )}
       {shown === "usage" && usage && (
         <div role="menu" aria-label={usageAria} data-composer-meter-detail="usage" className={cn(DETAIL, USAGE_DETAIL)}>
-          <AccountLimits provider={usage.row} name={accountRowName(usage.row)} favorite={usage.favorite} />
+          {usage.row && <AccountLimits provider={usage.row} name={accountRowName(usage.row)} favorite={usage.favorite} />}
           {usage.near && usage.line && <p data-composer-meter-limit="" className="px-2 py-1 tabular-nums">{usage.line}</p>}
           {usageActions?.(() => setOpen(null))}
         </div>
@@ -167,6 +172,9 @@ export function ComposerMeter({ bot, threadId }: { bot: Bot; threadId: string })
   const rows = useEnginePlanRows(engine, limit?.driver, open === "usage");
   const usage = usageHalf(rows);
   const detail = useEngineLimitDetail({ limit, weekly: weeklyLimitNotice(rows), botId: bot.id, threadId, messages: own ? bot.messages : undefined });
+  // no plan window for this engine: its own limit, whenever the dot showed
+  const fromLimit = usage || !detail.line ? null : limitHalf(limit);
+  const tone = usageTone({ near: detail.near, weeklyNotice: Boolean(detail.weekly), hard: detail.hard });
   const compact = useCompact();
   const favorite = useUsageFavorite();
   return (
@@ -174,12 +182,12 @@ export function ComposerMeter({ bot, threadId }: { bot: Bot; threadId: string })
       context={context ? { percent: context.percent, detail: task?.usage ? contextDetail(task.usage) : null } : undefined}
       usage={usage ? {
         percent: usage.percent,
-        tone: usageTone({ near: detail.near, weeklyNotice: Boolean(detail.weekly), hard: detail.hard }),
+        tone,
         row: usage.row,
         favorite: { id: favorite, onToggle: toggleUsageFavorite },
         line: detail.line,
         near: detail.near,
-      } : undefined}
+      } : fromLimit ? { percent: fromLimit.percent, tone, line: detail.line, near: detail.near } : undefined}
       onOpenChange={setOpen}
       contextActions={own ? (
         <button type="button" data-composer-meter-compact="" disabled={Boolean(bot.busy) || compact.pending}

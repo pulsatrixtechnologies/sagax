@@ -53,6 +53,11 @@ const mount = async (props: Record<string, unknown> = {}) => {
 };
 const half = (name: string) => host.querySelector<HTMLButtonElement>(`[data-composer-meter-half="${name}"]`);
 const click = async (node: Element | null) => { act(() => { (node as HTMLElement).click(); }); await settle(); };
+/** What the server's own limit report says, on mount and on every poll. */
+const engineLimits = (engines: EngineLimit[], plan: () => unknown = () => ({ providers: fixture.plan })) => {
+  fixture.api.mockImplementation(async (path: unknown) => (path === "/api/plan-usage" ? plan() : { checkedAt: NOW, engines }));
+  limits.rememberLimits({ checkedAt: NOW, engines });
+};
 const planCalls = () => fixture.api.mock.calls.filter((call) => call[0] === "/api/plan-usage").length;
 
 beforeEach(() => {
@@ -111,6 +116,60 @@ describe("the context and usage meter", () => {
     await mount({ bot: bot({ tasks: [{ threadId: "t-1", usage: { turns: 4, input: 100, output: 50, context: { tokens: 84_000 } } }] }) });
     expect(half("context")).toBeNull();
     expect(host.querySelector("[data-composer-meter]")).toBeNull();
+  });
+
+  // #5372 review, HIGH 1: the dot this meter replaces showed whenever the
+  // engine's own limit report said near or reached, with or without a plan
+  // window. The usage half then draws from that limit, so its line and its
+  // actions stay within reach.
+  it("with the plan read rejected, an engine at its limit and held still shows the usage half, its line, Try again now, Switch engine and See usage", async () => {
+    engineLimits([{ ...limit(100, true), held: true }], () => { throw new Error("plan report unreachable"); });
+    await mount();
+    expect(half("usage")?.textContent).toBe("100%");
+    expect(half("usage")?.dataset.tone).toBe("danger");
+    expect(half("usage")?.getAttribute("aria-label")).toContain("Claude: at its limit");
+    await click(half("usage"));
+    const detail = host.querySelector('[data-composer-meter-detail="usage"]')!;
+    expect(detail.querySelector("[data-composer-meter-limit]")?.textContent).toContain("Claude: at its limit");
+    // no account row: the plan report gave none
+    expect(detail.querySelector("[data-plan-line]")).toBeNull();
+    expect(detail.querySelector('[data-testid="engine-limit-release"]')?.textContent).toBe("Try again now");
+    expect(detail.querySelector('[data-testid="engine-limit-usage"]')).not.toBeNull();
+    await click(detail.querySelector('[data-testid="engine-limit-switch"]'));
+    expect(modelWindow.open).toHaveBeenCalledWith("scout");
+  });
+
+  it("an API key account has no plan window: near its limit the usage half reads the engine's own share, in the dot's warning; at the limit it offers Continue at", async () => {
+    fixture.plan = [provider({ access: "api-key", state: "no-windows", fiveHour: window(null), weekly: window(null) })];
+    engineLimits([limit(93)]);
+    await mount();
+    expect(half("usage")?.textContent).toBe("93%");
+    expect(half("usage")?.dataset.tone).toBe("warning");
+    engineLimits([limit(100, true)]);
+    await settle();
+    expect(half("usage")?.textContent).toBe("100%");
+    expect(half("usage")?.dataset.tone).toBe("danger");
+    await click(half("usage"));
+    const detail = host.querySelector('[data-composer-meter-detail="usage"]')!;
+    expect(detail.querySelector("[data-composer-meter-limit]")?.textContent).toContain("Claude: at its limit");
+    expect(detail.querySelector('[data-testid="engine-limit-continue"]')?.textContent).toContain("Continue at");
+    expect(detail.querySelector('[data-testid="engine-limit-switch"]')).not.toBeNull();
+    expect(detail.querySelector('[data-testid="engine-limit-usage"]')).not.toBeNull();
+    // under the dot's threshold and with no plan window there is no data: the half stays absent
+    engineLimits([limit(40)]);
+    await settle();
+    expect(half("usage")).toBeNull();
+  });
+
+  it("a refusal's hold with no window reported fills the ring without a figure it does not have", async () => {
+    fixture.plan = [];
+    engineLimits([{ ...limit(0, true), usedPercent: null, window: null, resetsAt: null, held: true }]);
+    await mount();
+    expect(half("usage")).not.toBeNull();
+    expect(half("usage")?.textContent).toBe("");
+    expect(half("usage")?.dataset.tone).toBe("danger");
+    await click(half("usage"));
+    expect(host.querySelector('[data-testid="engine-limit-release"]')).not.toBeNull();
   });
 
   it("a click on the context half opens the tokens used of the total and Compact now, which calls the existing compaction", async () => {

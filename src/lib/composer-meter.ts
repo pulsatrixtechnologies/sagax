@@ -6,6 +6,7 @@
 // rows of the account that serves the bot (GET /api/plan-usage). A half with
 // no data is absent, never greyed and never at zero.
 import type { Message, TaskUsage } from "@/state/store";
+import { nearLimit, type EngineLimit } from "../../shared/limit-reset";
 import { compactedSinceReading } from "./context-warning";
 import type { PlanRow } from "./plan-usage";
 import { contextShare } from "./usage";
@@ -49,6 +50,23 @@ export function usageHalf(rows: readonly PlanRow[]): UsageHalf | null {
     }
   }
   return best;
+}
+
+export interface LimitHalf {
+  /** The engine's own share used, 0 to 100; null when it is refusing work
+   * and reported no window (the ring is then full, with no figure). */
+  percent: number | null;
+}
+
+/** The usage half when the plan report has no window for the engine (an API
+ * key account, a plan read that failed) but the engine's own limit report
+ * says near or reached: the limit dot showed then, so the half does (#5372
+ * review). Null under the dot's threshold: no data, no half. */
+export function limitHalf(limit: Pick<EngineLimit, "usedPercent" | "blocked"> | undefined): LimitHalf | null {
+  if (!limit || !nearLimit(limit)) return null;
+  const used = limit.usedPercent;
+  if (used === null || !Number.isFinite(used)) return { percent: null };
+  return { percent: Math.min(100, Math.max(0, Math.round(used))) };
 }
 
 export type UsageTone = "quiet" | "warning" | "danger";

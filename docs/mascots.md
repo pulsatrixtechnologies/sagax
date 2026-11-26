@@ -559,7 +559,8 @@ with a key this build does not know keeps everything else
 ### Turned by hand (#5384)
 
 Where a shape is drawn large (the bot page's hero, which is also the mascot
-picker's preview, and the bot panel's avatar, 88 px and up), the person turns
+picker's preview, and the avatar card at 88 px and up: a new bot's avatar and
+the Identity section's; the bot panel's own avatar is 64 px and is not turned), the person turns
 it as on the open-bot-avatar site's stage, with that stage's own figures
 (`floating-bots/mascot-turn.ts`): a drag turns the body (0.011 rad a pixel
 across, 0.009 up, the pitch held within 0.9 rad, the gaze held meanwhile), the
@@ -579,6 +580,73 @@ before. Small thumbnails, the desktop mascot and the characters that are not
 shapes are never turned. Covered by `mascot-turn.test.ts`,
 `mascot-turn.dom.test.ts` and `shape-stage.test.ts`; captured by
 `scripts/capture/mascot-turn.mjs`.
+
+#### Turned by hand: every gesture
+
+One row per gesture and state, one test per row, named by the row's id.
+"Site" is the open-bot-avatar site's stage (`apps/site/src/studio/Stage.tsx`,
+0.5.1); "page" is what the bot page did before the mascot was turned by hand
+(a click on the mascot toggles the picker, Escape closes the picker, then the
+page). The rule for Escape: it closes what it closed before, only when the
+mascot has nothing to cancel (a turn, a previewed state). The stage is the
+mascot and its Reset view button, in one wrapper (`[data-mascot-turn]`); on
+the site the button is inside the stage, so the keys and the focus treat the
+two as one. Tests: H is `floating-bots/mascot-turn.dom.test.ts`, P is
+`bot-profile/BotProfilePage.dom.test.ts`, C is `BotProfileAvatarCard.test.ts`.
+
+| Id | Gesture | State | What happens | From | Test |
+|---|---|---|---|---|---|
+| G01 | Click | front, picker closed | the picker opens at once | page | P |
+| G02 | Click | front, picker open | the picker closes at once | page | P |
+| G03 | Click | turned, picker closed | the picker opens once 250 ms passed with no second click; the mascot stays turned | page, the wait is ours | P |
+| G04 | Click | turned, picker open | the picker closes after the same wait; the mascot stays turned | page, the wait is ours | P |
+| G05 | Double click | front | two clicks, as before: the picker toggles twice | page | P |
+| G06 | Double click | turned, picker closed | front again; the picker never opens | site | P |
+| G07 | Double click | turned, picker open | front again; the same picker stays, on its tab | site | P |
+| G08 | Two clicks that are no double click | turned | two clicks: the first played when the second comes, the second after its wait | page | H |
+| G09 | Drag (4 px and more) | picker closed | turns by 0.011 rad a pixel across and 0.009 up; opens nothing | site | P |
+| G10 | Drag | picker open | turns; the same picker stays, let go on the mascot, over the panel or outside | site | P |
+| G11 | Press that moved less than 4 px | any | a click (G01 to G04) | ours | H |
+| G12 | Press let go where the mascot does not see it | any | the press is over: the pointer coming back turns nothing | site (its stage holds the pointer) | H |
+| G13 | Drag begun outside, ended on the mascot | picker open | the picker closes at the press; nothing turns | page | P |
+| G14 | Right button | any | turns nothing | site | H |
+| G15 | Press during the way back | coming back | the way back stops where it is | site | H |
+| G16 | Arrow keys | focus on the mascot | 0.2 rad, 0.6 with Shift, the pitch within 0.9 rad; the picker untouched | site | H |
+| G17 | Home | turned, picker open | front again; the same picker and the page stay | site | P |
+| G18 | 0 | turned, picker open | as G17 | site | P |
+| G19 | Escape | turned, picker open | as G17 | site | P |
+| G20 | Escape, Home, 0 | turned, picker closed | front again; the page stays | site | P |
+| G21 | Escape | front, picker open | the picker closes, the page stays, the focus is on the mascot | page | P |
+| G22 | Escape | front, picker closed, nothing previewed | the page closes | page | P |
+| G23 | Home, 0 | front | left to the page | site | H |
+| G24 | 1 to 6 | focus on the mascot | previews idle, thinking, working, waiting, blocked, done; said to a screen reader; stores nothing | site, the preview is ours | H |
+| G25 | Escape | a state is previewed | the preview is dropped (with the turn if turned); the picker and the page stay; Home and 0 leave it | ours | H, P |
+| G26 | M, Shift+M | focus on the mascot | the mood changes and is stored, as the picker's pill does; where it cannot be stored the key is left alone | site | H |
+| G27 | Enter, Space | focus on the mascot | a click at once, front or turned | page | H |
+| G28 | A digit or M with Ctrl, Meta or Alt | any | left to the app | site | H |
+| G29 | Tab | turned | mascot, then its Reset view button; facing front the button is hidden and out of the Tab order | site | H |
+| G30 | Reset view button | turned, picker open | front again; the same picker stays; the focus goes to the mascot | site, the focus is ours | P |
+| G31 | Reset view button | turned, picker closed | front again; nothing else pressed; the focus goes to the mascot | site, the focus is ours | H |
+| G32 | Escape after G30 | front, picker open | the picker closes and the page stays; the next Escape closes the page | page | P |
+| G33 | Keys after G31 | front, picker closed | the mascot has the focus: its keys work, Escape as G20 or G22 | page | P |
+| G34 | Enter, Space on the Reset view button | turned | its click (G30, G31) | site | H |
+| G35 | The mascot's keys on the Reset view button | turned | as on the mascot (arrows, Home, 0, Escape, 1 to 6, M); the mascot takes the focus | site | H |
+| G36 | Escape on the Reset view button | turned, picker open or closed | front again; nothing closes; the focus goes to the mascot | site | P |
+| G37 | Focus leaving | a state is previewed | the preview lasts between the mascot and its button, ends when the focus leaves both | ours | H |
+| G38 | Escape in the panel | picker open | the picker closes; the focus goes back to the mascot that opened it | page | P |
+| G39 | Escape in the panel | turned, picker open | the picker closes; the mascot stays turned | site (keys are the focused stage's) | P |
+| G40 | Press outside | turned, picker open | the picker closes; the mascot stays turned | page | P |
+| G41 | Escape | a new bot's avatar, turned | front again; the window around it does not act on the key | site | C |
+| G42 | Escape | a new bot's avatar, front, its picker open | the picker closes alone | page | C |
+| G43 | Reset view button, then Escape | a new bot's avatar, its picker open | front again, the same picker, the focus on the avatar; Escape closes the picker alone | site, page | C |
+| G44 | Any | the bot panel's avatar (64 px), thumbnails | not turned: no grab, no key, no button; a click is a click | page | C |
+| G45 | Any | a picture, a character that is not a shape | not turned | page | H |
+| G46 | The look changes | turned | another character faces front; the shape comes back facing front | ours | H |
+
+Ours, not settled by the site or the page: the 4 px of G11, the 250 ms of G03
+(a double click slower than that toggles the picker once, then brings the
+mascot back), the previewed state and its Escape (G24, G25, G37), the focus
+handed to the mascot (G30, G31, G35).
 
 ## HD mascots (painted art, pilot: Shiba)
 

@@ -80,7 +80,17 @@ export function BotProfileAvatarCard({
       {/* room above for a move's jump and effects: the panel scrolls, so anything past its top is cut by a straight edge.
           pt-5 from 80px up (panel 92, wizard 104, profile 144) so a jump clears the box. */}
       <div className={cn("flex justify-center pb-0", size >= 80 ? "pt-5" : "pt-3")}>
-        <span className="relative inline-flex" data-mascot-turn={turn.enabled ? (turn.dragging ? "dragging" : "") : undefined}>
+        <span
+          className="relative inline-flex"
+          data-mascot-turn={turn.enabled ? (turn.dragging ? "dragging" : "") : undefined}
+          // Escape on the avatar or its Reset view button, the draft's picker open: once the mascot has nothing to
+          // cancel the key closes the picker alone, never the window around it (the picker's own Escape, #5369)
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing || !(draft && draftOpen)) return;
+            event.preventDefault();
+            setDraftOpen(false);
+          }}
+        >
         <button
           ref={avatarRef}
           type="button"

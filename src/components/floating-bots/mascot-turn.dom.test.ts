@@ -71,7 +71,7 @@ describe("the large mascot, turned by hand", () => {
   };
   const frames = async (ms: number) => act(async () => new Promise((resolve) => setTimeout(resolve, ms)));
 
-  it("a press that does not move is a click: the picker opens and the mascot stays facing front", async () => {
+  it("G11: a press that does not move is a click: the picker opens and the mascot stays facing front", async () => {
     await mount();
     await pointer("pointerdown", 100, 100);
     await pointer("pointermove", 102, 101);
@@ -264,5 +264,296 @@ describe("the large mascot, turned by hand", () => {
     await mount();
     expect(stageButton().getAttribute("aria-description")).toContain("arrow keys");
     expect(stageButton().getAttribute("aria-label")).toBe("Appearance");
+  });
+
+  // The gesture table of docs/mascots.md ("Turned by hand: every gesture"), the rows that need no page around the
+  // mascot. Each test is one row, named by its id; the rows about the picker, the page and the focus after a press
+  // are in bot-profile/BotProfilePage.dom.test.ts, the draft's avatar in BotProfileAvatarCard.test.ts.
+  describe("the gesture table", () => {
+    const reduced = { ...shape, motion: "reduced" } as MascotLook;
+    const reset = () => host.querySelector<HTMLButtonElement>("[data-mascot-turn-reset]")!;
+    const keyOn = async (node: HTMLElement, name: string, init: KeyboardEventInit = {}) => {
+      const event = new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...init });
+      await act(async () => { node.dispatchEvent(event); });
+      return event;
+    };
+    const stateOf = () => mascot().getAttribute("data-agent-state");
+    /** The focus leaving `node` for `next` (null: for nothing in the page). */
+    const leave = async (node: HTMLElement, next: HTMLElement | null) => {
+      const event = new MouseEvent("focusout", { bubbles: true });
+      Object.defineProperty(event, "relatedTarget", { value: next });
+      await act(async () => { node.dispatchEvent(event); });
+    };
+
+    it("G08: two clicks on a turned mascot that are no double click are two clicks, the first played when the second comes", async () => {
+      await mount();
+      await key("ArrowRight");
+      await mouseClick(1);
+      expect(onActivate).not.toHaveBeenCalled();
+      // a second click the browser does not count as the second of a double click (detail 1): no dblclick follows it
+      await mouseClick(1);
+      expect(onActivate).toHaveBeenCalledTimes(1);
+      await frames(320);
+      expect(onActivate).toHaveBeenCalledTimes(2);
+      expect(viewOf()).toBe("0.2 0");
+    });
+
+    it("G12: a press let go where the mascot does not see it is over: the pointer coming back turns nothing", async () => {
+      await mount();
+      await pointer("pointerdown", 100, 100);
+      // the release lands on the page, not on the mascot
+      await act(async () => {
+        const up = new MouseEvent("pointerup", { bubbles: true, cancelable: true, clientX: 400, clientY: 300, button: 0 } as MouseEventInit);
+        Object.defineProperty(up, "pointerId", { value: 1 });
+        document.body.dispatchEvent(up);
+      });
+      await pointer("pointermove", 180, 100);
+      expect(viewOf()).toBeNull();
+      expect(host.querySelector("[data-mascot-turn]")?.getAttribute("data-mascot-turn")).toBe("");
+    });
+
+    it("G14: the right button turns nothing", async () => {
+      await mount();
+      const send = async (type: string, x: number) => {
+        const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: 100, button: 2 } as MouseEventInit);
+        Object.defineProperty(event, "pointerId", { value: 1 });
+        await act(async () => { stageButton().dispatchEvent(event); });
+      };
+      await send("pointerdown", 100);
+      await send("pointermove", 180);
+      await send("pointerup", 180);
+      expect(viewOf()).toBeNull();
+      expect(onActivate).not.toHaveBeenCalled();
+    });
+
+    it("G15: a press on the mascot on its way back stops it where it is", async () => {
+      // the frames of the way back, run by hand
+      const frame = { request: globalThis.requestAnimationFrame, cancel: globalThis.cancelAnimationFrame };
+      const queued = new Map<number, FrameRequestCallback>();
+      let last = 0;
+      globalThis.requestAnimationFrame = ((step: FrameRequestCallback) => { queued.set(++last, step); return last; }) as typeof requestAnimationFrame;
+      globalThis.cancelAnimationFrame = ((id: number) => { queued.delete(id); }) as typeof cancelAnimationFrame;
+      try {
+        await mount({ shownLook: { ...shape, motion: "full" } as MascotLook });
+        await key("ArrowRight", { shiftKey: true });
+        expect(viewOf()).toBe("0.6 0");
+        queued.clear();
+        const began = performance.now();
+        await key("Home");
+        expect(queued.size, "the way back began").toBe(1);
+        // 120 ms into the 420 ms
+        await act(async () => { const [id, step] = [...queued][0]!; queued.delete(id); step(began + 120); });
+        const stopped = viewOf();
+        expect(stopped).not.toBeNull();
+        expect(Number(stopped!.split(" ")[0])).toBeGreaterThan(0.05);
+        expect(Number(stopped!.split(" ")[0])).toBeLessThan(0.6);
+        expect(queued.size, "the next frame is asked for").toBe(1);
+        await pointer("pointerdown", 100, 100);
+        expect(queued.size, "the press stopped the way back").toBe(0);
+        await pointer("pointerup", 100, 100);
+        expect(viewOf()).toBe(stopped);
+      } finally {
+        globalThis.requestAnimationFrame = frame.request;
+        globalThis.cancelAnimationFrame = frame.cancel;
+      }
+    });
+
+    it("G16: the arrow keys turn by 0.2 rad, 0.6 with Shift, the pitch held within 0.9 rad", async () => {
+      await mount();
+      expect((await key("ArrowRight")).defaultPrevented).toBe(true);
+      expect(viewOf()).toBe("0.2 0");
+      await key("ArrowLeft", { shiftKey: true });
+      expect(viewOf()).toBe("-0.4 0");
+      await key("ArrowUp", { shiftKey: true });
+      await key("ArrowUp", { shiftKey: true });
+      expect(viewOf()).toBe("-0.4 0.9");
+      await key("ArrowDown");
+      expect(viewOf()).toBe("-0.4 0.7");
+    });
+
+    it("G23: Home and 0 on a mascot facing front are left to the page", async () => {
+      await mount();
+      for (const name of ["Home", "0"]) expect((await key(name)).defaultPrevented, name).toBe(false);
+      expect(viewOf()).toBeNull();
+    });
+
+    it("G24: 1 to 6 preview the six states in the site's order, say them, and store nothing", async () => {
+      await mount();
+      const seen: Array<string | null> = [];
+      const said: Array<string | null | undefined> = [];
+      for (const name of ["1", "2", "3", "4", "5", "6"]) {
+        expect((await key(name)).defaultPrevented, name).toBe(true);
+        seen.push(stateOf());
+        said.push(host.querySelector("[data-mascot-turn-said]")?.textContent);
+      }
+      expect(seen).toEqual(["idle", "thinking", "working", "waiting", "blocked", "done"]);
+      expect(said).toEqual(["Idle", "Thinking", "Working", "Waiting", "Blocked", "Done"]);
+      expect(onMood).not.toHaveBeenCalled();
+      expect(onActivate).not.toHaveBeenCalled();
+      // 7 to 9 pick nothing
+      expect((await key("7")).defaultPrevented).toBe(false);
+      expect(stateOf()).toBe("done");
+    });
+
+    it("G25: Escape drops a previewed state before anything else closes, and brings a turned mascot back with it", async () => {
+      await mount({ shownLook: reduced });
+      await key("5");
+      expect(stateOf()).toBe("blocked");
+      expect((await key("Escape")).defaultPrevented, "the preview is the mascot's to cancel").toBe(true);
+      expect(stateOf()).toBe("idle");
+      expect(host.querySelector("[data-mascot-turn-said]")?.textContent).toBe("");
+      // nothing left to cancel: the key is the page's again
+      expect((await key("Escape")).defaultPrevented).toBe(false);
+      // turned and previewing: one Escape brings the mascot back to itself
+      await key("ArrowRight");
+      await key("3");
+      expect((await key("Escape")).defaultPrevented).toBe(true);
+      expect(viewOf()).toBeNull();
+      expect(stateOf()).toBe("idle");
+      // Home and 0 are the view's alone, as on the site
+      await key("ArrowRight");
+      await key("3");
+      await key("Home");
+      expect(viewOf()).toBeNull();
+      expect(stateOf()).toBe("working");
+    });
+
+    it("G26: M and Shift+M change the mood through the page; with no way to store it the key is left alone", async () => {
+      await mount();
+      expect((await key("m")).defaultPrevented).toBe(true);
+      expect(onMood).toHaveBeenLastCalledWith("happy");
+      await key("M", { shiftKey: true });
+      expect(onMood).toHaveBeenCalledTimes(2);
+      await mount({ onMood: undefined });
+      onMood.mockClear();
+      expect((await key("m")).defaultPrevented).toBe(false);
+      expect(onMood).not.toHaveBeenCalled();
+    });
+
+    it("G27: Enter and Space press the mascot at once, facing front or turned", async () => {
+      await mount();
+      for (const name of ["Enter", " "]) expect((await key(name)).defaultPrevented, name).toBe(false);
+      await mouseClick(0);
+      expect(onActivate).toHaveBeenCalledTimes(1);
+      await key("ArrowRight");
+      for (const name of ["Enter", " "]) expect((await key(name)).defaultPrevented, name).toBe(false);
+      await mouseClick(0);
+      expect(onActivate).toHaveBeenCalledTimes(2);
+      expect(viewOf()).toBe("0.2 0");
+    });
+
+    it("G28: a digit or M with Ctrl, Meta or Alt is a shortcut of the app, not the mascot's", async () => {
+      await mount();
+      for (const init of [{ ctrlKey: true }, { metaKey: true }, { altKey: true }]) {
+        expect((await key("5", init)).defaultPrevented).toBe(false);
+        expect((await key("m", init)).defaultPrevented).toBe(false);
+      }
+      expect(stateOf()).toBe("idle");
+      expect(onMood).not.toHaveBeenCalled();
+    });
+
+    it("G29: the Reset view button is there, named and in the Tab order right after the mascot, only while it is turned", async () => {
+      await mount({ shownLook: reduced });
+      expect(reset().hidden).toBe(true);
+      expect(reset().tabIndex).toBe(-1);
+      await key("ArrowRight");
+      expect(reset().hidden).toBe(false);
+      expect(reset().tabIndex).toBe(0);
+      expect(stageButton().tabIndex).toBe(0);
+      expect(reset().getAttribute("aria-label")).toBe("Reset view");
+      expect(reset().getAttribute("title")).toBe("Reset view");
+      // the next stop after the mascot, in the same wrapper
+      expect(stageButton().nextElementSibling).toBe(reset());
+      expect(reset().closest("[data-mascot-turn]")).toBe(stageButton().closest("[data-mascot-turn]"));
+      await key("ArrowLeft");
+      expect(reset().hidden).toBe(true);
+      expect(reset().tabIndex).toBe(-1);
+    });
+
+    it("G31: the Reset view button brings the mascot back, presses nothing else, and hands the focus to the mascot before it hides", async () => {
+      await mount({ shownLook: reduced });
+      await key("ArrowRight");
+      // a press on a button gives it the focus (Chromium), and so does Tab
+      reset().focus();
+      expect(document.activeElement).toBe(reset());
+      await act(async () => reset().click());
+      expect(viewOf()).toBeNull();
+      expect(reset().hidden).toBe(true);
+      expect(onActivate).not.toHaveBeenCalled();
+      expect(document.activeElement, "the focus is on the mascot, not on a hidden button").toBe(stageButton());
+    });
+
+    it("G34: Enter and Space on the Reset view button are its click", async () => {
+      await mount({ shownLook: reduced });
+      await key("ArrowRight");
+      reset().focus();
+      for (const name of ["Enter", " "]) expect((await keyOn(reset(), name)).defaultPrevented, name).toBe(false);
+      expect(viewOf()).toBe("0.2 0");
+      // the click a key makes (detail 0)
+      await act(async () => { reset().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 0 })); });
+      expect(viewOf()).toBeNull();
+      expect(document.activeElement).toBe(stageButton());
+    });
+
+    it("G35: the mascot's keys work from its Reset view button too, as inside the site's stage, and the mascot takes the focus", async () => {
+      await mount({ shownLook: reduced });
+      await key("ArrowRight");
+      reset().focus();
+      expect((await keyOn(reset(), "ArrowRight")).defaultPrevented).toBe(true);
+      expect(viewOf()).toBe("0.4 0");
+      expect(document.activeElement).toBe(stageButton());
+      reset().focus();
+      expect((await keyOn(reset(), "4")).defaultPrevented).toBe(true);
+      expect(stateOf()).toBe("waiting");
+      reset().focus();
+      expect((await keyOn(reset(), "m")).defaultPrevented).toBe(true);
+      expect(onMood).toHaveBeenCalledWith("happy");
+      for (const name of ["Home", "0", "Escape"]) {
+        await key("ArrowRight");
+        reset().focus();
+        expect((await keyOn(reset(), name)).defaultPrevented, name).toBe(true);
+        expect(viewOf(), name).toBeNull();
+        expect(document.activeElement, name).toBe(stageButton());
+      }
+    });
+
+    it("G37: a previewed state lasts while the focus is on the mascot or its Reset view button, and ends when it leaves both", async () => {
+      await mount({ shownLook: reduced });
+      await key("ArrowRight");
+      await key("5");
+      expect(stateOf()).toBe("blocked");
+      // Tab from the mascot to its button
+      await leave(stageButton(), reset());
+      expect(stateOf()).toBe("blocked");
+      // Shift+Tab back
+      await leave(reset(), stageButton());
+      expect(stateOf()).toBe("blocked");
+      // Tab from the button to the rest of the page
+      await leave(reset(), document.body);
+      expect(stateOf()).toBe("idle");
+      await key("5");
+      await leave(stageButton(), null);
+      expect(stateOf()).toBe("idle");
+    });
+
+    it("G45: a picture worn in place of the mascot is not turned", async () => {
+      await mount({ picture: { name: "Nimbus", color: "blue", avatarUrl: "data:image/png;base64,AAAA", avatarCrop: "circle" } as never });
+      expect(host.querySelector("[data-mascot-turn]")?.getAttribute("data-mascot-turn") ?? null).toBeNull();
+      expect(host.querySelector("[data-mascot-turn-reset]")).toBeNull();
+      expect((await key("ArrowRight")).defaultPrevented).toBe(false);
+      expect((await key("5")).defaultPrevented).toBe(false);
+    });
+
+    it("G46: a turned shape changed for another character faces front, and is facing front when the shape comes back", async () => {
+      await mount();
+      await key("ArrowRight");
+      await key("5");
+      await mount({ shown: "owl", shownLook: completeMascotLook({ character: "owl" } as MascotLook) });
+      expect(host.querySelector("[data-mascot-turn-reset]")).toBeNull();
+      await mount();
+      expect(viewOf()).toBeNull();
+      expect(stateOf()).toBe("idle");
+      expect(reset().hidden).toBe(true);
+    });
   });
 });

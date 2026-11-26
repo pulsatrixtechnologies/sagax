@@ -16,7 +16,15 @@
 // volume to turn, and a picture is a picture. The state a key previews is
 // never stored: it shows until the mascot loses the focus, then the bot's
 // own state is back.
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
+//
+// The stage is the mascot and its Reset view button, side by side in one
+// wrapper ([data-mascot-turn]); on the site the button sits inside the stage.
+// So the mascot's keys work from the button too, a previewed state lasts while
+// the focus is on either, and the button never keeps a focus it is about to
+// hide with: it hands it to the mascot. Escape is the mascot's while it has
+// something to cancel (a turn, a previewed state); with nothing to cancel it
+// is left to what closed on it before (the picker, then the page).
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import type { AvatarState } from "open-bot-avatar";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
@@ -60,7 +68,7 @@ export interface MascotTurn {
     onClickCapture?: (event: MouseEvent<HTMLElement>) => void;
     onDoubleClick?: () => void;
     onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void;
-    onBlur?: () => void;
+    onBlur?: (event: FocusEvent<HTMLElement>) => void;
   };
   enabled: boolean;
   dragging: boolean;
@@ -92,7 +100,9 @@ export function useMascotTurn({ look, picture = false, onMood }: { look: MascotL
     heldClick.current = 0;
   };
   const easing = useRef(0);
-  useEffect(() => () => { cancelAnimationFrame(easing.current); window.clearTimeout(heldClick.current); }, []);
+  // stops listening for the release of a press the mascot may never see
+  const unwatch = useRef<(() => void) | null>(null);
+  useEffect(() => () => { cancelAnimationFrame(easing.current); window.clearTimeout(heldClick.current); unwatch.current?.(); }, []);
   // a look that is no longer a shape faces front again
   useEffect(() => {
     if (enabled) return;
@@ -142,7 +152,24 @@ export function useMascotTurn({ look, picture = false, onMood }: { look: MascotL
       onPointerDown: (event) => {
         if (event.button !== 0) return;
         cancelAnimationFrame(easing.current);
-        press.current = { id: event.pointerId, x: event.clientX, y: event.clientY, start: current.current, dragged: false };
+        const id = event.pointerId;
+        press.current = { id, x: event.clientX, y: event.clientY, start: current.current, dragged: false };
+        // Until a drag begins the mascot does not hold the pointer, so its release may land elsewhere (the pointer
+        // left in one move, a menu opened under it): the press is over all the same, or the pointer coming back
+        // over the mascot would turn it with no button down.
+        unwatch.current?.();
+        const released = (up: globalThis.PointerEvent) => {
+          if (up.pointerId !== id) return;
+          unwatch.current?.();
+          if (press.current?.id === id && !press.current.dragged) press.current = null;
+        };
+        unwatch.current = () => {
+          window.removeEventListener("pointerup", released, true);
+          window.removeEventListener("pointercancel", released, true);
+          unwatch.current = null;
+        };
+        window.addEventListener("pointerup", released, true);
+        window.addEventListener("pointercancel", released, true);
       },
       onPointerMove: (event) => {
         const held = press.current;
@@ -172,14 +199,19 @@ export function useMascotTurn({ look, picture = false, onMood }: { look: MascotL
         if (!heldClick.current && !isTurned(current.current)) return;
         event.preventDefault();
         event.stopPropagation();
-        // the second click of a double click: the dblclick that follows drops the first
-        if (heldClick.current) return;
         const button = event.currentTarget;
-        heldClick.current = window.setTimeout(() => {
-          heldClick.current = 0;
+        const play = () => {
+          dropHeldClick();
           replaying.current = true;
           try { button.click(); } finally { replaying.current = false; }
-        }, DOUBLE_CLICK_MS);
+        };
+        if (heldClick.current) {
+          // the second click of a double click: the dblclick that follows drops the first
+          if (event.detail >= 2) return;
+          // a click of its own (no double click for the browser): the held one is played now, this one waits in its turn
+          play();
+        }
+        heldClick.current = window.setTimeout(play, DOUBLE_CLICK_MS);
       },
       onDoubleClick: () => {
         dropHeldClick();
@@ -187,6 +219,12 @@ export function useMascotTurn({ look, picture = false, onMood }: { look: MascotL
       },
       onKeyDown: (event) => {
         const action = keyAction(event, current.current);
+        // Escape brings the mascot back to itself: the state a key previews goes with the turn, or alone
+        if (event.key === "Escape" && previewState) {
+          event.preventDefault();
+          setPreviewState(null);
+          setSaid("");
+        }
         if (!action) return;
         if (action.kind === "mood" && !onMood) return;
         event.preventDefault();
@@ -203,7 +241,12 @@ export function useMascotTurn({ look, picture = false, onMood }: { look: MascotL
         onMood?.(next);
         setSaid(t(MOOD_LABEL[next]));
       },
-      onBlur: () => setPreviewState(null),
+      // the preview lasts while the focus is on the stage: the mascot or its Reset view button
+      onBlur: (event) => {
+        const next = event.relatedTarget;
+        if (next instanceof Node && event.currentTarget.closest("[data-mascot-turn]")?.contains(next)) return;
+        setPreviewState(null);
+      },
     },
   };
 }
@@ -213,7 +256,17 @@ export function turnCursor(turn: Pick<MascotTurn, "enabled" | "dragging">): stri
   return turn.enabled ? cn("touch-none select-none", turn.dragging ? "cursor-grabbing" : "cursor-grab") : undefined;
 }
 
-/** Shown while the mascot is turned: brings it back to the front (the site's "Reset view"). */
+/** The mascot of the stage a Reset view button belongs to: the other button of its wrapper. */
+function focusMascot(reset: HTMLElement) {
+  reset.closest("[data-mascot-turn]")?.querySelector<HTMLElement>("button:not([data-mascot-turn-reset])")?.focus({ preventScroll: true });
+}
+
+/**
+ * Shown while the mascot is turned: brings it back to the front (the site's
+ * "Reset view"). It hides once the mascot faces front, so it never keeps the
+ * focus through its own press or a key: the mascot takes it first, or the
+ * focus would fall to the document and the next Escape would close the page.
+ */
 export function MascotTurnReset({ turn, className }: { turn: MascotTurn; className?: string }) {
   if (!turn.enabled) return null;
   return (
@@ -221,7 +274,16 @@ export function MascotTurnReset({ turn, className }: { turn: MascotTurn; classNa
       <button
         type="button"
         data-mascot-turn-reset=""
-        onClick={turn.reset}
+        onClick={(event) => {
+          focusMascot(event.currentTarget);
+          turn.reset();
+        }}
+        // the mascot's keys, as on the site where the button is inside the stage; Enter and Space stay the button's
+        onKeyDown={(event) => {
+          turn.handlers.onKeyDown?.(event);
+          if (event.defaultPrevented) focusMascot(event.currentTarget);
+        }}
+        onBlur={turn.handlers.onBlur}
         aria-label={t("mascotStage.reset")}
         title={t("mascotStage.reset")}
         hidden={!turn.turned}

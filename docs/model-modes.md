@@ -202,6 +202,32 @@ desktop's (#5090); the engine stays on the server. Tests:
 `ComposerModesTests.swift`; capture: `-mascotGallery heavy` in the
 simulator (`HeavyTeamGallery.swift`).
 
+## A model at its limit is never a mode's pick (#5403)
+
+Owner's request M-20261126-101. One list feeds the turn's pick and the
+menu's preview (`autoPickForTurn`, so `GET /api/bots/:id/auto-model` and its
+`modes` say what the turn would run). An account is out of that list while it
+cannot serve the person: signed out, no key, engine off or not responding
+(`autoEnginesFor`), a refusal Sagax saw, and an account whose 5-hour or weekly
+window the person's usage report shows used up with no extra usage left
+(`limitFailover.autoExcluded(payer, engines, "report")`, the verdict of
+`spentPlanUntil` that the quick pick already read; no second one).
+
+- Each account on its own: a model several accounts serve stays while one of
+  them has room, and the person's account strategy picks among those.
+- Auto, Fast and Expert take the next available model. Heavy seats only
+  available models: with fewer left the team is smaller.
+- A model the person set for a mode (Settings > Modes) is skipped the same
+  way for the turn; the setting is kept and runs again once the limit resets.
+- With every account at its limit the pick keeps its list, as before: the
+  turn's refusal says when the limit resets.
+- The desktop reads the preview again each time the menu opens
+  (`useAutoModelStatus`, `open`), the last answer staying on screen meanwhile.
+
+Tests: `server/index-leaves/autoPickForTurn.limit.test.ts`,
+`server/usage/limit-failover-host.test.ts`, `server/routes/bots-mutate.test.ts`,
+`src/lib/auto-model-preview.dom.test.ts`.
+
 ## Heavy: a team of read-only experts (#5089)
 
 Owner's request M-20261119-077, answers D-20261119-084 and D-20261119-085:
@@ -217,7 +243,7 @@ called from `startTurn` before the leader's prompt is built.
   accounts, each one's strongest model, then each one's second strongest;
   `assignSeats` gives the experts different accounts first, then different
   models of the same provider. An account at its usage limit is already out
-  (#5031); only this person's accounts are offered.
+  (#5031, #5403); only this person's accounts are offered.
 - **Read-only, held by the server.** Each expert is a hidden thread of the same
   bot, confined before its first turn (`store.confineHeavyExpert`): the
   conversation's tool scope of #4993 keeps only reviewed reads of Sagax's own

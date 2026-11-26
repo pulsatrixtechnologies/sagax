@@ -124,7 +124,8 @@ async function handleBotAutoModel(env: BotsMutateEnv): Promise<boolean> {
     const engines = env.autoEnginesFor(previewBot, speaker, false, excluded);
     const payer = env.autoPayerKey(bot, speaker);
     const refused = env.autoRefusalsFor(payer);
-    const limited = env.limitFailover.autoExcluded(payer, engines);
+    // the same reading as the turn's pick (autoPickForTurn), M-20261126-101
+    const limited = env.limitFailover.autoExcluded(payer, engines, "report");
     const entry = (choice: { instanceId: string; model: string }): AutoModelEntry | null => {
       const engine = engines.find((candidate: any) => candidate.instanceId === choice.instanceId);
       const option = engine?.models.options.find((candidate: any) => candidate.id === choice.model);

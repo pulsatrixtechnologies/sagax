@@ -732,6 +732,22 @@ describe("what Sagax knows of a limit, and says of its reset", () => {
     expect(w.state.switches).toEqual([]);
   });
 
+  it("M-20261126-101: a mode's pick skips each account whose plan the report shows spent, and keeps the others of the provider", () => {
+    const w = world();
+    const resetsAt = w.clock.now + 3 * 24 * HOUR;
+    const host = createLimitFailoverHost({ ...w.deps, planLimitUntil: (payer, id) => payer === "server" && id !== "codex" && id !== "claude-3" ? resetsAt : null });
+    const engines = [
+      { instanceId: "claude", driverKind: "claudeAgent" }, { instanceId: "claude-2", driverKind: "claudeAgent" },
+      { instanceId: "claude-3", driverKind: "claudeAgent" }, { instanceId: "codex", driverKind: "codex" },
+    ];
+    expect([...host.autoExcluded("server", engines, "report")]).toEqual(["claude", "claude-2"]);
+    // another person's report says nothing of this one's accounts
+    expect([...host.autoExcluded("ada", engines, "report")]).toEqual([]);
+    // the window reset: the accounts are back
+    w.clock.now += 4 * 24 * HOUR;
+    expect([...host.autoExcluded("server", engines, "report")]).toEqual([]);
+  });
+
   it("picks a backup from the refusals Sagax saw, never from a plan the report read as spent", async () => {
     const w = world();
     const host = createLimitFailoverHost({ ...w.deps, planLimitUntil: (_payer, id) => id === "codex" ? w.clock.now + 3 * 24 * HOUR : null });

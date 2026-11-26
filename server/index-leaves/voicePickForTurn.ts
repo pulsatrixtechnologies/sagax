@@ -10,7 +10,7 @@ function voicePickForTurn(bot: BotRecord, base: ModelSelection, speaker: TurnSpe
   const payer = host.autoPayerKey(bot, speaker);
   const offered = host.autoEnginesFor({ ...bot, modelSelection: base }, speaker, guestConfined);
   // Sagax's quick pick also skips an engine whose plan the payer's usage
-  // report showed spent (J4); Auto reads only the refusals Sagax saw.
+  // report showed spent (J4), as a mode's and Auto's pick do (M-20261126-101).
   const limited = host.limitFailover.autoExcluded(payer, offered, "quick");
   const engines = offered.filter((engine) => !limited.has(engine.instanceId));
   if (!engines.length) return null;

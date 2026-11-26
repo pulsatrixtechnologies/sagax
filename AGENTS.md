@@ -108,6 +108,7 @@ Rules only. How the code works (files, routes, tests, history) lives in
 - A caller waiting on a thread (a run_with_engine part such as a routine's verification step) waits for the turn the usage-limit failover carried to the next engine, and is told which engine ran it and which refused; it ends with the refusal only when no engine took the work on (2026-11-19, #4878).
 - A model refusal holds that model only, never the whole engine, unless its plan is spent (2026-11-02).
 - Auto never picks outside the providers the admin left on, a model turned off or a model the provider refused; a refusal climbs toward a stronger model, and a pin always wins (2026-10-29, 2026-10-30).
+- A mode, Auto included, never picks or names a model whose every account is at its usage limit or cannot serve the person now; it takes the next available one, and the person's setting is kept (2026-11-26, #5403).
 - Never put a per-turn value in a pooled process's contract or session inputs: it relaunches the engine on every turn.
 - Perspicax is one fixed `perspicax` mount on every engine; a role switch changes its catalog, never its server name; never narrow the general tool limit back to 32 (2026-11-03, #1935).
 - Never fix the Codex Perspicax bridge by removing the reserved-variable guard or sharing `SAGAX_PERSPICAX_*` with another server (2026-10-30).

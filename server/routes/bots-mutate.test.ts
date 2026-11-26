@@ -254,6 +254,22 @@ describe("bots-mutate routes", () => {
   });
 });
 
+// M-20261126-101: the menu's preview reads the limits as the turn's pick does
+describe("GET /api/bots/:id/auto-model", () => {
+  it("lists an account whose plan the usage report shows spent as held by its limit", async () => {
+    const engines = [
+      { instanceId: "claude", displayName: "Claude Code", models: { options: [] } },
+      { instanceId: "grok", displayName: "Grok", models: { options: [] } },
+    ];
+    // no turn was refused yet: only a reading of the person's usage report knows of the limit
+    const autoExcluded = vi.fn((_payer: string, _engines: unknown, pick?: string) => new Set(pick === "report" ? ["claude"] : []));
+    const route = createBotsMutateRoutes(baseDeps({ autoEnginesFor: vi.fn(() => engines), limitFailover: { autoExcluded } } as unknown as Partial<BotsMutateRouteDeps>));
+    const { ctx, json } = context("/api/bots/osprey/auto-model");
+    expect(await dispatchRoutes([route], ctx)).not.toBe(PASS);
+    expect(json.mock.calls[0]?.[2]).toMatchObject({ excluded: [{ instanceId: "claude", engineLabel: "Claude Code", reason: "limit" }] });
+  });
+});
+
 // #4527 lot E: the person's own tools left out of a bot's list
 describe("PATCH /api/bots/:id toolKeep", () => {
   /** A person's state with one tool left out (the rule's verdict, set directly). */

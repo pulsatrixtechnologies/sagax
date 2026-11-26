@@ -28,10 +28,14 @@ function autoPickForTurn(input: {
   const payer = host.autoPayerKey(bot, input.speaker);
   const skip = [...autoRefusalsFor(payer), ...(input.skip ?? [])];
   const offered = host.autoEnginesFor(bot, input.speaker, input.guestConfined === true);
-  // An engine at its usage limit for this payer, and another sign-in to the
-  // same subscription, wait for the reset (server/usage/limit-failover-host.ts);
-  // with nothing else left, Auto keeps its list and the limit says when.
-  const limited = host.limitFailover.autoExcluded(payer, offered);
+  // An engine at its usage limit for this payer waits for the reset
+  // (server/usage/limit-failover-host.ts): one a refusal holds, and one whose
+  // 5-hour or weekly window the payer's usage report shows used up
+  // (M-20261126-101: Auto and every mode take the next model they can be
+  // served now; each account on its own, so a model stays while one of its
+  // accounts has room). With nothing else left, Auto keeps its list and the
+  // limit says when.
+  const limited = host.limitFailover.autoExcluded(payer, offered, "report");
   const open = offered.filter((engine) => !limited.has(engine.instanceId));
   const engines = open.length ? open : offered;
   // #4329 lot 5: the engines the owner chose to run with come right after the bot's own

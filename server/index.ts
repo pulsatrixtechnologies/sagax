@@ -16504,10 +16504,10 @@ const limitFailoverStore = new LimitFailoverStore({ file: join(DATA_DIR, "limit-
  * app is open; the server's when solo). The scope is the payer's key
  * (autoPayerKey). The usage-limit failover reads it (planLimitUntil) as a
  * hint only: Sagax's quick pick (a wake's or a call's fast model) skips a
- * spent engine. A real refusal on it that names no reset is still held for
- * Sagax's one-hour estimate, never until this reset: a top-up shows only in a
- * later report, which clears this hint, never a hold (2026-11-02). Auto and
- * other-provider backups read only real refusals; same-provider accounts also
+ * spent engine, and so does a mode's or Auto's pick (M-20261126-101). A real
+ * refusal on it that names no reset is still held for Sagax's one-hour estimate,
+ * never until this reset: a top-up shows only in a later report, which clears this
+ * hint, never a hold. Other-provider backups read only real refusals; same-provider accounts also
  * rotate from the report's used percent (#2192). */
 const spentPlans = new Map<string, number>();
 /** #2192: fullest window used-percent per payer and engine, from the last report. */
@@ -16744,7 +16744,7 @@ const limitFailover = createLimitFailoverHost({
   // next fast pick for this payer (voicePickForTurn reads autoRefusalsFor).
   refuseModel: (payer, selection, until) => rememberAutoRefusal(payer, { instanceId: selection.instanceId, model: selection.model }, until),
   // A plan window the person's usage report showed spent (J4), until a turn
-  // on that engine works for them again: only Sagax's quick pick skips it.
+  // on that engine works for them again: Sagax's own picks (quick, a mode, Auto) skip it.
   planLimitUntil: (payer, instanceId) => planLimitUntil(payer, instanceId),
   // #2192: used percent for silent same-provider rotation before the limit.
   planUsedPercent: (payer, instanceId) => planUsedPercentOf(payer, instanceId),

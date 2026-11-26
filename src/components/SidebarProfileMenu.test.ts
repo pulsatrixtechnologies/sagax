@@ -287,7 +287,8 @@ describe("profileMenuItems (the reference design's account menu, 2026-10-16)", (
       expect(usage.label).toBe("Utilisation");
       expect(usage.value).toBe("42\u00a0%");
       expect(usage.label).toBe("Utilisation");
-      expect(usage.submenu!.map((entry) => entry.key)).toEqual(["claude", "month-cost", "view-usage"]);
+      // #5406: the accounts are one entry, the usage pill's own detail
+      expect(usage.submenu!.map((entry) => entry.key)).toEqual(["accounts", "month-cost", "view-usage"]);
       expect(usage.submenu!.find((entry) => entry.key === "view-usage")).toMatchObject({ label: "Voir l'utilisation", separatorBefore: true });
       const bare = items({ usagePercent: null, usageRows: [], monthCost: null }).find((entry) => entry.key === "usage")!;
       expect(bare.value).toBeUndefined();
@@ -309,11 +310,13 @@ describe("profileMenuItems (the reference design's account menu, 2026-10-16)", (
     expect(top.tooltip).toBe("Usage · Codex Business · 100%");
   });
 
-  it("M-20261125-084: Usage › has one row per account, never one per window", () => {
+  it("M-20261125-084, #5406: Usage › draws the accounts as the usage pill's detail (one row per account, never one per window), and nothing with no window", () => {
     const rows = [planRow({ id: "grok", name: "Grok", driver: "grok", plan: "Ultra", weekly: openWindow(87), fiveHour: openWindow(10) }), planRow({ id: "codex", name: "Codex", driver: "codex", plan: "Business", fiveHour: openWindow(100) }), planRow({ id: "key", name: "Claude (API key)", state: "no-windows" })];
     const usage = items({ usageRows: rows, usageFavorite: { id: "grok", onToggle: noop } }).find((entry) => entry.key === "usage")!;
-    expect(usage.submenu!.map((entry) => entry.key)).toEqual(["grok", "codex", "month-cost", "view-usage"]);
-    for (const entry of usage.submenu!.slice(0, 2)) expect(entry.node, "the account's row is drawn by the Usage limits row").toBeTruthy();
+    expect(usage.submenu!.map((entry) => entry.key)).toEqual(["accounts", "month-cost", "view-usage"]);
+    expect(usage.submenu![0]!.node, "the accounts are drawn by the usage detail (SidebarProfileMenu.usage-rows.dom.test.ts)").toBeTruthy();
+    const none = items({ usageRows: [rows[2]!], usageFavorite: { id: null, onToggle: noop } }).find((entry) => entry.key === "usage")!;
+    expect(none.submenu!.map((entry) => entry.key)).toEqual(["month-cost", "view-usage"]);
   });
 
   it("puts Keyboard shortcuts, Release notes, Check for updates and About under Help", () => {

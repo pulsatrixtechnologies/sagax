@@ -17,8 +17,6 @@ import {
   Archive,
   Bell,
   BellDot,
-  Copy,
-  Link2,
   ListChecks,
   Check,
   ChevronRight,
@@ -52,7 +50,6 @@ import {
   visibleMessages,
   currentTaskBot,
   openBot,
-  botOpensTo,
   openBotThread,
   openNotificationTarget,
   startNewTopic,
@@ -88,7 +85,6 @@ import { lastSpokenLine } from "@/lib/receipts";
 import { activityPreview, botEngine } from "@/lib/failed-turn";
 import { activeLocale, t } from "@/lib/i18n";
 import { copyText } from "@/lib/copy-text";
-import { botRefUrl } from "@/lib/thread-refs";
 import { canOpenBotInOwnWindow, openBotInOwnWindow } from "@/lib/chat-windows";
 import { botShowsUnread } from "@/lib/bot-unread";
 import { isViewersPrimaryBot, viewerOwnsBot } from "@/lib/primary-bot";
@@ -1275,13 +1271,15 @@ export function BotContextMenu({
     startNewTopic(dispatch, bot);
   }, { id: "new-topic" });
 
-  // One flat menu, no More. The reference's three groups, in its order
-  // (owner, 2026-11-17, #4639): [Pin, Mark as Unread, New window] |
-  // [Copy link, Copy conversation ID] | [Hide from sidebar, Delete]. What the
-  // sidebar menu already had stays in its own groups around them: New thread
-  // first, Move to › under Pin, Rename, Edit bot, Share, Make primary bot, Put
-  // on the desktop after the first group, the bulk thread actions and Archive
-  // beside Hide and Delete. Mark all as read and Model… stay out (2026-10-15).
+  // One flat menu, no More. The reference's groups, in its order (owner,
+  // 2026-11-17, #4639): [Pin, Mark as Unread, New window] | [Hide from
+  // sidebar, Delete]. What the sidebar menu already had stays in its own
+  // groups around them: New thread first, Move to › under Pin, Rename, Edit
+  // bot, Share, Make primary bot, Put on the desktop after the first group,
+  // the bulk thread actions and Archive beside Hide and Delete. Mark all as
+  // read and Model… stay out (2026-10-15). Copy link and Copy conversation ID
+  // left this menu (owner, 2026-11-25, #5373): the link stays in the bot
+  // page's Share bubble and in the bot's "..." menu.
   const unread = botShowsUnread(bot);
   const markItem = item(
     unread ? <Bell size={16} /> : <BellDot size={16} />,
@@ -1297,12 +1295,6 @@ export function BotContextMenu({
   const windowItem = canOpenBotInOwnWindow()
     ? item(<AppWindow size={16} />, t("sidebar.bot.newWindow"), () => { void openBotInOwnWindow(bot); }, { id: "new-window" })
     : null;
-  // The app's own deep link to this bot's conversation (sagax://bot/<id>,
-  // opened by openChatLink), and the id of the conversation it opens on.
-  const copyItems = [
-    item(<Link2 size={16} />, t("sidebar.bot.copyLink"), () => { void copyText(botRefUrl(bot.id)); }, { id: "copy-link" }),
-    item(<Copy size={16} />, t("sidebar.copyConversationId"), () => { void copyText(botOpensTo(bot, showThreads)); }, { id: "copy-id" }),
-  ];
   const entries = remoteClient ? [
     ...(newThreadItem ? [newThreadItem] : []),
     floatItem,
@@ -1313,7 +1305,6 @@ export function BotContextMenu({
     editItem,
     ...(shareItem ? [shareItem] : []),
     markItem,
-    ...copyItems,
   ] : [
     ...(newThreadItem ? [newThreadItem, divider("d-new")] : []),
     item(
@@ -1332,8 +1323,6 @@ export function BotContextMenu({
     ...(shareItem ? [shareItem] : []),
     ...(primaryItem ? [primaryItem] : []),
     floatItem,
-    divider("d-copy"),
-    ...copyItems,
     ...(threadsOwner ? [
       divider("d-threads"),
       item(<Archive size={16} />, t("task.archiveAll"), () => { void bulk.archiveAll(threadsOwner); },

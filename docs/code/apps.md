@@ -92,6 +92,24 @@ workspace switch.
   `electron/bundled-ui.node-test.mjs`, `src/lib/account-menu.test.ts`; real
   Electron with timings: `scripts/verify/dev/verify-account-switch.ts`.
 
+## Switch organization reads the saved servers when its page is on screen (2026-11-25, #5353)
+
+Switch organization › (the account menu, `src/components/SidebarProfileMenu.tsx`)
+and the desktop's server chooser (the button beside Add account,
+`workspaceMenuTemplate` in `electron/environments.cjs`) show one list: the
+desktop's saved servers. The chooser is built in main; the menu reads the same
+state through `environments.state()` and `switchTargets`
+(`src/lib/account-menu.ts`). Main answers that read only to the page on screen
+(`workspaceOnly`), and Personal's page is opened hidden, ready for a switch
+(`prepareOtherAccounts`). Since the menu is kept open above the name by default
+(#5016) it reads with its row, so on Personal the read was refused while the
+page was hidden and never asked again: the submenu listed only Add an
+organization. `watchSavedServers` (`account-menu.ts`) asks now and again each
+time the page comes on screen (the window's focus, which the desktop gives the
+page it shows; the page turning visible; and, while no answer came, the
+person's move on the page). Tests: `src/lib/account-menu.saved-servers.test.ts`,
+`src/components/SidebarProfileMenu.switch-organization.dom.test.ts`.
+
 ## One-line self-hosted install (2026-10-26)
 
 `install.sh` (repository root) installs the server from the public image

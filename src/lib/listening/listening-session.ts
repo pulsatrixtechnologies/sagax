@@ -15,6 +15,8 @@ import { t } from "@/lib/i18n";
 import { dictationFrame, DICTATION_RATE } from "@/lib/composer-dictation";
 import { openPreferredMicrophone } from "@/lib/audio-input";
 import { attachVoiceCapture, type CaptureContext, type CaptureSource, type VoiceCapture } from "@/lib/voice-mode/capture-worklet";
+import { voiceFailureKind } from "@/lib/voice-mode/api";
+import { voiceErrorNote } from "@/lib/voice-mode/failure";
 import { readVoiceprint, type SpeakerEmbedder } from "@/lib/voice-mode/speaker-id";
 import { LiveTranscriber } from "@/lib/voice-mode/stt-stream";
 import { LevelVad, VAD_FRAME, type VoiceProbability } from "@/lib/voice-mode/vad";
@@ -45,7 +47,8 @@ export interface ListeningLive {
   view: ListeningView;
   /** the speaker of the line being spoken in a channel, as shown */
   liveSpeaker: Partial<Record<ListeningChannelId, string>>;
-  /** what went wrong (the microphone refused, the server unreachable) */
+  /** what went wrong (the voice service refused to transcribe, the server
+   * unreachable) */
   error: string | null;
   /** the system refused the computer's sound (its settings can grant it) */
   computerDenied?: boolean;
@@ -197,6 +200,10 @@ class Session {
   /** Utterances still being given their speaker. */
   private hearing = new Set<Promise<void>>();
   private readonly book: SpeakerBook;
+  /** Why what is said is not transcribed, until words are heard again
+   * (#5377); and why the lines did not reach the server, until they do. */
+  private hearFailure: string | null = null;
+  private sendFailure: string | null = null;
 
   constructor(private readonly deps: ListeningDeps, private readonly botId: string, private readonly threadId: string, personName: string) {
     this.book = newSpeakerBook({ personName, voiceprint: readVoiceprint(), label: (n) => t("listening.speaker", { n }) });
@@ -247,6 +254,25 @@ class Session {
     this.armHeartbeat();
   }
 
+  /** The card's one line of what is wrong: the hearing first (nothing is
+   * transcribed), then the sending. */
+  private showFailure(): void {
+    const error = this.hearFailure ?? this.sendFailure;
+    if (current && current.error !== error) update((live) => ({ ...live, error }));
+  }
+
+  /** Someone spoke and the speech to text gave nothing: the reason, by the
+   * sentences the call and the dictation say for the same refusal
+   * (voice-mode/failure.ts), never "nobody has spoken yet" alone (#5377). */
+  private unheard(cause: unknown): void {
+    if (this.stopped) return;
+    const kind = voiceFailureKind(cause);
+    const note = voiceErrorNote("transcribe-failed", kind, cause, t);
+    // a refusal card's own sentence comes from the server, in the person's language
+    this.hearFailure = !kind && cause instanceof Error && cause.message ? readableError(cause) : t(note.key, note.params);
+    this.showFailure();
+  }
+
   private newChannel(channel: ListeningChannelId, transcriber: ChannelTranscriber, vad: VoiceProbability): ListeningChannel {
     return new ListeningChannel({
       transcriber,
@@ -260,6 +286,7 @@ class Session {
         this.hearing.add(done);
         void done.finally(() => this.hearing.delete(done));
       },
+      onFailed: (cause) => this.unheard(cause),
     });
   }
 
@@ -275,6 +302,10 @@ class Session {
     else if (this.computerLines.length && echoOf(utterance, this.computerLines)) {
       update((live) => ({ ...live, view: withPartial(live.view, channel, "") }));
       return;
+    }
+    if (this.hearFailure !== null) {
+      this.hearFailure = null;
+      this.showFailure();
     }
     const embedding = this.embedder ? await this.embedder.embed(utterance.audio).catch(() => null) : null;
     const speaker = assignSpeaker(this.book, channel, embedding, utterance.audio.length / DICTATION_RATE);
@@ -313,9 +344,11 @@ class Session {
       try {
         await this.deps.request(`/api/listening/${sessionId}/lines`, { method: "POST", body: JSON.stringify({ lines: batch, speakers: this.book.speakers }) });
         this.pending = this.pending.filter((line) => !batch.includes(line));
-        if (current?.error) update((live) => ({ ...live, error: null }));
+        this.sendFailure = null;
+        this.showFailure();
       } catch (error) {
-        update((live) => ({ ...live, error: readableError(error) }));
+        this.sendFailure = readableError(error);
+        this.showFailure();
         this.scheduleFlush(RETRY_MS);
       } finally {
         this.inFlight = null;

@@ -97,8 +97,14 @@ const attention: PersonAttentionCard = {
 // #2098 (the operator, 2026-11-05: "C'EST INNACEPTABLE"), then #2272 (the owner,
 // 2026-11-06: "It not doing anything when I click it"): a run opens from
 // every entry point as its own window over the bot's chat column, shaped
-// like a bot-to-bot exchange (ExchangeSheet, X to close). Never a thread,
-// a side panel or a Continue/Open thread button (one conversation, #2081).
+// like a bot-to-bot exchange (ExchangeSheet). Never a thread or a side
+// panel (one conversation, #2081).
+// [M-20261125-040] (the owner, 2026-11-25: "Peux tu éviter de mettre le chat
+// et remettre le close button et un bouton Continue in a chat et retire le X
+// d'en haut du chat"): the window is the bot-to-bot sheet (no X at the top,
+// the chat's message bar covered, the Close Chat pill at the bottom) and
+// has Continue in the conversation again, which opens the bot's one
+// conversation, never a thread.
 describe("#2272 a routine run opens as its window over the chat, from every entry point", () => {
   const ENTRY_POINTS = [
     "state/store/model.ts", // View run, notifications, Inbox links, unified thread links
@@ -134,10 +140,15 @@ describe("#2272 a routine run opens as its window over the chat, from every entr
     expect(next.routineRunWindow).toEqual({ runId: "run-1", routineId: "routine-1", botId: "scout" });
   });
 
-  it("the window is the bot-to-bot exchange shell, rendered over the main chat, with no thread button", () => {
+  it("the window is the bot-to-bot exchange sheet, rendered over the main chat, with Continue in the conversation and no thread button", () => {
     const window = readSrc("components/routines/RoutineRunWindow.tsx");
     expect(window).toContain("<ExchangeSheet");
-    expect(window).not.toMatch(/continueRoutineRunInConversation|openGroupThread|openThread|routineRun\.continue/);
+    expect(window).not.toMatch(/openGroupThread|openThread\b|openBotThread/);
+    // [M-20261125-040]: no X and no message bar under it (the "window"
+    // chrome), and Continue goes through the one rule of the conversation.
+    expect(window).not.toMatch(/chrome="window"/);
+    expect(window).toContain("continueRoutineRunInConversation(");
+    expect(window).toContain('t("routineRun.continue")');
     expect(readSrc("components/ChatView.tsx-parts/ChatViewSheets.tsx")).toContain("<RoutineRunWindow");
     // The old shapes stay gone.
     const offenders = files.filter((file) => /RoutineRunExchange|routineRunSheet|openRoutineRunSheet|openRoutineRunInChat/.test(file.text)).map((file) => file.name);

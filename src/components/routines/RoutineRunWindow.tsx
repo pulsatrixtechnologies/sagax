@@ -1,22 +1,33 @@
 // #2272 (JC, 2026-11-06): "open the details of a routine ... the equivalent
 // of a bot to bot chat ... like it was before". A routine run opens as its
 // own window over the bot's chat column: the ExchangeSheet shell of a
-// bot-to-bot exchange (header pill, X to close, chat bubbles), the routine's
-// instruction as the opening line, tool steps in the transcript, and what the
-// run waits on pinned above. One conversation (#2081): no Continue, no group
-// thread, no Open thread; Stop stays on the run's card in the chat (#2096).
+// bot-to-bot exchange (header pill, chat bubbles), the routine's instruction
+// as the opening line, tool steps in the transcript, and what the run waits
+// on pinned above. One conversation (#2081): no group thread, no Open
+// thread; Stop stays on the run's card in the chat (#2096).
+// [M-20261125-040] (JC, 2026-11-25: "Peux tu éviter de mettre le chat et
+// remettre le close button et un bouton Continue in a chat et retire le X
+// d'en haut du chat"): the sheet as it was before 0.8.52 (#2149 had given it
+// the X at the top and left the chat's message bar under it). It covers the
+// column, message bar included, has no X, and ends on one footer row:
+// Continue in the conversation (the bot's one conversation, the report
+// quoted in its message bar), then the Close Chat pill.
 // A run older than the app's window is loaded by id (GET /api/routines?run=).
 import { useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, MessageSquareText } from "lucide-react";
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import type { BotActivityDetail } from "@/lib/bot-activity";
 import { routineRunPendingExchange, routineRunToExchange, routineRunExchangeMeta } from "@/lib/routine-run-exchange";
-import { api, useStore, type Bot } from "@/state/store";
+import { api, continueRoutineRunInConversation, useStore, type Bot } from "@/state/store";
 import type { RoutineRunCardReport } from "@/state/store/model";
+import { createPinnedHold, PinnedHoldContext } from "@/lib/pinned-waiting";
+import { useShowThreads } from "@/lib/thread-preferences";
 import { ExchangeSheet } from "../BotExchangeChip";
+import { PRIMARY_PILL } from "../SettingsPrimitives";
 import { RunActivityState } from "./RunActivityState";
-import { useWaitingNotPinned, WaitingOnYou } from "../task/WaitingOnYou";
+import { WaitingOnYou } from "../task/WaitingOnYou";
 import type { WaitingItem } from "@/lib/use-waiting-cards";
 
 /** #3581: `report` is the chat card's own report (its message's summary),
@@ -82,8 +93,16 @@ function RoutineRunWindowSheet({ run: listed, cardReport, asked, routine, bot, b
   onClose: () => void;
   onStop: (runId: string) => void;
 }) {
+  const { dispatch } = useStore();
+  const showThreads = useShowThreads();
   const run = useWholeReport(listed, cardReport, asked);
   const live = ["queued", "running", "waiting"].includes(run.status);
+  // Continue is the bot's own conversation; a team goal has none here.
+  const canContinue = run.target === "bot";
+  const openContinue = () => {
+    continueRoutineRunInConversation(dispatch, bot, run, showThreads);
+    onClose();
+  };
   const exchange = useMemo(
     () => routineRunToExchange({ run, routine, bot, detail }),
     [run, run.output, run.report, run.status, run.error, routine, bot, detail],
@@ -95,24 +114,38 @@ function RoutineRunWindowSheet({ run: listed, cardReport, asked, routine, bot, b
     </span>
   );
   // What the run waits on, answerable here as in the conversation.
-  // #4204: the chat's composer stays under this window; what its pinned
-  // card holds is drawn there only
-  const items = useWaitingNotPinned(run.redacted ? [] : waiting);
+  // [M-20261125-040]: the sheet covers the chat's message bar and the
+  // pinned card over it, so an ask that card holds is drawn here (#4204:
+  // once on screen). The sheet's own hold, never written to, says so.
+  const [hold] = useState(createPinnedHold);
+  const items = run.redacted ? [] : waiting;
   const pinned = items.length > 0 ? (
     <div data-run-waiting>
-      <WaitingOnYou
-        items={items}
-        threadId={run.threadId ?? ""}
-        botFor={(id) => bots.find((candidate) => candidate.id === id) ?? (id === bot.id ? bot : undefined)}
-        onCancel={() => onStop(run.id)}
-      />
+      <PinnedHoldContext value={hold}>
+        <WaitingOnYou
+          items={items}
+          threadId={run.threadId ?? ""}
+          botFor={(id) => bots.find((candidate) => candidate.id === id) ?? (id === bot.id ? bot : undefined)}
+          onCancel={() => onStop(run.id)}
+        />
+      </PinnedHoldContext>
+    </div>
+  ) : undefined;
+  // The sheet's single footer row; ExchangeSheet adds the neutral Close
+  // Chat pill at its end. `contents`: the button is an item of that row.
+  const footer = canContinue ? (
+    <div data-routine-run-actions className="contents">
+      <button type="button" data-run-continue onClick={openContinue} className={cn(PRIMARY_PILL, "gap-1.5")}>
+        <MessageSquareText size={13} aria-hidden="true" />
+        {t("routineRun.continue")}
+      </button>
     </div>
   ) : undefined;
   return (
     <ExchangeSheet
-      chrome="window"
       run={exchange}
       pinned={pinned}
+      footer={footer}
       bots={[...bots]}
       onClose={onClose}
       loadError={detailError && !detail}
@@ -174,7 +207,6 @@ export function RoutineRunWindow({ target, bots, onClose, onStop }: {
     } as RoutineRun;
     return (
       <ExchangeSheet
-        chrome="window"
         run={routineRunToExchange({ run: kept, routine, bot })}
         bots={[...bots]}
         onClose={onClose}
@@ -187,7 +219,6 @@ export function RoutineRunWindow({ target, bots, onClose, onStop }: {
   if (!run) {
     return (
       <ExchangeSheet
-        chrome="window"
         run={routineRunPendingExchange({ routineName: routine?.name ?? "", bot })}
         bots={[...bots]}
         onClose={onClose}

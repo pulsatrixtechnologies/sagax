@@ -176,3 +176,23 @@ describe("the listening badge (#4100)", () => {
     expect(host.querySelectorAll("[data-listening-badge]")).toHaveLength(1);
   });
 });
+
+describe("the listening card when nothing is transcribed (#5377)", () => {
+  it("says the reason once and never that nobody has spoken", () => {
+    const reason = "xAI has no credits left for the organization's xAI key. Ask an admin, or add your own xAI key in Settings > Providers. The answers stay in the chat.";
+    live = { ...listening(), view: { lines: [], partial: {}, speakers: [] }, liveSpeaker: {}, error: reason };
+    const host = mount(createElement(ListeningCard, { bot, messages: [] }));
+    const card = host.querySelector("[data-listening-card='here']")!;
+    expect(card.querySelector('[role="alert"]')?.textContent).toBe(reason);
+    expect(card.textContent).not.toContain("nobody has spoken yet");
+    expect(card.textContent!.split(reason)).toHaveLength(2);
+    // still listening: the person stops it from the same red button
+    expect(card.querySelector("[data-listening-stop]")).not.toBeNull();
+  });
+
+  it("still says it is waiting while nothing is wrong", () => {
+    live = { ...listening(), view: { lines: [], partial: {}, speakers: [] }, liveSpeaker: {} };
+    const host = mount(createElement(ListeningCard, { bot, messages: [] }));
+    expect(host.querySelector("[data-listening-newest]")?.textContent).toBe("Listening… nobody has spoken yet.");
+  });
+});

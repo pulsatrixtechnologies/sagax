@@ -67,7 +67,7 @@ export function WorkspaceFilesSection({
 }) {
   const files = useWorkspaceFiles({ bot, active, onOpenSection, initial, initialExpanded, memoryEditable });
   const {
-    advanced, listing, error, busy, newName, setNewName, creating, setCreating, showOptions, setShowOptions, selected, setSelected, setDropTarget, upload, setMoving, uploadRef, uploadFolderRef, reload, startCreate, create, askDelete, onUpload, onDragOver, onDrop,
+    listing, error, busy, newName, setNewName, creating, setCreating, showOptions, setShowOptions, selected, setSelected, setDropTarget, upload, setMoving, uploadRef, uploadFolderRef, reload, startCreate, create, askDelete, onUpload, onDragOver, onDrop,
   } = files;
 
   const plain = useSettingsSurface() === "plain";
@@ -214,7 +214,6 @@ export function WorkspaceFilesSection({
             <ProfileRow
               icon={<FolderOpen />}
               label={t("persona.files.short")}
-              state={advanced && listing ? <span className="break-all" data-workspace-path="">{listing.workspacePath}</span> : undefined}
               wrap
             />
             {parts?.notice}
@@ -246,7 +245,6 @@ export function WorkspaceFilesSection({
         <span>{t("persona.files.short")}</span>
         <HelpTip label={t("settings.moreAbout", { title: t("botSettings.nav.files") })}>
           <span className="block">{t("persona.files.intro")}</span>
-          {advanced && listing && <span className="mt-2 block break-all font-mono" data-workspace-path="">{listing.workspacePath}</span>}
         </HelpTip>
       </div>
 

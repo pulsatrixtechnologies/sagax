@@ -268,7 +268,12 @@ were. The topic is a client draft until its first message
 search hits open their own topic. Section "Fresh topic on return" in
 `docs/code/chat.md` has the full rules and tests.
 
-Release note text:
+Since 2026-10-28 (#1586) an automatic return shows nothing on the desktop:
+the timeline stays whole and only the bot's context is fresh at the next
+message. The setting's text says so since #5382; the release note below is
+the 2026-10-18 wording, kept as history.
+
+Release note text (2026-10-18):
 
 - FR : « Retour dans un chat : un sujet neuf. Après 4 h d'absence ou de
   silence (réglable dans Réglages > Apparence > Conversation), revenir à un

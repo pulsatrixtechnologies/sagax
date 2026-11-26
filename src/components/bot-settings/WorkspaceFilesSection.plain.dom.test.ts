@@ -129,11 +129,9 @@ describe("Bot folder on the profile page (plain)", () => {
     expect(toggle.getAttribute("aria-checked")).toBe("true");
     await act(async () => { toggle.click(); });
     expect(onToggle).toHaveBeenCalledWith(false);
-    // the folder's path, grey under its name (advanced mode)
-    const path = card.querySelector("[data-workspace-path]")!;
-    expect(path.textContent).toBe("/data/workspaces/pepper");
-    expect(path.closest(".text-ink-secondary")).not.toBeNull();
-    expect(path.className).not.toContain("font-mono");
+    // the folder's path on the server is not shown, in any mode (M-20261125-077)
+    expect(card.querySelector("[data-workspace-path]")).toBeNull();
+    expect(card.textContent).not.toContain("/data/workspaces/pepper");
     // the files: a row each, what loads when grey under the name
     expect(card.querySelector('[data-file-open="MEMORY.md"]')).not.toBeNull();
     expect(card.querySelector('[data-file-open="memory/clients.md"]')).not.toBeNull();

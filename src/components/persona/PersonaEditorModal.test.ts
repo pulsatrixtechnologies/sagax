@@ -602,7 +602,10 @@ describe("Knowledge", () => {
       const html = render(id);
       expect(selectedTab(html), id).toBe("knowledge");
       expect(subPageOf(html), id).toBeUndefined();
-      expect(html).toContain('data-settings-group="bot-profile-review"');
+      // nothing waits in this first paint, so the To review card is not drawn
+      // (M-20261125-066); with a learning staged it comes first, as
+      // BotFolderCard.dom.test.ts checks
+      expect(html).not.toContain('data-settings-group="bot-profile-review"');
       expect(bodiesOf(sectionHtml(html, "files").html), id).toEqual(["files"]);
       expect(html).not.toContain('data-bot-profile-row="page-routines"');
       expect(html).not.toContain('data-bot-profile-row="page-folder"');

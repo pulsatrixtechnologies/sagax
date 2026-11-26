@@ -1,6 +1,6 @@
 // Model picker chip / trigger (extracted from ModelPicker.tsx, #1383).
 import { type RefObject } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, type LucideIcon } from "lucide-react";
 import type { Bot, InstanceInfo, ModelSelection } from "@/state/store";
 import { InstanceProviderMark } from "../ProviderIcons";
 import { cn } from "@/lib/cn";
@@ -55,6 +55,7 @@ export function ModelPickerTrigger({
   menu,
   toggleMenu,
   composerLabel,
+  chipGlyph: ChipGlyph,
   followLine,
   summary,
   selection,
@@ -83,6 +84,8 @@ export function ModelPickerTrigger({
   menu: boolean;
   toggleMenu: () => void;
   composerLabel: string;
+  /** The chat bar's chip: the icon of the mode in use, or Custom's (M-20261126-104). */
+  chipGlyph?: LucideIcon;
   followLine: string;
   summary: string;
   selection: ModelSelection;
@@ -118,13 +121,14 @@ export function ModelPickerTrigger({
     aria-haspopup="listbox"
     title={bot.busy ? `${composerLabel}${followLine}\n${t(threadId ? "model.threadBusy" : "model.busy")}` : `${composerLabel}${followLine}`}
     className={cn(
-      // M-20261125-074: under the message box, in small quiet text
-      "flex max-w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px] leading-5 text-ink-secondary hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-50",
+      // M-20261126-104: back inside the message box, just before the voice button
+      "flex max-w-full items-center gap-1.5 rounded-lg px-1.5 py-1 text-[13px] text-ink-secondary hover:bg-raised hover:text-ink disabled:cursor-not-allowed disabled:opacity-50",
       isUltracodeEffort(selection.effort) && "ultracode-effort-chip",
     )}
   >
+    {ChipGlyph && <ChipGlyph size={15} strokeWidth={1.75} aria-hidden="true" data-composer-model-glyph="" className="shrink-0" />}
     <span className="truncate">{composerLabel}</span>
-    <ChevronDown size={12} className={cn("shrink-0 transition-transform", menu && "rotate-180")} />
+    <ChevronDown size={14} className={cn("shrink-0 transition-transform", menu && "rotate-180")} />
   </button>
 ) : listChip ? (
   // Settings > Models list cell: the engine mark and the whole model name

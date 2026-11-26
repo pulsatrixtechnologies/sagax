@@ -4,6 +4,7 @@ import type { MenuMotion } from "../MenuMotion";
 import type { Bot, InstanceInfo, ModelSelection } from "@/state/store";
 import type { ModelMenuRow, ModelMenuSection } from "../ModelMenu";
 import { ModelPanel, type ModelPanelProps } from "../ModelPanel";
+import { MODE_MENU_WIDTH } from "../ModeMenu";
 import { cn } from "@/lib/cn";
 import { COMPOSER_POPOVER_RISE_CLASS, MENU_BOX } from "../menu-look";
 import { t } from "@/lib/i18n";
@@ -120,11 +121,12 @@ export function ModelPickerMenu({
   /** #4417: "Context size" for the bot (src/components/ContextSize.tsx),
    * computed by the picker. */
   contextSize?: readonly ContextSizeChoice[];
-  /** #4900, #5088, M-20261123-045: the chat bar's mode menu (Auto, Fast,
-   * Expert, Heavy, Build, Reasoning, All models), the model panel's short view. */
+  /** #4900, #5088, M-20261126-104: the chat bar's mode menu (Auto, Fast,
+   * Expert, Heavy, Custom, Effort), the model panel's short view. */
   modeMenu?: ModelPanelProps["modes"];
 }) {
-  const width = MENU_WIDTH;
+  // M-20261126-104: the chat bar's mode menu is about 240 px wide
+  const width = modeMenu ? MODE_MENU_WIDTH : MENU_WIDTH;
   const currentOptimize = autoOptimizeOf(selection.autoOptimize);
   // The settings of the model in use, under the composer's list (the maintainer,
   // 2026-10-13, Cursor's second panel): Fast when it has a fast twin and

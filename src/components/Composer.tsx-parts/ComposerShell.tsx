@@ -267,14 +267,17 @@ export function ComposerShell({
           config={config}
           composerAria={composerAria}
           below={bot && !group && !remoteClient
-            ? <ComposerUnderRow bot={bot} threadId={threadId} modelMenu={modelMenu} composerRowRef={composerRowRef}
-                meter={<ComposerMeter bot={bot} threadId={threadId} />} />
+            ? <ComposerUnderRow meter={<ComposerMeter bot={bot} threadId={threadId} />} />
             : undefined}
         >
           <ComposerActionBar
             bot={bot}
             group={group}
+            remoteClient={remoteClient}
             locked={locked}
+            threadId={threadId}
+            modelMenu={modelMenu}
+            composerRowRef={composerRowRef}
             dictating={dictating}
             voiceNoting={voiceNoting}
             recording={recording}

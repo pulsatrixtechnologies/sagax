@@ -29,6 +29,8 @@ export interface ModeMenuLevelProps {
   label: string;
   /** The width the whole path that may open from this level takes (its own and the levels after it). */
   room?: number;
+  /** A fixed width (Effort's and Custom's levels); absent, the level takes its rows' width. */
+  width?: number;
   /** Opened by a click or a key: the focus moves into it. A hover leaves the focus where it is. */
   focus: boolean;
   onKeyDown: KeyboardEventHandler<HTMLDivElement>;
@@ -37,7 +39,7 @@ export interface ModeMenuLevelProps {
   children: ReactNode;
 }
 
-export function ModeMenuLevel({ level, anchor, label, room = 0, focus, onKeyDown, onPointerEnter, children }: ModeMenuLevelProps) {
+export function ModeMenuLevel({ level, anchor, label, room = 0, width, focus, onKeyDown, onPointerEnter, children }: ModeMenuLevelProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   // placed before every paint: the row that opened it moves when its own level is placed or scrolls
@@ -89,7 +91,9 @@ export function ModeMenuLevel({ level, anchor, label, room = 0, focus, onKeyDown
     // data-model-menu: a press in a level is a press in the model menu (the composer's and the picker's outside checks)
     <div ref={ref} data-mode-level={level} data-model-menu="" role="group" aria-label={label}
       onKeyDown={onKeyDown} onPointerEnter={onPointerEnter}
-      className={cn("fixed left-0 top-0 flex w-max min-w-[min(180px,calc(100vw-24px))] max-w-[min(300px,calc(100vw-24px))] flex-col overflow-hidden py-1 text-popover-ink", POPOVER_LAYER, MENU_BOX)}>
+      style={width ? { width } : undefined}
+      className={cn("fixed left-0 top-0 flex flex-col overflow-hidden py-1 text-popover-ink",
+        width ? "max-w-[calc(100vw-24px)]" : "w-max min-w-[min(180px,calc(100vw-24px))] max-w-[min(300px,calc(100vw-24px))]", POPOVER_LAYER, MENU_BOX)}>
       {children}
     </div>
   );

@@ -1,12 +1,15 @@
+import type { RefObject } from "react";
 import { ArrowUp, Clock, Square } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { sendBlockStops, type SendBlock } from "@/lib/send-state";
 import type { Bot, Group } from "@/state/store";
+import { ModelPicker, type ComposerModelMenuControl } from "../ModelPicker";
 import { CallButton } from "../CallView";
 import { NudgeButton } from "../NudgeButton";
 import { ComposerVoiceButton } from "../ComposerVoiceButton";
 import { noteVoiceModeUsed } from "@/lib/composer-voice";
 import {
+  COMPOSER_WIDE_ONLY,
   ComposerCtaSeat,
   ComposerMicButton,
   ComposerSendButton,
@@ -22,7 +25,11 @@ type DictationEngine = "native" | "xai" | null;
 export function ComposerActionBar({
   bot,
   group,
+  remoteClient,
   locked,
+  threadId,
+  modelMenu,
+  composerRowRef,
   dictating,
   voiceNoting,
   recording,
@@ -50,7 +57,11 @@ export function ComposerActionBar({
 }: {
   bot?: Bot;
   group?: Group;
+  remoteClient: boolean;
   locked: boolean;
+  threadId: string;
+  modelMenu: RefObject<ComposerModelMenuControl | null>;
+  composerRowRef: RefObject<HTMLDivElement | null>;
   dictating: boolean;
   voiceNoting: boolean;
   recording: boolean;
@@ -104,6 +115,18 @@ export function ComposerActionBar({
       >
         <Square size={14} className="fill-current" aria-hidden="true" />
       </button>
+    )}
+    {bot && !group && !remoteClient && (
+      // M-20261126-104: the model chip sits inside the message box again, just
+      // before the voice button (the Stop of a running turn comes before it).
+      // #2106: picking writes the bot's model for every thread. #4093: a narrow
+      // box folds the chip away; the + menu's Model row opens the same menu
+      // through menuControl.
+      <span data-composer-model-chip="" className={COMPOSER_WIDE_ONLY}>
+        <ModelPicker inComposer key={bot.threadId} bot={bot} threadId={threadId}
+          menuControl={modelMenu}
+          fallbackAnchor={() => composerRowRef.current?.querySelector<HTMLElement>("[data-composer-plus]") ?? null} />
+      </span>
     )}
   {!locked && dictating && (
     <DictationChip

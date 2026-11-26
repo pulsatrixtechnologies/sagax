@@ -10,26 +10,27 @@
 // person, not the bot (src/lib/model-favorites.ts, GET/PUT /api/me/models).
 //
 // #5088, then the owner on 2026-11-23 (M-20261123-040, M-20261123-045,
-// M-20261123-047): in the composer the short view is the mode menu instead
-// (ModeMenu.tsx, the rows of shared/mode-menu.ts, the same as the Perspicax
-// console's): Auto, Fast, Expert, Heavy, Build, then Reasoning, then All
-// models (D-20261124-002: Auto's Optimize for is no row of this menu, it is
-// set in Manage models and in a bot's Model cell of Settings). Reasoning and
-// All models open beside the menu, which stays on screen (owner 2026-11-25,
-// M-20261125-035, D-20261125-012, #5338: cascading submenus, ModeMenuLevel.tsx,
-// no page replacing the menu and no back row): Reasoning lists the levels of
-// the model in use; All models is a cascade, the provider, then the account
-// (skipped when the provider has one), then the model, each level beside the
-// row that opened it, listing only what can run a turn now
-// (src/lib/model-menu.ts modelCascade). A click, a rest of the pointer or the
-// right arrow opens a level; Escape or the left arrow closes the deepest one.
-// The starred favorites sit in the menu itself, under the modes and the
-// heading "Favorites" (M-20261125-074); the star of All models still adds or
-// removes one. Account, Runs with
-// and Manage models stay in the footer; a model turned off is turned back on
-// in Manage models, the menu no longer counts them.
+// M-20261123-047) and on 2026-11-26 (M-20261126-104, M-20261126-103): in the
+// composer the short view is the mode menu instead (ModeMenu.tsx), about
+// 240 px wide: Auto, Fast, Expert, Heavy, Custom, then Effort (D-20261124-002:
+// Auto's Optimize for is no row of this menu, it is set in Manage models and
+// in a bot's Model cell of Settings). Custom and Effort open beside the menu,
+// which stays on screen (owner 2026-11-25, M-20261125-035, D-20261125-012,
+// #5338: cascading submenus, ModeMenuLevel.tsx, no page replacing the menu
+// and no back row). Effort opens one explaining sentence and the levels of
+// the model in use, "Recommended" beside the model's own level, an info mark
+// on Max. Custom opens the model list: the starred favorites first, then the
+// providers (a cascade: the provider, then the account, skipped when the
+// provider has one, then the model, each level beside the row that opened
+// it, listing only what can run a turn now, src/lib/model-menu.ts
+// modelCascade), and "Manage models" at the foot of that list. The menu has
+// no footer: the lines of a model picked by hand (Account, Runs with, Fast,
+// Context size) sit over Manage models, in that same list. A click, a rest of
+// the pointer or the right arrow opens a level; Escape or the left arrow
+// closes the deepest one. The star of a model still adds or removes a
+// favorite; a model turned off is turned back on in Manage models.
 import { useEffect, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
-import { Check, ChevronLeft, ChevronRight, Search, Star } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Info, Search, Settings, Star } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -84,11 +85,12 @@ export interface ModelPanelProps {
   showSettings: boolean;
   /** Which list opens: the short one (Auto, the person's favorites, "All models") or every provider's models. */
   view?: "short" | "all";
-  /** #5088, M-20261123-045: the composer's mode menu (Auto, Fast, Expert,
-   * Heavy, Build, Reasoning, All models) as the short view; "all" then opens
-   * on the providers of All models. `pinnedLabel` names the model the person
-   * pinned while it runs. */
-  modes?: Pick<ModeMenuProps, "current" | "resolutions" | "onPick"> & { pinnedLabel?: string };
+  /** #5088, M-20261126-104: the composer's mode menu (Auto, Fast, Expert,
+   * Heavy, Custom, Effort) as the short view; "all" then opens on the list
+   * Custom opens. `pinnedLabel` names the model picked by hand, on Custom's
+   * row. The bot working (`disabled`) locks the modes and the models, never
+   * the effort: a level chosen mid-turn applies from the next turn. */
+  modes?: Pick<ModeMenuProps, "current" | "resolutions" | "onPick"> & { pinnedLabel?: string; pinnedTitle?: string };
 }
 
 /** The provider the "All models" list opens on: the one that holds the current
@@ -125,11 +127,16 @@ const GROUP_HEADING = "px-2 pb-0.5 pt-2 text-[12px] leading-4 text-popover-ink-s
  * check; it stays empty on every other row. */
 export const ROW_SIDE_SLOT = "flex w-5 shrink-0 items-center justify-center";
 export const ROW_ICON_SLOT = "flex size-7 shrink-0 items-center justify-center";
+// the hairline between the groups of a level (ModeMenu.tsx's own)
+const LEVEL_SEPARATOR = "mx-2 my-1 border-t border-popover-hairline";
 // a row of the mode menu's panels (a level, a provider, an account): ModeMenu.tsx's row
 const PANEL_ROW = "group flex h-9 items-center gap-1 rounded-lg hover:bg-popover-hover focus-within:bg-popover-hover";
 const PANEL_ROW_BUTTON = "flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg pl-2 text-left text-[13px] text-popover-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50";
 
-/** The room All models asks of one side of the menu before it opens there: its three levels (providers, accounts, models) side by side. */
+/** The widths of the two levels the menu opens (M-20261126-104, the mockup's): Effort's and Custom's. */
+const EFFORT_LEVEL_WIDTH = 260;
+const CUSTOM_LEVEL_WIDTH = 240;
+/** The room Custom asks of one side of the menu before it opens there: its three levels (providers, accounts, models) side by side. */
 const CASCADE_ROOM = 900;
 
 /** Two places of the cascade are the same level. */
@@ -203,7 +210,7 @@ export function ModelPanel(props: ModelPanelProps) {
     : at.panel === "accounts" ? [{ panel: "providers" }, at]
     : [{ panel: "providers" }, ...(viaAccount ? [{ panel: "accounts", provider: at.provider } as MenuPanel] : []), at];
   const inAll = levels[0]?.panel === "providers";
-  // M-20261125-074: the favorites sit in the menu itself, under the modes; one that cannot run now is absent
+  // M-20261126-104: the favorites lead the list Custom opens; one that cannot run now is absent
   const menuFavorites = modes ? favoriteRows.filter((row) => !row.unavailable) : [];
   const viewRows: ModelMenuRow[] = modes ? (atAccount?.models.map((one) => one.data) ?? []) : !all ? [] : section?.rows ?? [];
   const searchable = (modes ? at.panel === "models" : all) && viewRows.length > PANEL_SEARCH_FROM;
@@ -361,10 +368,12 @@ export function ModelPanel(props: ModelPanelProps) {
   // levels of the model in use; Fast, Expert and Heavy set their own each
   // turn, so the row is greyed and shows the level they impose
   const imposed = modes && modes.current ? modes.resolutions?.[modes.current]?.effort : undefined;
-  const levelsRow = reasoningRow({ mode: modes?.current ?? null, levels: effortLevels, value: effort?.value, modelDefault: effort?.modelDefault, imposed });
+  // M-20261126-104: no "Auto" beside Effort; with no level chosen the row shows the model's own, under Auto too
+  // (the shared rule keeps "Auto" for the console, so Auto is read here as a model with no mode)
+  const levelsRow = reasoningRow({ mode: modes?.current === "auto" ? null : modes?.current ?? null, levels: effortLevels, value: effort?.value, modelDefault: effort?.modelDefault, imposed });
   // an engine with model variants draws its own control in the panel
   const reasoningState: ReasoningRow = variantRow && !levelsRow.disabled ? { shown: true, disabled: false, choices: [] } : levelsRow;
-  const reasoningLabel = (level: string | undefined) => (level ? effortLabel(level as EffortLevel) : modes?.current === "auto" ? t("model.mode.auto.name") : variantRow ? "" : t("model.defaultTag"));
+  const reasoningLabel = (level: string | undefined) => (level ? effortLabel(level as EffortLevel) : variantRow ? "" : t("model.defaultTag"));
   const hasReasoning = showSettings && !modes && (Boolean(variantRow) || effortLevels.length > 0);
   const runsShown = !autoOn && runsWith && runsWithShown(runsWith) ? runsWith : undefined;
   const runsCurrent = runsShown?.find((choice) => choice.current);
@@ -397,9 +406,10 @@ export function ModelPanel(props: ModelPanelProps) {
     </label>
   );
 
-  // M-20261125-074: the person's favorite models in the mode menu, under the
-  // heading "Favorites" (sentence case): one click runs the model; the star
-  // that adds or removes one stays in All models
+  // M-20261126-104: the person's favorite models lead the list Custom opens,
+  // under the heading "Favorites" (sentence case), a star before each: one
+  // click runs the model; the star that adds or removes one stays on the
+  // models of a provider
   const menuFavoriteRows = menuFavorites.length > 0 ? (
     <div data-mode-favorites="">
       <div data-mode-favorites-heading="" className={GROUP_HEADING}>{t("model.favorites")}</div>
@@ -410,15 +420,15 @@ export function ModelPanel(props: ModelPanelProps) {
             title={[row.title ?? row.label, row.account].filter(Boolean).join(" · ")}
             tabIndex={row.current ? 0 : -1}
             onMouseDown={(event) => event.preventDefault()}
-            onPointerEnter={(event) => restOn(event, { panel: "root" }, false)}
+            onPointerEnter={(event) => restOn(event, { panel: "providers" }, false)}
             onClick={() => onPick(row)}
             className={PANEL_ROW_BUTTON}>
-            <span aria-hidden="true" className={cn("flex size-4 shrink-0 items-center justify-center", row.current ? "text-popover-ink" : "text-popover-ink-secondary")}>
-              <Star size={15} strokeWidth={1.75} />
+            <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center text-popover-accent">
+              <Star size={14} fill="currentColor" />
             </span>
-            <span className="min-w-0 flex-1 truncate">{row.label}</span>
-            {row.account && <span data-model-row-account className="max-w-[45%] shrink-0 truncate pl-1 text-right text-[12px] text-popover-ink-secondary">{row.account}</span>}
-            <span aria-hidden="true" className={ROW_SIDE_SLOT} />
+            <span className="min-w-[55%] flex-1 truncate">{row.label}</span>
+            {/* the list is narrow: the name keeps most of the row, the whole account is in the tooltip */}
+            {row.account && <span data-model-row-account className="min-w-0 max-w-[35%] shrink truncate pl-1 text-right text-[12px] text-popover-ink-secondary">{row.account}</span>}
             <span aria-hidden="true" className={ROW_ICON_SLOT}>{row.current && <Check size={14} className="text-popover-accent" />}</span>
           </button>
         </div>
@@ -427,25 +437,34 @@ export function ModelPanel(props: ModelPanelProps) {
   ) : undefined;
 
   // the mode menu's levels (D-20261125-012): each one's rows, drawn beside the row that opened it
-  const levelLabel = (level: MenuPanel) => (level.panel === "reasoning" ? t("model.reasoning") : level.panel === "providers" ? t("model.auto.rail")
+  const levelLabel = (level: MenuPanel) => (level.panel === "reasoning" ? t("model.effort") : level.panel === "providers" ? t("model.mode.custom.name")
     : level.panel === "accounts" ? atProvider?.label ?? "" : viaAccount ? `${atProvider?.label ?? ""} · ${atAccount?.label ?? ""}` : atProvider?.label ?? "");
   const levelRows = (level: MenuPanel): ReactNode => {
     if (!modes) return null;
     if (level.panel === "reasoning") {
       return variantRow ? <div className="px-2 py-1.5">{variantRow}</div> : effort && reasoningState.choices.map((choice) => {
         const on = (choice ?? undefined) === reasoningState.value;
+        const level = choice === null ? undefined : choice as EffortLevel;
+        // the info mark: what the deepest levels cost (Max) or do (Ultracode)
+        const info = level === undefined ? undefined : isUltracodeEffort(level) ? t("model.effort.ultracodeHint") : level === "max" ? t("model.effort.maxHint") : undefined;
         return (
           <div key={choice ?? "default"} className={PANEL_ROW}>
-            <button type="button" role="radio" aria-checked={on} disabled={disabled}
+            {/* the bot working never locks the effort: a level chosen mid-turn applies from the next turn */}
+            <button type="button" role="radio" aria-checked={on}
               data-model-panel-row={`effort:${choice ?? "default"}`} data-model-effort-choice={choice ?? "default"}
-              title={choice === null ? t("model.effort.defaultTitle") : isUltracodeEffort(choice as EffortLevel) ? t("model.effort.ultracodeHint") : t("model.effort.levelTitle", { level: effortLabel(choice as EffortLevel) })}
+              title={level === undefined ? t("model.effort.defaultTitle") : info ?? t("model.effort.levelTitle", { level: effortLabel(level) })}
               tabIndex={on || (reasoningState.value === undefined && choice === reasoningState.choices[0]) ? 0 : -1}
               onMouseDown={(event) => event.preventDefault()}
-              // the model's own default level is picked as "no level sent"
-              onClick={() => { effort.onPick(choice === null || (modes.current !== "auto" && choice === effort.modelDefault) ? undefined : choice as EffortLevel); go({ panel: "root" }, false); }}
+              // the model's own level is picked as "no level sent"
+              onClick={() => { effort.onPick(level === undefined || level === effort.modelDefault ? undefined : level); go({ panel: "root" }, false); }}
               className={PANEL_ROW_BUTTON}>
-              <span className={cn("min-w-0 flex-1 truncate", choice !== null && isUltracodeEffort(choice as EffortLevel) && "ultracode-effort-option")}>{reasoningLabel(choice ?? undefined)}</span>
-              <span aria-hidden="true" className={ROW_SIDE_SLOT} />
+              <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                <span className={cn("truncate", level !== undefined && isUltracodeEffort(level) && "ultracode-effort-option")}>{reasoningLabel(choice ?? undefined)}</span>
+                {level !== undefined && level === effort.modelDefault && (
+                  <span data-model-effort-recommended="" className="shrink-0 rounded border border-popover-hairline px-1 text-[11px] leading-4 text-popover-ink-secondary">{t("model.effort.recommended")}</span>
+                )}
+                {info && <Info size={13} aria-hidden="true" data-model-effort-info={level} className="shrink-0 text-popover-ink-secondary" />}
+              </span>
               <span aria-hidden="true" className={ROW_ICON_SLOT}>{on && <Check size={14} className="text-popover-accent" />}</span>
             </button>
           </div>
@@ -455,6 +474,9 @@ export function ModelPanel(props: ModelPanelProps) {
     if (level.panel === "providers") {
       return (
         <>
+          {menuFavoriteRows}
+          {menuFavoriteRows && <div role="separator" className={LEVEL_SEPARATOR} />}
+          <div data-mode-all-heading="" className={GROUP_HEADING}>{t("model.auto.rail")}</div>
           {cascadeLead.map((row) => modelRow(row, undefined, level))}
           {cascade.map((provider) => {
             const on = cascadeCurrent?.provider.id === provider.id;
@@ -509,6 +531,98 @@ export function ModelPanel(props: ModelPanelProps) {
       </>
     );
   };
+
+  // the lines of a model picked by hand: the account it runs on, what runs it
+  const accountLines = accountChoices && inUse && (
+          <>
+            {accountOpen && (
+              <div role="radiogroup" aria-label={t("model.account")} data-model-line-choices="account" className="pb-0.5"
+                onKeyDown={(event) => arrowRadios(event, "[data-model-account-choice]", "vertical")}>
+                {accountChoices.map((choice) => {
+                  const on = choice.instanceId === inUse.instanceId;
+                  return (
+                    <button key={choice.key} type="button" role="radio" aria-checked={on} disabled={disabled || Boolean(choice.unavailable)}
+                      data-model-account-choice={choice.instanceId} onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        if (!on) onPick({ ...choice, current: false, pinAccount: true });
+                        setAccountOpen(false);
+                      }}
+                      className="flex min-h-8 w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left text-[13px] outline-none hover:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">
+                      <span className="truncate">{choice.account}</span>
+                      {on && <Check size={14} aria-hidden="true" className="shrink-0 text-popover-accent" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <button type="button" data-model-line="account" aria-expanded={accountOpen} disabled={disabled} onClick={() => setAccountOpen((open) => !open)}
+              className="flex min-h-7 w-full min-w-0 items-center gap-1 rounded-md px-2 text-[12px] text-popover-ink-secondary outline-none hover:text-popover-ink focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">
+              <span className="shrink-0">{t("model.account")}</span>
+              <span data-model-line-value className="truncate text-popover-ink">{inUse.account ?? ""}</span>
+              <ChevronRight size={12} aria-hidden="true" className={cn("shrink-0 transition-transform", accountOpen && "rotate-90")} />
+            </button>
+          </>
+        );
+  const runsChoices = runsShown && runsOpen && (
+          <div role="radiogroup" aria-label={t("model.runsWith")} data-model-line-choices="runs-with" className="pb-0.5"
+            onKeyDown={(event) => arrowRadios(event, "[data-model-line-choice]", "vertical")}>
+            {runsShown.map((choice) => (
+              <button key={choice.key} type="button" role="radio" aria-checked={choice.current} disabled={disabled}
+                data-model-line-choice={choice.key} onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  if (!choice.current) choice.onPick();
+                  setRunsOpen(false);
+                }}
+                className="flex min-h-8 w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left text-[13px] outline-none hover:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate">{runsWithOptionLabel(choice)}</span>
+                  {choice.hint && <span className="text-[12px] leading-4 text-popover-ink-secondary">{choice.hint}</span>}
+                </span>
+                {choice.current && <Check size={14} aria-hidden="true" className="shrink-0 text-popover-accent" />}
+              </button>
+            ))}
+          </div>
+        );
+  const runsButton = runsShown && (
+            <button type="button" data-model-line="runs-with" aria-expanded={runsOpen} disabled={disabled} onClick={() => setRunsOpen((open) => !open)}
+              className="flex min-h-7 min-w-0 items-center gap-1 rounded-md px-2 text-[12px] text-popover-ink-secondary outline-none hover:text-popover-ink focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">
+              <span className="shrink-0">{t("model.runsWith")}</span>
+              <span data-model-line-value className="truncate text-popover-ink">{runsCurrent?.label ?? ""}</span>
+              <ChevronRight size={12} aria-hidden="true" className={cn("shrink-0 transition-transform", runsOpen && "rotate-90")} />
+            </button>
+  );
+  const modelSettings = showSettings && (fast || (contextSize && contextSize.length > 0)) && (
+    <ModelMenuSettings disabled={disabled} fast={fast} contextSize={autoOn ? undefined : contextSize} />
+  );
+  // M-20261126-104: the mode menu has no footer. The lines of a model picked
+  // by hand (they exist only while one runs) and Manage models sit at the foot
+  // of the list Custom opens, Manage models last, a gear before it
+  const pickedLines = modes && (
+    <>
+      {modelSettings}
+      {(accountLines || runsButton) && (
+        <div data-model-picked-lines="" className="shrink-0 border-t border-popover-hairline px-1.5 py-1">
+          {accountLines}
+          {runsChoices}
+          {runsButton}
+        </div>
+      )}
+      {manage?.onManage && (
+        <div data-model-manage-row="" className="shrink-0 border-t border-popover-hairline px-1.5 pt-1">
+          <div className={PANEL_ROW}>
+            <button type="button" data-model-manage data-model-panel-row="manage" tabIndex={-1}
+              onMouseDown={(event) => event.preventDefault()}
+              onPointerEnter={(event) => restOn(event, { panel: "providers" }, false)}
+              onClick={manage.onManage}
+              className={PANEL_ROW_BUTTON}>
+              <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center text-popover-ink-secondary"><Settings size={15} strokeWidth={1.75} /></span>
+              <span className="min-w-0 flex-1 truncate">{t("model.manage")}</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div data-model-panel className="flex min-h-0 flex-col text-popover-ink">
@@ -568,9 +682,8 @@ export function ModelPanel(props: ModelPanelProps) {
         {modes ? (
           <ModeMenu current={modes.current} resolutions={modes.resolutions} onPick={modes.onPick} disabled={disabled}
             onModeRest={(event) => restOn(event, { panel: "root" }, false)}
-            favorites={menuFavoriteRows}
-            reasoning={showSettings ? { row: reasoningState, label: reasoningLabel, open: at.panel === "reasoning", onOpen: () => go({ panel: "reasoning" }), onRest: reasoningState.disabled ? (event) => restOn(event, { panel: "root" }, false) : (event) => restOn(event, { panel: "reasoning" }, true) } : undefined}
-            allModels={{ label: modes.pinnedLabel, open: inAll, onOpen: () => go({ panel: "providers" }), onRest: (event) => restOn(event, { panel: "providers" }, true) }} />
+            effort={showSettings ? { row: reasoningState, label: reasoningLabel, open: at.panel === "reasoning", onOpen: () => go({ panel: "reasoning" }), onRest: reasoningState.disabled ? (event) => restOn(event, { panel: "root" }, false) : (event) => restOn(event, { panel: "reasoning" }, true) } : undefined}
+            custom={{ label: modes.pinnedLabel, title: modes.pinnedTitle, open: inAll, onOpen: () => go({ panel: "providers" }), onRest: (event) => restOn(event, { panel: "providers" }, true) }} />
         ) : !all ? (
           <>
             {autoRow && modelRow({ ...autoRow, label: t("model.auto.label"), kind: "auto" })}
@@ -611,6 +724,7 @@ export function ModelPanel(props: ModelPanelProps) {
       {modes && levels.map((level, index) => (
         <ModeMenuLevel key={`${level.panel}:${"provider" in level ? level.provider : ""}:${"account" in level ? level.account : ""}`} level={level.panel}
           anchor={levelAnchor(level, viaAccount)} label={levelLabel(level)} room={level.panel === "reasoning" ? 0 : CASCADE_ROOM} focus={focusLevel && index === levels.length - 1}
+          width={level.panel === "reasoning" ? EFFORT_LEVEL_WIDTH : level.panel === "providers" ? CUSTOM_LEVEL_WIDTH : undefined}
           onPointerEnter={settle}
           onKeyDown={(event) => {
             const typing = event.target instanceof HTMLInputElement;
@@ -629,17 +743,16 @@ export function ModelPanel(props: ModelPanelProps) {
             }
             arrowRadios(event, "[data-model-panel-row]", "vertical");
           }}>
-          {level.panel === "reasoning" && (
-            <div className={cn(HEADING, "flex items-baseline gap-3")}>
-              <span className="shrink-0">{t("model.reasoning")}</span>
-              {!variantRow && <span className="ml-auto min-w-0 truncate">{t("model.effort.slowerHint")}</span>}
-            </div>
+          {level.panel === "reasoning" && !variantRow && (
+            // one explaining sentence over the levels, whole (it wraps)
+            <p data-model-effort-explain="" className={cn(HEADING, "pt-1.5")}>{t("model.effort.explain")}</p>
           )}
           {level.panel === "models" && searchField}
           <div role="radiogroup" aria-label={levelLabel(level)} data-mode-panel={level.panel}
             className="max-h-[min(400px,52dvh)] min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5">
             {levelRows(level)}
           </div>
+          {level.panel === "providers" && pickedLines}
         </ModeMenuLevel>
       ))}
 
@@ -648,7 +761,7 @@ export function ModelPanel(props: ModelPanelProps) {
         // width (seven read on two balanced lines), the shared segmented control
         <div data-model-panel-reasoning data-model-settings-effort="" className="shrink-0 border-t border-popover-hairline px-3.5 pb-2 pt-2">
           <div className="flex items-baseline justify-between gap-3 pb-2">
-            <span className="shrink-0 text-[12px] leading-4 text-popover-ink-secondary">{t("model.reasoning")}</span>
+            <span className="shrink-0 text-[12px] leading-4 text-popover-ink-secondary">{t("model.effort")}</span>
             {!variantRow && <span className="min-w-0 truncate text-[12px] leading-4 text-popover-ink-secondary">{t("model.effort.slowerHint")}</span>}
           </div>
           {variantRow ?? (effort && (
@@ -670,78 +783,21 @@ export function ModelPanel(props: ModelPanelProps) {
         </div>
       )}
 
-      {showSettings && (fast || (contextSize && contextSize.length > 0)) && (
-        <ModelMenuSettings disabled={disabled} fast={fast} contextSize={autoOn ? undefined : contextSize} />
-      )}
+      {!modes && modelSettings}
 
+      {!modes && (
       <div data-model-panel-footer className="shrink-0 border-t border-popover-hairline px-1.5 py-1">
-        {accountChoices && inUse && (
-          <>
-            {accountOpen && (
-              <div role="radiogroup" aria-label={t("model.account")} data-model-line-choices="account" className="pb-0.5"
-                onKeyDown={(event) => arrowRadios(event, "[data-model-account-choice]", "vertical")}>
-                {accountChoices.map((choice) => {
-                  const on = choice.instanceId === inUse.instanceId;
-                  return (
-                    <button key={choice.key} type="button" role="radio" aria-checked={on} disabled={disabled || Boolean(choice.unavailable)}
-                      data-model-account-choice={choice.instanceId} onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => {
-                        if (!on) onPick({ ...choice, current: false, pinAccount: true });
-                        setAccountOpen(false);
-                      }}
-                      className="flex min-h-8 w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left text-[13px] outline-none hover:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">
-                      <span className="truncate">{choice.account}</span>
-                      {on && <Check size={14} aria-hidden="true" className="shrink-0 text-popover-accent" />}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            <button type="button" data-model-line="account" aria-expanded={accountOpen} disabled={disabled} onClick={() => setAccountOpen((open) => !open)}
-              className="flex min-h-7 w-full min-w-0 items-center gap-1 rounded-md px-2 text-[12px] text-popover-ink-secondary outline-none hover:text-popover-ink focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">
-              <span className="shrink-0">{t("model.account")}</span>
-              <span data-model-line-value className="truncate text-popover-ink">{inUse.account ?? ""}</span>
-              <ChevronRight size={12} aria-hidden="true" className={cn("shrink-0 transition-transform", accountOpen && "rotate-90")} />
-            </button>
-          </>
-        )}
-        {runsShown && runsOpen && (
-          <div role="radiogroup" aria-label={t("model.runsWith")} data-model-line-choices="runs-with" className="pb-0.5"
-            onKeyDown={(event) => arrowRadios(event, "[data-model-line-choice]", "vertical")}>
-            {runsShown.map((choice) => (
-              <button key={choice.key} type="button" role="radio" aria-checked={choice.current} disabled={disabled}
-                data-model-line-choice={choice.key} onMouseDown={(event) => event.preventDefault()}
-                onClick={() => {
-                  if (!choice.current) choice.onPick();
-                  setRunsOpen(false);
-                }}
-                className="flex min-h-8 w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left text-[13px] outline-none hover:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate">{runsWithOptionLabel(choice)}</span>
-                  {choice.hint && <span className="text-[12px] leading-4 text-popover-ink-secondary">{choice.hint}</span>}
-                </span>
-                {choice.current && <Check size={14} aria-hidden="true" className="shrink-0 text-popover-accent" />}
-              </button>
-            ))}
-          </div>
-        )}
+        {accountLines}
+        {runsChoices}
         <div className="flex items-center justify-between gap-2" data-model-settings-runs-with={runsShown ? "" : undefined}>
-          {runsShown ? (
-            <button type="button" data-model-line="runs-with" aria-expanded={runsOpen} disabled={disabled} onClick={() => setRunsOpen((open) => !open)}
-              className="flex min-h-7 min-w-0 items-center gap-1 rounded-md px-2 text-[12px] text-popover-ink-secondary outline-none hover:text-popover-ink focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">
-              <span className="shrink-0">{t("model.runsWith")}</span>
-              <span data-model-line-value className="truncate text-popover-ink">{runsCurrent?.label ?? ""}</span>
-              <ChevronRight size={12} aria-hidden="true" className={cn("shrink-0 transition-transform", runsOpen && "rotate-90")} />
-            </button>
-          ) : <span />}
+          {runsButton || <span />}
           {manage && (
             <span className="flex items-center gap-1">
               {manage.onManage ? (
                 <button type="button" data-model-manage onClick={manage.onManage}
                   className="flex min-h-7 items-center gap-1 rounded-md px-2 text-[12px] text-popover-ink-secondary outline-none hover:text-popover-ink focus-visible:ring-2 focus-visible:ring-focus">
                   <span>{t("model.manage")}</span>
-                  {/* M-20261123-047: the mode menu no longer counts what is off; Manage models turns a model back on */}
-                  {!modes && manage.turnedOff > 0 && <span data-model-manage-off>{t(manage.turnedOff === 1 ? "model.manageOffOne" : "model.manageOff", { count: manage.turnedOff })}</span>}
+                  {manage.turnedOff > 0 && <span data-model-manage-off>{t(manage.turnedOff === 1 ? "model.manageOffOne" : "model.manageOff", { count: manage.turnedOff })}</span>}
                 </button>
               ) : (
                 <>
@@ -761,6 +817,7 @@ export function ModelPanel(props: ModelPanelProps) {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

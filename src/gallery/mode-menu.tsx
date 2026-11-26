@@ -1,10 +1,10 @@
 /** Isolated gallery for headless captures of the chat bar and its mode menu
- * (#4900, #5088, #5372): the real composer field (COMPOSER_PILL) holding the
- * +, the field and the voice button; under it the quiet row with the real
- * chip (ModelPickerTrigger) reading the mode and its reasoning level, and the
- * real context and usage meter (ComposerMeterView); the real ModelPanel with
- * its modes (Auto, Fast, Expert, Heavy, Favorites, Reasoning, All models) in the
- * model menu's box, its sections built by the real buildModelPickerSections
+ * (#4900, #5088, #5372; M-20261126-104): the real composer field
+ * (COMPOSER_PILL) holding the +, the field, the real chip (ModelPickerTrigger)
+ * reading the mode and its effort, and the voice button; under it the quiet
+ * row with the real context and usage meter (ComposerMeterView); the real
+ * ModelPanel with its modes (Auto, Fast, Expert, Heavy, Custom, Effort) in the
+ * model menu's box, over the chip, its sections built by the real buildModelPickerSections
  * from demo accounts (two Claude accounts, one more signed out, Grok, OpenAI).
  * Synthetic data only. Not shipped in the app.
  * ?skin=<id>&lang=<code>&mode=auto|fast|expert|heavy|pinned&view=short|all
@@ -20,7 +20,7 @@ import { ATTACH_ICON, ComposerMicButton, ComposerPlusMenu, RecordMark, SECONDARY
 import { ModelPanel } from "../components/ModelPanel";
 import { ClaudeMark, ProviderMonogram } from "../components/ProviderIcons";
 import { ModelPickerTrigger } from "../components/ModelPicker.tsx-parts/ModelPickerTrigger";
-import { MENU_WIDTH } from "../components/ModelPicker.tsx-parts/helpers";
+import { CUSTOM_GLYPH, MODE_GLYPHS, MODE_MENU_WIDTH } from "../components/ModeMenu";
 import { buildModelPickerSections } from "../components/ModelPicker.tsx-parts/buildSections";
 import { MENU_BOX } from "../components/menu-look";
 import { cn } from "../lib/cn";
@@ -89,7 +89,7 @@ function Chip({ label }: { label: string }) {
   const ref = useRef<HTMLButtonElement>(null);
   return ModelPickerTrigger({
     windowOnly: false, inComposer: true, headless: false, contained: false, bot: { id: "demo", busy: false } as never, triggerRef: ref, menu: true,
-    toggleMenu: () => {}, composerLabel: label, followLine: "", summary: label, selection: { instanceId: "demo", model: "demo" }, autoOn: current !== "pinned",
+    toggleMenu: () => {}, composerLabel: label, chipGlyph: current === "pinned" ? CUSTOM_GLYPH : MODE_GLYPHS[current], followLine: "", summary: label, selection: { instanceId: "demo", model: "demo" }, autoOn: current !== "pinned",
     autoRecord: null, autoInstance: undefined, active: undefined, showActiveAccount: false, selectedVariantLabel: undefined, advanced: false,
   });
 }
@@ -131,23 +131,26 @@ function Gallery() {
     profile: bot as never, botModelInstance: instances[1], botModelName: "", health: { orgMode: false, myEngines: null },
     myEngines: null, ranOnName: () => "", favoriteKeys: stars,
   }).menuSections;
-  const pinnedLabel = "Claude Opus 5.5 · ada.admin@acme.test";
+  // Custom's row names the model picked by hand, under a mode too (the selection keeps it)
+  const pinnedLabel = "Claude Opus 5.5";
+  const pinnedTitle = "Claude Opus 5.5 · ada.admin@acme.test";
   const chip = current === "pinned" ? "Claude Opus 5.5" : chatBarChipLabel(current, current === "auto" ? undefined : resolutions[current].effort);
   return (
     <div className="flex min-h-screen flex-col bg-app p-4 text-ink sm:p-8">
       <div className={cn("relative mt-auto flex w-full min-w-0 flex-col justify-end pt-[560px]", atLeft ? "mr-auto max-w-[600px]" : atRight ? "ml-auto max-w-[600px]" : "mx-auto max-w-[760px]")}>
-        {menuOpen && <div data-model-menu="" data-gallery-menu="" style={{ width: MENU_WIDTH }} className={cn("absolute bottom-[34px] left-0 z-10 py-1 text-popover-ink", MENU_BOX)}>
+        {/* over the chip, as in the app; place=left keeps it at the bar's left so the whole path has room at its right */}
+        {menuOpen && <div data-model-menu="" data-gallery-menu="" style={{ width: MODE_MENU_WIDTH }} className={cn("absolute bottom-[82px] z-10 py-1 text-popover-ink", atLeft ? "left-0" : "right-[52px]", MENU_BOX)}>
           <ModelPanel
             sections={sections}
             onPick={() => undefined}
             favorites={{ keys: stars, onToggle: (candidate) => setStars((list) => (list.includes(candidate.key) ? list.filter((key) => key !== candidate.key) : [...list, candidate.key])) }}
             mark={(key) => (key === "anthropic" || key === "claude" ? <ClaudeMark size={14} /> : <ProviderMonogram label={key === "xai" ? "Grok" : key === "computer" ? "Local" : "OpenAI"} />)}
             autoOn={autoOn}
-            effort={{ title: t("model.reasoning"), levels: ["low", "medium", "high", "xhigh", "max"], modelDefault: "high", onPick: () => undefined }}
+            effort={{ title: t("model.effort"), levels: ["low", "medium", "high", "xhigh", "max"], modelDefault: "high", onPick: () => undefined }}
             manage={{ onManage: () => undefined, turnedOff: 3, openProviders: () => undefined }}
             showSettings
             view={view}
-            modes={{ current: current === "pinned" ? null : current, resolutions, onPick: () => undefined, ...(current === "pinned" ? { pinnedLabel } : {}) }}
+            modes={{ current: current === "pinned" ? null : current, resolutions, onPick: () => undefined, pinnedLabel, ...(current === "pinned" ? { pinnedTitle } : {}) }}
           />
         </div>}
         <div data-tour="composer" className={COMPOSER_PILL}>
@@ -157,16 +160,17 @@ function Gallery() {
               { id: "teach", label: t("composer.plus.teach"), icon: <RecordMark />, onSelect: () => {} },
             ]} />
             <textarea rows={1} placeholder="Message Wren · Assistant" className="block min-h-6 w-full flex-1 resize-none bg-transparent chat-input-text px-1 py-1.5 placeholder:text-ink-secondary focus:outline-none" />
+            {/* M-20261126-104: the chip inside the box, just before the voice button (ComposerActionBar.tsx) */}
+            <span data-gallery-chip="" data-composer-model-chip="" className="composer-band flex items-center"><Chip label={chip} /></span>
             {/* the one voice button (ComposerVoiceButton.tsx): its face, its arrow, its menu */}
             <ComposerVoiceButton engine="xai"
               dictation={<ComposerMicButton onClick={() => undefined} engine="xai" shortcut="⌘D" />}
               conversation={<button type="button" data-composer-voice="" aria-label="Voice" className={SECONDARY_CIRCLE}><AudioLines size={16} aria-hidden="true" /></button>} />
           </div>
         </div>
-        {/* the quiet row under the box (ComposerUnderRow.tsx): the chip, then the meter at its end */}
+        {/* the quiet row under the box (ComposerUnderRow.tsx): the meter at its end */}
         <div data-composer-under-row="" className="@container/composer relative z-[1] w-full">
           <div className="flex min-h-7 items-center gap-2 px-2 pt-1">
-            <span data-gallery-chip="" className="flex items-center"><Chip label={chip} /></span>
             <span className="ml-auto flex min-w-0 items-center">
               <ComposerMeterView
                 initialOpen={meterOpen}

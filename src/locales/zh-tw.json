@@ -2563,7 +2563,6 @@
   "model.simple.effort": "推理強度",
   "model.simple.apiKey": "API 金鑰",
   "model.simple.signInForOwn": "登入以使用 {name} 自己的模型",
-  "model.simple.reasoning": "推理",
   "model.useBotModel": "使用 {name} 的模型",
   "model.botModelTag": "（機器人的模型）",
   "model.followsBot": "使用 {name} 的模型",

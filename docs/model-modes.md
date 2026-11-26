@@ -1,4 +1,4 @@
-# Composer modes: Auto, Fast, Expert, Heavy, Reasoning, All models (#4900, #5088)
+# Composer modes: Auto, Fast, Expert, Heavy, Custom, Effort (#4900, #5088, #5408)
 
 ## The chat bar of the desktop app (owner 2026-11-25, #5372)
 
@@ -14,18 +14,21 @@ dropped, the model kept), and an app that still sends `mode: "build"` gets
 Auto without an error (`RETIRED_MODEL_MODE`, `shared/model-mode.ts`).
 
 ```
-( + )  Message <bot>                                   ( mic v )
-  [ Expert · High ^ ]                          [ o 42%  |  o 89% ]
+( + )  Message <bot>                 [ * Expert · High ^ ]  ( mic v )
+                                               [ o 42%  |  o 89% ]
 ```
 
-- The message box holds the +, the field and one voice button. Under it, a
-  quiet row in small text: the model chip at the left, the context and usage
-  meter at the right (`Composer.tsx-parts/ComposerUnderRow.tsx`).
-- The chip reads the mode then the reasoning level ("Expert · High"), or the
-  model the person pinned. Its menu: Auto, Fast, Expert, Heavy; then
-  "Favorites" (the starred models); then Reasoning; then All models (the
-  cascade); then Manage models. A star in All models adds or removes a
-  favorite (`src/lib/model-favorites.ts`).
+- The message box holds the +, the field, the model chip and one voice
+  button, the chip just before the voice button (owner 2026-11-26,
+  M-20261126-104, #5408; `Composer.tsx-parts/ComposerActionBar.tsx`). Under
+  the box, a quiet row in small text keeps the context and usage meter, at
+  the right (`Composer.tsx-parts/ComposerUnderRow.tsx`).
+- The chip reads the icon of the mode, the mode, then the effort ("Expert ·
+  High"), or the model the person picked by hand (Custom's icon). Its menu,
+  about 240 px wide (M-20261126-104, M-20261126-103): Auto, Fast, Expert,
+  Heavy, Custom, then Effort; no "All models" row, no footer. See "The mode
+  menu" below. A star on a model adds or removes a favorite
+  (`src/lib/model-favorites.ts`).
 - Build is no row of the chat bar, and no mode at all (D-20261126-005, above).
   `shared/mode-menu.ts` is unchanged and still names it (the console's copy is
   byte-identical); Sagax's own list is `MODEL_MODES` (`shared/model-mode.ts`),
@@ -74,25 +77,25 @@ Tests: `src/components/ComposerMeter.dom.test.ts`, `src/lib/composer-meter.test.
 
 ## The mode menu
 
-The chat bar's model button opens the mode menu. Since the owner's decision of
-2026-11-23 (M-20261123-040, M-20261123-045, M-20261123-047) it is the same
-menu, row for row, in the Sagax app and in the Perspicax console:
+The chat bar's model button opens the mode menu. On the desktop (owner
+2026-11-26, M-20261126-104, M-20261126-103, #5408) it is about 240 px wide:
 
 ```
 Auto / Fast / Expert / Heavy
+Custom           <model>  ›   (favorites, providers › account › model, Manage models)
 ──────────
-Reasoning        <level>  ›   (the levels of the model in use)
-──────────
-All models                ›   (provider › account › model)
+Effort           <level>  ›   (the levels of the model in use)
 ```
 
-The rows and their rules are one definition, `shared/mode-menu.ts`, which
-imports nothing; the console keeps a byte-identical copy
-(`console/src/lib/mode-menu.ts`) pinned by its hash, and each side runs the
-same cases.
+The modes and their order are one definition shared with the Perspicax
+console, `shared/mode-menu.ts`, which imports nothing; the console keeps a
+byte-identical copy (`console/src/lib/mode-menu.ts`) pinned by its hash, and
+each side runs the same cases. The file is unchanged: the console, the iPhone
+and the iPad keep its rows (Reasoning, All models) until their own lots; the
+Custom and Effort rows are the desktop's (`src/components/ModeMenu.tsx`).
 
-The button reads the mode's name ("Expert ⌄"), or the model the person pinned
-in All models. A hovered or focused mode opens a small tooltip beside the
+The button reads the mode's name ("Expert ⌄"), or the model the person picked
+by hand. A hovered or focused mode opens a small tooltip beside the
 menu: what the mode does, then which model backs it ("Quick responses · Grok
 4.7", "Thinks hard · Grok 4.7", "Team of Experts · GPT-6 Astra, Claude Opus
 5.5"). Auto never names a model: it reads each request.
@@ -100,10 +103,10 @@ menu: what the mode does, then which model backs it ("Quick responses · Grok
 Sagax maps every mode, on every turn, to the best models the person can use:
 their connected providers and accounts, and their local models.
 
-**Reasoning** and **All models** open cascading submenus (owner 2026-11-25,
+**Custom** and **Effort** open cascading submenus (owner 2026-11-25,
 M-20261125-035, D-20261125-011, D-20261125-012, #5338): the menu stays on
 screen and each level opens beside the row that opened it, so the whole path
-reads at once (menu, providers, accounts, models). Nothing replaces the menu
+reads at once (menu, list, accounts, models). Nothing replaces the menu
 and there is no back row. A click, a rest of the pointer or the right arrow
 opens a level; Escape or the left arrow closes the deepest one and the focus
 returns to the row that opened it. The first level picks the side for the
@@ -112,33 +115,47 @@ room) and the next levels keep going that way; in a window too narrow for
 the path a level stops at the window's margin, over a part of the one before
 it. One shell draws a level (`src/components/ModeMenuLevel.tsx`), placed by
 the menu family's submenu positioner (`submenuPlace`). On iPhone and iPad the
-same path is the system's nested menus (see `ios/App/Features/Chat`).
+path is the system's nested menus (see `ios/App/Features/Chat`).
 
-**Reasoning** is a row that shows the level in use and opens, beside the menu, the
-levels the model in use takes (`modelEffortLevels`, so they follow the model).
-Under a mode that sets its own level (Fast, Expert, Heavy) the row is greyed
-and shows the level the mode imposes. A model that takes no level has no row.
-Under Auto, the row reads Auto until the person chooses a level. Choosing Auto again lets each turn use its mode's level.
+**Effort** is the one name everywhere: it replaces "Reasoning" in the menu, in
+the model panel's other places and in the short menu a working bot opens
+elsewhere. Its row shows the level in use and opens, beside the menu, one
+explaining sentence and the levels the model in use takes
+(`modelEffortLevels`, so they follow the model), "Recommended" beside the
+model's own level, an info mark on Max (and on Ultracode). Under a mode that
+sets its own level (Fast, Expert, Heavy) the row is greyed and shows the level
+the mode imposes. A model that takes no level has no row. The row never reads
+"Auto": with no level chosen it shows the model's own level, under Auto too,
+and picking that level again sends none, so each turn uses its mode's level
+(an agent's choice on M-20261126-104; the shared rule keeps "Auto" for the
+console). While the bot works the chat bar still opens this menu, its modes
+and models locked and its Effort row open: a level chosen mid-turn applies
+from the next turn. There is no Effort window of its own in the chat bar.
 
-**All models** is the person's own model. Its row names the pinned model while
-it runs and opens a cascade of three levels, each beside the one before: the
-provider, then the account, then the model. A provider with a single account
-goes straight to its models. Only what can run a turn now is listed: an
-account signed out or not responding, a model turned off and a provider left
-with nothing are absent, and no state is written in the menu. "Local" is a
-provider: the models of this computer and of the local servers, each server
-(or the person who shares it) where an account would be. A model two accounts
-offer is listed under each, and the copy under an account the menu does not
-lead with forces that account (as the Account line does). The starred
-favorites lead the provider level and the star still adds or removes one,
-synced across the person's devices. Nothing else of the panel is lost (one
-component, `src/components/ModelPanel.tsx` with `modes`): the Account and Runs
-with lines and "Manage models" stay in the footer. Auto's "Optimize for" is no
-row of the mode menu (owner, D-20261124-002: the menu has the console's rows
-only); it is set where it already was, under Auto in the Manage models window
-and in a bot's Model cell (Settings, Providers, Models and context size). The menu no longer counts the models turned off: turning one back on
-is done in Manage models. The other places the model menu opens (the bot's
-Model row, the wizard, team settings) keep the panel's own short view.
+**Custom** is the person's own model. Its row names the model picked by hand
+(the one the selection keeps under a mode too), is checked while that model
+runs, and opens the model list, each option with an icon before it: the
+starred favorites under "Favorites" (a star; one click runs the model; one
+that cannot run now is absent), then "All models", a cascade of three levels,
+each beside the one before: the provider (its mark), then the account, then
+the model. A provider with a single account goes straight to its models. Only
+what can run a turn now is listed: an account signed out or not responding, a
+model turned off and a provider left with nothing are absent, and no state is
+written in the menu. "Local" is a provider: the models of this computer and of
+the local servers, each server (or the person who shares it) where an account
+would be. A model two accounts offer is listed under each, and the copy under
+an account the menu does not lead with forces that account (as the Account
+line does). The star of a model still adds or removes a favorite, synced
+across the person's devices. "Manage models" (a gear) is the foot of this
+list. The menu has no footer: the lines that exist only for a model picked by
+hand (Account, Runs with, Fast, Context size) sit over Manage models, in the
+same list (one component, `src/components/ModelPanel.tsx` with `modes`).
+Auto's "Optimize for" is no row of the mode menu (owner, D-20261124-002); it
+is set where it already was, under Auto in the Manage models window and in a
+bot's Model cell (Settings, Providers, Models and context size). The menu no
+longer counts the models turned off: turning one back on is done in Manage
+models. The other places the model menu opens (the bot's Model row, the
+wizard, team settings) keep the panel's own short view, footer included.
 
 ## The rules (server/models/model-mode.ts)
 

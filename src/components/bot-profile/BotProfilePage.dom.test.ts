@@ -955,7 +955,9 @@ describe("bot profile page: Access card (#3399, #4075)", () => {
     skillsAnswer = { skills: [], staged: [], library: [], assignedSkills: [] };
     await home("general");
     panel = await home("knowledge");
-    expect(panel.querySelector("[data-bot-profile-review-empty]")?.textContent).toContain("You're all caught up");
+    // nothing waits: the To review card is not drawn (M-20261125-066)
+    expect(panel.querySelector('[data-settings-group="bot-profile-review"]')).toBeNull();
+    expect(panel.textContent).not.toContain("You're all caught up");
   });
 });
 

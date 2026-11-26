@@ -15241,8 +15241,6 @@
   "botProfile.review.update": "Mettre à jour",
   "botProfile.review.decline": "Refuser",
   "botProfile.review.openInChat": "Ouvrir dans le chat",
-  "botProfile.review.emptyTitle": "Tu es à jour",
-  "botProfile.review.emptyLine": "Ce que le bot apprend à l'usage s'affiche ici avant qu'il l'applique.",
   "botProfile.review.error": "Impossible d'enregistrer cette décision.",
   "botProfile.skills.addLibrary": "Depuis la bibliothèque",
   "botProfile.skills.addLibraryDescription": "Une compétence que ta bibliothèque contient déjà",

@@ -95,7 +95,9 @@ describe("WorkspaceFilesSection", () => {
     expect(html).toContain("4 / 60 lines · 90 B / 7.8 KB");
     expect(html).toContain("last used 1 min ago");
     expect(html).toContain("not used yet");
-    expect(html).toContain("data-workspace-path");
+    // the folder's path on the server is not shown, even in Advanced (M-20261125-077)
+    expect(html).not.toContain("data-workspace-path");
+    expect(html).not.toContain("/data/workspaces/pepper");
     expect(entryDetails(listing.entries[3]!, now)).toContain("120 B · created");
   });
 

@@ -96,5 +96,12 @@ describe("an app older than the minimum is asked to update before it goes on", (
     expect(send(old, "/api/bots/b1/interrupt")).toBeNull();
     expect(send(old, "/api/me/preferences", "PUT")).toBeNull();
     expect(send(old, "/api/bots/b1/messages/guarded")?.status).toBe(426);
+    // an edited message is sent again: a send like the others
+    expect(send(old, "/api/bots/b1/messages/m1/edit")?.status).toBe(426);
+    expect(send(old, "/api/bots/b1/messages/m1/pin")).toBeNull();
+    expect(send(old, "/api/bots/b1/messages/m1/edit/again")).toBeNull();
+    expect(send(old, "/api/bots//messages")).toBeNull();
+    expect(send(old, "/api/groups/g1/messages/guarded")).toBeNull();
+    expect(send(old, "/api/threads/t1/messages")).toBeNull();
   });
 });

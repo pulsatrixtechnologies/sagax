@@ -384,7 +384,8 @@ owl in their place, so it is asked to update before it goes on.
   one. The server is the only place that can ask.
 - `server/app-update-gate.ts`, called in `handleRequest` after
   authentication: a person's send (`POST /api/bots/:id/messages`,
-  `/messages/guarded`, `POST /api/groups/:id/messages`) from an app older
+  `/messages/guarded`, `/messages/:messageId/edit`,
+  `POST /api/groups/:id/messages`) from an app older
   than `MINIMUM_APP_VERSION` is answered 426 `app_update_required` with one
   sentence, in the app's language, that says to update and how. Every app
   already shows a refused send's sentence as it is (the desktop's

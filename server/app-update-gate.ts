@@ -44,8 +44,19 @@ const RELEASE = /^\d{1,9}\.\d{1,9}\.\d{1,9}$/;
 const DESKTOP_AGENT = /\b(?:sagax|openmausbot)\/(\d{1,9}\.\d{1,9}\.\d{1,9})\b.*\bElectron\//i;
 const IOS_AGENT = /^(?:sagax|openmausbot)[^/\s]*\/(\d{1,9}) CFNetwork\//i;
 
-/** The person's sends: a message to a bot (guarded or not) or in a room. */
-const SEND_ROUTE = /^\/api\/(?:bots\/[\w-]+\/messages(?:\/guarded)?|groups\/[\w-]+\/messages)$/;
+/** The person's sends: a message to a bot (guarded or not), an edited
+ * message sent again, or a message in a room (/api/bots/:id/messages,
+ * /api/bots/:id/messages/guarded, /api/bots/:id/messages/:messageId/edit,
+ * /api/groups/:id/messages). Read by segment: this names routes that exist,
+ * it is no route of its own (scripts/tool-policy reads a path pattern as one). */
+function isPersonSend(path: string): boolean {
+  const [empty, api, kind, id, messages, fifth, sixth, ...rest] = path.split("/");
+  if (empty !== "" || api !== "api" || !id || messages !== "messages" || rest.length > 0) return false;
+  if (kind === "groups") return fifth === undefined;
+  if (kind !== "bots") return false;
+  if (sixth !== undefined) return Boolean(fifth) && sixth === "edit";
+  return fifth === undefined || fifth === "guarded";
+}
 
 export interface RequestApp {
   family: "desktop" | "ios";
@@ -112,7 +123,7 @@ export interface AppUpdateRefusal {
  * request goes on (another route, another client, an app new enough, or one
  * whose version cannot be read). */
 export function appUpdateRefusal(input: { method: string; path: string; headers: Headers; baseVersion?: () => string }): AppUpdateRefusal | null {
-  if (input.method !== "POST" || !SEND_ROUTE.test(input.path)) return null;
+  if (input.method !== "POST" || !isPersonSend(input.path)) return null;
   const app = requestApp(input.headers);
   if (!app || !olderThanMinimum(app, input.baseVersion)) return null;
   const french = (requestLanguage(input.headers) ?? "").toLowerCase().startsWith("fr");

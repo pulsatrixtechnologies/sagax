@@ -10470,7 +10470,7 @@
   "stream.resumeTopic": "Back to the previous topic",
   "stream.freshFailed": "The new topic could not be started. Try again.",
   "settings.freshTopic.title": "New topic on return",
-  "settings.freshTopic.subtitle": "Coming back to a bot after this long (away, or the conversation quiet) opens a new, empty topic. The bot keeps all of the history; earlier topics stay one click away.",
+  "settings.freshTopic.subtitle": "After this long away from a bot (or with its conversation quiet), the bot starts from a fresh context at your next message. Nothing changes on screen: the whole conversation stays, and the bot can still look back at it.",
   "settings.freshTopic.hours": "{count} h",
   "settings.freshTopic.never": "Never",
   "code.title": "Code",

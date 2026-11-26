@@ -10465,7 +10465,7 @@
   "stream.resumeTopic": "Revenir au sujet précédent",
   "stream.freshFailed": "Le nouveau sujet n'a pas pu être créé. Réessaie.",
   "settings.freshTopic.title": "Nouveau sujet au retour",
-  "settings.freshTopic.subtitle": "Revenir à un bot après ce délai (absence ou conversation silencieuse) ouvre un nouveau sujet vide. Le bot garde tout l'historique ; les sujets précédents restent à un clic.",
+  "settings.freshTopic.subtitle": "Quand tu reviens à un bot après ce délai (absence ou conversation silencieuse), il repart d'un contexte neuf à ton prochain message. Rien ne change à l'écran : toute la conversation reste affichée, et le bot peut encore s'y référer.",
   "settings.freshTopic.hours": "{count} h",
   "settings.freshTopic.never": "Jamais",
   "code.title": "Code",

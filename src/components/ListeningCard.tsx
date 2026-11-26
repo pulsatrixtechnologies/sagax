@@ -70,6 +70,9 @@ export function ListeningCard({ bot, messages }: { bot: Bot; messages: readonly 
   }, [lines]);
   if (!here && !remote) return null;
   const newest = newestLine(lines);
+  // #5377: with a reason on the card and no line yet, the reason is the
+  // one thing said; "nobody has spoken yet" would deny what the person did
+  const unheard = Boolean(here?.error) && lines.length === 0;
   const stop = async () => {
     setStopping(true);
     setError(null);
@@ -106,7 +109,7 @@ export function ListeningCard({ bot, messages }: { bot: Bot; messages: readonly 
                 <>
                   <span className="font-medium">{newest.speaker}</span> {newest.text}
                 </>
-              ) : here?.phase === "starting" ? t("listening.starting") : t("listening.waiting")}
+              ) : here?.phase === "starting" ? t("listening.starting") : unheard ? null : t("listening.waiting")}
             </p>
           </div>
           {here && (
@@ -145,7 +148,7 @@ export function ListeningCard({ bot, messages }: { bot: Bot; messages: readonly 
             )}
           </p>
         )}
-        {here && showTranscript && (
+        {here && showTranscript && !unheard && (
           <div ref={list} data-listening-transcript="" aria-live="polite" className={cn("mt-2.5 max-h-[min(50vh,420px)]", TRANSCRIPT_BOX)}>
             {lines.length === 0 && <p className="text-[12px] text-ink-tertiary">{t("listening.waiting")}</p>}
             {lines.map((line) => (

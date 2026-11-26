@@ -22,6 +22,8 @@ export interface ChannelTranscriber {
   finishHeard(): Promise<Heard>;
   discard(): void;
   close(): void;
+  /** why the last utterance could not be transcribed (LiveTranscriber) */
+  uploadError?: unknown;
 }
 
 /** One finished utterance: its words, when it began, and its audio (the
@@ -54,6 +56,9 @@ export class ListeningChannel {
     now?: () => number;
     onPartial: (text: string) => void;
     onFinal: (utterance: ChannelUtterance) => void;
+    /** An utterance was spoken and the speech to text gave no words for
+     * it: `cause` is what the voice service answered (#5377). */
+    onFailed?: (cause: unknown) => void;
   };
 
   constructor(options: ListeningChannel["options"]) {
@@ -112,9 +117,17 @@ export class ListeningChannel {
     const at = this.startedAt;
     return transcriber.finishHeard().then((heard) => {
       this.options.onPartial("");
+      // spoken, and refused or lost on the way: said, never a silence
+      if (heard.failed) {
+        this.options.onFailed?.(transcriber.uploadError ?? null);
+        return;
+      }
       const text = heard.text.trim();
       if (text) this.options.onFinal({ text, at, audio });
-    }, () => { this.options.onPartial(""); });
+    }, (cause) => {
+      this.options.onPartial("");
+      this.options.onFailed?.(cause);
+    });
   }
 
   /** Stop: the utterance being spoken is finished, then the socket closes. */

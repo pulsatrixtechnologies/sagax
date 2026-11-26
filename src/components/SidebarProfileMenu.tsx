@@ -85,6 +85,7 @@ import { useAchievements } from "@/lib/achievements";
 import { isRoutineProblemRun } from "@/lib/routines";
 import { useShowRoutinesBadge } from "@/lib/routines-badge-preferences";
 import { useAccountMenuAbove } from "@/lib/account-menu-above";
+import { watchSavedServers } from "@/lib/account-menu";
 import { activeRoutineCount } from "@/lib/active-routines";
 import { viewerActorId } from "@/lib/viewer";
 import { achievementTitleName } from "./achievements/MemberCard";
@@ -570,9 +571,9 @@ function useAccountMenuData(enabled: boolean, refresh = 0): AccountMenuData {
     void api<PersonalUsageSummary>(usageQuery(month, "day"))
       .catch(() => api<PersonalUsageSummary>(usageQuery(month, "day", true)))
       .then((summary) => { if (alive) setMonthCost(formatCost(costOf(summary))); }, () => {});
-    void Promise.resolve(window.ogb?.environments?.state())
-      .then((next) => { if (alive && next) setEnvironments(next); }, () => {});
-    return () => { alive = false; };
+    // #5353: asked again when this page comes on screen (account-menu.ts)
+    const unwatch = watchSavedServers(window.ogb?.environments, (next) => { if (alive) setEnvironments(next); });
+    return () => { alive = false; unwatch(); };
   }, [enabled, refresh]);
   const summary = usageSummary(rows, favorite);
   return {

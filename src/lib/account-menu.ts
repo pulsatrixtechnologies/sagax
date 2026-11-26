@@ -254,6 +254,55 @@ export function accountChoices(
   ];
 }
 
+/** How long a refused read waits before the person's next move asks again. */
+const SAVED_SERVERS_RETRY_MS = 1_000;
+
+/**
+ * The saved servers behind Switch organization ›, read from the desktop
+ * (`environments.state()`, the list its own server chooser shows) now, and
+ * again each time this page comes on screen. The desktop opens Personal's
+ * page hidden, ready for a switch, and answers that read only to the page on
+ * screen: a menu that reads with its row (kept open above the name) was
+ * refused and listed no organization at all (#5353). Coming on screen is the
+ * window's focus or the page turning visible; while no answer came yet, the
+ * person's first move on the page asks too (a hidden page gets none).
+ * Returns the stop.
+ */
+export function watchSavedServers<T>(
+  bridge: { state: () => Promise<T | null | undefined> | T | null | undefined } | undefined,
+  onState: (state: T) => void,
+  page: Pick<Window, "addEventListener" | "removeEventListener"> & { document?: Pick<Document, "visibilityState" | "addEventListener" | "removeEventListener"> } | undefined = typeof window === "undefined" ? undefined : window,
+  now: () => number = Date.now,
+): () => void {
+  if (!bridge) return () => {};
+  let alive = true;
+  let known = false;
+  let asking = false;
+  let askedAt = -Infinity;
+  const ask = () => {
+    if (asking) return;
+    asking = true;
+    askedAt = now();
+    void Promise.resolve().then(() => bridge.state()).then((next) => {
+      if (!alive || !next) return;
+      known = true;
+      onState(next);
+    }, () => {}).finally(() => { asking = false; });
+  };
+  const visible = () => { if (page?.document?.visibilityState !== "hidden") ask(); };
+  const moved = () => { if (!known && now() - askedAt >= SAVED_SERVERS_RETRY_MS) ask(); };
+  ask();
+  page?.addEventListener("focus", ask);
+  page?.addEventListener("pointermove", moved);
+  page?.document?.addEventListener("visibilitychange", visible);
+  return () => {
+    alive = false;
+    page?.removeEventListener("focus", ask);
+    page?.removeEventListener("pointermove", moved);
+    page?.document?.removeEventListener("visibilitychange", visible);
+  };
+}
+
 /** Switch organization ›: this computer first, then the organization
  * servers saved on it, the active one checked. Missing folders and other
  * computers' remote servers that are not organizations stay in Settings.

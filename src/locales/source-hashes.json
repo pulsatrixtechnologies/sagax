@@ -19470,7 +19470,16 @@
       "image.error.avatarInvalidResponse": "873d67df07a220635934a2fc9197fc42d7c54eabc7206e680257c125ba96dba2",
       "image.error.avatarNeedsBase64": "3ec890d92729ca11eabce7a347c7b8e4d757a916d919fd27c900ec836cedfb96",
       "image.error.avatarInvalidData": "8a1a292108f38a4fd9cd15f833472aade2a6aec894abd297b0cc556e4fb4d6d8",
-      "image.error.avatarOversized": "a4cd251773c956d5eaa9706d8a3a70a7581660d0f605373fc872eb1230fff9ed"
+      "image.error.avatarOversized": "a4cd251773c956d5eaa9706d8a3a70a7581660d0f605373fc872eb1230fff9ed",
+      "voiceMode.key.other.own": "0d03eda3c8fb17977a1b00333e038de18acd1a1cecb4c30e2a74fcc7ac91d1b9",
+      "voiceMode.key.other.org": "e470c83c5c25dfe5e3fb906385edb1d30c5bd0a1fe50c36a5509469e24fcae4d",
+      "voiceMode.key.other.server": "fbf3834e5b85422c20da4234e10bb2f2d262997f60c0c31c3b22c2bd9d99b3c0",
+      "voiceMode.keyAction.other.own": "c616b596e0e9453337ba42e5371d94bc644bede3008e21dbc0c67394bfc31d95",
+      "voiceMode.keyAction.other.org": "57a143b3d7a1d48182cc62f919b3f5202156c18befff4d2ea1940aceb310e790",
+      "voiceMode.provider.quota.namedOther": "df5791daeed2573855b5b67e63e531fb10ba535089fdf3ecd3f8be7e7fc9691f",
+      "voiceMode.provider.key.namedOther": "d79f7ad4f2bda15c32268ed8919ebe01ebb06a49d50ebaea88e02d447e67974f",
+      "voiceMode.provider.busy.namedOther": "057d93df9bcc82e4676e6ae91b24514b7d153bc2ea5af6809c7c0f6a968506bc",
+      "listening.otherProvider": "dda6a3b29c6f9eaf7e7a4c17a7f384e40d015d25a0858d80937a60cfdca37b34"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

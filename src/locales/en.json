@@ -15892,5 +15892,14 @@
   "image.error.avatarInvalidResponse": "{provider} returned an invalid image response",
   "image.error.avatarNeedsBase64": "{provider} image generation must return base64 image data (b64_json)",
   "image.error.avatarInvalidData": "{provider} returned invalid image data",
-  "image.error.avatarOversized": "{provider} returned invalid or oversized image data; expected PNG, JPEG, or WebP"
+  "image.error.avatarOversized": "{provider} returned invalid or oversized image data; expected PNG, JPEG, or WebP",
+  "voiceMode.key.other.own": "your {provider} key{tail}",
+  "voiceMode.key.other.org": "the organization's {provider} key{tail}",
+  "voiceMode.key.other.server": "this server's {provider} key{tail}",
+  "voiceMode.keyAction.other.own": "Add credits to that {provider} account, or change the key in Settings > Providers.",
+  "voiceMode.keyAction.other.org": "Ask an admin, or add your own {provider} key in Settings > Providers.",
+  "voiceMode.provider.quota.namedOther": "{provider} has no credits left for {key}. {action} The answers stay in the chat.",
+  "voiceMode.provider.key.namedOther": "{provider} rejected {key}: invalid, revoked, or without voice permission. {action} The answers stay in the chat.",
+  "voiceMode.provider.busy.namedOther": "{provider} is rate-limiting {key}. It comes back by itself; the answers stay in the chat.",
+  "listening.otherProvider": "An {providers} key also transcribes: add one in Settings > Providers and Listening goes on with it by itself."
 }

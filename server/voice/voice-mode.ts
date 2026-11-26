@@ -858,6 +858,17 @@ return async function listen(req: IncomingMessage, res: import("node:http").Serv
       if (heard > 0) usage(usageModel(provider, "stt"), heard);
       heard = 0;
     };
+    /** This candidate failed with `lastError` (none: it never answered):
+     * where to go next, the refusal remembered so the person's following
+     * sockets start there. One verdict for a socket that does not open and
+     * for one that opened, then stopped serving (#5377). */
+    const giveWay = (lastError: string | undefined): { failure: GrokVoiceFailure; next: number } => {
+      const failure = grokVoiceFailure(lastError ?? "not reachable");
+      const next = lastError ? nextCandidateIndex(ordered, i, failure) : -1;
+      if (lastError && voiceKeyFailureIsFinal(failure)) refusals.remember(who, voiceKeyRef(candidate), failure);
+      else if (next >= 0) refusals.remember(who, voiceKeyRef(candidate), failure, VOICE_PROVIDER_REFUSAL_TTL_MS);
+      return { failure, next };
+    };
     onThisKey(candidate, () => { adapter.warm?.(key); });
     let warmedAt = now();
     // the provider's socket is reopened behind the page's when it drops,
@@ -876,7 +887,20 @@ return async function listen(req: IncomingMessage, res: import("node:http").Serv
         }
         session?.sendText(JSON.stringify(frame));
       },
-      closePage: (code) => session?.close(code),
+      closePage: (code) => {
+        // The provider took the socket, then stopped serving it (1011: its
+        // reopens failed). The page reconnects by itself: its next socket
+        // starts with the next key or provider, never the one that just
+        // gave up (#5377), with the same line in Events as at the first open.
+        if (code === 1011 && ears.lastError) {
+          const { failure, next } = giveWay(ears.lastError);
+          if (next >= 0) {
+            (deps.log ?? console.warn)(`[voice-mode] ${VOICE_PROVIDER_LABELS[provider]} listen socket stopped serving the ${describeVoiceKey(candidate)} (${failure}): the next socket starts with the ${describeVoiceKey(ordered[next]!)}`);
+            if (candidateProvider(ordered[next]!) !== provider) sayFallback(threadId, "speech to text", [{ ...voiceKeyRef(candidate), failure }], ordered[next]!);
+          }
+        }
+        session?.close(code);
+      },
       log: (line) => (deps.log ?? console.warn)(line),
       onUpstreamClosed: book,
       scrub: (message) => scrub(message, key),
@@ -889,10 +913,7 @@ return async function listen(req: IncomingMessage, res: import("node:http").Serv
     if (!opened || socket.destroyed) {
       ears.close();
       if (socket.destroyed) return;
-      const failure = grokVoiceFailure(ears.lastError ?? "not reachable");
-      const next = ears.lastError ? nextCandidateIndex(ordered, i, failure) : -1;
-      if (ears.lastError && voiceKeyFailureIsFinal(failure)) refusals.remember(who, voiceKeyRef(candidate), failure);
-      else if (next >= 0) refusals.remember(who, voiceKeyRef(candidate), failure, VOICE_PROVIDER_REFUSAL_TTL_MS);
+      const { failure, next } = giveWay(ears.lastError);
       if (next >= 0) {
         const refusal = { ...voiceKeyRef(candidate), failure };
         if (candidateProvider(ordered[next]!) === provider) tried.push(refusal);

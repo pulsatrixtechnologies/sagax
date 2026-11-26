@@ -278,7 +278,9 @@ describe("who transcribes a Listening session (#5377)", () => {
 
   it("leaves xAI for the session's next socket when xAI took the socket, then refused the audio for credits", async () => {
     xai.stt.failOnAudio = true;
-    const first = await listen();
+    // its own conversation: a switch is said once a minute per conversation
+    const path = LISTEN.replace("threadId=t-1", "threadId=t-2");
+    const first = await listen(path);
     if ("refused" in first) throw new Error(`refused ${first.refused}`);
     await until("ready", () => first.frames.find((f) => f.type === "ready"));
     // the page speaks, and says it again each time the server replaced xAI's side (`reconnected`)
@@ -288,7 +290,7 @@ describe("who transcribes a Listening session (#5377)", () => {
     await until("the page socket closed", () => first.closed(), 8000);
     expect(first.closed()).toBe(1011);
     expect(notices.filter((line) => line.includes("went on with"))).toEqual(["Voice: speech to text went on with OpenAI after xAI (an error)"]);
-    const next = await listen();
+    const next = await listen(path);
     if ("refused" in next) throw new Error(`refused ${next.refused}`);
     const ready = await until("ready", () => next.frames.find((f) => f.type === "ready"));
     expect((ready.key as { provider?: string }).provider).toBe("openai");

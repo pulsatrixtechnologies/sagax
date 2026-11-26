@@ -5,6 +5,15 @@ import { reloadMyEngines } from "@/lib/perspicax-org";
 import type { InstanceInfo } from "@/state/store";
 import { COMPOSER_MODEL_EVENT, FOCUSABLE, type ComposerModelChip } from "./helpers";
 
+/** A press that must not close the model menu: in the menu, its chip or its
+ * anchor, or in a level of the mode menu's cascade, which floats on the page
+ * outside the menu's own box (#5338, ModeMenuLevel.tsx). */
+export function pressInsideModelMenu(target: Node | null, roots: ReadonlyArray<{ contains(node: Node | null): boolean } | null | undefined>): boolean {
+  if (roots.some((root) => root?.contains(target))) return true;
+  const element = target && "closest" in target ? target as Element : target?.parentElement;
+  return Boolean(element?.closest("[data-mode-level]"));
+}
+
 export function useModelPickerEffects(opts: {
   anyOpen: boolean;
   orgMode: boolean;
@@ -144,7 +153,7 @@ export function useModelPickerEffects(opts: {
     if (!menu) return;
     const outside = (event: MouseEvent) => {
       const target = event.target instanceof Node ? event.target : null;
-      if (menuRef.current?.contains(target) || triggerRef.current?.contains(target) || anchorRef.current?.contains(target)) return;
+      if (pressInsideModelMenu(target, [menuRef.current, triggerRef.current, anchorRef.current])) return;
       setMenu(false);
     };
     const resize = () => setMenu(false);

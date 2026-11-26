@@ -2019,12 +2019,19 @@ Rules that hold at every width:
   row: what the mode does, then the model behind it in secondary ink ("Quick
   responses · Grok 4.7"); a click's own focus stays quiet. Reasoning shows the
   level in use at its right, in 12px secondary ink, and opens the levels of
-  the model in use in place; under Fast, Expert and Heavy it is greyed and
+  the model in use beside the menu; under Fast, Expert and Heavy it is greyed and
   shows the level the mode imposes. All models names the pinned model at its
-  right and opens three panels in place, each under a back row (a chevron and
-  the panel's name in 12px secondary ink): the providers (the favorites first),
-  the provider's accounts, the account's models with a search past eight rows.
-  A provider with one account skips the account panel. Nothing that cannot run
+  right and opens three levels as cascading submenus (owner, 2026-11-25,
+  M-20261125-035, D-20261125-012, #5338): the providers (the favorites first),
+  the provider's accounts, the account's models with a search past eight rows,
+  each in the menu family's box beside the row that opened it, 4px over the
+  box before, level with that row; the menu and the whole path stay on screen,
+  no page replaces the menu and there is no back row. The row whose level is
+  open keeps the hovered fill. A click, a rest of the pointer (80ms to open,
+  250ms to change) or the right arrow opens a level; Escape or the left arrow
+  closes the deepest. The path opens to the right, or to the left when the
+  right cannot hold it and the left has more room.
+  A provider with one account skips the account level. Nothing that cannot run
   is listed and no state ("Off", "Signed out") is written. See
   `docs/model-modes.md`. Tests: `shared/mode-menu.test.ts`,
   `src/components/ModeMenu.dom.test.ts`, `src/components/ModelPanel.modes.test.ts`,

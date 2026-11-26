@@ -8,8 +8,10 @@
 // mode does, then which model backs it ("Quick responses · Grok 4.7"). The
 // models are not the person's to pick here: Sagax maps each mode to the best
 // ones they can use (server/models/model-mode.ts). A model the person pinned in
-// All models checks that row, which names it.
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+// All models checks that row, which names it. Reasoning and All models open
+// their level beside the menu (#5338, D-20261125-012), on a click, a rest of
+// the pointer or the right arrow; the row says so while its level is open.
+import { useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { Brain, Check, ChevronRight, Hammer, Layers, Sparkles, Zap, type LucideIcon } from "lucide-react";
 
@@ -43,13 +45,16 @@ export interface ModeMenuProps {
   disabled?: boolean;
   onPick: (mode: ModelMode) => void;
   /** Reasoning: the row's state (shared/mode-menu.ts reasoningRow), how a
-   * level reads, and what opens its levels. Absent: no row. */
-  reasoning?: { row: ReasoningRow; label: (level: string | undefined) => string; onOpen: () => void };
+   * level reads, and what opens its levels. Absent: no row. `open`: its
+   * levels are on screen beside the menu; `onRest`: the pointer came on the row. */
+  reasoning?: { row: ReasoningRow; label: (level: string | undefined) => string; onOpen: () => void; open?: boolean; onRest?: (event: PointerEvent) => void };
   /** All models: opens the cascade. `label` is the pinned model while it runs. */
-  allModels?: { label?: string; onOpen: () => void };
+  allModels?: { label?: string; onOpen: () => void; open?: boolean; onRest?: (event: PointerEvent) => void };
+  /** The pointer came on a mode: what is open beside the menu closes. */
+  onModeRest?: (event: PointerEvent) => void;
 }
 
-export function ModeMenu({ current, resolutions, disabled = false, onPick, reasoning, allModels }: ModeMenuProps) {
+export function ModeMenu({ current, resolutions, disabled = false, onPick, reasoning, allModels, onModeRest }: ModeMenuProps) {
   const modes = offeredModes(resolutions);
   const rows = menuRows({ offered: modes, reasoning: Boolean(reasoning?.row.shown), all: Boolean(allModels) });
   const [tipFor, setTipFor] = useState<ModelMode | null>(null);
@@ -95,14 +100,15 @@ export function ModeMenu({ current, resolutions, disabled = false, onPick, reaso
         if (row.kind === "reasoning" && reasoning) {
           const { row: state } = reasoning;
           return (
-            <div key="reasoning" className={rowShape}>
-              <button type="button" aria-haspopup="menu" disabled={disabled || state.disabled}
+            <div key="reasoning" className={cn(rowShape, reasoning.open && "bg-popover-hover")}>
+              <button type="button" aria-haspopup="menu" aria-expanded={Boolean(reasoning.open)} disabled={disabled || state.disabled}
                 data-mode-row="reasoning" data-model-panel-row="mode:reasoning" data-mode-reasoning-imposed={state.disabled ? "" : undefined}
                 title={state.disabled ? t("model.mode.reasoning.imposed") : undefined}
                 tabIndex={-1}
                 onMouseDown={(event) => event.preventDefault()}
+                onPointerEnter={reasoning.onRest}
                 onKeyDown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); reasoning.onOpen(); } }}
-                onClick={reasoning.onOpen}
+                onClick={() => reasoning.onOpen()}
                 className={buttonShape}>
                 <span className="min-w-0 flex-1 truncate">{t("model.reasoning")}</span>
                 <span data-mode-reasoning-value="" className="max-w-[55%] shrink-0 truncate pl-1 text-right text-[12px] text-popover-ink-secondary">{reasoning.label(state.value)}</span>
@@ -114,14 +120,15 @@ export function ModeMenu({ current, resolutions, disabled = false, onPick, reaso
         }
         if (row.kind === "all" && allModels) {
           return (
-            <div key="all" className={rowShape}>
-              <button type="button" role="radio" aria-checked={pinned} aria-haspopup="menu" disabled={disabled}
+            <div key="all" className={cn(rowShape, allModels.open && "bg-popover-hover")}>
+              <button type="button" role="radio" aria-checked={pinned} aria-haspopup="menu" aria-expanded={Boolean(allModels.open)} disabled={disabled}
                 data-mode-row="all" data-model-panel-row="mode:all" data-mode-current={pinned ? "" : undefined}
                 aria-label={pinned && allModels.label ? `${t("model.auto.rail")}. ${allModels.label}` : t("model.auto.rail")}
                 tabIndex={pinned ? 0 : -1}
                 onMouseDown={(event) => event.preventDefault()}
+                onPointerEnter={allModels.onRest}
                 onKeyDown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); allModels.onOpen(); } }}
-                onClick={allModels.onOpen}
+                onClick={() => allModels.onOpen()}
                 className={buttonShape}>
                 <span className="min-w-0 flex-1 truncate">{t("model.auto.rail")}</span>
                 {pinned && allModels.label && (
@@ -146,7 +153,7 @@ export function ModeMenu({ current, resolutions, disabled = false, onPick, reaso
                 aria-label={`${modeName(mode)}. ${modeTooltip(mode, resolutions?.[mode])}`}
                 tabIndex={on || (current === null && !allModels && mode === modes[0]) ? 0 : -1}
                 onMouseDown={(event) => event.preventDefault()}
-                onPointerEnter={() => setTipFor(mode)}
+                onPointerEnter={(event) => { setTipFor(mode); onModeRest?.(event); }}
                 onPointerLeave={() => setTipFor((open) => (open === mode ? null : open))}
                 onFocus={(event) => { if (keyboardFocus(event.currentTarget)) setTipFor(mode); }}
                 onBlur={() => setTipFor((open) => (open === mode ? null : open))}

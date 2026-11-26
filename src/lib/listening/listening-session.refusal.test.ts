@@ -53,6 +53,13 @@ const outOfCredits = () => new Response(JSON.stringify({
   key: { source: "org-key", last4: "c0Je", provider: "xai" },
 }), { status: 503, headers: { "content-type": "application/json" } });
 
+/** The organization's xAI key and the person's OpenAI key, both without credits. */
+const everyKeyOutOfCredits = () => new Response(JSON.stringify({
+  error: "The OpenAI account needs credits to generate speech.", code: "out_of_credits", failure: "quota", out_of_credits: true,
+  key: { source: "perspicax-key", last4: "n8Qq", provider: "openai" },
+  tried: [{ source: "org-key", last4: "c0Je", failure: "quota" }, { source: "perspicax-key", last4: "n8Qq", provider: "openai", failure: "quota" }],
+}), { status: 502, headers: { "content-type": "application/json" } });
+
 afterEach(async () => {
   await stopListening();
   vi.unstubAllGlobals();
@@ -64,8 +71,9 @@ describe("Listening says why nothing is transcribed (#5377)", () => {
     const f = fakes(outOfCredits);
     await startListening({ botId: "bot-a", threadId: "t-1", personName: "Ada" }, f.deps);
     await f.utterance();
+    // the other provider that can hear (shared/voice-providers.ts) is named too: its key takes over by itself
     await vi.waitFor(() => expect(currentListening()!.error).toBe(
-      "xAI has no credits left for the organization's xAI key ···c0Je. Ask an admin, or add your own xAI key in Settings > Providers. The answers stay in the chat.",
+      "xAI has no credits left for the organization's xAI key ···c0Je. Ask an admin, or add your own xAI key in Settings > Providers. The answers stay in the chat. An OpenAI key also transcribes: add one in Settings > Providers and Listening goes on with it by itself.",
     ));
     expect(f.uploads.every((url) => url.includes("/voice/transcribe"))).toBe(true);
     expect(currentListening()!.view.lines).toEqual([]);
@@ -78,6 +86,23 @@ describe("Listening says why nothing is transcribed (#5377)", () => {
     await f.utterance();
     await vi.waitFor(() => expect(currentListening()!.error).toMatch(/^xAI n'a plus de crédits pour /));
     expect(currentListening()!.error).not.toMatch(/has no credits|Ask an admin/);
+  });
+
+  it("names the provider of the key refused last, and offers no other provider once each one was tried", async () => {
+    const f = fakes(everyKeyOutOfCredits);
+    await startListening({ botId: "bot-a", threadId: "t-1", personName: "Ada" }, f.deps);
+    await f.utterance();
+    await vi.waitFor(() => expect(currentListening()!.error).toBe(
+      "OpenAI has no credits left for your OpenAI key ···n8Qq. Add credits to that OpenAI account, or change the key in Settings > Providers. The answers stay in the chat.",
+    ));
+  });
+
+  it("says in French that another provider's key also transcribes, and where to add it", async () => {
+    setLocale("fr");
+    const f = fakes(outOfCredits);
+    await startListening({ botId: "bot-a", threadId: "t-1", personName: "Ada" }, f.deps);
+    await f.utterance();
+    await vi.waitFor(() => expect(currentListening()!.error).toMatch(/Une clé OpenAI transcrit aussi : ajoutes-en une dans Réglages > Fournisseurs et l'écoute continue avec elle d'elle-même\.$/));
   });
 
   it("says the voice service does not answer when it is down, never a raw status line", async () => {

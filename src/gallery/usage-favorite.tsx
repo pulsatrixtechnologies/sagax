@@ -12,7 +12,7 @@ import { PlanUsageView } from "../components/PlanUsage";
 import { UsageAccountsDetail } from "../components/UsageAccountsDetail";
 import { allAccounts } from "../lib/usage-pill";
 import { usageSummary } from "../lib/account-menu";
-import { accountRowName, connectedPlanRows, type PlanUsageReport } from "../lib/plan-usage";
+import { connectedPlanRows, type PlanUsageReport } from "../lib/plan-usage";
 import { toggleUsageFavorite, useUsageFavorite, writeUsageFavorite } from "../lib/usage-favorite";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";

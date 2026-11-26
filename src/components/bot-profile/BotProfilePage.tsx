@@ -136,6 +136,8 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   const bot = state.bots.find((candidate) => candidate.id === propBot.id) ?? propBot;
   const advanced = useAdvancedMode();
   const rootRef = useRef<HTMLElement>(null);
+  // The page's scroller: opening the mascot picker brings the page back to its top.
+  const scrollRef = useRef<HTMLDivElement>(null);
   const { available, slackUrl } = useBotSectionAvailability(bot.id);
 
   // A page this server does not offer (Slack without an Admin page, Shared
@@ -723,7 +725,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
       className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-app text-ink outline-none"
     >
       <BotProfileInsetStrip />
-      <div data-bot-profile-scroll="" className="content-card-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+      <div ref={scrollRef} data-bot-profile-scroll="" className="content-card-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
         {/* Banner in the mascot's colour from the very top, the mascot over
             its lower edge. It is the window's drag handle (the top of the
             page moves the window, as every view's top does) and it scrolls

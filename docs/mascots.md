@@ -404,11 +404,12 @@ avatar of the same shape, colour and mood, with no animation loop. The large
 mascot (88 px and up, or asked in full) is live: the engine's frames
 (`avatarFrame`) on its one shared clock, written onto one SVG (volume,
 breath, blinks, pointer gaze, the bot's mood: thinking at work, happy when
-done), resting off screen. At work the bot keeps its own body: the engine's
-`thinking` replaces the body with three dots since 0.3, so the app asks the
+done), resting off screen. A bot at rest whose own face is a working one
+(a pinned face, a bot about code) keeps its own body: the app asks the
 engine's `idle` for the pose its `thinking` held until 0.2 (`engineFrame`:
 turned, tipped up and rolled, the eyes up and away under two lids). The
-engine's states, moods and Fluffy material are not exposed yet (#5268). Reduced motion draws the still. A skin paints the
+engine's states and look settings are described under "States and look
+settings" below (#5349). Reduced motion draws the still. A skin paints the
 body's colour and eyes and, for the premium skins, its own layers (texture,
 edge, glow, particles; `shapeSkinLayers`) on the body's face, the largest
 cross-section under its projection, with the eyes over it. The fourteen moves
@@ -440,8 +441,58 @@ palette, the rocket and the witch hat with 0.4, the owner's word for
 request. Its `egg` is kept there without a picker entry, the app's own Egg
 holding that id (#5279).
 The 0.5 line (#5347) changes no drawing of the app: the stills bake to the
-same text, and only the phone's bundled engine is regenerated. Its glass
-material and its states and marks of a host's own are not used here.
+same text, and only the phone's bundled engine is regenerated. Its states
+and marks of a host's own are not used here.
+
+### States and look settings (#5349)
+
+**States.** A shape takes one of the engine's six agent states from what the
+bot is really doing: `agentStateForBot` (`src/lib/mascot.ts`) reads the same
+live signals as `stateForBot` (one reader, `liveSignals`), and nothing of
+the bot's profile or of a pinned face:
+
+| What the bot does | State | What the engine draws |
+|---|---|---|
+| Nothing | `idle` | The bot's own face, as before |
+| A card or a question waits for the person (`activity: "waiting-on-you"`, an options card) | `waiting` | Leans, eyes as slits |
+| The last step failed | `blocked` | An exclamation mark in the body's place |
+| A turn runs, nothing on screen yet | `thinking` | Three dots in the body's place |
+| A turn runs, a step is on screen | `working` | Bent over its work; ribbons sweep round it (live only) |
+| A finished turn is unread | `done` | Happy; live, it turns in a cage of ribbons |
+
+Nobody chooses a fixed state and none is stored (the look's schema refuses a
+`state` key). `BotAvatar` reads the bot's own live fields; a caller that
+holds the conversation passes `agentState` with its messages (the sidebar,
+the chat header). A small avatar draws the state's still (`stateStill`: the
+engine's frame at rest, inferred the first time a bot of that shape is in
+that state, then kept; no ribbon); a large one is live (`avatarFrame` with
+the animator's `stateAge`), ribbons drawn with their gradients
+(`shapesMarkup`). A skin never paints a mark (`skinFace` skips `mark-`
+slices): the dots and the exclamation mark take the body's colour. The
+desktop mascot keeps its own clips.
+
+**Look settings.** Stored on `mascotLook` (`shared/mascot-look.ts`), each
+only when it differs from the default, so a look nobody touched keeps the
+keys it had (`withEngineLook`; `engineLookOf` fills the defaults in):
+
+| Key | Values | Default (today's drawing) |
+|---|---|---|
+| `material` | `flat`, `fluffy`, `glass` | `flat` |
+| `mood` | `neutral`, `happy` | `neutral` |
+| `eyeColor` | `#rrggbb` | the skin's own ink |
+| `depth` | 0 to 14 | the engine's natural depth (6); the Outline skin is flat |
+| `followPointer` | boolean | `true` |
+
+Fluffy and Glass are painted by the engine itself on its canvas with WebGL2
+(`shape-material.tsx`, `mountAvatar`), loaded the first time a mascot wears
+one; small avatars mount the engine's still. A material takes the bot's
+colour in place of the skin, and plays none of the fourteen moves; without
+WebGL2 the mascot is drawn flat with its skin. The editor (Edit bot >
+Appearance, `MascotLookEditor.tsx`) shows the Material, Face and States tabs
+for the shapes only; States previews a state on the stage and saves nothing.
+The desktop window's validator (`electron/floating-bot-window.mjs`) and the
+phone's model (`MascotLook.EngineSettings`) carry the keys; the phone does
+not draw them yet. Captures: `scripts/capture/mascot-settings.mjs`.
 
 ### Files
 
@@ -457,6 +508,7 @@ material and its states and marks of a host's own are not used here.
 | Generate a new shape (dev only, not in the UX) | `scripts/generate-shape.mjs`, `docs/design/shape-generator.md` |
 | Phone | `ios/Sources/CompanionCore/ShapeEngine*.swift`, `ShapeMascotView.swift` |
 | Captures and cost measure | `scripts/capture/shape-mascots.mjs` |
+| States and look settings (#5349) | `src/lib/mascot.ts` `agentStateForBot`, `shape-avatar.ts` `enginePose` and `stateStill`, `shape-material.tsx`, `scripts/capture/mascot-settings.mjs` |
 | Screenshots (before #4145) | `docs/screenshots/shapes`, `docs/screenshots/shape-engine-v2` |
 | Say and sprout fix (#2981): before/after, rest and orbit move | `docs/screenshots/shapes-say-sprout` |
 | Sprout restored and say mascot look (#3104): before main and after, rest and move | `docs/screenshots/shapes-regression-2026-11-09` |

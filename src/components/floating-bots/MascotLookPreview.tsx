@@ -10,7 +10,7 @@ import { Lock, Shuffle } from "lucide-react";
 import type { LockInfo } from "@/lib/achievements";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import type { MausColor, MausMotion, MausState } from "@/lib/mascot";
+import { agentStateForBot, type AgentState, type MascotLiveBot, type MausColor, type MausMotion, type MausState } from "@/lib/mascot";
 import { BotAvatar } from "@/components/Avatar";
 import type { MascotSkinId } from "../../../shared/mascot-skins";
 import type { MascotCharacter, MascotLook } from "../../../shared/mascot-look";
@@ -61,9 +61,11 @@ export interface MascotLookPreviewProps {
   /** The bot's live state and the moves it plays across the app. */
   liveState?: MausState;
   liveMotion?: { kind: Exclude<MausMotion, "none">; nonce: number } | null;
+  /** One of the engine's states shown while the person looks at it (the States tab, #5349): a preview, never saved. */
+  previewState?: AgentState | null;
 }
 
-type StageProps = Pick<MascotLookPreviewProps, "bot" | "shown" | "shownName" | "shownLook" | "shownLock" | "owlSkin" | "previewSkin" | "moves" | "fxMove" | "onPlay" | "onPlayNext" | "picture" | "liveState" | "onActivate" | "activateLabel"> & {
+type StageProps = Pick<MascotLookPreviewProps, "bot" | "shown" | "shownName" | "shownLook" | "shownLock" | "owlSkin" | "previewSkin" | "moves" | "fxMove" | "onPlay" | "onPlayNext" | "picture" | "liveState" | "previewState" | "onActivate" | "activateLabel"> & {
   motion: { kind: Exclude<MausMotion, "none">; nonce: number } | null;
   size: number;
   profile?: boolean;
@@ -75,7 +77,7 @@ type StageProps = Pick<MascotLookPreviewProps, "bot" | "shown" | "shownName" | "
   clip?: boolean;
 };
 
-function MascotStage({ bot, shown, shownName, shownLook, shownLock, owlSkin, previewSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, onActivate, activateLabel, motion, size, profile, pad = 20, clip = false }: StageProps) {
+function MascotStage({ bot, shown, shownName, shownLook, shownLock, owlSkin, previewSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, previewState, onActivate, activateLabel, motion, size, profile, pad = 20, clip = false }: StageProps) {
   return (
     <button
       type="button"
@@ -93,6 +95,8 @@ function MascotStage({ bot, shown, shownName, shownLook, shownLock, owlSkin, pre
           bot={picture ?? { name: bot.name, color: bot.color, mascotSkin: (previewSkin && shown === "owl" ? previewSkin : owlSkin) as typeof owlSkin, mascotLook: shownLook, avatarCrop: "mascot" }}
           size={size}
           state={liveState ?? "idle"}
+          // the state previewed; else the bot's own on its page (the hero), and at rest in the editor so the look reads
+          agentState={previewState ?? (liveState !== undefined ? agentStateForBot(bot as MascotLiveBot) : "idle")}
           motion={motion?.kind ?? "none"}
           motionKey={motion?.nonce ?? 0}
           characterMove={fxMove}
@@ -134,10 +138,11 @@ export function MascotLookPreview({
   onActivate,
   activateLabel,
   liveState,
+  previewState,
   liveMotion,
 }: MascotLookPreviewProps): ReactNode {
   const motion = owlMotion ?? liveMotion ?? null;
-  const stage = { bot, shown, shownName, shownLook, shownLock, owlSkin, previewSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, onActivate, activateLabel, motion };
+  const stage = { bot, shown, shownName, shownLook, shownLock, owlSkin, previewSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, previewState, onActivate, activateLabel, motion };
   // The profile hero's frame moves left by the air its art leaves, so the
   // art's left edge lines up with the name's first letter (M-20261119-081).
   const frameRef = useRef<HTMLSpanElement>(null);

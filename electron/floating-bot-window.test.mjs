@@ -946,6 +946,18 @@ describe("the desktop window's mascot look", () => {
     expect(mascotLook({ character: "shape", skins: { shape: "plasma" } })).toEqual({ character: "shape" });
   });
 
+  // #5349: the engine's look settings reach the desktop mascot with the look, known values only
+  it("keeps the engine's look settings (material, mood, eye colour, depth, pointer), and drops one it does not know", () => {
+    const settings = { material: "fluffy", mood: "happy", eyeColor: "#ffffff", depth: 10, followPointer: false };
+    expect(mascotLook({ character: "shape", shape: "cup", ...settings })).toEqual({ character: "shape", shape: "cup", ...settings });
+    expect(mascotLook({ character: "shape", material: "glass" })).toEqual({ character: "shape", material: "glass" });
+    expect(mascotLook({ character: "shape", material: "flat", mood: "neutral", depth: 0, followPointer: true })).toEqual({ character: "shape", material: "flat", mood: "neutral", depth: 0, followPointer: true });
+    expect(mascotLook({ character: "shape", material: "velvet", mood: "sleepy", eyeColor: "red", depth: 99, followPointer: "no", state: "working" })).toEqual({ character: "shape" });
+    expect(mascotLook({ character: "shape", eyeColor: "#2A8FE8" })).toEqual({ character: "shape", eyeColor: "#2a8fe8" });
+    // a look stored before the settings is unchanged
+    expect(mascotLook({ character: "shape", shape: "cup", skins: { shape: "gold" } })).toEqual({ character: "shape", shape: "cup", skins: { shape: "gold" } });
+  });
+
   it("knows Bunbu and its twelve skins, legacy names included, and drops a skin it does not know", () => {
     for (const skin of BUNBU_SKINS) expect(mascotLook({ character: "bunbu", skins: { bunbu: skin } })).toEqual({ character: "bunbu", skins: { bunbu: skin } });
     for (const [old, current] of Object.entries(LEGACY_BUNBU_SKINS)) expect(mascotLook({ character: "bunbu", skins: { bunbu: old } }).skins.bunbu).toBe(current);

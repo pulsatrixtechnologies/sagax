@@ -79,6 +79,39 @@ final class MascotLookTests: XCTestCase {
         XCTAssertEqual(full.trombiSkin, .retro98)
     }
 
+    // #5349: the engine's look settings set on the desktop. The phone keeps the character and carries them.
+    func testEngineSettingsKeepTheCharacterAndRoundTrip() throws {
+        let json = ##"{"character":"shape","shape":"cup","skins":{"shape":"gold"},"material":"fluffy","mood":"happy","eyeColor":"#FFFFFF","depth":10,"followPointer":false}"##
+        let look = try JSONDecoder().decode(MascotLook.self, from: Data(json.utf8))
+        XCTAssertEqual(look.character, .shape)
+        XCTAssertEqual(look.shape, .cup)
+        XCTAssertEqual(look.engine, MascotLook.EngineSettings(material: "fluffy", mood: "happy", eyeColor: "#ffffff", depth: 10, followPointer: false))
+        // an edit on the phone (complete, then stored) keeps every one of them
+        var edited = look.complete
+        edited.shape = .star
+        XCTAssertEqual(edited.stored.engine, look.engine)
+        let object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(edited.stored)) as? [String: Any]
+        XCTAssertEqual(object?["shape"] as? String, "star")
+        XCTAssertEqual(object?["material"] as? String, "fluffy")
+        XCTAssertEqual(object?["mood"] as? String, "happy")
+        XCTAssertEqual(object?["eyeColor"] as? String, "#ffffff")
+        XCTAssertEqual(object?["depth"] as? Double, 10)
+        XCTAssertEqual(object?["followPointer"] as? Bool, false)
+    }
+
+    func testAnEngineSettingTheDesktopDoesNotTakeIsDroppedAlone() throws {
+        let json = #"{"character":"shape","shape":"cup","material":"velvet","mood":"sleepy","eyeColor":"red","depth":99,"followPointer":"no"}"#
+        let look = try JSONDecoder().decode(MascotLook.self, from: Data(json.utf8))
+        XCTAssertEqual(look, MascotLook(character: .shape, shape: .cup))
+        XCTAssertNil(look.engine)
+        // a look stored before the settings encodes none of their keys
+        let object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(look)) as? [String: Any]
+        XCTAssertEqual(Set(object?.keys.map { $0 } ?? []), ["character", "shape"])
+        // a state is never stored: a key the schema does not know still reads as the owl, as on the desktop
+        let stated = try JSONDecoder().decode(MascotLook.self, from: Data(#"{"character":"shape","state":"working"}"#.utf8))
+        XCTAssertEqual(stated, .owl)
+    }
+
     func testEncodesOnlyWhatIsSet() throws {
         let data = try JSONEncoder().encode(MascotLook(character: .trombi, skins: .init(trombi: .gold)))
         let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]

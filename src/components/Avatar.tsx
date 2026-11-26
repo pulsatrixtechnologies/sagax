@@ -12,14 +12,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { type MausColor, type MausMotion, type MausState } from "@/lib/mascot";
+import { agentStateForBot, type AgentState, type MascotLiveBot, type MausColor, type MausMotion, type MausState } from "@/lib/mascot";
 import { t } from "@/lib/i18n";
 import { OWL_BEAT_MS, owlBeatForMotion, owlStateForMaus } from "@/lib/owl/owl-state";
 import { OwlAvatar, type OwlAvatarHandle } from "./OwlAvatar";
 import { avatarCropRadius, botAvatarProfile, clampAvatarFocus, clampAvatarZoom, type BotAvatarCrop } from "../../shared/bot-avatar";
 import type { MascotBodyId } from "../../shared/mascot-bodies";
 import type { MascotSkinId } from "../../shared/mascot-skins";
-import { botMascotLook, completeMascotLook, type MascotLook } from "../../shared/mascot-look";
+import { botMascotLook, completeMascotLook, engineLookOf, type MascotLook } from "../../shared/mascot-look";
 import { ShapeMascot, type ShapeMood } from "./ShapeMascot";
 import type { TrombiPose } from "./retro-assistant/Trombi";
 import { SkinnedTrombi } from "./skin-fx/SkinnedTrombi";
@@ -187,7 +187,13 @@ export type BotAvatarProps = Omit<MausAvatarProps, "color"> & {
     mascotSkin?: MascotSkinId | null;
     /** The bot's character (owl, shape, Trombi); absent means the owl. */
     mascotLook?: MascotLook | null;
-  };
+  } & Pick<MascotLiveBot, "busy" | "activity" | "unread" | "tasks">;
+  /**
+   * What the bot is doing, as one of the engine's six states (#5349). A
+   * caller that reads the conversation passes agentStateForBot with its
+   * messages; without it the avatar reads the bot's own live fields.
+   */
+  agentState?: AgentState;
   /** A one-shot move (the Appearance gallery's Moves): a shape's or Trombi's body motion and skin effect, the owl's skin effect. */
   characterMove?: FxMoveRequest | null;
   /** Mark this avatar as its person's Primary Bot: a small orange circle with
@@ -325,6 +331,7 @@ function CharacterAvatar({
   color,
   size,
   state,
+  agentState,
   animated = true,
   label,
   move,
@@ -333,6 +340,7 @@ function CharacterAvatar({
   color: MausColor;
   size: number;
   state?: MausState;
+  agentState?: AgentState;
   animated?: boolean;
   label?: string | null;
   move?: FxMoveRequest | null;
@@ -346,6 +354,8 @@ function CharacterAvatar({
         color={color}
         size={size}
         mood={shapeMoodFor(state)}
+        agentState={agentState}
+        engineLook={engineLookOf(full)}
         animated={animated}
         move={move}
         moveBody
@@ -451,6 +461,7 @@ function BotAvatarImage({
   characterMove,
   sidebarAlive,
   mascotRef,
+  agentState,
   ...mascotProps
 }: Omit<BotAvatarProps, "primary" | "primaryRingClassName">) {
   const profile = botAvatarProfile(bot);
@@ -473,6 +484,7 @@ function BotAvatarImage({
         color={bot.color}
         size={size}
         state={mascotProps.state}
+        agentState={agentState ?? agentStateForBot(bot)}
         animated={mascotProps.animated}
         label={label ?? bot.name}
         move={characterMove}

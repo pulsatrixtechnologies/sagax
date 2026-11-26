@@ -423,6 +423,19 @@ describe("bot zip import rules", () => {
     if (inspected.kind === "zip") inspected.reader.close();
   });
 
+  // #5349: the engine's look settings travel with the bot's look, by the same path
+  it("carries a look's material, mood, eye colour, depth and pointer setting through an export and an import", async () => {
+    const fx = fixture();
+    const source = richBot(fx);
+    const look = { character: "shape", shape: "cup", skins: { shape: "gold" }, material: "glass", mood: "happy", eyeColor: "#ffffff", depth: 9, followPointer: false } as BotRecord["mascotLook"];
+    fx.store.patchBotProfile(source.id, { mascotLook: look });
+    const file = await exportToFile(fx.host, source.id);
+    const inspected = inspectBotZip(file);
+    const result = await importBotZip(fx.host, inspected, { ownerPrincipalId: "pr_00000000-0000-4000-8000-000000000001", asMember: false, conversations: false, sharing: false });
+    expect(fx.store.bot(result.botId)!.mascotLook).toEqual(look);
+    if (inspected.kind === "zip") inspected.reader.close();
+  });
+
   it("a Mastery look the importer has not unlocked stays the default", async () => {
     const fx = fixture();
     const source = richBot(fx);

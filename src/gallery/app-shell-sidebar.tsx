@@ -211,13 +211,42 @@ const shapeTeam: Bot[] = shapeCount
       shaped(bot(`shape-${i + 1}`, `Bot ${i + 1}`, { section: "Ops", busy: i % 7 === 3, title: fr ? "Opérations" : "Operations" }, fr ? "Rien de neuf." : "Nothing new.", 500 + i), team.length + i)),
   ]
   : [];
+// #5349 ?states=1: a sidebar of bots wearing shapes, one in each of the
+// engine's six states from its own live signals (at rest, a turn running,
+// a step on screen, a card waiting, a failed step, an unread answer), then
+// the look settings: a happy bot, white eyes, a flat and a deep body, and
+// the Fluffy and Glass materials (scripts/capture/mascot-settings.mjs).
+const stateTeam: Bot[] = params.get("states") === "1"
+  ? ([
+    ["rest", fr ? "Au repos" : "At rest", "circle", "blue", {}, {}],
+    ["thinking", fr ? "Réfléchit" : "Thinking", "star", "orange", { busy: true, activity: "working" }, {}],
+    ["working", fr ? "Travaille" : "Working", "cup", "green", { busy: true, activity: "working", messages: [{ id: "w1", role: "bot", kind: "activity", text: fr ? "Lit le dossier" : "Reading the file", tool: { name: "Read", ok: true }, createdAt: at } as unknown as Message] }, {}],
+    ["waiting", fr ? "T'attend" : "Waiting for you", "ghost", "purple", { busy: true, activity: "waiting-on-you" }, {}],
+    ["blocked", fr ? "Bloqué" : "Blocked", "hexagon", "red", { messages: [{ id: "f1", role: "bot", kind: "activity", text: fr ? "Étape en échec" : "Step failed", tool: { name: "Bash", ok: false }, createdAt: at } as unknown as Message] }, {}],
+    ["done", fr ? "Terminé" : "Done", "cloud", "teal", { unread: true }, {}],
+    ["happy", fr ? "Joyeuse" : "Happy", "squircle", "pink", {}, { mood: "happy" }],
+    ["eyes", fr ? "Yeux blancs" : "White eyes", "drop", "purple", {}, { eyeColor: "#ffffff" }],
+    ["flat", fr ? "Volume 0" : "Volume 0", "pumpkin", "orange", {}, { depth: 0 }],
+    ["deep", fr ? "Volume 14" : "Volume 14", "pumpkin", "orange", {}, { depth: 14 }],
+    ["fluffy", fr ? "Peluche" : "Fluffy", "cat", "yellow", {}, { material: "fluffy" }],
+    ["glass", fr ? "Verre" : "Glass", "gem", "blue", {}, { material: "glass" }],
+    ["fluffy-working", fr ? "Peluche au travail" : "Fluffy at work", "bunny", "green", { busy: true, activity: "working" }, { material: "fluffy" }],
+  ] as [string, string, string, string, Partial<Bot>, Record<string, unknown>][]).map(([id, name, shape, color, extra, look], i) => ({
+    ...bot(`state-${id}`, name, { section: "My team", title: "", ...extra }, fr ? "Rien de neuf." : "Nothing new.", 20 + i),
+    ...(extra.messages ? { messages: extra.messages } : {}),
+    // an unread answer is read from the bot's threads
+    ...(extra.unread ? { tasks: [{ threadId: `t-state-${id}`, title: fr ? "Général" : "General", createdAt: at, updatedAt: at, unread: true }] } : {}),
+    color,
+    mascotLook: { character: "shape", shape, ...look },
+  } as Bot))
+  : [];
 const start: AppState = {
   ...initialState,
   connected: true,
   hydrated: true,
   selectedId: selectParam ?? "atlas",
   config: { profile: { name: "Alex Gagnon" } } as AppState["config"],
-  bots: shapeCount ? shapeTeam : [...team, ...(scene ? moreBots(fr, at) : []), ...hiddenTeam],
+  bots: stateTeam.length ? stateTeam : shapeCount ? shapeTeam : [...team, ...(scene ? moreBots(fr, at) : []), ...hiddenTeam],
   sections: scene || shapeCount ? ["My team", "Ops"] : ["My team"],
   // ?panel=1 opens the bot panel beside the chat, as App.tsx docks it (#2141).
   settingsOpen: params.get("panel") === "1" || Boolean(scene),

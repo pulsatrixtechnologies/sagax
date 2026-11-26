@@ -4,7 +4,7 @@ import { BotAvatar } from "../Avatar";
 import { BotChatHeader, BotHeaderPill, botPillActions, CHAT_PILL_AVATAR_PX, type ChatWindowContextValue } from "../BotHeaderPill";
 import { isViewersPrimaryBot } from "@/lib/primary-bot";
 import { viewerActorId } from "@/lib/viewer";
-import { MAUS_COLORS, stateForBot } from "@/lib/mascot";
+import { MAUS_COLORS, agentStateForBot, stateForBot } from "@/lib/mascot";
 import { botBubbleVars } from "@/lib/bubble-colors";
 import { mascotRowAnimated } from "@/lib/mascot-animate";
 import { peerLine } from "@/lib/peer-message";
@@ -193,7 +193,7 @@ export function useChatViewPresence({
           bot={bot}
           primary={isViewersPrimaryBot(bot, viewerActorId(state.config))}
           primaryRingClassName="ring-circle"
-          state={stateForBot({ ...bot, messages })}
+          state={stateForBot({ ...bot, messages })} agentState={agentStateForBot({ ...bot, messages })}
           size={CHAT_PILL_AVATAR_PX}
           motion={(mascotMotion?.kind as never) ?? "none"}
           motionKey={mascotMotion?.nonce ?? 0}
@@ -220,7 +220,7 @@ export function useChatViewPresence({
           bot={bot}
           primary={isViewersPrimaryBot(bot, viewerActorId(state.config))}
           primaryRingClassName="ring-circle"
-          state={stateForBot({ ...bot, messages })}
+          state={stateForBot({ ...bot, messages })} agentState={agentStateForBot({ ...bot, messages })}
           size={CHAT_PILL_AVATAR_PX}
           motion={(mascotMotion?.kind as never) ?? "none"}
           motionKey={mascotMotion?.nonce ?? 0}

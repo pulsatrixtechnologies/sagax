@@ -4,8 +4,13 @@
 // doing anything when I click it. This is innacceptable."). Blocking: a click
 // on View run (the chat's card, the bot panel's runs, the routine list, the
 // report all go through openRoutineRun) draws the run's window over the chat
-// column, the bot-to-bot exchange shell with its X; X closes it. A run older
-// than the app's window is loaded by id, and its window opens all the same.
+// column, the bot-to-bot exchange shell. A run older than the app's window
+// is loaded by id, and its window opens all the same.
+// [M-20261125-040] (the owner, 2026-11-25, on a routine run's window: "Peux
+// tu éviter de mettre le chat et remettre le close button et un bouton
+// Continue in a chat et retire le X d'en haut du chat"): the window covers
+// the chat's message bar, has no X at the top, and ends on one row: Continue
+// in the conversation, then the Close Chat pill, as before 0.8.52.
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -63,26 +68,34 @@ afterEach(() => {
 });
 
 describe("#2272 clicking a routine run opens its window", () => {
-  it("View run draws the bot-to-bot window over the chat; X closes it", () => {
+  it("View run draws the bot-to-bot sheet over the chat: no X, no message bar, Close Chat closes it [M-20261125-040]", () => {
     store.state = { ...initialState, bots: [bot], routines: [routine], routineRuns: [run], selectedId: "other", activeView: "routines" } as AppState;
     render();
     expect(host.querySelector('[data-testid="routine-run-window"]')).toBeNull();
     host.querySelector<HTMLButtonElement>('button[aria-label="View run for Project health watch"]')!.click();
     expect(store.state.activeView).toBe("chat");
     expect(store.state.selectedId).toBe("scout");
-    const window = host.querySelector('[data-testid="routine-run-window"]');
+    const window = host.querySelector<HTMLElement>('[data-testid="routine-run-window"]');
     expect(window).not.toBeNull();
     expect(window!.textContent).toContain("Project health watch");
-    expect(window!.textContent).not.toMatch(/Open thread|Go to conversation|Continue in the conversation/);
-    // the routine run floats the bot chat's bar, pill and fades (the owner 2026-11-06);
+    expect(window!.textContent).not.toMatch(/Open thread|Go to conversation/);
+    // no X at the top, no floating bar of the chat
+    expect(window!.querySelector("[data-window-close]")).toBeNull();
+    expect(window!.querySelector("[data-chat-header-bar]")).toBeNull();
     // the pill is the one chat pill, 40px: the reference's measure in the
     // owner's configuration (a 24px mascot, 7.5px around it, a 0.5px ring; #4163)
-    const bar = window!.querySelector<HTMLElement>("[data-chat-header-bar]")!;
-    expect(bar.className).toMatch(/absolute inset-x-0 top-0/);
-    expect(bar.querySelector('[data-chat-edge-fade="top"]')).not.toBeNull();
-    expect(bar.querySelector("[data-chat-header-center] [data-chat-pill]")?.className).toMatch(/\bh-10\b/);
-    expect(window!.querySelector('[data-chat-bottom-edge] [data-chat-edge-fade="bottom"]')).not.toBeNull();
-    host.querySelector<HTMLButtonElement>('[data-testid="bot-exchange-close"]')!.click();
+    expect(window!.querySelector("[data-exchange-header] [data-chat-pill]")?.className).toMatch(/\bh-10\b/);
+    // the sheet covers the whole column, the chat's message bar included
+    expect(window!.getAttribute("data-exchange-chrome")).toBe("sheet");
+    expect(window!.className).toMatch(/\binset-0\b/);
+    expect(window!.style.bottom).toBe("");
+    // one footer row: Continue first, the Close Chat pill last
+    const row = window!.querySelector<HTMLElement>("[data-exchange-footer]")!;
+    const buttons = [...row.querySelectorAll("button")];
+    expect(buttons.map((button) => button.textContent)).toEqual(["Continue in the conversation", "Close Chat"]);
+    expect(buttons[0]!.hasAttribute("data-run-continue")).toBe(true);
+    expect(buttons[1]!.hasAttribute("data-exchange-close-chat")).toBe(true);
+    buttons[1]!.click();
     expect(store.state.routineRunWindow).toBeNull();
     expect(host.querySelector('[data-testid="routine-run-window"]')).toBeNull();
   });

@@ -100,8 +100,9 @@ export function TranscriptDate({ at }: { at: number }) {
  * under the header and its actions (Continue, Stop, …) in the footer row.
  * A bot-to-bot sheet (chrome "sheet", #3245): close is one "Close Chat" pill
  * at the bottom, in place of the composer, as in Grok Bot: alone and
- * centered, or last in the action row. A routine run's window (chrome
- * "window", #2149) has the X at the top and the chat's composer below.
+ * centered, or last in the action row. A routine run's window is this
+ * sheet too [M-20261125-040]. Chrome "window" (#2149) has the X at the top
+ * and the chat's composer below; nothing opens with it now.
  * Escape closes both. */
 export function ExchangeSheet({
   run,
@@ -139,10 +140,11 @@ export function ExchangeSheet({
   pinned?: ReactNode;
   testId?: string;
   ariaLabel?: string;
-  /** "sheet" (default): a bot-to-bot conversation, opaque header pill and
-   * one "Close Chat" pill at the bottom, no X, no composer (#3245).
-   * "window": a routine run (#2149), the floating bar with the X, ending
-   * above the chat's composer, which stays usable. */
+  /** "sheet" (default): a bot-to-bot conversation or a routine run
+   * [M-20261125-040], opaque header pill and one "Close Chat" pill at the
+   * bottom, no X, no composer (#3245).
+   * "window" (#2149): the floating bar with the X, ending above the chat's
+   * composer, which stays usable. */
   chrome?: "sheet" | "window";
   /** The Close Chat pill's words (sheet chrome). */
   closeLabel?: string;

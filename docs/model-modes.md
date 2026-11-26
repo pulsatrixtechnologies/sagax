@@ -226,6 +226,8 @@ window the person's usage report shows used up with no extra usage left
   `limitFailover.limitedUntil`). The modes stay in the menu and each tooltip
   reads "No model you can use right now · resets 3:40 PM", from the texts the
   app already had (`model.cascade.none`, `limits.resets`).
+  The preview's own `pick` and its sentence are empty then too
+  (`server/routes/bots-mutate-small.ts`), so Auto's chip names no model either.
 - A report at 100 % is read again by the server, with no app asking: while a
   payer has a live entry from the report (`spentPlans`), that payer's limit
   clock (`LimitResetClock`, the timer that already reads usage every 5 minutes

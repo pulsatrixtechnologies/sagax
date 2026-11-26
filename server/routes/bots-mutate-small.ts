@@ -142,7 +142,10 @@ async function handleBotAutoModel(env: BotsMutateEnv): Promise<boolean> {
       const item = entry(choice);
       return item && !refused.some((skip: any) => skip.instanceId === choice.instanceId && skip.model === choice.model) ? [item] : [];
     });
-    const usablePick = turn && chain.some((choice: any) => choice.instanceId === turn.pick.selection.instanceId && choice.model === turn.pick.selection.model);
+    // M-20261126-101: with every account at its limit the turn still tries its list, and the preview names no model
+    // as the next one (the modes say none can be used and when the first is back, modesAtLimit)
+    const allLimited = engines.length > 0 && engines.every((engine: any) => limited.has(engine.instanceId));
+    const usablePick = !allLimited && turn && chain.some((choice: any) => choice.instanceId === turn.pick.selection.instanceId && choice.model === turn.pick.selection.model);
     // Recovery uses the saved selections, including custom/local endpoints
     // that the automatic candidate scorer intentionally leaves out.
     const backups = env.botRecoveryBackups(bot, env.cfg).flatMap((choice: any) => {

@@ -268,6 +268,29 @@ describe("GET /api/bots/:id/auto-model", () => {
     expect(await dispatchRoutes([route], ctx)).not.toBe(PASS);
     expect(json.mock.calls[0]?.[2]).toMatchObject({ excluded: [{ instanceId: "claude", engineLabel: "Claude Code", reason: "limit" }] });
   });
+
+  // review M1: with every account at its limit the turn would still try its
+  // list, and the preview names none of it: no pick, no sentence about one
+  it("names no model as Auto's next one while every account is at its limit", async () => {
+    const engines = [
+      { instanceId: "claude", displayName: "Claude Code", models: { options: [{ id: "opus", label: "Claude Opus" }] } },
+      { instanceId: "grok", displayName: "Grok", models: { options: [{ id: "grok-4", label: "Grok 4" }] } },
+    ];
+    const pick = { selection: { instanceId: "claude", model: "opus" }, chain: [{ instanceId: "claude", model: "opus" }, { instanceId: "grok", model: "grok-4" }] };
+    const preview = async (spent: string[]) => {
+      const autoExcluded = vi.fn((_payer: string, _engines: unknown, kind?: string) => new Set(kind === "report" ? spent : []));
+      const route = createBotsMutateRoutes(baseDeps({
+        autoEnginesFor: vi.fn(() => engines), limitFailover: { autoExcluded },
+        autoPickForTurn: vi.fn(() => ({ pick })), autoModelRecord: vi.fn(() => ({ instanceId: "claude", model: "opus", modelLabel: "Claude Opus" })),
+        explainPick: vi.fn(() => "Claude Opus is the strongest."),
+      } as unknown as Partial<BotsMutateRouteDeps>));
+      const { ctx, json } = context("/api/bots/osprey/auto-model");
+      await dispatchRoutes([route], ctx);
+      return json.mock.calls[0]?.[2] as { pick: unknown; explanation: string };
+    };
+    expect(await preview(["claude"])).toMatchObject({ pick: { modelLabel: "Claude Opus" }, explanation: "Claude Opus is the strongest." });
+    expect(await preview(["claude", "grok"])).toMatchObject({ pick: null, explanation: "" });
+  });
 });
 
 // #4527 lot E: the person's own tools left out of a bot's list

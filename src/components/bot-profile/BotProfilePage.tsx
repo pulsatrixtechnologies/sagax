@@ -106,6 +106,7 @@ import { AccountsCard, Block, ChannelsCard, Note, ProfileCard, sectionLabel, typ
 import { BotFolderCard } from "./BotProfilePage.tsx-parts/BotFolderCard";
 import { BotProfileHeader, useBotProfileHero } from "./BotProfilePage.tsx-parts/BotProfileHeader";
 import { BotProfileTabBar, useBotProfileSearch } from "./BotProfilePage.tsx-parts/BotProfileTabs";
+import { useCaptionChrome } from "../DesktopCapabilities";
 import { BotProfileInsetStrip, BotProfileTopBar } from "./BotProfilePage.tsx-parts/BotProfileTopBar";
 import { AppearanceRow, GROUP_LABEL, SUBPAGE_META, SubPageModal, SubPageRow } from "./BotProfilePage.tsx-parts/subpages";
 import { BotPageModal } from "./BotPageModal";
@@ -670,9 +671,9 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   const wearsPicture = Boolean(avatar.avatarUrl) && avatar.avatarCrop !== "mascot";
   const banner = profileBannerColors(bannerAccent, wearsPicture ? null : mascotDominantColor(bot));
   const bannerStyle = { "--bot-profile-banner-from": banner.from, "--bot-profile-banner-to": banner.to } as CSSProperties;
+  const { dragProps } = useCaptionChrome();
 
   const { heroSlot, hero } = useBotProfileHero({ bot, derived, onOpenAppearance: shown("appearance") ? () => openCategory("appearance") : undefined });
-
 
   return (
     <MascotHeroSlotContext.Provider value={heroSlot}>
@@ -708,9 +709,22 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     >
       <BotProfileInsetStrip />
       <div data-bot-profile-scroll="" className="content-card-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        {/* Banner in the mascot's colour from the very top, the mascot over
+            its lower edge. It is the window's drag handle (the top of the
+            page moves the window, as every view's top does) and it scrolls
+            away with the page, so the handle never sits over a row. */}
+        <div
+          aria-hidden="true"
+          data-bot-profile-banner=""
+          data-bot-profile-banner-palette={bannerPalette}
+          {...dragProps}
+          style={{ ...bannerStyle, ...dragProps.style }}
+          className="bot-profile-banner h-[124px] w-full shrink-0"
+        />
         {/* No bar (#5371): Share and the X float at the top right (sticky,
             no height of their own in the flow) and the banner scrolls away
-            under them with the page. */}
+            under them with the page. After the banner, so the two buttons
+            are cut out of its drag region. */}
         <BotProfileTopBar
           bot={bot}
           onClose={onClose}
@@ -719,14 +733,6 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
           shareVisibility={shareVisibility}
           shareOpen={shareOpen}
           onShareOpenChange={setShareOpen}
-        />
-        {/* Banner in the mascot's colour from the very top, the mascot over its lower edge. */}
-        <div
-          aria-hidden="true"
-          data-bot-profile-banner=""
-          data-bot-profile-banner-palette={bannerPalette}
-          style={bannerStyle}
-          className="bot-profile-banner h-[124px] w-full shrink-0"
         />
         {/* One centred column, the reference's reading width (920px, 32px
             gutters, #4420), a 16px gutter on a phone. */}

@@ -5,8 +5,8 @@
 // or once it has scrolled (owner, 2026-11-25, #5371; this replaces the
 // blurred strip with the small mascot and the name of 2026-11-08). A
 // sub-page is a modal over the page (#4470), so there is no link back. The
-// row is clear and takes no room in the flow: the banner and the page scroll
-// under the two buttons, whole.
+// row is clear, takes no room in the flow and no click: the banner and the
+// page scroll under the two buttons, whole, and stay clickable there.
 import type { Bot } from "@/state/store";
 import { useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
 import { useCaptionChrome, useMacInsetChrome } from "../../DesktopCapabilities";
@@ -34,20 +34,25 @@ export function BotProfileTopBar({ bot, onClose, shareShown, shareGrants, shareV
   shareOpen: boolean;
   onShareOpenChange: (open: boolean) => void;
 }) {
-  const { noDragStyle, controlsShiftStyle, dragProps, dragStyle } = useCaptionChrome();
+  const { noDragStyle, controlsShiftStyle } = useCaptionChrome();
 
   return (
     <div
       data-bot-profile-topbar=""
-      {...dragProps}
-      style={dragStyle}
-      // sticky in the scroll, taking no room in the flow: the banner starts
-      // under it. Its height is the frame's shared header height, so the two
-      // circles sit as far under the window's top edge as every other round
-      // control of the top row (owner, 2026-11-25, #5379).
-      className="sticky top-0 z-20 -mb-(--app-topbar-height) h-(--app-topbar-height) flex shrink-0 items-center justify-end gap-2 bg-transparent px-3"
+      // Sticky in the scroll, after the banner and pulled back up over it,
+      // taking no room in the flow. Its height is the frame's shared header
+      // height, so the two circles sit as far under the window's top edge as
+      // every other round control of the top row (owner, 2026-11-25, #5379).
+      // The row itself is nothing: it takes no click (the rows that scroll
+      // under it answer theirs) and it is not the window's drag handle (a
+      // drag region swallows the clicks of whatever is under it). The banner
+      // is the handle, and scrolls away (review of PR #5381, #5371).
+      className="pointer-events-none sticky top-0 z-20 -mt-[124px] mb-[calc(124px-var(--app-topbar-height))] h-(--app-topbar-height) flex shrink-0 items-center justify-end gap-2 bg-transparent px-3"
     >
-      <div data-bot-profile-topbar-actions="" className="flex shrink-0 items-center gap-2" style={controlsShiftStyle ?? noDragStyle}>
+      {/* Only the two buttons take the pointer. Cut out of the banner's drag
+          region here: this group comes after the banner, and a later no-drag
+          cuts into an earlier drag (styles.css, window drag regions). */}
+      <div data-bot-profile-topbar-actions="" className="pointer-events-auto flex shrink-0 items-center gap-2" style={controlsShiftStyle ?? noDragStyle}>
         {/* Share (Grok Bot): the popover where the people and groups the
             bot is shared with are managed, the one place for it, a round
             icon button, never the word; then the round close button, the

@@ -23,6 +23,7 @@ import { botMascotSkin } from "../../../../shared/mascot-skins";
 import { completeMascotLook } from "../../../../shared/mascot-look";
 import { BOT_PROFILE_LIMITS } from "../../../../shared/bot-profile";
 import { useAvatarSources } from "../../appearance/AvatarSources";
+import { useCaptionChrome } from "../../DesktopCapabilities";
 import { MascotLookPreview } from "../../floating-bots/MascotLookPreview";
 import type { MascotHeroSlot } from "../../floating-bots/mascot-hero-slot";
 import { InlineEditableText } from "../../bot-settings/InlineEditableText";
@@ -54,6 +55,7 @@ export function useBotProfileHero({ bot, derived, onOpenAppearance }: {
   const claimHero = useCallback((claimed: boolean) => setHeroClaimed(claimed), []);
   const heroSources = useAvatarSources(bot, derived.patch);
   const [heroDropping, setHeroDropping] = useState(false);
+  const { noDragStyle } = useCaptionChrome();
   // a name stored with its title glued on ("Heron · Chief of Staff")
   // shows as two lines too; saving either line writes both fields apart
   const shown = splitBotNameTitle(bot.name, (bot.title ?? ""));
@@ -160,6 +162,10 @@ export function useBotProfileHero({ bot, derived, onOpenAppearance }: {
         }}
         title={t("botPanel.avatar.dropOrPaste")}
         data-avatar-dropping={heroDropping ? "" : undefined}
+        // The mascot overlaps the banner, which is the window's drag handle
+        // (#5371): cut out of it, or the mascot's upper half would move the
+        // window instead of opening Appearance.
+        style={noDragStyle}
         // the mascot's middle (168px frame) on the banner's lower edge (#4420)
         className={cn("relative -mt-[84px] flex flex-col items-start rounded-[18px]", heroDropping && "ring-2 ring-accent")}
       >

@@ -1,10 +1,10 @@
-// Composer modes (#4900): what Fast, Expert, Heavy and Build run for a person
+// Composer modes (#4900): what Fast, Expert and Heavy run for a person
 // with one provider, several providers, and only local models.
 import { describe, expect, it } from "vitest";
 
-import { HEAVY_MAX_AGENTS } from "../../shared/model-mode.ts";
+import { FORCED_MODEL_MODES, HEAVY_MAX_AGENTS, isForcedModelMode } from "../../shared/model-mode.ts";
 import { bareModelId, modelForTier, type AutoEngine, type AutoRequest, type CatalogFacts, type CatalogLookup } from "./model-auto.ts";
-import { bestPerProvider, heavySeats, localSize, pickModeModel, rankForMode, resolveModes } from "./model-mode.ts";
+import { MODE_TIER, bestPerProvider, heavySeats, localSize, pickModeModel, rankForMode, resolveModes } from "./model-mode.ts";
 
 const FACTS: Record<string, CatalogFacts> = {
   "claude-opus-5-5": { name: "Claude Opus 5.5", reasoning: true, vision: true, context: 1_000_000, costInput: 4, costOutput: 20, releaseDate: "2026-09-22" },
@@ -247,34 +247,19 @@ describe("the ranking Auto and the modes share", () => {
   });
 });
 
-describe("Build (M-20261123-045, as the console defines it)", () => {
-  it("is the provider's model made for code, at no level of its own", () => {
-    const pick = pickModeModel(request([kimi]), "build")!;
-    expect(pick.selection).toEqual({ instanceId: "kimi", model: "kimi-for-coding" });
-    expect(pick).toMatchObject({ reason: "mode", mode: "build", tier: "coding" });
-    expect(pick.team).toBeUndefined();
-  });
-
-  it("runs at the level the person chose in Reasoning, where the engine takes it", () => {
-    const chosen = pickModeModel(request([grok], { instanceId: "grok-build", model: "grok-4.7", auto: true, mode: "build", effort: "high" }), "build")!;
-    expect(chosen.selection.effort).toBe("high");
-    // a level the picked engine does not take is not sent
-    const other = pickModeModel(request([kimi], { instanceId: "kimi", model: "k3", auto: true, mode: "build", effort: "high" }), "build")!;
-    expect(other.selection.effort).toBeUndefined();
-  });
-
-  it("with nothing usable returns null, so the menu does not offer it", () => {
-    expect(pickModeModel(request([], { instanceId: "none", model: "none", auto: true }), "build")).toBeNull();
+describe("Build (D-20261126-005)", () => {
+  it("is no mode the server knows: nothing picks it and no table names it", () => {
+    expect(FORCED_MODEL_MODES).toEqual(["fast", "expert", "heavy"]);
+    expect(isForcedModelMode("build")).toBe(false);
+    expect(Object.keys(MODE_TIER)).toEqual(["fast", "expert", "heavy"]);
   });
 });
 
 describe("resolveModes", () => {
   it("says what every mode runs, for the picker's tooltips", () => {
     const modes = resolveModes(request([claudeOpus(), grok]));
-    expect(Object.keys(modes)).toEqual(["auto", "fast", "expert", "heavy", "build"]);
-    // Build names its model and imposes no reasoning level (the menu's Reasoning row stays the person's)
-    expect(modes.build.pick).not.toBeNull();
-    expect(modes.build.effort).toBeUndefined();
+    // D-20261126-005: Build is not answered, so no menu can offer it
+    expect(Object.keys(modes)).toEqual(["auto", "fast", "expert", "heavy"]);
     expect(modes.expert.pick).toMatchObject({ model: "claude-opus-5-5", modelLabel: "Claude Opus 5.5", engineLabel: "Claude Code" });
     expect(modes.expert.effort).toBe("high");
     expect(modes.heavy.team!.slice(0, 2).map((seat) => seat.model)).toEqual(["claude-opus-5-5", "grok-4.7"]);

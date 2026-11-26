@@ -239,7 +239,6 @@ struct ModelMenuSheet: View {
         case .auto: ("Auto", "Picks from the request", "sparkles")
         case .fast: ("Fast", "Quick responses", "bolt")
         case .expert: ("Expert", "Thinks hard", "brain")
-        case .build: ("Build", "A model made for code", "hammer")
         case .heavy: ("Heavy", "Team of Experts", "square.3.layers.3d")
         }
         return Button { pickMode(mode) } label: {

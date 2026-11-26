@@ -1,6 +1,6 @@
 // Composer modes (#4900, back by #5088; owner 2026-11-23, M-20261123-045):
 // the chat bar's menu, the same as the Perspicax console's: Auto, Fast,
-// Expert, Heavy, Build, then Reasoning, then All models (the person's own
+// Expert, Heavy, then Reasoning, then All models (the person's own
 // pinned model, no mode). The rows and their rules are shared/mode-menu.ts,
 // the one definition for both products. A mode never names a model. Sagax maps it,
 // every turn, to the best models the person can use (their connected
@@ -14,12 +14,18 @@
 import type { EffortLevel, ModelSelection } from "./model-selection.ts";
 import { MENU_MODES, type MenuMode } from "./mode-menu.ts";
 
-export const MODEL_MODES = MENU_MODES;
-export type ModelMode = MenuMode;
+/** Build stopped everywhere (owner 2026-11-26, D-20261126-005): it is no mode
+ * of Sagax any more. The server never picks it, answers it in no list and
+ * stores it nowhere; a selection or a request that still names it is Auto.
+ * shared/mode-menu.ts keeps the word only because that file is the console's
+ * byte-identical copy. */
+export const RETIRED_MODEL_MODE = "build";
+export type ModelMode = Exclude<MenuMode, typeof RETIRED_MODEL_MODE>;
+export const MODEL_MODES: readonly ModelMode[] = MENU_MODES.filter((mode): mode is ModelMode => mode !== RETIRED_MODEL_MODE);
 
 /** The modes that pick a model by their own rule (everything but Auto). */
 export type ForcedModelMode = Exclude<ModelMode, "auto">;
-export const FORCED_MODEL_MODES: readonly ForcedModelMode[] = ["fast", "expert", "heavy", "build"];
+export const FORCED_MODEL_MODES: readonly ForcedModelMode[] = ["fast", "expert", "heavy"];
 
 export function isModelMode(value: unknown): value is ModelMode {
   return typeof value === "string" && (MODEL_MODES as readonly string[]).includes(value);
@@ -40,7 +46,7 @@ export function modeOfSelection(selection: Pick<ModelSelection, "auto" | "mode">
  * Auto flag goes on, the mode is stored for the ones that are not Auto, and
  * what only a pinned model or plain Auto carries (a variant, Auto's Optimize
  * choice) goes. The effort stays: Fast, Expert and Heavy set their own while
- * a turn runs, Auto and Build run the person's. */
+ * a turn runs, Auto runs the person's. */
 export function selectionForMode(selection: ModelSelection, mode: ModelMode): ModelSelection {
   const { mode: _mode, variant: _variant, autoOptimize: _optimize, ...rest } = selection;
   return {

@@ -1,6 +1,6 @@
 // The composer's mode menu in the one model panel (#5088; owner 2026-11-23,
 // M-20261123-040, M-20261123-045, M-20261123-047). The short view is Auto,
-// Fast, Expert, Heavy, Build, Reasoning, All models. Reasoning opens the levels
+// Fast, Expert, Heavy, Reasoning, All models. Reasoning opens the levels
 // of the model in use. All models is a cascade, provider, account, model,
 // with only what can run now; the starred favorites lead it and the star is
 // still a toggle. The footer keeps Account, Runs with and Manage models; how
@@ -128,12 +128,12 @@ describe("the model panel with the composer's modes", () => {
     expect(html({ effort: { ...props().effort!, value: "high" } })).toMatch(/data-mode-reasoning-value[^>]*>High</);
   });
 
-  it("a mode that sets its own reasoning greys the row and shows the level it imposes; Auto, Build and a pinned model leave it open", () => {
+  it("a mode that sets its own reasoning greys the row and shows the level it imposes; Auto and a pinned model leave it open", () => {
     const resolutions = { expert: { mode: "expert", pick: null, effort: "high" } } as unknown as NonNullable<ModelPanelProps["modes"]>["resolutions"];
     const imposed = html({ modes: { current: "expert", onPick: vi.fn(), resolutions } });
     expect(imposed).toMatch(/<button[^>]*disabled=""[^>]*data-mode-row="reasoning"[^>]*data-mode-reasoning-imposed/);
     expect(imposed).toMatch(/data-mode-reasoning-value[^>]*>High</);
-    for (const modes of [{ current: "auto" as const, onPick: vi.fn() }, { current: "build" as const, onPick: vi.fn() }, { current: null, onPick: vi.fn(), pinnedLabel: "Claude · opus" }]) {
+    for (const modes of [{ current: "auto" as const, onPick: vi.fn() }, { current: null, onPick: vi.fn(), pinnedLabel: "Claude · opus" }]) {
       expect(html({ autoOn: modes.current !== null, modes })).not.toContain("data-mode-reasoning-imposed");
     }
   });

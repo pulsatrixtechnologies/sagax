@@ -836,7 +836,7 @@ export function explainPick(pick: AutoPick): string {
   }
   // #4900: the person chose a composer mode
   if (pick.reason === "mode" && pick.mode) {
-    const rule = { fast: "the quickest good model", expert: "the strongest model", heavy: "the strongest model, which leads the team", build: "the model made for code" }[pick.mode];
+    const rule = { fast: "the quickest good model", expert: "the strongest model", heavy: "the strongest model, which leads the team" }[pick.mode];
     return `${pick.mode[0]!.toUpperCase()}${pick.mode.slice(1)}: ${pick.modelLabel} on ${pick.engineLabel}, ${rule} ${payer}.`;
   }
   // The person's own turn, when the words moved it off the strongest tier

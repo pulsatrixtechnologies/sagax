@@ -1128,7 +1128,7 @@ export class Store {
         b.projects = b.projects.map(({ id, name, emoji }) => ({ id, name, ...(isProjectEmoji(emoji) ? { emoji } : {}) }));
         boot.botsMigrated = true;
       }
-      // #5088: Build left the composer modes; a stored one, or any value that
+      // D-20261126-005: Build is no mode; a stored one, or any value that
       // is no mode, is dropped: the bot or thread keeps its model and Auto.
       for (const selection of [b.modelSelection, ...(b.tasks ?? []).map((task) => task.modelSelection)]) {
         if (selection && "mode" in selection && !isForcedModelMode((selection as { mode?: unknown }).mode)) {

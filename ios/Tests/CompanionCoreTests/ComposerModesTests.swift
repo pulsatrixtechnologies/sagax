@@ -8,8 +8,11 @@ final class ComposerModesTests: XCTestCase {
         XCTAssertNil(ComposerModes.mode(of: ModelSelection(instanceId: "claude", model: "opus")))
         XCTAssertEqual(ComposerModes.mode(of: ModelSelection(instanceId: "claude", model: "opus", auto: true)), .auto)
         XCTAssertEqual(ComposerModes.mode(of: ModelSelection(instanceId: "claude", model: "opus", auto: true, mode: "heavy")), .heavy)
-        // Build round-trips from desktop; a mode without Auto is a pinned model
-        XCTAssertEqual(ComposerModes.mode(of: ModelSelection(instanceId: "claude", model: "opus", auto: true, mode: "build")), .build)
+        // D-20261126-005: Build is no mode; a selection still set on it reads as Auto.
+        // A mode without Auto is a pinned model.
+        XCTAssertEqual(ComposerModes.mode(of: ModelSelection(instanceId: "claude", model: "opus", auto: true, mode: "build")), .auto)
+        XCTAssertNil(ComposerMode(rawValue: "build"))
+        XCTAssertEqual(ComposerMode.forced, [.fast, .expert, .heavy])
         XCTAssertNil(ComposerModes.mode(of: ModelSelection(instanceId: "claude", model: "opus", mode: "fast")))
     }
 
@@ -27,16 +30,31 @@ final class ComposerModesTests: XCTestCase {
     }
 
     func testTheSelectionKeepsTheModeOnTheWayBack() throws {
-        let decoded = try JSONDecoder().decode(ModelSelection.self, from: Data(#"{"instanceId":"claude","model":"opus","auto":true,"mode":"build"}"#.utf8))
-        XCTAssertEqual(decoded.mode, "build")
+        let decoded = try JSONDecoder().decode(ModelSelection.self, from: Data(#"{"instanceId":"claude","model":"opus","auto":true,"mode":"heavy"}"#.utf8))
+        XCTAssertEqual(decoded.mode, "heavy")
         let again = try JSONDecoder().decode(ModelSelection.self, from: JSONEncoder().encode(decoded))
-        XCTAssertEqual(again.mode, "build")
+        XCTAssertEqual(again.mode, "heavy")
+    }
+
+    /// D-20261126-005: a bot or a conversation an older server still keeps on
+    /// Build decodes without an error, reads as Auto, and the next choice the
+    /// person makes writes a mode the server knows.
+    func testASelectionStillOnBuildFallsBackOnAuto() throws {
+        let stored = try JSONDecoder().decode(ModelSelection.self, from: Data(#"{"instanceId":"claude","model":"opus","auto":true,"mode":"build"}"#.utf8))
+        XCTAssertEqual(ComposerModes.mode(of: stored), .auto)
+        let auto = ComposerModes.selection(stored, for: .auto)
+        XCTAssertNil(auto.mode)
+        XCTAssertEqual(auto.auto, true)
+        XCTAssertEqual(ComposerModes.selection(stored, for: .expert).mode, "expert")
     }
 
     func testAvailableModesAndImposedReasoning() throws {
         let preview = try JSONDecoder().decode(ComposerModes.Preview.self, from: Data(#"{"modes":{"expert":{"effort":"high","pick":{"instanceId":"one","model":"m"}},"build":{"pick":null}}}"#.utf8))
-        XCTAssertEqual(ComposerModes.offered(nil), [.auto, .fast, .expert, .heavy, .build])
+        XCTAssertEqual(ComposerModes.offered(nil), [.auto, .fast, .expert, .heavy])
         XCTAssertEqual(ComposerModes.offered(preview), [.auto, .expert])
+        // D-20261126-005: Build is never offered, even by a server that still answers it
+        let older = try JSONDecoder().decode(ComposerModes.Preview.self, from: Data(#"{"modes":{"fast":{"pick":{"instanceId":"one","model":"m"}},"build":{"pick":{"instanceId":"one","model":"code"}}}}"#.utf8))
+        XCTAssertEqual(ComposerModes.offered(older), [.auto, .fast])
         var selection = ModelSelection(instanceId: "one", model: "m", auto: true, mode: "expert")
         let imposed = ComposerModes.reasoning(selection: selection, instances: [], preview: preview)
         XCTAssertTrue(imposed.shown)
@@ -47,7 +65,7 @@ final class ComposerModesTests: XCTestCase {
         XCTAssertFalse(ComposerModes.reasoning(selection: selection, instances: [], preview: preview).shown)
     }
 
-    func testAutoAndBuildUseTheLevelsOfTheirResolvedModel() {
+    func testAutoUsesTheLevelsOfItsResolvedModelAndSoDoesASelectionStillOnBuild() {
         var instance = engine("coder", family: "coding", email: nil, models: [("code", "Code")])
         instance.capabilities = InstanceCapabilities(effortLevels: ["low", "high"])
         instance.models.options[0].defaultEffort = "high"
@@ -59,10 +77,10 @@ final class ComposerModesTests: XCTestCase {
         XCTAssertFalse(automatic.disabled)
         XCTAssertNil(automatic.value)
         XCTAssertEqual(automatic.choices, [nil, "low", "high", UltracodeEffort.id])
+        // D-20261126-005: still on Build is Auto: Auto's pick, Auto's row
         selection.mode = "build"
         let build = ComposerModes.reasoning(selection: selection, instances: [instance], preview: preview)
-        XCTAssertEqual(build.value, "high")
-        XCTAssertEqual(build.choices, ["low", "high", UltracodeEffort.id])
+        XCTAssertEqual(build, automatic)
         selection.effort = "low"
         XCTAssertEqual(ComposerModes.reasoning(selection: selection, instances: [instance], preview: preview).value, "low")
     }

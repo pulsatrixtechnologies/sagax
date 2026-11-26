@@ -6,13 +6,15 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { setLocale } from "@/lib/i18n";
 import type { ModeResolution, ModelMode } from "../../shared/model-mode";
-import { chatBarChipLabel, modeName, offeredModes, shownMode } from "./model-mode";
+import { chatBarChipLabel, offeredModes, shownMode } from "./model-mode";
 
 const pick = { instanceId: "grok", model: "grok-4.7", engineLabel: "Grok", modelLabel: "Grok 4.7" };
 const all = (): Record<ModelMode, ModeResolution> => ({
   auto: { mode: "auto", pick }, fast: { mode: "fast", pick, effort: "low" }, expert: { mode: "expert", pick, effort: "high" },
-  heavy: { mode: "heavy", pick, effort: "high" }, build: { mode: "build", pick },
+  heavy: { mode: "heavy", pick, effort: "high" },
 });
+/** What a server from before D-20261126-005 still answers. */
+const withBuild = () => ({ ...all(), build: { mode: "build", pick } }) as unknown as Record<ModelMode, ModeResolution>;
 
 beforeEach(() => setLocale("en"));
 
@@ -20,15 +22,15 @@ describe("the chat bar's modes", () => {
   it("offers Auto, Fast, Expert and Heavy, never Build, before and after the server answers", () => {
     expect(offeredModes(undefined)).toEqual(["auto", "fast", "expert", "heavy"]);
     expect(offeredModes(all())).toEqual(["auto", "fast", "expert", "heavy"]);
+    expect(offeredModes(withBuild())).toEqual(["auto", "fast", "expert", "heavy"]);
     expect(offeredModes({ ...all(), heavy: { mode: "heavy", pick: null } })).toEqual(["auto", "fast", "expert"]);
   });
 
   it("a selection still set on Build reads as Auto; the others read as they are", () => {
-    expect(shownMode({ auto: true, mode: "build" })).toBe("auto");
+    expect(shownMode({ auto: true, mode: "build" } as never)).toBe("auto");
     expect(shownMode({ auto: true, mode: "expert" })).toBe("expert");
     expect(shownMode({ auto: true })).toBe("auto");
     expect(shownMode({})).toBeNull();
-    expect(modeName("build")).toBe("Auto");
   });
 
   it("the chip names the mode, then the reasoning level in use", () => {

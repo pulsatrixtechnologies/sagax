@@ -26,8 +26,8 @@ describe("a mode rides the selection", () => {
     expect(modeOfSelection(base())).toBeNull();
     expect(modeOfSelection({ auto: true })).toBe("auto");
     expect(modeOfSelection({ auto: true, mode: "heavy" })).toBe("heavy");
-    // Build is back (owner, 2026-11-23, M-20261123-045)
-    expect(modeOfSelection({ auto: true, mode: "build" })).toBe("build");
+    // D-20261126-005: Build is no mode any more; a selection still carrying it reads as plain Auto
+    expect(modeOfSelection({ auto: true, mode: "build" } as never)).toBe("auto");
     // a stored mode Sagax does not know reads as plain Auto
     expect(modeOfSelection({ auto: true, mode: "turbo" } as never)).toBe("auto");
     // a mode without Auto is not a mode: the model is pinned

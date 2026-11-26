@@ -2,7 +2,7 @@
 /** checkedModelSelection (#1388). Pure move from server/index.ts. */
 import { isModelVariant } from "../contracts.ts";
 import { isEffortLevel } from "../../shared/wire.ts";
-import { isForcedModelMode } from "../../shared/model-mode.ts";
+import { RETIRED_MODEL_MODE, isForcedModelMode } from "../../shared/model-mode.ts";
 export type Host = Record<string, any>;
 
 export function createCheckedModelSelection(getHost: () => Host): any {
@@ -67,8 +67,9 @@ function checkedModelSelection(
     if (value.auto === true) selection.autoOptimize = value.autoOptimize;
   }
   // #4900, #5088: the composer mode (Fast, Expert, Heavy), kept only with Auto.
-  // "auto" or null is plain Auto: nothing stored.
-  if (value.mode !== undefined && value.mode !== null && value.mode !== "auto") {
+  // "auto" or null is plain Auto: nothing stored. Build stopped everywhere
+  // (D-20261126-005): an app that still sends it gets Auto, never an error.
+  if (value.mode !== undefined && value.mode !== null && value.mode !== "auto" && value.mode !== RETIRED_MODEL_MODE) {
     if (!isForcedModelMode(value.mode)) {
       return { ok: false, status: 400, error: "modelSelection.mode must be auto, fast, expert or heavy" };
     }

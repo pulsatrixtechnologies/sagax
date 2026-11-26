@@ -14,12 +14,12 @@
 // the pointer or the right arrow; the row says so while its level is open.
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Brain, Check, ChevronRight, Hammer, Layers, Sparkles, Zap, type LucideIcon } from "lucide-react";
+import { Brain, Check, ChevronRight, Layers, Sparkles, Zap, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { modeBlurb, modeModelsLine, modeName, modeTooltip, offeredModes, type ModelMode } from "@/lib/model-mode";
-import type { ModeResolution } from "../../shared/model-mode";
+import { isModelMode, type ModeResolution } from "../../shared/model-mode";
 import { menuRows, type ReasoningRow } from "../../shared/mode-menu";
 import { MENU_BOX } from "./menu-look";
 import { POPOVER_LAYER } from "./AnchoredPopover";
@@ -36,7 +36,7 @@ function keyboardFocus(element: HTMLElement): boolean {
   return !("pointerFocus" in element.dataset);
 }
 
-export const MODE_GLYPHS: Record<ModelMode, LucideIcon> = { auto: Sparkles, fast: Zap, expert: Brain, heavy: Layers, build: Hammer };
+export const MODE_GLYPHS: Record<ModelMode, LucideIcon> = { auto: Sparkles, fast: Zap, expert: Brain, heavy: Layers };
 
 export interface ModeMenuProps {
   /** The mode in use; null while a model the person pinned in All models runs. */
@@ -144,7 +144,8 @@ export function ModeMenu({ current, resolutions, disabled = false, onPick, reaso
             </div>
           );
         }
-        if (row.kind !== "mode") return null;
+        // the shared rows may name a mode Sagax retired (Build, D-20261126-005): never drawn
+        if (row.kind !== "mode" || !isModelMode(row.id)) return null;
         const mode = row.id;
         const Glyph = MODE_GLYPHS[mode];
         const on = current === mode;

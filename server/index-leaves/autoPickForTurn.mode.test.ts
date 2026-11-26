@@ -68,6 +68,17 @@ describe("a mode in the turn's pick", () => {
     expect(pick?.selection).toEqual(turn(undefined)?.pick.selection);
   });
 
+  it("D-20261126-005: Auto never takes Build, whatever the request asks for", () => {
+    const ask = (text: string, role: "orchestration" | "worker" | "continue" = "orchestration") => pickFor({ bot: bot(undefined), threadId: "t1", speaker, role, text })?.pick;
+    for (const text of ["Fix the failing unit tests in this TypeScript codebase.", "Corrige le bogue dans le code source et lance le build.", "Refactor src/main.rs and open a pull request."]) {
+      for (const role of ["orchestration", "worker", "continue"] as const) {
+        const pick = ask(text, role);
+        expect(pick?.mode).not.toBe("build");
+        expect(pick?.reason).not.toBe("mode");
+      }
+    }
+  });
+
   it("a plain Auto bot still reads the request, as before", () => {
     const pick = turn(undefined)?.pick;
     expect(pick?.mode).toBeUndefined();
@@ -109,8 +120,8 @@ describe("a mode in the turn's pick", () => {
 
   it("the preview also says what every mode runs", () => {
     const answer = pickFor({ bot: bot("fast"), threadId: "t1", speaker, role: "orchestration", text: "", withModes: true });
-    // Build is a mode of the menu since the owner's decision M-20261123-045.
-    expect(Object.keys(answer?.modes ?? {})).toEqual(["auto", "fast", "expert", "heavy", "build"]);
+    // D-20261126-005: Build is no mode any more; the server names it nowhere.
+    expect(Object.keys(answer?.modes ?? {})).toEqual(["auto", "fast", "expert", "heavy"]);
     expect(answer?.modes?.expert.pick?.modelLabel).toBe("Claude Opus 5.5");
   });
 });

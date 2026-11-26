@@ -49,5 +49,5 @@ export interface ModelSelection {
    * mode runs is picked per turn from what the person can use
    * (server/models/model-mode.ts). Absent means plain Auto. Kept only with
    * Auto; picking a model in the engine list clears it. */
-  mode?: "fast" | "expert" | "heavy" | "build";
+  mode?: "fast" | "expert" | "heavy";
 }

@@ -6,6 +6,12 @@
 // the mood. A press that barely moved stays a click: it still opens what the
 // button opens (mascot-turn.ts, CLICK_SLOP).
 //
+// The site's stage has no click, so its double click only turns the body
+// back. Here the button opens the picker, and a double click is two clicks
+// first: on a turned mascot a click waits DOUBLE_CLICK_MS for a second one,
+// so the double click brings the mascot back and leaves the picker as it was,
+// as Reset view does. Facing front, a click is a click at once.
+//
 // Only a shape is turned: the other characters are flat drawings with no
 // volume to turn, and a picture is a picture. The state a key previews is
 // never stored: it shows until the mascot loses the focus, then the bot's
@@ -24,6 +30,8 @@ import { pickerColor } from "./mascot-picker";
 import type { MausColor } from "@/lib/mascot";
 import { FRONT, dragView, isDrag, isTurned, keyAction, resetView, wrapYaw, RESET_MS, type ViewAngle } from "./mascot-turn";
 
+/** How long a click on a turned mascot waits for the second click of a double click. */
+const DOUBLE_CLICK_MS = 250;
 const MOODS: readonly ShapeMoodSetting[] = ["neutral", "happy"];
 const STATE_LABEL: Readonly<Record<string, LocaleKey>> = {
   idle: "mascotStage.state.idle",
@@ -76,8 +84,15 @@ export function useMascotTurn({ look, picture = false, onMood }: { look: MascotL
   current.current = view;
   const press = useRef<{ id: number; x: number; y: number; start: ViewAngle; dragged: boolean } | null>(null);
   const swallowClick = useRef(false);
+  // the click a turned mascot holds until it knows whether a second one follows (0: none)
+  const heldClick = useRef(0);
+  const replaying = useRef(false);
+  const dropHeldClick = () => {
+    window.clearTimeout(heldClick.current);
+    heldClick.current = 0;
+  };
   const easing = useRef(0);
-  useEffect(() => () => cancelAnimationFrame(easing.current), []);
+  useEffect(() => () => { cancelAnimationFrame(easing.current); window.clearTimeout(heldClick.current); }, []);
   // a look that is no longer a shape faces front again
   useEffect(() => {
     if (enabled) return;
@@ -146,12 +161,30 @@ export function useMascotTurn({ look, picture = false, onMood }: { look: MascotL
       onPointerUp: end,
       onPointerCancel: end,
       onClickCapture: (event) => {
-        if (!swallowClick.current) return;
-        swallowClick.current = false;
+        if (swallowClick.current) {
+          swallowClick.current = false;
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        // at once: the held click played, a key's click (no second one follows it), a mascot facing front
+        if (replaying.current || event.detail === 0) return;
+        if (!heldClick.current && !isTurned(current.current)) return;
         event.preventDefault();
         event.stopPropagation();
+        // the second click of a double click: the dblclick that follows drops the first
+        if (heldClick.current) return;
+        const button = event.currentTarget;
+        heldClick.current = window.setTimeout(() => {
+          heldClick.current = 0;
+          replaying.current = true;
+          try { button.click(); } finally { replaying.current = false; }
+        }, DOUBLE_CLICK_MS);
       },
-      onDoubleClick: () => { if (isTurned(current.current)) reset(); },
+      onDoubleClick: () => {
+        dropHeldClick();
+        if (isTurned(current.current)) reset();
+      },
       onKeyDown: (event) => {
         const action = keyAction(event, current.current);
         if (!action) return;

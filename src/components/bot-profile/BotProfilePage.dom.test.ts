@@ -25,6 +25,8 @@ import {
   type BotProfileTab,
 } from "@/lib/persona-sections";
 import { openFolds } from "../settings/nested-surfaces";
+import { loadAllBakedStills } from "../shape-stills";
+import { completeMascotLook, type MascotLook } from "../../../shared/mascot-look";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -153,9 +155,10 @@ afterEach(() => {
   sentMessages.length = 0;
 });
 
-async function mount(locale: "en" | "fr", org = true) {
+async function mount(locale: "en" | "fr", org = true, look?: MascotLook) {
   setLocale(locale);
   fixture = editBotFixture(org);
+  if (look) (fixture.bot as { mascotLook?: MascotLook }).mascotLook = look;
   routinesListings = 0;
   // the organization probe is cached once per page: ask again for this fixture
   await loadPerspicaxOrg(true);
@@ -537,7 +540,73 @@ describe("bot profile page: General cards in place (#3398)", () => {
     expect(host.querySelector("[data-bot-profile-page]"), "the page stays").not.toBeNull();
   });
 
-  // M-20261119-081: General > Settings has an Appearance row again (after Model), opening what the mascot opens:
+  // #5384, the review of #5389: the mascot is the picker's preview, turned by hand. A double click on a turned
+  // mascot brings it back to the front, as Reset view does, and leaves the picker as it was: each of its two
+  // clicks opened or closed the picker, which came back mounted anew on Shapes.
+  describe("a double click on the turned header mascot", () => {
+    // reduced motion: the drawing holds still between two events, so the page settles (the way back is immediate)
+    const shape = { ...completeMascotLook({ character: "shape", shape: "cup" } as MascotLook), motion: "reduced" } as MascotLook;
+    beforeAll(async () => { await loadAllBakedStills(); });
+    const stage = () => host.querySelector<HTMLElement>("[data-bot-profile-hero] button[data-mascot-stage]")!;
+    const viewOf = () => stage().querySelector("[data-shape]")?.getAttribute("data-shape-view") ?? null;
+    const popover = () => document.querySelector<HTMLElement>("[data-mascot-picker-popover]");
+    const send = async (type: string, detail: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: 100, clientY: 100, button: 0, detail });
+      if (type.startsWith("pointer")) Object.defineProperty(event, "pointerId", { value: 1 });
+      await act(async () => { stage().dispatchEvent(event); });
+    };
+    /** What a browser sends for a double click, and whether the picker was there after each event. */
+    const doubleClick = async () => {
+      const seen: boolean[] = [];
+      for (const detail of [1, 2]) {
+        for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+          await send(type, detail);
+          seen.push(popover() !== null);
+        }
+      }
+      await send("dblclick", 2);
+      seen.push(popover() !== null);
+      return seen;
+    };
+    const turn = async () => {
+      await act(async () => { stage().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true })); });
+      expect(viewOf()).toBe("0.2 0");
+    };
+    /** Past any click still held. */
+    const wait = async () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 500)); });
+
+    it("picker closed: the mascot faces front again and the picker never opens", async () => {
+      await mount("en", true, shape);
+      await home("general");
+      await turn();
+      expect(popover()).toBeNull();
+      expect(await doubleClick(), "the picker after each event").not.toContain(true);
+      await wait();
+      await settle();
+      expect(viewOf(), "back to the front").toBeNull();
+      expect(popover(), "the picker stays closed").toBeNull();
+    });
+
+    it("picker open on Characters: the mascot faces front again and the same picker stays, on Characters", async () => {
+      await mount("en", true, shape);
+      await home("general");
+      await click(stage(), "the mascot");
+      await until(() => document.querySelector("[data-mascot-picker-popover] [data-mascot-picker]"));
+      await click(popover()!.querySelector<HTMLElement>('[data-mascot-picker-tab="characters"]'), "the Characters tab");
+      const picker = popover()!.querySelector<HTMLElement>("[data-mascot-picker]")!;
+      const selected = () => popover()?.querySelector('[data-mascot-picker-tab][aria-selected="true"]')?.getAttribute("data-mascot-picker-tab");
+      expect(selected()).toBe("characters");
+      await turn();
+      expect(await doubleClick(), "the picker after each event").not.toContain(false);
+      await wait();
+      await settle();
+      expect(viewOf(), "back to the front").toBeNull();
+      expect(popover()?.querySelector("[data-mascot-picker]"), "the same picker, never mounted anew").toBe(picker);
+      expect(selected(), "still on Characters").toBe("characters");
+    });
+  });
+
+
   // [M-20261125-063] the mascot picker under the mascot, where it was the mascot editor's modal
   it("regression M-20261119-081: General > Settings has an Appearance row after Model that opens the mascot picker", async () => {
     await mount("en");

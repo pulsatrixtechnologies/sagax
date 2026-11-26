@@ -142,6 +142,54 @@ describe("the large mascot, turned by hand", () => {
     expect(viewOf()).toBeNull();
   });
 
+  // #5384, the review of #5389: a double click is two clicks then a dblclick, and each click
+  // opened or closed the picker. On a turned mascot the double click only brings it back.
+  const mouseClick = async (detail: number) => act(async () => { stageButton().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail, button: 0 })); });
+  const doubleClick = async () => {
+    await mouseClick(1);
+    await mouseClick(2);
+    await act(async () => { stageButton().dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, detail: 2 })); });
+  };
+
+  it("a double click on a turned mascot brings it back to the front and is no click on the mascot", async () => {
+    await mount();
+    await key("ArrowRight");
+    expect(viewOf()).toBe("0.2 0");
+    await doubleClick();
+    expect(onActivate).not.toHaveBeenCalled();
+    await frames(520);
+    expect(viewOf()).toBeNull();
+    // nor is the first click played once the double click is over
+    expect(onActivate).not.toHaveBeenCalled();
+    // facing front again, a click is a click at once
+    await mouseClick(1);
+    expect(onActivate).toHaveBeenCalledTimes(1);
+  });
+
+  it("a single click on a turned mascot is still a click, once no second one came; a key's click is one at once", async () => {
+    await mount();
+    await key("ArrowRight");
+    await mouseClick(1);
+    expect(onActivate).not.toHaveBeenCalled();
+    await frames(320);
+    expect(onActivate).toHaveBeenCalledTimes(1);
+    // the mascot stays where the person left it
+    expect(viewOf()).toBe("0.2 0");
+    // Enter and Space press the button with a click that no second one follows
+    await mouseClick(0);
+    expect(onActivate).toHaveBeenCalledTimes(2);
+  });
+
+  it("a click on a mascot facing front is a click at once, and so are both clicks of a double click", async () => {
+    await mount();
+    await mouseClick(1);
+    expect(onActivate).toHaveBeenCalledTimes(1);
+    await mouseClick(2);
+    await act(async () => { stageButton().dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, detail: 2 })); });
+    expect(onActivate).toHaveBeenCalledTimes(2);
+    expect(viewOf()).toBeNull();
+  });
+
   it("leaves Escape, Home and the keys that press the button alone while the mascot faces front", async () => {
     await mount();
     for (const name of ["Escape", "Home", "0", "Enter", " "]) expect((await key(name)).defaultPrevented, name).toBe(false);

@@ -24,7 +24,12 @@
 // hide with: it hands it to the mascot. Escape is the mascot's while it has
 // something to cancel (a turn, a previewed state); with nothing to cancel it
 // is left to what closed on it before (the picker, then the page).
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
+// The button hides once the mascot faces front, wherever the focus is then: on
+// its way back the button is out of the Tab order, and a focus still on it
+// when it hides goes to the mascot. A double click on the button is one way
+// back and nothing else: its second click, which lands on the mascot once the
+// button is gone, is no click on the mascot.
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import type { AvatarState } from "open-bot-avatar";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
@@ -73,12 +78,16 @@ export interface MascotTurn {
   enabled: boolean;
   dragging: boolean;
   turned: boolean;
+  /** On its way back to the front (the 420 ms). */
+  returning: boolean;
   reset: () => void;
+  /** The Reset view button was pressed: the second click of a double click on it is not the mascot's. */
+  resetPressed: () => void;
   /** What a key just picked, for screen readers. */
   said: string;
 }
 
-export function useMascotTurn({ look, picture = false, onMood }: { look: MascotLook | null | undefined; picture?: boolean; onMood?: ((mood: ShapeMoodSetting) => void) | undefined }): MascotTurn {
+export function useMascotTurn({ look, picture = false, onMood, small = false }: { look: MascotLook | null | undefined; picture?: boolean; onMood?: ((mood: ShapeMoodSetting) => void) | undefined; /** Drawn under the live size (shape-stage.ts, `small`). */ small?: boolean }): MascotTurn {
   const enabled = turnsByHand(look, picture);
   const settings = engineLookOf(look);
   const systemReduced = useReducedMotion();
@@ -86,6 +95,7 @@ export function useMascotTurn({ look, picture = false, onMood }: { look: MascotL
 
   const [view, setView] = useState<ViewAngle>(FRONT);
   const [dragging, setDragging] = useState(false);
+  const [returning, setReturning] = useState(false);
   const [previewState, setPreviewState] = useState<AvatarState | null>(null);
   const [said, setSaid] = useState("");
   const current = useRef(view);
@@ -95,18 +105,24 @@ export function useMascotTurn({ look, picture = false, onMood }: { look: MascotL
   // the click a turned mascot holds until it knows whether a second one follows (0: none)
   const heldClick = useRef(0);
   const replaying = useRef(false);
+  // the last press was on the Reset view button: a click counted as the second or third of a multiple click is its echo
+  const afterReset = useRef(false);
   const dropHeldClick = () => {
     window.clearTimeout(heldClick.current);
     heldClick.current = 0;
   };
   const easing = useRef(0);
+  const stopEasing = () => {
+    cancelAnimationFrame(easing.current);
+    setReturning(false);
+  };
   // stops listening for the release of a press the mascot may never see
   const unwatch = useRef<(() => void) | null>(null);
   useEffect(() => () => { cancelAnimationFrame(easing.current); window.clearTimeout(heldClick.current); unwatch.current?.(); }, []);
   // a look that is no longer a shape faces front again
   useEffect(() => {
     if (enabled) return;
-    cancelAnimationFrame(easing.current);
+    stopEasing();
     setView(FRONT);
     setPreviewState(null);
     setDragging(false);
@@ -114,7 +130,7 @@ export function useMascotTurn({ look, picture = false, onMood }: { look: MascotL
 
   const turned = isTurned(view);
   const reset = () => {
-    cancelAnimationFrame(easing.current);
+    stopEasing();
     if (reduced) return setView(FRONT);
     const from = current.current;
     const start = performance.now();
@@ -122,12 +138,15 @@ export function useMascotTurn({ look, picture = false, onMood }: { look: MascotL
       const next = resetView(from, now - start);
       setView(next);
       if (now - start < RESET_MS) easing.current = requestAnimationFrame(step);
+      else setReturning(false);
     };
+    setReturning(true);
     easing.current = requestAnimationFrame(step);
   };
+  const resetPressed = () => { afterReset.current = true; };
 
-  const stage = useMemo<ShapeStage | null>(() => (enabled ? { view, holdGaze: dragging, previewState } : null), [enabled, view, dragging, previewState]);
-  if (!enabled) return { stage: null, handlers: {}, enabled, dragging: false, turned: false, reset, said: "" };
+  const stage = useMemo<ShapeStage | null>(() => (enabled ? { view, holdGaze: dragging, previewState, ...(small ? { small } : {}) } : null), [enabled, view, dragging, previewState, small]);
+  if (!enabled) return { stage: null, handlers: {}, enabled, dragging: false, turned: false, returning: false, reset, resetPressed, said: "" };
 
   const end = (event: PointerEvent<HTMLElement>) => {
     const held = press.current;
@@ -146,12 +165,14 @@ export function useMascotTurn({ look, picture = false, onMood }: { look: MascotL
     enabled,
     dragging,
     turned,
+    returning,
     reset,
+    resetPressed,
     said,
     handlers: {
       onPointerDown: (event) => {
         if (event.button !== 0) return;
-        cancelAnimationFrame(easing.current);
+        stopEasing();
         const id = event.pointerId;
         press.current = { id, x: event.clientX, y: event.clientY, start: current.current, dragged: false };
         // Until a drag begins the mascot does not hold the pointer, so its release may land elsewhere (the pointer
@@ -194,6 +215,14 @@ export function useMascotTurn({ look, picture = false, onMood }: { look: MascotL
           event.stopPropagation();
           return;
         }
+        // The echo of a press on the Reset view button: the button hides once the mascot faces front, so the
+        // second click of a double click on it lands here. It is no click on the mascot.
+        if (afterReset.current && event.detail >= 2) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        afterReset.current = false;
         // at once: the held click played, a key's click (no second one follows it), a mascot facing front
         if (replaying.current || event.detail === 0) return;
         if (!heldClick.current && !isTurned(current.current)) return;
@@ -230,7 +259,7 @@ export function useMascotTurn({ look, picture = false, onMood }: { look: MascotL
         event.preventDefault();
         if (action.kind === "reset") return reset();
         if (action.kind === "view") {
-          cancelAnimationFrame(easing.current);
+          stopEasing();
           return setView(action.view);
         }
         if (action.kind === "state") {
@@ -268,14 +297,22 @@ function focusMascot(reset: HTMLElement) {
  * focus would fall to the document and the next Escape would close the page.
  */
 export function MascotTurnReset({ turn, className }: { turn: MascotTurn; className?: string }) {
+  const button = useRef<HTMLButtonElement>(null);
+  // whatever brought the mascot back (its own keys, a double click, the end of a drag), a focus still on the
+  // button when it hides goes to the mascot, before the browser drops it on the document
+  useLayoutEffect(() => {
+    if (!turn.turned && button.current && document.activeElement === button.current) focusMascot(button.current);
+  }, [turn.turned]);
   if (!turn.enabled) return null;
   return (
     <>
       <button
+        ref={button}
         type="button"
         data-mascot-turn-reset=""
         onClick={(event) => {
           focusMascot(event.currentTarget);
+          turn.resetPressed();
           turn.reset();
         }}
         // the mascot's keys, as on the site where the button is inside the stage; Enter and Space stay the button's
@@ -287,7 +324,8 @@ export function MascotTurnReset({ turn, className }: { turn: MascotTurn; classNa
         aria-label={t("mascotStage.reset")}
         title={t("mascotStage.reset")}
         hidden={!turn.turned}
-        tabIndex={turn.turned ? 0 : -1}
+        // on its way back the button is about to hide: Tab passes it
+        tabIndex={turn.turned && !turn.returning ? 0 : -1}
         className={cn("absolute grid size-7 place-items-center rounded-full border border-hairline bg-panel text-ink-secondary outline-none hover:bg-raised-hover hover:text-ink focus-visible:ring-2 focus-visible:ring-accent", className)}
       >
         <RotateCcw size={14} aria-hidden="true" />

@@ -559,8 +559,8 @@ with a key this build does not know keeps everything else
 ### Turned by hand (#5384)
 
 Where a shape is drawn large (the bot page's hero, which is also the mascot
-picker's preview, and the avatar card at 88 px and up: a new bot's avatar and
-the Identity section's; the bot panel's own avatar is 64 px and is not turned), the person turns
+picker's preview, and the avatar card: the bot panel's avatar, a new bot's
+and the Identity section's), the person turns
 it as on the open-bot-avatar site's stage, with that stage's own figures
 (`floating-bots/mascot-turn.ts`): a drag turns the body (0.011 rad a pixel
 across, 0.009 up, the pitch held within 0.9 rad, the gaze held meanwhile), the
@@ -607,7 +607,7 @@ two as one. Tests: H is `floating-bots/mascot-turn.dom.test.ts`, P is
 | G09 | Drag (4 px and more) | picker closed | turns by 0.011 rad a pixel across and 0.009 up; opens nothing | site | P |
 | G10 | Drag | picker open | turns; the same picker stays, let go on the mascot, over the panel or outside | site | P |
 | G11 | Press that moved less than 4 px | any | a click (G01 to G04) | ours | H |
-| G12 | Press let go where the mascot does not see it | any | the press is over: the pointer coming back turns nothing | site (its stage holds the pointer) | H |
+| G12 | Press let go where the mascot does not see it (it left before moving 4 px over it) | any | the press is over: nothing turns, and the pointer coming back turns nothing | ours (the site's stage holds the pointer from the press, so it turns) | H |
 | G13 | Drag begun outside, ended on the mascot | picker open | the picker closes at the press; nothing turns | page | P |
 | G14 | Right button | any | turns nothing | site | H |
 | G15 | Press during the way back | coming back | the way back stops where it is | site | H |
@@ -624,7 +624,7 @@ two as one. Tests: H is `floating-bots/mascot-turn.dom.test.ts`, P is
 | G26 | M, Shift+M | focus on the mascot | the mood changes and is stored, as the picker's pill does; where it cannot be stored the key is left alone | site | H |
 | G27 | Enter, Space | focus on the mascot | a click at once, front or turned | page | H |
 | G28 | A digit or M with Ctrl, Meta or Alt | any | left to the app | site | H |
-| G29 | Tab | turned | mascot, then its Reset view button; facing front the button is hidden and out of the Tab order | site | H |
+| G29 | Tab | turned, at rest | mascot, then its Reset view button; facing front the button is hidden and out of the Tab order | site | H |
 | G30 | Reset view button | turned, picker open | front again; the same picker stays; the focus goes to the mascot | site, the focus is ours | P |
 | G31 | Reset view button | turned, picker closed | front again; nothing else pressed; the focus goes to the mascot | site, the focus is ours | H |
 | G32 | Escape after G30 | front, picker open | the picker closes and the page stays; the next Escape closes the page | page | P |
@@ -637,16 +637,20 @@ two as one. Tests: H is `floating-bots/mascot-turn.dom.test.ts`, P is
 | G39 | Escape in the panel | turned, picker open | the picker closes; the mascot stays turned | site (keys are the focused stage's) | P |
 | G40 | Press outside | turned, picker open | the picker closes; the mascot stays turned | page | P |
 | G41 | Escape | a new bot's avatar, turned | front again; the window around it does not act on the key | site | C |
-| G42 | Escape | a new bot's avatar, front, its picker open | the picker closes alone | page | C |
+| G42 | Escape | a new bot's avatar, front, its picker open | a shape: the picker closes alone (before, the key went to the window around it); another character: the key goes where it went before | ours | C |
 | G43 | Reset view button, then Escape | a new bot's avatar, its picker open | front again, the same picker, the focus on the avatar; Escape closes the picker alone | site, page | C |
-| G44 | Any | the bot panel's avatar (64 px), thumbnails | not turned: no grab, no key, no button; a click is a click | page | C |
-| G45 | Any | a picture, a character that is not a shape | not turned | page | H |
+| G44 | Every gesture above | the bot panel's avatar (64 px, filled to its box) | turned like the others; a click opens the bot's page, a right click its menu, as before; at rest it is the still image it was, the moving drawing only while turned, dragged or previewing | site; the still at rest is ours | C, `shape-stage.test.ts` |
+| G45 | Any | a picture, a character that is not a shape, a thumbnail | not turned | page | H, `shape-stage.test.ts` |
 | G46 | The look changes | turned | another character faces front; the shape comes back facing front | ours | H |
+| G47 | Double click on the Reset view button | turned, picker open or closed | one way back and nothing else: the second click, which lands on the mascot once the button is gone, is no click; the picker stays as it was | site | H, P |
+| G48 | Tab during the way back | coming back | the button is still shown but out of the Tab order; a focus on it when it hides goes to the mascot, so Escape then closes the picker, not the page | ours | H, P |
 
-Ours, not settled by the site or the page: the 4 px of G11, the 250 ms of G03
-(a double click slower than that toggles the picker once, then brings the
-mascot back), the previewed state and its Escape (G24, G25, G37), the focus
-handed to the mascot (G30, G31, G35).
+Ours (an agent's choice), not settled by the site or the page: the 4 px of
+G11 and the press that leaves before them (G12); the 250 ms of G03 (a double
+click slower than that toggles the picker once, then brings the mascot back);
+the previewed state and its Escape (G24, G25, G37); the focus handed to the
+mascot (G30, G31, G35, G48); Escape closing a new bot's picker alone (G42);
+the bot panel's avatar kept a still image at rest (G44).
 
 ## HD mascots (painted art, pilot: Shiba)
 

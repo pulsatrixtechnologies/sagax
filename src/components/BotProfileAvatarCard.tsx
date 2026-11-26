@@ -8,9 +8,11 @@
 // click opens the same mascot picker under the draft's avatar.
 // A picture dropped on the avatar, or pasted while it has focus, becomes the
 // bot's picture through the same upload as the Appearance pane (25 MB).
-// A shape mascot drawn large here (88 px and up) is turned by hand, as on the
-// open-bot-avatar site's stage (#5384, floating-bots/use-mascot-turn.tsx): a
-// drag turns it, a press that barely moved is still the click.
+// A shape mascot is turned by hand here, as on the open-bot-avatar site's
+// stage (#5384, floating-bots/use-mascot-turn.tsx): a drag turns it, a press
+// that barely moved is still the click. The bot panel's own avatar is drawn
+// under the live size (64 px, filled to its box): at rest it stays the still
+// image it was, and moves only while it is turned (shape-stage.ts, `small`).
 import { useRef, useState } from "react";
 
 import { avatarImageFrom, dragMayCarryImage } from "@/lib/avatar-input";
@@ -25,6 +27,7 @@ import { BotAvatar } from "./Avatar";
 import { MascotPickerPopover } from "./floating-bots/MascotPickerPopover";
 import { MascotGlassCaustic, MascotTurnReset, turnCursor, useMascotTurn } from "./floating-bots/use-mascot-turn";
 import { ShapeStageContext } from "./shape-stage";
+import { LIVE_MIN } from "./ShapeMascot";
 import { completeMascotLook, withEngineLook, type MascotLook } from "../../shared/mascot-look";
 import { useAvatarSources, type AvatarPatch } from "./appearance/AvatarSources";
 
@@ -46,7 +49,7 @@ export function BotProfileAvatarCard({
    * there). The pencil badge is gone (2026-10-14): a click on the mascot
    * opens the editor, and the "..." menu has Edit bot. */
   onContextMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  /** The mascot's size: 92 in the bot panel (#2196, Grok Bot parity); 144 on
+  /** The mascot's size: 64 in the bot panel, filled to its box (#4151); 144 on
    * the profile page; the bot wizard's Identity step draws it at 104. */
   size?: number;
   /** What a click does instead of opening the profile page (the profile
@@ -62,11 +65,12 @@ export function BotProfileAvatarCard({
   const [dropping, setDropping] = useState(false);
   const avatarRef = useRef<HTMLButtonElement>(null);
   const sources = useAvatarSources(bot, onPatch);
-  // only the large mascot is turned (the engine's live size, ShapeMascot LIVE_MIN); a picture never is
+  // a picture is never turned
   const wearsPicture = (bot.avatarCrop ?? "mascot") !== "mascot" && Boolean(bot.avatarUrl);
   const turn = useMascotTurn({
-    look: size >= 88 ? bot.mascotLook : null,
-    picture: wearsPicture || size < 88,
+    look: bot.mascotLook,
+    picture: wearsPicture,
+    small: size < LIVE_MIN,
     onMood: (mood) => onPatch({ mascotLook: withEngineLook(completeMascotLook(bot.mascotLook), { mood }) as MascotLook }),
   });
   const open = () => {
@@ -83,10 +87,11 @@ export function BotProfileAvatarCard({
         <span
           className="relative inline-flex"
           data-mascot-turn={turn.enabled ? (turn.dragging ? "dragging" : "") : undefined}
-          // Escape on the avatar or its Reset view button, the draft's picker open: once the mascot has nothing to
-          // cancel the key closes the picker alone, never the window around it (the picker's own Escape, #5369)
+          // Escape on a turned-by-hand avatar or its Reset view button, the draft's picker open: once the mascot has
+          // nothing to cancel the key closes the picker alone, never the window around it (the picker's own Escape,
+          // #5369). A character that is not turned keeps the key where it went before.
           onKeyDown={(event) => {
-            if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing || !(draft && draftOpen)) return;
+            if (!turn.enabled || event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing || !(draft && draftOpen)) return;
             event.preventDefault();
             setDraftOpen(false);
           }}

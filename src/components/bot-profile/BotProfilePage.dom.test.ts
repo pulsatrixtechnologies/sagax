@@ -910,6 +910,54 @@ describe("bot profile page: General cards in place (#3398)", () => {
         expect(focused()).toBe(stage());
       });
 
+      it("G47: a double click on the Reset view button, picker open: the mascot faces front and the same picker stays, on its tab", async () => {
+        const picker = await openOnCharacters();
+        const seen = await pressReset();
+        // the button is gone (reduced motion: at once): the second click and the dblclick land on the mascot under it
+        for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click", "dblclick"]) {
+          const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: 100, clientY: 100, button: 0, detail: 2 });
+          if (type.startsWith("pointer")) Object.defineProperty(event, "pointerId", { value: 1 });
+          await act(async () => { stage().dispatchEvent(event); });
+          seen.push(popover() !== null);
+        }
+        await wait();
+        await settle();
+        seen.push(popover() !== null);
+        expect(seen, "the picker after each event").not.toContain(false);
+        expect(viewOf()).toBeNull();
+        expect(pickerNode(), "never mounted anew").toBe(picker);
+        expect(selected()).toBe("characters");
+        // picker closed: nothing opens
+        await keyPress("Escape");
+        expect(popover()).toBeNull();
+        await turn();
+        const closedSeen = await pressReset();
+        for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click", "dblclick"]) {
+          const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: 100, clientY: 100, button: 0, detail: 2 });
+          if (type.startsWith("pointer")) Object.defineProperty(event, "pointerId", { value: 1 });
+          await act(async () => { stage().dispatchEvent(event); });
+          closedSeen.push(popover() !== null);
+        }
+        await wait();
+        await settle();
+        closedSeen.push(popover() !== null);
+        expect(closedSeen, "the picker after each event, closed").not.toContain(true);
+      });
+
+      it("G48: a focus on the Reset view button when the mascot comes back by its own keys goes to the mascot; Escape then closes the picker and the page stays", async () => {
+        await opened();
+        await turn();
+        // Home on the mascot, the focus already on the button (a Tab during the way back, in a browser that lets it land)
+        resetButton().focus();
+        await act(async () => { stage().dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true, cancelable: true })); });
+        await settle();
+        expect(viewOf()).toBeNull();
+        expect(focused(), "not left on a hidden button, so not on the document").toBe(stage());
+        await keyPress("Escape");
+        expect(popover()).toBeNull();
+        expect(page(), "the page stays").not.toBeNull();
+      });
+
       it("G38: the picker closed by Escape from its panel gives the focus back to the mascot that opened it, turned or not", async () => {
         await opened();
         expect(popover()!.contains(document.activeElement), "the panel took the focus").toBe(true);

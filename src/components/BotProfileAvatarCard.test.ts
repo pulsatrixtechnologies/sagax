@@ -181,17 +181,47 @@ describe("BotProfileAvatarCard", () => {
       expect(reached.filter((each) => each.key === "Escape")).toEqual([{ key: "Escape", taken: true }]);
     });
 
-    it("G44: the bot panel's small avatar is not turned: no grab, no key, no Reset view, a click is a click", async () => {
+    it("G44: the bot panel's avatar (64 px, filled to its box) is turned too; at rest it is the still image it was", async () => {
       const onOpen = vi.fn();
-      await act(async () => root.render(createElement(BotProfileAvatarCard, { bot: makeBot({ mascotLook: shape }), activeState: "idle", mascotMotion: null, onPatch: vi.fn(), size: 64, fillBox: true, onOpen })));
-      expect(host.querySelector("[data-mascot-turn]")?.getAttribute("data-mascot-turn") ?? null).toBeNull();
-      expect(host.querySelector("[data-mascot-turn-reset]")).toBeNull();
-      expect(avatar().className).not.toContain("cursor-grab");
-      expect(avatar().hasAttribute("aria-description")).toBe(false);
-      for (const name of ["ArrowRight", "5", "m", "Home", "0", "Escape"]) expect((await key(avatar(), name)).defaultPrevented, name).toBe(false);
+      const panel = (look: MascotLook) => createElement(BotProfileAvatarCard, { bot: makeBot({ mascotLook: look }), activeState: "idle", mascotMotion: null, onPatch: vi.fn(), size: 64, fillBox: true, onOpen });
+      const full = { ...shape, motion: "full" } as MascotLook;
+      await act(async () => root.render(panel(full)));
+      const drawn = () => avatar().querySelector("[data-shape]")!;
+      expect(host.querySelector("[data-mascot-turn]")?.getAttribute("data-mascot-turn")).toBe("");
+      expect(avatar().className).toContain("cursor-grab");
+      expect(reset().hidden).toBe(true);
+      // at rest: the still image, no moving drawing, as before the mascot was turned by hand
+      const atRest = drawn().innerHTML;
+      expect(drawn().querySelector("img"), "the still image").not.toBeNull();
+      expect(drawn().querySelector("[data-shape-live]")).toBeNull();
+      // a click is a click at once
       await act(async () => { avatar().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 })); });
-      await act(async () => { avatar().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 2 })); });
-      expect(onOpen).toHaveBeenCalledTimes(2);
+      expect(onOpen).toHaveBeenCalledTimes(1);
+      // turned: the moving drawing under that view, and the Reset view button
+      expect((await key(avatar(), "ArrowRight")).defaultPrevented).toBe(true);
+      expect(viewOf()).toBe("0.2 0");
+      expect(drawn().querySelector("img")).toBeNull();
+      expect(reset().hidden).toBe(false);
+      // a state previewed
+      await key(avatar(), "5");
+      expect(drawn().getAttribute("data-agent-state")).toBe("blocked");
+      // back to the front and to itself: the same still image again
+      await act(async () => root.render(panel(shape)));
+      await key(avatar(), "Escape");
+      expect(viewOf()).toBeNull();
+      expect(reset().hidden).toBe(true);
+      expect(drawn().getAttribute("data-agent-state")).toBe("idle");
+      await act(async () => root.render(panel(full)));
+      expect(drawn().innerHTML).toBe(atRest);
+    });
+
+    it("G42, a character that is not turned: Escape on a draft's owl with its picker open goes where it went before", async () => {
+      const card = createElement(BotProfileAvatarCard, { bot: makeBot({ mascotLook: completeMascotLook({ character: "owl" } as MascotLook) }), activeState: "idle", mascotMotion: null, onPatch: vi.fn(), size: 104 });
+      await act(async () => root.render(createElement(BotEditorContext.Provider, { value: { request: vi.fn(), draft: true } }, card)));
+      await open();
+      avatar().focus();
+      await key(avatar(), "Escape");
+      expect(reached.filter((each) => each.key === "Escape"), "the window around has the key, as before").toEqual([{ key: "Escape", taken: false }]);
     });
   });
 });

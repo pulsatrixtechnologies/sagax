@@ -536,6 +536,72 @@ describe("the large mascot, turned by hand", () => {
       expect(stateOf()).toBe("idle");
     });
 
+    it("G47: a double click on the Reset view button is one way back: its second click, landing on the mascot once the button is gone, is no click", async () => {
+      await mount({ shownLook: reduced });
+      await key("ArrowRight");
+      reset().focus();
+      await act(async () => { reset().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 })); });
+      expect(viewOf()).toBeNull();
+      expect(reset().hidden).toBe(true);
+      // the button is hidden: the browser gives the second click and the dblclick to the mascot under it
+      await mouseClick(2);
+      await act(async () => { stageButton().dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, detail: 2 })); });
+      await mouseClick(3);
+      expect(onActivate).not.toHaveBeenCalled();
+      await frames(320);
+      expect(onActivate).not.toHaveBeenCalled();
+      expect(viewOf()).toBeNull();
+      // a click of its own on the mascot is a click again, and so is a double click facing front, as before
+      await mouseClick(1);
+      await mouseClick(2);
+      expect(onActivate).toHaveBeenCalledTimes(2);
+    });
+
+    it("G48: on its way back the Reset view button is out of the Tab order, and a focus left on it goes to the mascot when it hides", async () => {
+      const frame = { request: globalThis.requestAnimationFrame, cancel: globalThis.cancelAnimationFrame };
+      const queued = new Map<number, FrameRequestCallback>();
+      let last = 0;
+      globalThis.requestAnimationFrame = ((step: FrameRequestCallback) => { queued.set(++last, step); return last; }) as typeof requestAnimationFrame;
+      globalThis.cancelAnimationFrame = ((id: number) => { queued.delete(id); }) as typeof cancelAnimationFrame;
+      const run = async (at: number) => act(async () => { const [id, step] = [...queued][0]!; queued.delete(id); step(at); });
+      try {
+        await mount({ shownLook: { ...shape, motion: "full" } as MascotLook });
+        for (const begin of ["Escape", "Home", "0", "double click", "Reset view"]) {
+          await key("ArrowRight", { shiftKey: true });
+          expect(reset().tabIndex, begin).toBe(0);
+          queued.clear();
+          const began = performance.now();
+          if (begin === "double click") await act(async () => { stageButton().dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); });
+          else if (begin === "Reset view") await act(async () => reset().click());
+          else await key(begin);
+          await run(began + 100);
+          // still turned, still shown, but Tab passes it
+          expect(viewOf(), begin).not.toBeNull();
+          expect(reset().hidden, begin).toBe(false);
+          expect(reset().tabIndex, begin).toBe(-1);
+          // a focus that got there all the same (a pointer, another browser's Tab order)
+          reset().focus();
+          await run(began + 500);
+          expect(viewOf(), begin).toBeNull();
+          expect(reset().hidden, begin).toBe(true);
+          expect(document.activeElement, begin).toBe(stageButton());
+        }
+        // a way back stopped by a press or an arrow key leaves the mascot turned: the button is a Tab stop again
+        await key("ArrowRight", { shiftKey: true });
+        queued.clear();
+        const began = performance.now();
+        await key("Home");
+        await run(began + 100);
+        expect(reset().tabIndex).toBe(-1);
+        await key("ArrowRight");
+        expect(reset().tabIndex).toBe(0);
+        expect(reset().hidden).toBe(false);
+      } finally {
+        globalThis.requestAnimationFrame = frame.request;
+        globalThis.cancelAnimationFrame = frame.cancel;
+      }
+    });
+
     it("G45: a picture worn in place of the mascot is not turned", async () => {
       await mount({ picture: { name: "Nimbus", color: "blue", avatarUrl: "data:image/png;base64,AAAA", avatarCrop: "circle" } as never });
       expect(host.querySelector("[data-mascot-turn]")?.getAttribute("data-mascot-turn") ?? null).toBeNull();

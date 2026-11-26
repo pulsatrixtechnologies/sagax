@@ -13,6 +13,12 @@ export interface ShapeStage {
   holdGaze: boolean;
   /** A state shown for a moment in place of the bot's own (keys 1 to 6); never stored. */
   previewState: AvatarState | null;
+  /**
+   * The stage of a mascot drawn under the live size (the bot panel's avatar,
+   * 64 px filled to its box): at rest it stays the still image it was, and it
+   * is the moving drawing only while it is turned, dragged or previews a state.
+   */
+  small?: boolean;
 }
 
 export const ShapeStageContext = createContext<ShapeStage | null>(null);

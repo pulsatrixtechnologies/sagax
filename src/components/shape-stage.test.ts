@@ -59,6 +59,22 @@ describe("a mascot turned by hand (#5384)", () => {
     expect(draw({ detail: "static" }, stage({ view }))).toBe(draw({ detail: "static" }));
   });
 
+  it("a mascot drawn under the live size on its own stage (the bot panel's avatar) is the still image at rest and is turned like the large one", () => {
+    const panel = { size: 64 };
+    const view = { yaw: 0.8, pitch: -0.3 };
+    // at rest: what it drew off a stage [D-20261119-031]
+    expect(draw(panel, stage({ small: true }))).toBe(draw(panel));
+    expect(draw({ ...panel, agentState: "working" }, stage({ small: true }))).toBe(draw({ ...panel, agentState: "working" }));
+    // turned, dragged or previewing: the moving drawing
+    const turned = raw(panel, stage({ small: true, view }));
+    expect(turned).toContain('data-shape-view="0.8 -0.3"');
+    expect(turned).toContain("data-shape-live");
+    expect(raw(panel, stage({ small: true, previewState: "blocked" }))).toContain('data-agent-state="blocked"');
+    // a thumbnail inside a large mascot's stage is still never turned
+    expect(draw(panel, stage({ view }))).toBe(draw(panel));
+    expect(draw({ ...panel, detail: "static" }, stage({ small: true, view }))).toBe(draw({ ...panel, detail: "static" }));
+  });
+
   it("under reduced motion the mascot on a stage stays the moving drawing (it turns, its eyes follow), and off a stage it stays the still image", () => {
     const reduced = { engineLook: { motion: "reduced" as const } };
     expect(raw(reduced)).toContain("<img");

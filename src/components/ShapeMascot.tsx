@@ -536,7 +536,8 @@ export function ShapeMascot({
   const reduced = settings.motion === "reduced" || (settings.motion === "system" && systemReduced);
   // on a stage the large mascot is turned by hand (#5384); a thumbnail inside one is not
   const stage = useContext(ShapeStageContext);
-  const onStage = stage !== null && animated && detail !== "static" && size >= LIVE_MIN;
+  const stageBusy = stage !== null && (stage.holdGaze || stage.previewState !== null || Math.abs(stage.view.yaw) > 0.01 || Math.abs(stage.view.pitch) > 0.01);
+  const onStage = stage !== null && animated && detail !== "static" && (size >= LIVE_MIN || (stage.small === true && stageBusy));
   const view = onStage && (Math.abs(stage.view.yaw) > 0.01 || Math.abs(stage.view.pitch) > 0.01) ? stage.view : undefined;
   const shownState = onStage && stage.previewState ? stage.previewState : agentState;
   const uid = `shape-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;

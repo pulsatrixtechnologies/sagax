@@ -1,0 +1,196 @@
+{
+ "prefix": "before",
+ "devicePixelRatio": 2,
+ "sharpness": {
+  "flat": [
+   {
+    "where": "tile",
+    "kind": "img",
+    "material": "flat",
+    "live": false,
+    "boxCss": 96,
+    "shownCss": 80.63,
+    "laidOutCss": 50,
+    "bitmapPx": null,
+    "neededPx": 161,
+    "sharpness": null
+   },
+   {
+    "where": "row",
+    "kind": "img",
+    "material": "flat",
+    "live": false,
+    "boxCss": 57.6,
+    "shownCss": 48.38,
+    "laidOutCss": 30,
+    "bitmapPx": null,
+    "neededPx": 97,
+    "sharpness": null
+   },
+   {
+    "where": "chat-pill",
+    "kind": "img",
+    "material": "flat",
+    "live": false,
+    "boxCss": 24,
+    "shownCss": 20.16,
+    "laidOutCss": 20,
+    "bitmapPx": null,
+    "neededPx": 40,
+    "sharpness": null
+   }
+  ],
+  "fluffy": [
+   {
+    "where": "tile",
+    "kind": "canvas",
+    "material": "fluffy",
+    "live": null,
+    "boxCss": 96,
+    "shownCss": 83.2,
+    "laidOutCss": 52,
+    "bitmapPx": 104,
+    "neededPx": 166,
+    "sharpness": 0.62
+   },
+   {
+    "where": "row",
+    "kind": "canvas",
+    "material": "fluffy",
+    "live": null,
+    "boxCss": 57.6,
+    "shownCss": 48,
+    "laidOutCss": 30,
+    "bitmapPx": 60,
+    "neededPx": 96,
+    "sharpness": 0.62
+   },
+   {
+    "where": "chat-pill",
+    "kind": "canvas",
+    "material": "fluffy",
+    "live": null,
+    "boxCss": 24,
+    "shownCss": 20.5,
+    "laidOutCss": 21,
+    "bitmapPx": 41,
+    "neededPx": 41,
+    "sharpness": 1
+   }
+  ],
+  "glass": [
+   {
+    "where": "tile",
+    "kind": "canvas",
+    "material": "glass",
+    "live": null,
+    "boxCss": 96,
+    "shownCss": 83.2,
+    "laidOutCss": 52,
+    "bitmapPx": 104,
+    "neededPx": 166,
+    "sharpness": 0.62
+   },
+   {
+    "where": "row",
+    "kind": "canvas",
+    "material": "glass",
+    "live": null,
+    "boxCss": 57.6,
+    "shownCss": 48,
+    "laidOutCss": 30,
+    "bitmapPx": 60,
+    "neededPx": 96,
+    "sharpness": 0.62
+   },
+   {
+    "where": "chat-pill",
+    "kind": "canvas",
+    "material": "glass",
+    "live": null,
+    "boxCss": 24,
+    "shownCss": 20.5,
+    "laidOutCss": 21,
+    "bitmapPx": 41,
+    "neededPx": 41,
+    "sharpness": 1
+   }
+  ]
+ },
+ "motion": {
+  "flat": {
+   "tile": false,
+   "row": false
+  },
+  "fluffy": {
+   "tile": true,
+   "row": false
+  },
+  "glass": {
+   "tile": true,
+   "row": false
+  }
+ },
+ "cost": {
+  "flat": {
+   "bots": 30,
+   "mascots": 31,
+   "rows": 29,
+   "canvases": 0,
+   "liveSvg": 0,
+   "contexts": {
+    "webgl2": 1,
+    "webgl": 0,
+    "2d": 0
+   },
+   "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M3 Max, Unspecified Version)",
+   "fps": 60,
+   "longestFrameMs": 17,
+   "mainThreadPct": 2.9,
+   "scriptPct": 0.1,
+   "rendererCpuPct": 4.6,
+   "gpuCpuPct": 1.8,
+   "heapMb": 39.8
+  },
+  "fluffy": {
+   "bots": 30,
+   "mascots": 31,
+   "rows": 29,
+   "canvases": 31,
+   "liveSvg": 0,
+   "contexts": {
+    "webgl2": 3,
+    "webgl": 0,
+    "2d": 39
+   },
+   "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M3 Max, Unspecified Version)",
+   "fps": 60,
+   "longestFrameMs": 17,
+   "mainThreadPct": 1.9,
+   "scriptPct": 0.1,
+   "rendererCpuPct": 2.9,
+   "gpuCpuPct": 3.5,
+   "heapMb": 43.7
+  },
+  "glass": {
+   "bots": 30,
+   "mascots": 31,
+   "rows": 29,
+   "canvases": 31,
+   "liveSvg": 0,
+   "contexts": {
+    "webgl2": 3,
+    "webgl": 0,
+    "2d": 38
+   },
+   "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M3 Max, Unspecified Version)",
+   "fps": 60,
+   "longestFrameMs": 17,
+   "mainThreadPct": 2.2,
+   "scriptPct": 0.1,
+   "rendererCpuPct": 3.3,
+   "gpuCpuPct": 3.8,
+   "heapMb": 55.4
+  }
+ }
+}

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { AFTER_RESET_MS } from "../../shared/limit-failover.ts";
-import { LimitFailoverStore, limitBackupAllowed, MAX_RESENDS, pickLimitBackup, ROUTINE_RESUME_COOLDOWN_MS, type LimitCandidate } from "./limit-failover.ts";
+import { LimitFailoverStore, limitBackupAllowed, limitServingPool, MAX_RESENDS, pickLimitBackup, ROUTINE_RESUME_COOLDOWN_MS, type LimitCandidate } from "./limit-failover.ts";
 
 const claude = { instanceId: "claude", driverKind: "claudeAgent" };
 const codex = { instanceId: "codex", driverKind: "codex" };
@@ -93,6 +93,29 @@ describe("pickLimitBackup", () => {
       .toEqual({ instanceId: "grok", model: "m1" });
     expect(pickLimitBackup({ from: claude, preferred: [{ instanceId: "api" }], candidates, blocked: () => false, config }))
       .toEqual({ instanceId: "api", model: "m1" });
+  });
+});
+
+describe("limitServingPool (#5406)", () => {
+  const candidates = [engine("claude", "claudeAgent"), engine("claude-2", "claudeAgent"), engine("codex", "codex"), engine("key", "codex"), engine("empty", "grokAgent", [])];
+  const config = (instanceId: string) => (instanceId === "key" ? { access: "api" } : undefined);
+
+  it("lists every engine a limit may move the turn to, the serving one included, whatever is held", () => {
+    expect(limitServingPool({ preferred: [], candidates, config })).toEqual(["claude", "claude-2", "codex"]);
+  });
+
+  it("keeps a pay-per-use engine only when the person chose it as a backup", () => {
+    expect(limitServingPool({ preferred: [{ instanceId: "key" }], candidates, config })).toEqual(["claude", "claude-2", "codex", "key"]);
+  });
+
+  it("holds every engine pickLimitBackup may pick: one rule, never two", () => {
+    for (const preferred of [[], [{ instanceId: "key" }]]) {
+      const pool = limitServingPool({ preferred, candidates, config });
+      for (const blocked of [[], ["claude-2"], ["claude-2", "codex"], ["claude-2", "codex", "key"]]) {
+        const pick = pickLimitBackup({ from: claude, preferred, candidates, config, blocked: (id) => blocked.includes(id) });
+        if (pick) expect(pool).toContain(pick.instanceId);
+      }
+    }
   });
 });
 

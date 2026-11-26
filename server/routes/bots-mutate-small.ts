@@ -150,8 +150,12 @@ async function handleBotAutoModel(env: BotsMutateEnv): Promise<boolean> {
       const option = instance.models.options.find((candidate: any) => candidate.id === choice.model);
       return [{ ...choice, engineLabel: env.engineDisplayName(instance), modelLabel: option?.label || choice.model }];
     });
+    // #5406 (M-20261126-096): the engines that may run a turn of this
+    // conversation when a usage limit moves it, the takeover's own pool; the
+    // chat bar's usage pill sums the accounts behind them.
+    const serves: string[] = env.limitFailover.servingPool?.(bot.id, bot.threadId, speaker) ?? [];
     env.json(env.res, 200, { auto: bot.modelSelection.auto === true, pick: usablePick ? env.autoModelRecord(turn.pick, Date.now()) : null,
-      chain, excluded, backups, explanation: usablePick ? env.explainPick(turn.pick) : "", ...(turn?.modes ? { modes: turn.modes } : {}) });
+      chain, excluded, backups, serves, explanation: usablePick ? env.explainPick(turn.pick) : "", ...(turn?.modes ? { modes: turn.modes } : {}) });
     return true;
   }
   return false;

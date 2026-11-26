@@ -67,8 +67,11 @@ import { useServerMode } from "./ServerModeSettings";
 import { api } from "@/state/store";
 import { accountChoices, businessAccount, SAGAX_MOBILE_URL, switchAccount, switchTargets as listSwitchTargets, usageSummary, type AccountChoice, type SwitchTarget } from "@/lib/account-menu";
 import { toggleUsageFavorite, useUsageFavorite } from "@/lib/usage-favorite";
-import { AccountLimits } from "./PlanUsage";
-import { accountRowName, connectedPlanRows, type PlanRow, type PlanUsageReport } from "@/lib/plan-usage";
+import { usePlanRows } from "./ChatUsageNotices";
+import { UsageAccountsDetail } from "./UsageAccountsDetail";
+import { connectedPlanRows, type PlanRow, type PlanUsageReport } from "@/lib/plan-usage";
+import { useEngineLimits } from "@/lib/limit-resets";
+import { allAccounts } from "@/lib/usage-pill";
 import { costOf, formatCost, personalUsagePeriods, usageQuery, type PersonalUsageSummary } from "@/lib/usage-personal";
 import { requestAbout } from "@/lib/about-ui";
 import { requestReleaseNotes } from "@/lib/release-notes-ui";
@@ -332,13 +335,14 @@ export function profileMenuItems(input: {
   handlers: ProfileMenuHandlers;
 }): SidebarMenuItem[] {
   const usage: SidebarSubmenuEntry[] = [
-    // M-20261125-084: one row per account (its provider and address, its two
-    // windows side by side, its star once), the row of Settings > Usage limits
-    ...input.usageRows.filter((row) => row.state === "windows").map((row) => ({
-      key: row.id,
-      label: accountRowName(row),
-      node: <AccountLimits provider={row} name={accountRowName(row)} favorite={input.usageFavorite} />,
-    })),
+    // M-20261125-084, #5406: the chat bar's own usage detail, one row per
+    // account (its provider and address, its two windows side by side, its
+    // star once); read again when Usage › opens, then every minute while open
+    ...(input.usageRows.some((row) => row.state === "windows") ? [{
+      key: "accounts",
+      label: t("usageDetail.aria"),
+      node: <AccountMenuUsage rows={input.usageRows} favorite={input.usageFavorite} />,
+    }] : []),
     ...(input.monthCost !== null ? [{ key: "month-cost", label: t("sidebar.account.monthCost"), value: input.monthCost, info: true, foot: true }] : []),
   ];
   const help: SidebarSubmenuEntry[] = [
@@ -533,6 +537,16 @@ interface AccountMenuData {
   rows: PlanRow[];
   monthCost: string | null;
   targets: SwitchTarget[];
+}
+
+/** Usage ›'s accounts (#5406): the usage pill's own detail (UsageAccountsDetail),
+ * every signed-in account with a window. Drawn only while Usage › is open:
+ * it reads the figures again when it opens, then every minute while it stays
+ * open (D-20261125-014); `rows` (the menu's own read) show until then. */
+export function AccountMenuUsage({ rows, favorite }: { rows: PlanRow[]; favorite?: { id: string | null; onToggle: (planId: string) => void } }) {
+  const live = usePlanRows(true, rows);
+  const limits = useEngineLimits();
+  return <UsageAccountsDetail accounts={allAccounts(live, limits)} favorite={favorite} />;
 }
 
 /** Usage ›'s plan windows (GET /api/plan-usage) and this month's cost (GET

@@ -103,7 +103,7 @@ export interface PlanUsageViewProps {
 /** A plan's star: on hover or focus, and always while it is on. Offered on
  * a plan that reports windows (the ones the menu can show), and on the
  * starred one whatever its state, so it can be cleared. */
-function FavoriteStar({ provider, favorite }: { provider: PlanRow; favorite: NonNullable<PlanUsageViewProps["favorite"]> }) {
+export function FavoriteStar({ provider, favorite }: { provider: PlanRow; favorite: NonNullable<PlanUsageViewProps["favorite"]> }) {
   const on = favorite.id !== null && (provider.aliasIds ?? [provider.id]).includes(favorite.id);
   if (!on && provider.state !== "windows") return null;
   const name = provider.plan ? `${provider.name} ${provider.plan}` : provider.name;

@@ -368,6 +368,9 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Chat width (reading 960px, the default; wide ~1280px; full fills the pane) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.chatWidth` | simple |
 | Space under the composer (small 16px; standard 48px, the default; large 80px) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.composerBottomSpace` | simple |
 | Conversation header (pill: the bot's name in a centred pill, the default; title: a plain title at the top left) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.conversationHeader` | simple |
+| Usage in the message bar (on, the default: the usage pill after the model choice; off hides it) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.usagePillInBar` | simple |
+| Usage pill shape (bars: three bars; circles: three circles, the default; battery; dots: three dots; text: text only) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.usagePillShape` | simple |
+| Context indicator of the conversation (on, the default; off hides the share of the model's context the conversation uses) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.contextIndicator` | simple |
 
 ### Notifications et confidentialité
 

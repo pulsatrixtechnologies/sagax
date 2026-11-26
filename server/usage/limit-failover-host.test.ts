@@ -997,6 +997,17 @@ describe("account rotation within a provider (#2192)", () => {
     expect(verdict).toMatchObject({ from: "Grok", to: "Grok (work)", selection: { instanceId: "grok-work", model: "m" } });
   });
 
+  it("lists the engines that may serve a conversation, held or not (#5406)", () => {
+    const w = world({ allowed: ["codex", "grok", "grok-work"] });
+    const host = createLimitFailoverHost({ ...w.deps, candidatesNow: () => ["codex", "grok", "grok-work"].map((id) => ({ instanceId: id, driverKind: DRIVERS[id]!, models: ["m"] })) });
+    expect(host.servingPool("bot", "thread", undefined)).toEqual(["codex", "grok", "grok-work"]);
+    host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "grok", driverKind: "grokAgent" }, selection: C, payer: "server", at: w.clock.now });
+    host.routineLimit({ threadId: "thread", cause: LIMIT, takeover: true });
+    expect(host.servingPool("bot", "thread", undefined)).toEqual(["codex", "grok", "grok-work"]);
+    // the candidates are not known: nothing is claimed
+    expect(createLimitFailoverHost(w.deps).servingPool("bot", "thread", undefined)).toEqual([]);
+  });
+
   it("still takes a pay-per-use key on the same engine when preferred", async () => {
     const w = world({ allowed: ["codex", "grok", "grok-work"] });
     const host = createLimitFailoverHost({ ...w.deps, config: (id) => id === "grok-work" ? { access: "api" } : undefined, preferred: () => [{ instanceId: "grok-work" }] });

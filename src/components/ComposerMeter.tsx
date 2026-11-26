@@ -1,36 +1,47 @@
-// The context and usage meter under the message box, at the row's end (owner
-// 2026-11-25, M-20261125-070, M-20261125-072 to M-20261125-074, #5372; it
-// covers #5283, a usage ring always in sight). It replaces the orange limit
-// dot of the chat bar. One wide pill, two halves, each a small ring that
-// fills and its percentage, read without a hover:
-//   left   the share of the model's context window this conversation uses;
-//   right  the most advanced limit (the short session or the week) of the
-//          account that serves this bot.
-// Only the usage half changes colour, by the dot's own rules. A click on a
-// half opens its detail: the tokens used of the total and "Compact now"; the
-// account with its provider (D-20261125-015), its windows and their reset,
-// then the dot's actions. The figures are read again when a detail opens and
-// every minute while it stays open (D-20261125-014). A half with no data is
-// absent. In a narrow window the pill keeps its two rings, without figures.
+// The context and usage meter under the message box (owner 2026-11-25,
+// M-20261125-070, M-20261125-072 to M-20261125-074, #5372), now the usage
+// pill (owner 2026-11-26, M-20261126-095, M-20261126-096, M-20261126-099,
+// M-20261126-106, M-20261126-108, #5406). It replaces the orange limit dot of
+// the chat bar. One pill: a small shape of three measures and a named
+// percentage always in sight, read without a hover:
+//   the week and the short session, as a sum of every account that can serve
+//   the bot (never the serving account alone: one full account says nothing
+//   alarming while others take the turns over);
+//   the share of the model's context window this conversation uses.
+// The text names the fuller account limit ("wk 44%", "5h 20%") and says
+// "back <day> <hour>" only when every account is blocked. A click opens the
+// detail: one row per account (UsageAccountsDetail), the context's tokens
+// with "Compact now", and the limit's actions only when everything is
+// blocked. The figures are read again when the detail opens and every minute
+// while it stays open (D-20261125-014). Settings > Appearance chooses the
+// shape, hides the pill, and hides the context indicator; with the pill
+// hidden the context keeps its own small ring. A measure with no data is
+// absent. In a narrow window the pill keeps its shape, without the words.
 // With no plan window for the engine (an API key account, a plan read that
-// failed), the usage half still shows whenever the dot did: it draws from the
+// failed), the pill still shows whenever the dot did: it draws from the
 // engine's own limit, with its line and its actions (#5372 review).
-// Never a banner above the chat. The rules are src/lib/composer-meter.ts.
+// Never a banner above the chat. The rules are src/lib/usage-pill.ts and
+// src/lib/composer-meter.ts; the pill itself is UsagePill.tsx, reusable
+// outside the chat bar.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { contextHalf, limitHalf, usageHalf, usageTone, type UsageTone } from "@/lib/composer-meter";
-import { useEngineLimits } from "@/lib/limit-resets";
-import { accountRowName, type PlanRow } from "@/lib/plan-usage";
+import { useAutoModelStatus } from "@/lib/auto-model-preview";
+import { contextHalf } from "@/lib/composer-meter";
+import { engineName, useEngineLimits } from "@/lib/limit-resets";
 import { toggleUsageFavorite, useUsageFavorite } from "@/lib/usage-favorite";
 import { contextDetail } from "@/lib/usage";
-import { weeklyLimitNotice } from "@/lib/usage-notices";
+import { rowsForEngine, weeklyLimitNotice } from "@/lib/usage-notices";
+import { servingAccounts, usagePill, type UsageAccount } from "@/lib/usage-pill";
+import { contextIndicator, usagePillInBar, usagePillShape, type UsagePillShape } from "@/lib/usage-pill-preferences";
 import type { Bot } from "@/state/store";
-import { useEnginePlanRows } from "./ChatUsageNotices";
+import { usePlanRows } from "./ChatUsageNotices";
 import { useCompact } from "./ContextWarning";
 import { EngineLimitActions, useEngineLimitDetail } from "./LimitResetContinue";
-import { AccountLimits } from "./PlanUsage";
+import type { PlanUsageViewProps } from "./PlanUsage";
+import { UsageAccountsDetail, type UsageAccountsDetailProps } from "./UsageAccountsDetail";
+import { UsagePill, usagePillLabel } from "./UsagePill";
 import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "./menu-look";
 
 const RING = 14;
@@ -49,46 +60,47 @@ function MeterRing({ percent }: { percent: number }) {
   );
 }
 
-const HALF = "flex h-full items-center gap-1.5 whitespace-nowrap px-2 tabular-nums outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-focus aria-expanded:bg-hover first:rounded-l-full last:rounded-r-full";
-/** The figure folds away in a narrow window: the two rings stay. */
+const HALF = "flex h-full items-center gap-1.5 whitespace-nowrap rounded-full px-2 tabular-nums outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-focus aria-expanded:bg-hover";
+/** The words fold away in a narrow window: the shape stays. */
 const FIGURE = "@max-[22rem]/composer:hidden";
-const TONE: Record<UsageTone, string> = { quiet: "", warning: "text-warning", danger: "text-danger" };
 const DETAIL = cn(MENU_SURFACE, MENU_FIT_ROW, "absolute bottom-full right-0 z-40 mb-1.5 max-w-[min(320px,calc(100vw-16px))]");
-/** The usage detail holds an account's row, its two windows side by side. */
-const USAGE_DETAIL = "w-[min(400px,calc(100vw-16px))] max-w-none";
+/** The usage detail holds the accounts' table: a name, two windows, a return. */
+const USAGE_DETAIL = "w-[min(520px,calc(100vw-16px))] max-w-none";
 
 export type MeterHalf = "context" | "usage";
 
 export interface ComposerMeterViewProps {
-  /** Absent: no context half. `detail`: "Context 84k (42% of 200k)". */
+  /** Absent: no context measure. `detail`: "Context 84k (42% of 200k)". */
   context?: { percent: number; detail: string | null };
-  /** Absent: no usage half. `line`: the limit's own sentence near the limit. */
+  /** Absent, or with no account: no usage pill. */
   usage?: {
-    /** Null: the engine refuses work and gave no share; a full ring, no figure. */
-    percent: number | null;
-    tone: UsageTone;
-    /** The account that serves the bot: one row, its provider and address,
-     * its two windows side by side (M-20261125-084), the row of Settings >
-     * Usage limits. Absent when the plan report has no window for the
-     * engine: the half then reads the engine's own limit. */
-    row?: PlanRow;
-    /** The account's star (the plan the account menu's Usage row shows). */
-    favorite?: { id: string | null; onToggle: (planId: string) => void };
+    /** Every account that can serve the bot (servingAccounts). */
+    accounts: readonly UsageAccount[];
+    /** The accounts' star (the plan the account menu's Usage row shows). */
+    favorite?: PlanUsageViewProps["favorite"];
+    /** The engine's own limit sentence, when its figure comes from the limit
+     * report and not from a plan window. */
     line?: string | null;
-    /** The limit is near: the line shows in the detail too. */
-    near?: boolean;
   };
-  /** The detail's actions, drawn by the owner: Compact now; the limit's actions. */
+  /** The person's choices (Settings > Appearance): the pill in the message
+   * bar, its shape, the context indicator. Absent: shown, circles, shown. */
+  pill?: boolean;
+  shape?: UsagePillShape;
+  contextShown?: boolean;
+  now?: number;
+  /** The detail's actions, drawn by the owner: Compact now; the limit's
+   * actions (shown only when every account is blocked). */
   contextActions?: ReactNode;
   usageActions?: (close: () => void) => ReactNode;
   /** A detail opened or closed (the owner reads its figures again). */
   onOpenChange?: (open: MeterHalf | null) => void;
-  /** Tests and the gallery: render with a detail open. */
+  /** Tests and the gallery: render with a detail open, a fold open. */
   initialOpen?: MeterHalf | null;
+  initialFolds?: UsageAccountsDetailProps["initialOpen"];
 }
 
 /** The pill and its details, without a store: every figure comes from its owner. */
-export function ComposerMeterView({ context, usage, contextActions, usageActions, onOpenChange, initialOpen = null }: ComposerMeterViewProps) {
+export function ComposerMeterView({ context, usage, pill = true, shape = "circles", contextShown = true, now, contextActions, usageActions, onOpenChange, initialOpen = null, initialFolds }: ComposerMeterViewProps) {
   const [open, setOpenState] = useState<MeterHalf | null>(initialOpen);
   const rootRef = useRef<HTMLSpanElement>(null);
   const changed = useRef(onOpenChange);
@@ -114,44 +126,54 @@ export function ComposerMeterView({ context, usage, contextActions, usageActions
     };
   }, [open]);
 
-  if (!context && !usage) return null;
-  const shown = open === "context" ? (context ? "context" : null) : open === "usage" ? (usage ? "usage" : null) : null;
-  const contextAria = context ? t("composer.meter.contextAria", { percent: context.percent }) : "";
-  const usageAria = usage ? usage.line ?? (usage.percent === null ? "" : t("composer.meter.usageAria", { percent: usage.percent })) : "";
+  const measured = contextShown ? context : undefined;
+  const values = pill && usage?.accounts.length ? usagePill({ accounts: usage.accounts, context: measured?.percent ?? null, now }) : null;
+  // accounts with no figure and nothing blocked: nothing to say, no pill
+  const usageShown = values && (values.named || values.blocked) ? values : null;
+  // the context's own ring: only while the pill does not carry it
+  const contextAlone = usageShown ? undefined : measured;
+  if (!usageShown && !contextAlone) return null;
+  const shown = open === "context" ? (contextAlone ? "context" : null) : open === "usage" ? (usageShown ? "usage" : null) : null;
+  const contextAria = measured ? t("composer.meter.contextAria", { percent: measured.percent }) : "";
+  const usageAria = usageShown ? t("usagePill.aria", { text: usagePillLabel(usageShown, Boolean(measured)) }) : "";
   return (
     <span ref={rootRef} data-composer-meter="" role="group" aria-label={t("composer.meter.aria")} className="relative flex items-center">
       <span className="flex h-6 items-center rounded-full border border-hairline/40 text-[12px] leading-4 text-ink-secondary">
-        {context && (
+        {contextAlone && (
           <button type="button" data-composer-meter-half="context" aria-haspopup="dialog" aria-expanded={shown === "context"}
             aria-label={contextAria} title={contextAria}
             onClick={() => setOpen(open === "context" ? null : "context")}
             className={HALF}>
-            <MeterRing percent={context.percent} />
-            <span className={FIGURE}>{t("composer.meter.percent", { percent: context.percent })}</span>
+            <MeterRing percent={contextAlone.percent} />
+            <span className={FIGURE}>{t("composer.meter.percent", { percent: contextAlone.percent })}</span>
           </button>
         )}
-        {context && usage && <span aria-hidden="true" className="h-3 w-px shrink-0 bg-hairline/60" />}
-        {usage && (
-          <button type="button" data-composer-meter-half="usage" data-tone={usage.tone} aria-haspopup="dialog" aria-expanded={shown === "usage"}
+        {usageShown && (
+          <button type="button" data-composer-meter-half="usage" data-tone={usageShown.tone} aria-haspopup="dialog" aria-expanded={shown === "usage"}
             aria-label={usageAria} title={usageAria}
             onClick={() => setOpen(open === "usage" ? null : "usage")}
-            className={cn(HALF, TONE[usage.tone])}>
-            <MeterRing percent={usage.percent ?? 100} />
-            {usage.percent !== null && <span className={FIGURE}>{t("composer.meter.percent", { percent: usage.percent })}</span>}
+            className={HALF}>
+            <UsagePill values={usageShown} shape={shape} showContext={Boolean(measured)} textClassName={FIGURE} />
           </button>
         )}
       </span>
-      {shown === "context" && context && (
+      {shown === "context" && contextAlone && (
         <div role="dialog" aria-label={contextAria} data-composer-meter-detail="context" className={DETAIL}>
-          {context.detail && <p className="px-2 py-1 tabular-nums">{context.detail}</p>}
+          {contextAlone.detail && <p className="px-2 py-1 tabular-nums">{contextAlone.detail}</p>}
           {contextActions}
         </div>
       )}
-      {shown === "usage" && usage && (
-        <div role="menu" aria-label={usageAria} data-composer-meter-detail="usage" className={cn(DETAIL, USAGE_DETAIL)}>
-          {usage.row && <AccountLimits provider={usage.row} name={accountRowName(usage.row)} favorite={usage.favorite} />}
-          {usage.near && usage.line && <p data-composer-meter-limit="" className="px-2 py-1 tabular-nums">{usage.line}</p>}
-          {usageActions?.(() => setOpen(null))}
+      {shown === "usage" && usageShown && usage && (
+        <div role="dialog" aria-label={usageAria} data-composer-meter-detail="usage" className={cn(DETAIL, USAGE_DETAIL)}>
+          <UsageAccountsDetail accounts={usage.accounts} favorite={usage.favorite} initialOpen={initialFolds} />
+          {usage.line && <p data-composer-meter-limit="" className="px-2 py-1 tabular-nums">{usage.line}</p>}
+          {measured && (measured.detail || contextActions) && (
+            <div data-composer-meter-context="" className="flex min-h-8 items-center gap-2 border-t border-hairline/40 pt-1">
+              {measured.detail && <p className="min-w-0 flex-1 truncate px-2 text-[13px] tabular-nums text-ink-secondary">{measured.detail}</p>}
+              {contextActions && <span className="shrink-0">{contextActions}</span>}
+            </div>
+          )}
+          {usageShown.blocked && usageActions?.(() => setOpen(null))}
         </div>
       )}
     </span>
@@ -161,34 +183,38 @@ export function ComposerMeterView({ context, usage, contextActions, usageActions
 /** The meter of one conversation: its readings, from the store and the server. */
 export function ComposerMeter({ bot, threadId }: { bot: Bot; threadId: string }) {
   const [open, setOpen] = useState<MeterHalf | null>(null);
+  // counts the usage detail's openings: each one reads who can serve again
+  const [reads, setReads] = useState(0);
   const task = bot.tasks?.find((candidate) => candidate.threadId === threadId);
   const own = threadId === bot.threadId;
   const context = contextHalf(task?.usage, own ? bot.messages : []);
 
-  // the engine this conversation really runs on (Auto resolved): the only one whose limit shows
+  // the engine this conversation really runs on (Auto resolved): the one marked as serving
   const selection = bot.modelSelection;
   const engine = (selection.auto === true ? task?.autoModel?.instanceId : undefined) ?? selection.instanceId;
-  const limit = useEngineLimits().find((candidate) => candidate.engine === engine);
-  const rows = useEnginePlanRows(engine, limit?.driver, open === "usage");
-  const usage = usageHalf(rows);
-  const detail = useEngineLimitDetail({ limit, weekly: weeklyLimitNotice(rows), botId: bot.id, threadId, messages: own ? bot.messages : undefined });
-  // no plan window for this engine: its own limit, whenever the dot showed
-  const fromLimit = usage || !detail.line ? null : limitHalf(limit);
-  const tone = usageTone({ near: detail.near, weeklyNotice: Boolean(detail.weekly), hard: detail.hard });
+  const limits = useEngineLimits();
+  const limit = limits.find((candidate) => candidate.engine === engine);
+  const rows = usePlanRows(open === "usage");
+  // who can serve this conversation: the usage-limit takeover's own pool (no second verdict)
+  const serves = useAutoModelStatus(bot.id, threadId, true, String(reads))?.serves;
+  const accounts = servingAccounts({ rows, serves, engine, driver: limit?.driver, limits, engineName });
+  const detail = useEngineLimitDetail({ limit, weekly: weeklyLimitNotice(rowsForEngine(rows, engine, limit?.driver)), botId: bot.id, threadId, messages: own ? bot.messages : undefined });
+  // the serving engine has no plan window: its figure is its own limit's, said by its line
+  const serving = accounts.find((account) => account.serving);
+  const fromLimit = Boolean(serving && !serving.row && detail.near);
   const compact = useCompact();
   const favorite = useUsageFavorite();
   return (
     <ComposerMeterView
       context={context ? { percent: context.percent, detail: task?.usage ? contextDetail(task.usage) : null } : undefined}
-      usage={usage ? {
-        percent: usage.percent,
-        tone,
-        row: usage.row,
-        favorite: { id: favorite, onToggle: toggleUsageFavorite },
-        line: detail.line,
-        near: detail.near,
-      } : fromLimit ? { percent: fromLimit.percent, tone, line: detail.line, near: detail.near } : undefined}
-      onOpenChange={setOpen}
+      usage={accounts.length ? { accounts, favorite: { id: favorite, onToggle: toggleUsageFavorite }, line: fromLimit ? detail.line : null } : undefined}
+      pill={usagePillInBar.use() === "on"}
+      shape={usagePillShape.use()}
+      contextShown={contextIndicator.use() === "on"}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next === "usage") setReads((count) => count + 1);
+      }}
       contextActions={own ? (
         <button type="button" data-composer-meter-compact="" disabled={Boolean(bot.busy) || compact.pending}
           title={bot.busy ? t("contextWarning.busy") : undefined}

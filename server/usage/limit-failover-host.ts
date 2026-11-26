@@ -12,7 +12,7 @@ import { ENGINE_REFUSAL_TTL_MS, type EngineRefusal } from "../engines/engine-ref
 import type { RoutineUsageLimit } from "../routines/routine-limit-words.ts";
 import { classifyRoutineFailure } from "../routines/routine-recovery.ts";
 import { pickAccountByRule } from "./account-strategy.ts";
-import { billsEachUse, limitBackupAllowed, pickLimitBackup, sameProvider, type LimitCandidate, type LimitEngine, type LimitFailover, type LimitFailoverStore } from "./limit-failover.ts";
+import { billsEachUse, limitBackupAllowed, limitServingPool, pickLimitBackup, sameProvider, type LimitCandidate, type LimitEngine, type LimitFailover, type LimitFailoverStore } from "./limit-failover.ts";
 import { limitKindOf, limitResetFromText, limitResetOrEstimate, type LimitKind } from "./limit-reset-time.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
@@ -165,6 +165,10 @@ export interface LimitFailoverHost {
   dispatchOf(threadId: string): LimitDispatch | undefined;
   /** Readiness uses the same selection as beforeTurn without moving a thread. */
   backupFor(botId: string, threadId: string, speaker: unknown, from: string): Promise<ModelSelection | null>;
+  /** #5406: the engines that may run a turn of this conversation when a limit
+   * moves it (limitServingPool), from what is known now. Empty when the
+   * candidates are not known. Never throws. */
+  servingPool(botId: string, threadId: string, speaker: unknown): string[];
   /** The engines Sagax must not pick for this payer now: one a refusal holds
    * at its usage limit. Sibling accounts of the same provider stay available
    * for silent rotation (#2192). `pick` "quick": Sagax's quick pick (a
@@ -792,6 +796,14 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       if (!deps.enabled()) return null;
       const engine = deps.engine(from);
       return engine ? pick(botId, threadId, speaker, engine, deps.payer(botId, speaker)) : null;
+    },
+    servingPool(botId, threadId, speaker) {
+      try {
+        const candidates = deps.candidatesNow?.(botId, threadId, speaker);
+        return candidates ? limitServingPool({ preferred: deps.preferred(botId, threadId), candidates, config: deps.config }) : [];
+      } catch {
+        return [];
+      }
     },
     autoExcluded(payer, engines, pick) {
       try {

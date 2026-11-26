@@ -405,10 +405,17 @@ const __BUILD_DATE__: string;
       };
       /** Hardware acceleration and the spell checker (kept by main). */
       shellPreferences?: {
-        get(): { hardwareAcceleration: boolean; spellcheck: boolean; botHotkeys?: boolean; botHotkeyModifier?: "cmd-shift" | "cmd-alt" | "ctrl-alt" } | null;
-        set(patch: { hardwareAcceleration?: boolean; spellcheck?: boolean; botHotkeys?: boolean; botHotkeyModifier?: "cmd-shift" | "cmd-alt" | "ctrl-alt" }): Promise<{ hardwareAcceleration: boolean; spellcheck: boolean } | null>;
+        get(): { hardwareAcceleration: boolean; spellcheck: boolean; botHotkeys?: boolean; botHotkeyModifier?: "cmd-shift" | "cmd-alt" | "ctrl-alt"; usageInMenuBar?: boolean } | null;
+        set(patch: { hardwareAcceleration?: boolean; spellcheck?: boolean; botHotkeys?: boolean; botHotkeyModifier?: "cmd-shift" | "cmd-alt" | "ctrl-alt"; usageInMenuBar?: boolean }): Promise<{ hardwareAcceleration: boolean; spellcheck: boolean } | null>;
         /** The window's own zoom for the Text size choice (1 to 1.5). */
         setZoom?(factor: number): boolean;
+      };
+      /** The usage icon of the macOS menu bar or of the Windows notification
+       * area (electron/usage-tray.mjs): this page hands its figures over when
+       * the shell asks. Absent in the browser. */
+      usageTray?: {
+        update(values: { week: number | null; session: number | null; text: string; tooltip?: string }): void;
+        onRefresh(cb: () => void): () => void;
       };
       appIcon?: {
         get(): Promise<{ platform: string; id: string | null; updatedAt: number | null }>;
@@ -472,7 +479,7 @@ const __BUILD_DATE__: string;
        * app Settings. Local-shell only: remote server pages never receive
        * the channel, and the bridge is absent in the browser. "cloud" is the
        * sagax://cloud link (Settings → OMB Cloud, opened by the link). */
-      onOpenAppSettings?(cb: (section?: "organization" | "cloud" | "cloud-settings") => void): () => void;
+      onOpenAppSettings?(cb: (section?: "organization" | "usage" | "cloud" | "cloud-settings") => void): () => void;
       /** Sagax → About / Help → About: the in-app About modal. Absent in the browser. */
       onOpenAbout?(cb: () => void): () => void;
       /** Help → Release notes. Absent in the browser and on a remote page. */

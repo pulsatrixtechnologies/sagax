@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { botHotkeyModifierChoice, installDesktopShellPreferences } from "./desktop-shell-preferences";
+import { botHotkeyModifierChoice, installDesktopShellPreferences, usageMenuBarChoice } from "./desktop-shell-preferences";
 
 afterEach(() => {
   localStorage.clear();
 });
 
-function shell(kept: { botHotkeyModifier?: "cmd-shift" | "cmd-alt" | "ctrl-alt" }) {
+function shell(kept: { botHotkeyModifier?: "cmd-shift" | "cmd-alt" | "ctrl-alt"; usageInMenuBar?: boolean }) {
   const set = vi.fn(async () => null);
   window.ogb = {
     shellPreferences: {
@@ -32,6 +32,27 @@ describe("desktop shell shortcut chord", () => {
     const stop = installDesktopShellPreferences();
     expect(botHotkeyModifierChoice.get()).toBe("cmd-alt");
     expect(set).toHaveBeenCalledWith(expect.objectContaining({ botHotkeyModifier: "cmd-alt" }));
+    stop();
+  });
+});
+
+describe("usage in the menu bar", () => {
+  it("is on by default and every change goes to the shell", () => {
+    const set = shell({});
+    const stop = installDesktopShellPreferences();
+    expect(usageMenuBarChoice.get()).toBe("true");
+    usageMenuBarChoice.set("false");
+    expect(set).toHaveBeenLastCalledWith(expect.objectContaining({ usageInMenuBar: false }));
+    usageMenuBarChoice.set("true");
+    expect(set).toHaveBeenLastCalledWith(expect.objectContaining({ usageInMenuBar: true }));
+    stop();
+  });
+
+  it("adopts the shell's off when this computer's storage was cleared", () => {
+    const set = shell({ usageInMenuBar: false });
+    const stop = installDesktopShellPreferences();
+    expect(usageMenuBarChoice.get()).toBe("false");
+    expect(set).toHaveBeenCalledWith(expect.objectContaining({ usageInMenuBar: false }));
     stop();
   });
 });

@@ -60,6 +60,7 @@ describe("other switches and their consumers", () => {
   const rows: Array<[string, string, string]> = [
     ["Use bot color as accent", "App.tsx", "useBotAccent"],
     ["Hardware acceleration / spellcheck / bot hotkeys", "../electron/desktop-shell-preferences.mjs", "hardwareAcceleration"],
+    ["Usage in the menu bar", "../electron/desktop-shell-preferences.mjs", "usageInMenuBar"],
     ["Desktop mascot switches", "components/floating-bots/FloatingBots.tsx", "floatingBotPrefs"],
     ["Dev context pods", "components/dev-pods/DevPods.tsx", "useDevPodPrefs"],
     ["Skill authoring", "components/Composer.tsx-parts/useComposerCommands.ts", "skillAuthoringEnabled"],

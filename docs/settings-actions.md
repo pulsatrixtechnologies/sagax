@@ -348,6 +348,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Check spelling while typing (desktop app) | Settings > General > Appearance > More appearance > Desktop | `sagax_settings` get, set `appearance.spellcheck` | simple |
 | Global shortcuts that open a bot (macOS) | Settings > General > Appearance > More appearance > Desktop | `sagax_settings` get, set `appearance.botHotkeys` | simple |
 | Chord of the bots' global shortcuts (Cmd+Shift, Cmd+Option, Ctrl+Option, then the slot number) | Settings > General > Appearance > More appearance > Desktop | `sagax_settings` get, set `appearance.botHotkeyChord` | simple |
+| Usage in the menu bar (macOS) or the notification area (Windows), desktop app | Settings > General > Appearance > More appearance > Usage | `sagax_settings` get, set `appearance.usageMenuBar` | simple |
 | Send key | Settings > General > Appearance | `sagax_settings` get, set `appearance.sendKey` | simple |
 | This run card | Settings > General > Appearance | `sagax_settings` get, set `appearance.runCard` | simple |
 | Sidebar logo | Settings > General > Appearance | `sagax_settings` get, set `appearance.sidebarLogo` | simple |

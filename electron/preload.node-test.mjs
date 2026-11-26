@@ -165,3 +165,31 @@ test("desktopLanguage reads main's choice once, synchronously, and caches what t
   assert.equal(await api.set(3), null);
   assert.equal(invocations.length, before + 1);
 });
+
+test("the usage icon's click opens Settings on Usage; a section main never names is dropped", () => {
+  const sections = [];
+  const unsubscribe = exposed.api.onOpenAppSettings(section => sections.push(section));
+  emit("app:open-settings", "usage");
+  emit("app:open-settings", "anything-else");
+  assert.deepEqual(sections, ["usage", undefined]);
+  unsubscribe();
+});
+
+test("usageTray hands the page's figures to main and hears main's request for fresh ones", () => {
+  const sent = [];
+  const send = fakeIpcRenderer.send;
+  fakeIpcRenderer.send = (...args) => { sent.push(args); };
+  try {
+    exposed.api.usageTray.update({ week: 44, session: 20, text: "44 %" });
+    assert.deepEqual(sent, [["usage-tray:update", { week: 44, session: 20, text: "44 %" }]]);
+  } finally {
+    fakeIpcRenderer.send = send;
+  }
+  let asked = 0;
+  const stop = exposed.api.usageTray.onRefresh(() => { asked += 1; });
+  emit("usage-tray:refresh");
+  assert.equal(asked, 1);
+  stop();
+  emit("usage-tray:refresh");
+  assert.equal(asked, 1);
+});

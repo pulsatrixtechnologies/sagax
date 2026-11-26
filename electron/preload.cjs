@@ -30,7 +30,7 @@ ipcRenderer.on("chat:open", (_event, link) => {
 
 // Main can finish loading the document before React subscribes. Retain only
 // the fixed organisation action, never a destination supplied by a renderer.
-const FIXED_SETTINGS_ACTIONS = new Set(["organization"]);
+const FIXED_SETTINGS_ACTIONS = new Set(["organization", "usage"]);
 let pendingSettingsAction = null;
 const appSettingsListeners = new Set();
 ipcRenderer.on("app:open-settings", (_event, section) => {
@@ -85,7 +85,7 @@ const REMOTE_SAFE = new Set(["platform", "windowControls", "windowFullscreen", "
 // the one file-manager call (#5018): the person asks to show one absolute
 // path, and the page learns only shown, missing, invalid or failed. Opening
 // a file, listing which paths exist, and saving a copy stay on the local page.
-const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "windowFullscreen", "onOpenAppSettings", "onOpenAbout", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts", "macApps", "screenThumbnail", "permOpenSettings", "permAll", "permAct", "revealInFolder"]);
+const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "windowFullscreen", "onOpenAppSettings", "onOpenAbout", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts", "macApps", "screenThumbnail", "permOpenSettings", "permAll", "permAct", "revealInFolder", "usageTray"]);
 let bundledPage = false;
 // main.mjs always answers this channel: a sendSync nobody answers would
 // block this page for good (a test harness must answer it too).
@@ -349,6 +349,17 @@ const bridge = {
       if (typeof language !== "string") return Promise.resolve(null);
       desktopLanguageCache = language;
       return ipcRenderer.invoke("desktop-language:set", language).catch(() => null);
+    },
+  },
+  /** The usage icon of the menu bar or of the notification area
+   * (electron/usage-tray.mjs): the page hands its figures over, and main
+   * asks for fresh ones once a minute while the icon is on. */
+  usageTray: {
+    update: (values) => ipcRenderer.send("usage-tray:update", values),
+    onRefresh: (cb) => {
+      const handler = () => cb();
+      ipcRenderer.on("usage-tray:refresh", handler);
+      return () => ipcRenderer.removeListener("usage-tray:refresh", handler);
     },
   },
   /** Hardware acceleration and the spell checker, kept by main

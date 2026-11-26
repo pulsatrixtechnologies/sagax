@@ -135,4 +135,22 @@ describe("GET/PUT /api/me/models", () => {
     expect((await call(handler, "PUT", { learnedRouting: "yes" }))?.status).toBe(400);
     expect(flags.get("p1")).toBe(false);
   });
+  // M-20261125-074, M-20261125-075 (#5372): the person's own modes, per person, no admin right
+  it("reads and saves the person's own modes, per person; null puts the defaults back", async () => {
+    const kept = new Map<string, object>();
+    const handler = createModelSwitchRoutes({
+      org: () => [], owner: (auth) => ((auth as { who?: string }).who ?? null), mine: () => [], save: () => {},
+      favorites: () => [], saveFavorites: () => {},
+      modeModels: { read: (owner) => kept.get(owner) ?? {}, save: (owner, value) => { kept.set(owner, value); } },
+    });
+    expect((await call(handler, "GET"))?.body).toMatchObject({ modeModels: {} });
+    const mine = { fast: { instanceId: "claude", model: "claude-haiku-4-5", effort: "medium" }, heavy: [{ instanceId: "codex", model: "gpt-6-astra" }] };
+    expect((await call(handler, "PUT", { modeModels: mine }))?.body).toMatchObject({ modeModels: mine });
+    // another person keeps their own
+    expect((await call(handler, "GET", undefined, { who: "p2" }))?.body).toMatchObject({ modeModels: {} });
+    // a mode given replaces the whole setting; a malformed one is refused
+    expect((await call(handler, "PUT", { modeModels: "fast" }))?.status).toBe(400);
+    expect((await call(handler, "PUT", { modeModels: null }))?.body).toMatchObject({ modeModels: {} });
+    expect((await call(handler, "GET"))?.body).toMatchObject({ modeModels: {} });
+  });
 });

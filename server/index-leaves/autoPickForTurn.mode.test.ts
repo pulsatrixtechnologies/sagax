@@ -36,12 +36,12 @@ const host = {
   autoRecordUsable: () => false,
 };
 const pickFor = createAutoPickForTurn(() => host);
-const bot = (mode?: "fast" | "expert" | "heavy") => ({
+const bot = (mode?: "fast" | "expert" | "heavy" | "build") => ({
   id: "b1", title: "", soul: "",
   modelSelection: { instanceId: "grok", model: "grok-4.7", auto: true as const, ...(mode ? { mode } : {}) },
 });
 const speaker = { origin: "person" };
-const turn = (mode: "fast" | "expert" | "heavy" | undefined, role: "orchestration" | "worker" | "continue" = "orchestration") =>
+const turn = (mode: "fast" | "expert" | "heavy" | "build" | undefined, role: "orchestration" | "worker" | "continue" = "orchestration") =>
   pickFor({ bot: bot(mode), threadId: "t1", speaker, role, text: "hello there" });
 
 describe("a mode in the turn's pick", () => {
@@ -50,6 +50,22 @@ describe("a mode in the turn's pick", () => {
     expect(turn("fast")?.pick).toMatchObject({ mode: "fast", selection: { instanceId: "grok", model: "grok-4-fast", effort: "low" } });
     // Heavy's seats: each account's strongest model first (#5089)
     expect(turn("heavy")?.pick.team?.slice(0, 2).map((agent: { modelLabel: string }) => agent.modelLabel)).toEqual(["Claude Opus 5.5", "Grok 4.7"]);
+  });
+
+  it("M-20261125-074: the turn runs the model the bot's owner chose for the mode, each owner their own", () => {
+    const owners: Record<string, object> = { ada: { fast: { instanceId: "claude", model: "claude-haiku-4-5", effort: "medium" } } };
+    const mine = createAutoPickForTurn(() => ({ ...host, autoModeModelsFor: (record: { ownerUserId?: string }) => owners[record.ownerUserId ?? ""] ?? {} }));
+    const ask = (ownerUserId: string) => mine({ bot: { ...bot("fast"), ownerUserId }, threadId: "t1", speaker, role: "orchestration", text: "hello there" })?.pick;
+    expect(ask("ada")).toMatchObject({ mode: "fast", selection: { instanceId: "claude", model: "claude-haiku-4-5", effort: "medium" } });
+    // another person's bots keep what the mode resolves by itself
+    expect(ask("grace")?.selection).toEqual(turn("fast")?.pick.selection);
+  });
+
+  it("M-20261125-073: a bot still set on Build runs as Auto, the request read as for a plain Auto bot", () => {
+    const pick = turn("build")?.pick;
+    expect(pick?.mode).toBeUndefined();
+    expect(pick?.reason).not.toBe("mode");
+    expect(pick?.selection).toEqual(turn(undefined)?.pick.selection);
   });
 
   it("a plain Auto bot still reads the request, as before", () => {

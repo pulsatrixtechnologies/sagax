@@ -70,6 +70,9 @@ export interface SidebarSubmenuEntry {
   trailing?: React.ReactNode;
   /** a line of information, not an action */
   info?: boolean;
+  /** a row its owner draws whole, not an action (Usage ›: an account's row
+   * with its two windows side by side, M-20261125-084) */
+  node?: React.ReactNode;
   /** an info line's star (Usage ›: the plan the Usage row shows). Shown on
    * hover or focus, and always while it is on. */
   favorite?: { on: boolean; label: string; onToggle: () => void };
@@ -193,7 +196,9 @@ export function SubmenuEntryRow({ entry, starSlot, onClose }: { entry: SidebarSu
   return (
     <div className="shrink-0">
       {entry.separatorBefore && <MenuDivider />}
-      {entry.info ? (
+      {entry.node ? (
+        <div data-submenu-node={entry.key}>{entry.node}</div>
+      ) : entry.info ? (
         // the engine and its plan on the first line, the
         // window and its reset on the second; the card grows
         // to its longest row (French included) and, past its

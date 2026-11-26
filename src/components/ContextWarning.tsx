@@ -17,7 +17,7 @@ const pill = "flex items-center gap-1.5 rounded-full border border-warning/40 bg
 const action = "rounded-full px-1.5 font-medium text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline";
 
 /** One request at a time per control; a failure lands in the chat's error banner. */
-function useCompact() {
+export function useCompact() {
   const { dispatch } = useStore();
   const [pending, setPending] = useState(false);
   const run = (path: string, body: unknown) => {

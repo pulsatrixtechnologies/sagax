@@ -65,7 +65,7 @@ const hover = (selector: string) => { const node = find(selector); act(() => { n
 const rest = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
 /** The menu's own rows, which stay on screen whatever is open beside them. */
 const menuRows = () => [...host.querySelectorAll<HTMLElement>("[data-mode-row]")].map((node) => node.dataset.modeRow);
-const MENU = ["auto", "fast", "expert", "heavy", "build", "reasoning", "all"];
+const MENU = ["auto", "fast", "expert", "heavy", "reasoning", "all"];
 
 beforeEach(() => {
   setLocale("en");

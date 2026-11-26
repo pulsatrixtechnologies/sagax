@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { accountChoices, businessAccount, CURRENT_ACCOUNT_ID, PERSONAL_ID, SAGAX_MOBILE_URL, serverDisplayName, switchAccount, switchTargets, usageLines, usagePercent, usageSummary } from "./account-menu";
+import { accountChoices, businessAccount, CURRENT_ACCOUNT_ID, PERSONAL_ID, SAGAX_MOBILE_URL, serverDisplayName, switchAccount, switchTargets, usagePercent, usageSummary } from "./account-menu";
 import type { PlanRow, PlanWindow } from "./plan-usage";
 
 const closed: PlanWindow = { available: false, remainingPercent: null, usedPercent: null, resetsAt: null };
@@ -9,7 +9,6 @@ const row = (patch: Partial<PlanRow>): PlanRow => ({
   id: "claude", name: "Claude", driver: "claude", plan: "Max", state: "windows", access: "subscription", instanceId: null, instanceIds: [],
   message: null, fiveHour: closed, weekly: closed, extra: [], models: [], ...patch,
 });
-const labels = { weekly: "Weekly", fiveHour: "5-hour", used: (n: number) => `${n}% used`, resetsIn: (when: string) => `resets in ${when}` };
 
 describe("the avatar menu's Usage", () => {
   it("shows the most used weekly window of the person's plans", () => {
@@ -20,15 +19,6 @@ describe("the avatar menu's Usage", () => {
     expect(usagePercent([row({ fiveHour: open(30) })])).toBe(30);
     expect(usagePercent([])).toBeNull();
     expect(usagePercent([row({ state: "no-windows" })])).toBeNull();
-  });
-
-  it("lists each window under its plan, the window and its reset on the second line (#4157)", () => {
-    const now = Date.parse("2026-10-16T00:00:00Z");
-    const lines = usageLines([row({ weekly: open(42, "2026-10-18T03:00:00Z"), fiveHour: open(5) })], labels, now);
-    expect(lines).toEqual([
-      { key: "claude:weekly", planId: "claude", planName: "Claude Max", label: "Claude Max", subtitle: "Weekly · resets in 2d 3h", value: "42% used" },
-      { key: "claude:five-hour", planId: "claude", planName: "Claude Max", label: "Claude Max", subtitle: "5-hour", value: "5% used" },
-    ]);
   });
 });
 

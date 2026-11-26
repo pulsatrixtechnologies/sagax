@@ -35,7 +35,7 @@ function autoPickForTurn(input: {
   const open = offered.filter((engine) => !limited.has(engine.instanceId));
   const engines = open.length ? open : offered;
   // #4329 lot 5: the engines the owner chose to run with come right after the bot's own
-  const request = { base: bot.modelSelection, engines, catalog: host.autoCatalogLookup, skip, ...(host.autoHarnessesFor ? { harness: host.autoHarnessesFor(bot) } : {}) };
+  const request = { base: bot.modelSelection, engines, catalog: host.autoCatalogLookup, skip, ...(host.autoHarnessesFor ? { harness: host.autoHarnessesFor(bot) } : {}), ...(host.autoModeModelsFor ? { modeModels: host.autoModeModelsFor(bot) } : {}) };
   // #5014: among the accounts of the picked model's provider that offer it,
   // the person's account strategy says which one runs it (its chain follows)
   const onAccount = (pick: AutoPick): AutoPick => {
@@ -86,7 +86,9 @@ function autoPickForTurn(input: {
   // own engine rule: a call turn takes the pick as a typed turn does, #4888).
   // With nothing usable for the mode the bot's Auto reads the request as before.
   const modes = input.withModes ? { modes: resolveModes(request) } : {};
-  if (isForcedModelMode(bot.modelSelection.mode)) {
+  // M-20261125-073: Build left the chat bar; a bot or a conversation still set
+  // on it runs as Auto (the request is read), and nothing stored is rewritten
+  if (isForcedModelMode(bot.modelSelection.mode) && bot.modelSelection.mode !== "build") {
     const picked = pickModeModel(request, bot.modelSelection.mode);
     if (picked) return { payer, pick: onAccount(picked), ...modes };
   }

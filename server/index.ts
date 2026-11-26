@@ -1577,6 +1577,7 @@ import { engineCascadeFacts, modelCascadeFacts } from "./agent-model-cascade.ts"
 import { accountPickText, accountSwitchSettingOf, cleanAccountSwitchDefaults, type AccountPick, type AccountSwitchSetting } from "../shared/account-switch.ts";
 import { createAccountMeter } from "./usage/account-meter.ts";
 import { createAccountSwitch } from "./usage/account-switch-host.ts";
+import { cleanModeModels, type ModeModels } from "../shared/mode-models.ts";
 import { outcomeOfSettledTurn } from "./usage/learned-routing.ts";
 import { createUsageForecast } from "./usage/usage-forecast.ts";
 import { addedAccount } from "../shared/added-account.ts";
@@ -3065,6 +3066,7 @@ bindLeafHost({
   get personDisabledModels() { return personDisabledModels; },
   get modelSwitchesFor() { return modelSwitchesFor; },
   get autoHarnessesFor() { return autoHarnessesFor; },
+  get autoModeModelsFor() { return autoModeModelsFor; },
   get modelSwitchRefusal() { return modelSwitchRefusal; },
   get orgOwnAccountsOutsideList() { return orgOwnAccountsOutsideList; },
   get orgAllowedEngines() { return orgAllowedEngines; },
@@ -31443,6 +31445,18 @@ ROUTES.push(createModelSwitchRoutes({
       await applyHarnessDefaults(owner, auth, cleared);
     },
   },
+  // M-20261125-074: the person's own modes, read per turn
+  modeModels: {
+    read: (owner) => modeModelsOf(owner),
+    save: (owner, value) => {
+      if (owner === "installation") {
+        saveConfig({ modeModels: value });
+        cfg.modeModels = value;
+      } else {
+        personSettings.setModeModels(owner, value);
+      }
+    },
+  },
   // #5014: the person's account strategy per provider, read per turn
   accountSwitchDefaults: {
     read: (owner) => accountSwitchDefaultsOf(owner),
@@ -34222,6 +34236,16 @@ function personAccountSwitchDefaults(principalId: string | null | undefined): Re
   const owner = personSettingsOwner(principalId);
   return owner ? personSettings.get(owner).accountSwitchByProvider ?? {} : {};
 }
+/** M-20261125-074: the person's own modes, read by each turn of their bots. */
+function personModeModels(principalId: string | null | undefined): ModeModels {
+  if (IDENTITY.kind !== "perspicax") return cleanModeModels(cfg.modeModels);
+  const owner = personSettingsOwner(principalId);
+  return owner ? personSettings.get(owner).modeModels ?? {} : {};
+}
+/** The same setting for a settings owner (GET/PUT /api/me/models). */
+function modeModelsOf(owner: string | "installation"): ModeModels {
+  return owner === "installation" ? cleanModeModels(cfg.modeModels) : { ...personSettings.get(owner).modeModels };
+}
 /** #5014: the same map for a settings owner (GET/PUT /api/me/models). */
 function accountSwitchDefaultsOf(owner: string | "installation"): Record<string, AccountSwitchSetting> {
   return owner === "installation" ? cleanAccountSwitchDefaults(cfg.accountSwitchByProvider) : { ...personSettings.get(owner).accountSwitchByProvider };
@@ -34275,6 +34299,10 @@ async function applyHarnessDefaults(owner: string | "installation", auth: Reques
 /** What Auto tries right after the bot's own engine: its "Runs with" choice
  * for any candidate, then its owner's default for the candidate's own
  * provider only (server/models/model-auto.ts). */
+/** M-20261125-074: the modes of the bot's owner (a person sets their own, no admin). */
+function autoModeModelsFor(bot: Pick<BotRecord, "ownerUserId">): ModeModels {
+  return personModeModels(effectiveBotOwner(bot));
+}
 function autoHarnessesFor(bot: Pick<BotRecord, "harness" | "ownerUserId">): AutoHarnesses {
   return { bot: bot.harness ?? null, byProvider: personHarnessDefaults(effectiveBotOwner(bot)) };
 }

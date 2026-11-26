@@ -15,6 +15,7 @@
 //     row), ranked by their own size, after everything the catalogue knows.
 // Pure: the engines, their rows and the catalogue are passed in, as for Auto.
 import type { EffortLevel, ModelSelection } from "../../shared/model-selection.ts";
+import type { ModeModelChoice } from "../../shared/mode-models.ts";
 import { effortAcceptedByEngine } from "../../shared/ultracode-effort.ts";
 import {
   FORCED_MODEL_MODES, HEAVY_MAX_AGENTS,
@@ -214,6 +215,30 @@ export function heavySeats(request: AutoRequest): ModeModel[] {
   }).slice(0, HEAVY_MAX_AGENTS).map(toModel);
 }
 
+// ── the person's own modes (M-20261125-074, shared/mode-models.ts) ───────
+
+/** The model a person chose, when it can run this turn: its engine is among
+ * theirs, offers the model, and no refusal took it out. Null otherwise (the
+ * mode then runs what it resolves by itself; the choice is kept). */
+function usableChoice(request: AutoRequest, choice: Pick<ModeModelChoice, "instanceId" | "model"> | undefined): { engine: AutoEngine; row: Row } | null {
+  if (!choice) return null;
+  const engine = request.engines.find((candidate) => candidate.instanceId === choice.instanceId);
+  const row = engine?.models.options.find((option) => option.id === choice.model);
+  if (!engine || !row) return null;
+  if ((request.skip ?? []).some((entry) => entry.instanceId === choice.instanceId && entry.model === choice.model)) return null;
+  return { engine, row };
+}
+
+/** Heavy's experts as the person chose them, those that can run, in their order. */
+function chosenSeats(request: AutoRequest): ModeModel[] {
+  const seats: ModeModel[] = [];
+  for (const choice of request.modeModels?.heavy ?? []) {
+    const usable = usableChoice(request, choice);
+    if (usable) seats.push({ instanceId: usable.engine.instanceId, model: usable.row.id, engineLabel: usable.engine.displayName, modelLabel: usable.row.label });
+  }
+  return seats.slice(0, HEAVY_MAX_AGENTS);
+}
+
 // ── Auto takes Heavy on a big or risky task (D-20261119-086) ─────────────
 
 /** A request that could cost something hard to undo: the person's data,
@@ -245,6 +270,40 @@ export function heavyWorthy(text: string): "big" | "risky" | null {
 /** The turn's model for a mode, as an Auto pick (so a refusal climbs the same
  * chain), or null when no model is usable (the caller falls back on Auto). */
 export function pickModeModel(request: AutoRequest, mode: ForcedModelMode): AutoPick | null {
+  const usual = pickUsualModeModel(request, mode);
+  // the person's own experts sit in Heavy; the leader stays the mode's
+  if (mode === "heavy") {
+    const seats = chosenSeats(request);
+    return usual && seats.length ? { ...usual, team: seats } : usual;
+  }
+  if (mode !== "fast" && mode !== "expert") return usual;
+  const choice = request.modeModels?.[mode];
+  const chosen = usableChoice(request, choice);
+  if (!choice || !chosen) return usual;
+  const { engine, row } = chosen;
+  const selection: ModelSelection = { instanceId: engine.instanceId, model: row.id };
+  // the level the person chose where the engine takes it, else the mode's own
+  const effort = choice.effort && effortAcceptedByEngine(choice.effort, engine.effortLevels ?? []) ? choice.effort : effortForMode(MODE_EFFORT[mode], engine.effortLevels);
+  if (effort) selection.effort = effort;
+  const first: AutoChainEntry = { instanceId: engine.instanceId, model: row.id };
+  const own = request.engines.find((candidate) => candidate.instanceId === request.base.instanceId);
+  return {
+    role: "orchestration",
+    selection,
+    engineLabel: engine.displayName,
+    modelLabel: row.label,
+    tier: MODE_TIER[mode],
+    reason: "mode",
+    mode,
+    ...(engine.via ? { via: engine.via } : {}),
+    ...(engine.instanceId !== request.base.instanceId ? { fromEngineLabel: own?.displayName ?? request.base.instanceId } : {}),
+    // a refusal climbs to what the mode runs by itself
+    chain: [first, ...(usual?.chain ?? []).filter((entry) => !(entry.instanceId === first.instanceId && entry.model === first.model))],
+  };
+}
+
+/** What a mode runs by itself, with nothing chosen by the person. */
+function pickUsualModeModel(request: AutoRequest, mode: ForcedModelMode): AutoPick | null {
   const { base } = request;
   // the person's own fast model (#1209) leads Fast, wherever it runs
   if (mode === "fast") {

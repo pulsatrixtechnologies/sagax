@@ -133,7 +133,7 @@ redaction is best effort. Neither this log nor a successful command proves an
 unasserted user outcome.
 
 `scripts/testing/usage-details-ui.e2e.test.ts` checks the header's **More** menu,
-usage breakdown, clipboard success and refusal, and responsive geometry at
+the absence of a token figure in the header, clipboard success and refusal, and responsive geometry at
 390, 800, 1100 and 1600 px. It checks that opening bot settings folds the sidebar
 without changing its saved density and closing settings restores it. Evidence
 includes screenshots and a `.usage-details.json` next to the fixture log.

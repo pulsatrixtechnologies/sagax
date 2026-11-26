@@ -14,7 +14,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { measureRowsFold, SidebarPopoverMenu, submenuPlace, submenuRowsFold, type SidebarMenuItem, type SidebarSubmenuEntry } from "./SidebarPopoverMenu";
-import { usageLines } from "@/lib/account-menu";
 import type { PlanRow, PlanWindow } from "@/lib/plan-usage";
 
 describe("submenuPlace", () => {
@@ -102,6 +101,14 @@ const rows = [
   engine("gemini", "Gemini", "Ultra", 23, 5),
   engine("cursor", "Cursor", "Pro Plus", 56, 30),
 ];
+// info lines as a side card draws them: a name, a second line, a figure
+// (since M-20261125-084 the account menu's Usage draws one row per account;
+// the info line stays the card's own row, Cost this month among them)
+const usageLines = (list: typeof rows, labels: { weekly: string; fiveHour: string; used: (percent: number) => string; resetsIn: (when: string) => string }) =>
+  list.flatMap((row) => ([["weekly", labels.weekly, row.weekly, "2d 2h"], ["five-hour", labels.fiveHour, row.fiveHour, "3h"]] as const).map(([key, label, window, when]) => ({
+    key: `${row.id}:${key}`, planId: row.id, planName: `${row.name} ${row.plan}`, label: `${row.name} ${row.plan}`,
+    subtitle: `${label} · ${labels.resetsIn(when)}`, value: labels.used(Math.round(window.usedPercent ?? 0)),
+  })));
 const lines = usageLines(rows, { weekly: "Weekly", fiveHour: "5-hour", used: (n) => `${n}% used`, resetsIn: (when) => `resets in ${when}` });
 
 let host: HTMLDivElement;

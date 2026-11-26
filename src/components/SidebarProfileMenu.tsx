@@ -65,9 +65,10 @@ import { InitialsAvatar } from "./Avatar";
 import { SidebarPopoverMenu, type SidebarMenuItem, type SidebarSubmenuEntry } from "./SidebarPopoverMenu";
 import { useServerMode } from "./ServerModeSettings";
 import { api } from "@/state/store";
-import { accountChoices, businessAccount, SAGAX_MOBILE_URL, switchAccount, switchTargets as listSwitchTargets, usageLines as planUsageLines, usageSummary, type AccountChoice, type SwitchTarget, type UsageLine } from "@/lib/account-menu";
+import { accountChoices, businessAccount, SAGAX_MOBILE_URL, switchAccount, switchTargets as listSwitchTargets, usageSummary, type AccountChoice, type SwitchTarget } from "@/lib/account-menu";
 import { toggleUsageFavorite, useUsageFavorite } from "@/lib/usage-favorite";
-import { connectedPlanRows, type PlanRow, type PlanUsageReport } from "@/lib/plan-usage";
+import { AccountLimits } from "./PlanUsage";
+import { accountRowName, connectedPlanRows, type PlanRow, type PlanUsageReport } from "@/lib/plan-usage";
 import { costOf, formatCost, personalUsagePeriods, usageQuery, type PersonalUsageSummary } from "@/lib/usage-personal";
 import { requestAbout } from "@/lib/about-ui";
 import { requestReleaseNotes } from "@/lib/release-notes-ui";
@@ -295,7 +296,8 @@ export function profileMenuItems(input: {
   usageName?: string | null;
   /** the account the percent is read from (its tooltip) */
   usageAccount?: string | null;
-  usageLines: UsageLine[];
+  /** the plan rows that report a window: one row each in Usage › */
+  usageRows: PlanRow[];
   /** the starred plan's id, and how a star is toggled; absent: no stars */
   usageFavorite?: { id: string | null; onToggle: (planId: string) => void };
   /** this month's cost of the person's own turns, formatted; null unknown */
@@ -330,26 +332,13 @@ export function profileMenuItems(input: {
   handlers: ProfileMenuHandlers;
 }): SidebarMenuItem[] {
   const usage: SidebarSubmenuEntry[] = [
-    // one star per plan, on its first line
-    ...input.usageLines.map((line, index, lines) => {
-      const favorite = input.usageFavorite;
-      const first = line.planId !== undefined && lines.findIndex((other) => other.planId === line.planId) === index;
-      const on = favorite?.id != null && favorite.id === line.planId;
-      return {
-        key: line.key,
-        label: line.label,
-        subtitle: line.subtitle,
-        value: line.value,
-        info: true,
-        ...(favorite && first && line.planId ? {
-          favorite: {
-            on,
-            label: t(on ? "usage.favorite.remove" : "usage.favorite.add", { name: line.planName ?? line.label }),
-            onToggle: () => favorite.onToggle(line.planId!),
-          },
-        } : {}),
-      };
-    }),
+    // M-20261125-084: one row per account (its provider and address, its two
+    // windows side by side, its star once), the row of Settings > Usage limits
+    ...input.usageRows.filter((row) => row.state === "windows").map((row) => ({
+      key: row.id,
+      label: accountRowName(row),
+      node: <AccountLimits provider={row} name={accountRowName(row)} favorite={input.usageFavorite} />,
+    })),
     ...(input.monthCost !== null ? [{ key: "month-cost", label: t("sidebar.account.monthCost"), value: input.monthCost, info: true, foot: true }] : []),
   ];
   const help: SidebarSubmenuEntry[] = [
@@ -496,7 +485,7 @@ export function profileMenuItems(input: {
         ...usage,
         { key: "view-usage", label: t("sidebar.account.viewUsage"), separatorBefore: usage.length > 0, foot: true, onSelect: input.handlers.onViewUsage },
       ],
-      submenuWidth: 228,
+      submenuWidth: input.usageRows.some((row) => row.state === "windows") ? 400 : 228,
       onSelect: () => {},
     },
     ...(input.mobile ? [{
@@ -541,7 +530,7 @@ interface AccountMenuData {
   /** the starred plan's short name while it drives the percent */
   percentName: string | null;
   percentAccount: string | null;
-  lines: UsageLine[];
+  rows: PlanRow[];
   monthCost: string | null;
   targets: SwitchTarget[];
 }
@@ -580,12 +569,7 @@ function useAccountMenuData(enabled: boolean, refresh = 0): AccountMenuData {
     percent: summary.percent,
     percentName: summary.name,
     percentAccount: summary.account,
-    lines: planUsageLines(rows, {
-      weekly: t("planUsage.weekly"),
-      fiveHour: t("planUsage.fiveHour"),
-      used: (used) => t("planUsage.used", { used }),
-      resetsIn: (when) => t("planUsage.resetsIn", { when }),
-    }),
+    rows,
     monthCost,
     targets: listSwitchTargets(environments, t("sidebar.account.solo")),
   };
@@ -700,7 +684,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
     usagePercent: account.percent,
     usageName: account.percentName,
     usageAccount: account.percentAccount,
-    usageLines: account.lines,
+    usageRows: account.rows,
     usageFavorite: { id: usageFavorite, onToggle: toggleUsageFavorite },
     monthCost: account.monthCost,
     mobile: SAGAX_MOBILE_URL !== null,

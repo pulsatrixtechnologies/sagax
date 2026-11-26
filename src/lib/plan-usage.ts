@@ -103,6 +103,20 @@ function productName(row: Pick<PlanProvider, "driver" | "name">): string {
   return (row.driver && PRODUCT[row.driver]) || row.name;
 }
 
+/** An account row's name with its provider (#5342): "Claude · ada@acme.example",
+ * so one address signed in at two providers reads as two accounts. Usage
+ * limits and the account menu's Usage both draw it. A name that already
+ * starts with its provider ("Claude", "Claude (API key)") and a row whose
+ * provider is not known stay as they are. */
+export function accountRowName(row: Pick<PlanRow, "driver" | "name">): string {
+  const provider = PRODUCT[row.driver];
+  if (!provider) return row.name;
+  const name = row.name.trim().toLowerCase();
+  const lead = provider.toLowerCase();
+  if (name === lead || name.startsWith(`${lead} `)) return row.name;
+  return `${provider} · ${row.name}`;
+}
+
 /** Plan ids a provider sends that have a known name (lower case). Codex
  * reports the ChatGPT plan type, Claude its subscription type. Product
  * names: the same in every language. */

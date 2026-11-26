@@ -1,7 +1,8 @@
 // The composer's mode menu (#4900, #5088; owner 2026-11-23, M-20261123-040,
 // M-20261123-045): the rows of shared/mode-menu.ts, the same in the Perspicax
 // console, at the top of the one model menu (ModelPanel.tsx): Auto, Fast,
-// Expert, Heavy, Build, a hairline, Reasoning (the level in use, opening the
+// Expert, Heavy (Build left the desktop's menu on 2026-11-25, M-20261125-073),
+// the person's favorite models under "Favorites" (M-20261125-074), a hairline, Reasoning (the level in use, opening the
 // levels of the model in use; greyed with the imposed level under a mode that
 // sets its own), a hairline, All models (opening provider, account, model).
 // A hovered or focused mode opens a small tooltip beside the menu: what the
@@ -11,7 +12,7 @@
 // All models checks that row, which names it. Reasoning and All models open
 // their level beside the menu (#5338, D-20261125-012), on a click, a rest of
 // the pointer or the right arrow; the row says so while its level is open.
-import { useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Brain, Check, ChevronRight, Hammer, Layers, Sparkles, Zap, type LucideIcon } from "lucide-react";
 
@@ -52,9 +53,12 @@ export interface ModeMenuProps {
   allModels?: { label?: string; onOpen: () => void; open?: boolean; onRest?: (event: PointerEvent) => void };
   /** The pointer came on a mode: what is open beside the menu closes. */
   onModeRest?: (event: PointerEvent) => void;
+  /** M-20261125-074: the person's favorite models, drawn by the panel, under
+   * the modes and before Reasoning, after a hairline. Absent: nothing. */
+  favorites?: ReactNode;
 }
 
-export function ModeMenu({ current, resolutions, disabled = false, onPick, reasoning, allModels, onModeRest }: ModeMenuProps) {
+export function ModeMenu({ current, resolutions, disabled = false, onPick, reasoning, allModels, onModeRest, favorites }: ModeMenuProps) {
   const modes = offeredModes(resolutions);
   const rows = menuRows({ offered: modes, reasoning: Boolean(reasoning?.row.shown), all: Boolean(allModels) });
   const [tipFor, setTipFor] = useState<ModelMode | null>(null);
@@ -144,8 +148,10 @@ export function ModeMenu({ current, resolutions, disabled = false, onPick, reaso
         const mode = row.id;
         const Glyph = MODE_GLYPHS[mode];
         const on = current === mode;
+        const lastMode = rows[index + 1]?.kind !== "mode";
         return (
-          <div key={mode}>
+          <Fragment key={mode}>
+          <div>
             <div className={rowShape}>
               <button type="button" role="radio" aria-checked={on} disabled={disabled}
                 data-mode-row={mode} data-model-panel-row={`mode:${mode}`} data-mode-current={on ? "" : undefined}
@@ -166,6 +172,8 @@ export function ModeMenu({ current, resolutions, disabled = false, onPick, reaso
               </button>
             </div>
           </div>
+          {lastMode && favorites ? <>{separator("separator-favorites")}{favorites}</> : null}
+          </Fragment>
         );
       })}
       {tipFor && tipAt && typeof document !== "undefined" && createPortal(

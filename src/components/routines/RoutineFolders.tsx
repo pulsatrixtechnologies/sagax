@@ -9,6 +9,9 @@
 // Stop, Pause or Resume, Rename (in place, also F2), Open, Duplicate, Delete.
 // Rows move by drag and drop (mouse or trackpad, pointer events) onto a folder,
 // its header or the no-folder area; Alt+Up / Alt+Down moves a focused row.
+// The bot panel's flat Upcoming card has no header for a folder that holds
+// routines: there a row's menu also carries Move to folder, and a row drags
+// onto the folders the card does show (the empty ones) (#5376).
 // New folder is in the section's "…". When titles start
 // with "[X]", one quiet line offers to sort them into folders; it is marked
 // seen only when the sort worked or the person closed it with the x (a failed
@@ -41,6 +44,7 @@ import {
 } from "../../../shared/routine-folders";
 import { RoutineList } from "./RoutineList";
 import { useRoutineFolders, type FolderNotice } from "./useRoutineFolders";
+import { folderMoveTargets } from "@/lib/routine-folder-actions";
 import { routineRowActions, RoutineMenuPortal, RoutineRowMenuItems } from "./RoutineRowMenu";
 import { MENU_ROW, MenuDivider, menuRow } from "@/components/menu-look";
 
@@ -101,7 +105,7 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
   const {
     dispatch, groups, folders, botRoutines, editable, supported, busy, pending, serverNote, setServerNote, notice, setNotice,
     prefixPlan, prefixFolders, showSortAction, showOffer, dismissOffer,
-    act, step, reorder, setFolderEnabled, removeFolder, sortByPrefix, undo,
+    act, move, step, reorder, setFolderEnabled, removeFolder, sortByPrefix, undo,
     drag, dropTarget, startDrag, canDrag: foldersDrag,
   } = useRoutineFolders({ bot, routines, allRoutines, onFiledInto: (folder) => expandRef.current(folder) });
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -154,9 +158,11 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
   // "Running" on a row opens that run's chat where the chat is (JC
   // 2026-11-03), never the Automations page.
   const openRunning = (routine: Routine, run: RoutineRun) => openRoutineRun(dispatch, { runId: run.id, routineId: routine.id, botId: run.botId ?? routine.botId });
-  // Flat Upcoming keeps Move to folder in the row menu; pointer drag needs
-  // the folder headers, so it stays off here (#2174).
-  const canDrag = !leadingClock && foldersDrag;
+  // Flat Upcoming (#2174) has no header for a folder that holds routines, so
+  // its row menu carries Move to folder; pointer drag needs a folder header,
+  // so there it is on only while the card shows one (an empty folder) (#5376).
+  const emptyFolders = groups.slice(1).filter((group) => group.routines.length === 0);
+  const canDrag = foldersDrag && (!leadingClock || emptyFolders.length > 0);
   const list = (items: Routine[], label?: string) => <RoutineList
     routines={items}
     viewerPrincipalId={viewerPrincipalId}
@@ -187,6 +193,7 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
           onOpen: () => onOpen(menu.routine),
           onDuplicate: onDuplicate ? () => onDuplicate(menu.routine) : undefined,
           onRename: () => setRenamingRoutine(menu.routine.id),
+          moveTo: leadingClock && supported ? folderMoveTargets(menu.routine, folders, (folder) => void move([menu.routine.id], folder)) : undefined,
         })} />
         : <FolderMenuItems
           canMoveUp={folders.indexOf(menu.folder) > 0}
@@ -239,21 +246,24 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
   // A folder with no routine has no row to carry its `[Folder]` prefix, so
   // the flat card lists it under the rows: New folder… shows what it made,
   // and the folder can be renamed, deleted or filled from there.
+  const dragPreview = drag && createPortal(<div data-routine-drag-preview="" aria-hidden="true"
+    style={{ left: drag.x + 12, top: drag.y + 8 }}
+    className="pointer-events-none fixed z-50 flex max-w-[260px] items-center gap-2 rounded-lg border-[0.5px] border-border bg-elevated px-3 py-1.5 text-[13px] leading-[18px] text-ink opacity-95 shadow-lg">
+    <FolderInput size={14} className="shrink-0 text-accent" /><span className="truncate">{drag.routine.name}</span>
+  </div>, document.body);
+
   if (leadingClock) {
     return <div className="flex flex-col gap-1" data-routine-folders="" data-routine-upcoming-flat="">
+      {dragPreview}
       {notices}
       {list(routines)}
-      {groups.slice(1).filter((group) => group.routines.length === 0).map(folderSection)}
+      {emptyFolders.map(folderSection)}
       {menus}
     </div>;
   }
 
   return <div className="flex flex-col gap-1" data-routine-folders="">
-    {drag && createPortal(<div data-routine-drag-preview="" aria-hidden="true"
-      style={{ left: drag.x + 12, top: drag.y + 8 }}
-      className="pointer-events-none fixed z-50 flex max-w-[260px] items-center gap-2 rounded-lg border-[0.5px] border-border bg-elevated px-3 py-1.5 text-[13px] leading-[18px] text-ink opacity-95 shadow-lg">
-      <FolderInput size={14} className="shrink-0 text-accent" /><span className="truncate">{drag.routine.name}</span>
-    </div>, document.body)}
+    {dragPreview}
     <FolderNotices {...folderNotices} />
 
     {(loose.routines.length > 0 || folders.length === 0 || loading || error) ? (

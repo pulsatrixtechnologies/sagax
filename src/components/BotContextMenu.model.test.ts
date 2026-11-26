@@ -1,10 +1,10 @@
 // The sidebar's bot menu, one flat menu (owner, 2026-10-15): New thread |
 // Pin, Move to ›, Mark as Unread, New window | Rename, Edit bot, Make primary
-// bot, Put on the desktop | Copy link, Copy conversation ID | Hide from
-// sidebar, Archive, Delete. No More, and no New thread in a working folder,
-// Mark all as read or Model…. Mark as Unread, New window, Copy link and Copy
-// conversation ID came back with the reference's three groups (owner,
-// 2026-11-17, #4639).
+// bot, Put on the desktop | Hide from sidebar, Archive, Delete. No More, and
+// no New thread in a working folder, Mark all as read or Model…. Mark as
+// Unread and New window came back with the reference's groups (owner,
+// 2026-11-17, #4639). Copy link and Copy conversation ID left this menu
+// (owner, 2026-11-25, #5373).
 import { readFileSync } from "node:fs";
 import { createElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -102,7 +102,7 @@ describe("the sidebar's bot menu", () => {
   it("lists every action in one menu, in Owner's order", () => {
     const { html } = render();
     // the maintainer, 2026-11-04: Archive all threads and Delete all threads, their own group
-    expect(items(html)).toEqual(["new-thread", "pin", "move", "mark-unread", "new-window", "rename", "edit", "put-on-desktop", "copy-link", "copy-id", "archive-all-threads", "delete-all-threads", "hide", "archive", "delete"]);
+    expect(items(html)).toEqual(["new-thread", "pin", "move", "mark-unread", "new-window", "rename", "edit", "put-on-desktop", "archive-all-threads", "delete-all-threads", "hide", "archive", "delete"]);
     for (const label of [">New thread<", ">Pin<", ">Move to<", ">Rename the bot<", ">Edit bot<", ">Hide from sidebar<", ">Archive<"]) expect(html).toContain(label);
     expect(html).not.toContain("Rename Bot");
   });
@@ -115,28 +115,42 @@ describe("the sidebar's bot menu", () => {
     expect(html).not.toContain("data-bot-menu-page");
   });
 
-  it("keeps the reference's three groups in its order: Pin, Mark as Unread, New window | Copy link, Copy conversation ID | Hide, Delete", () => {
+  it("keeps the reference's groups in its order: Pin, Mark as Unread, New window | Hide, Delete", () => {
     const { html } = render();
-    for (const label of [">Pin<", ">Mark as Unread<", ">New window<", ">Copy link<", ">Copy conversation ID<", ">Hide from sidebar<", ">Delete<"]) expect(html).toContain(label);
+    for (const label of [">Pin<", ">Mark as Unread<", ">New window<", ">Hide from sidebar<", ">Delete<"]) expect(html).toContain(label);
     const order = items(html);
     const pos = (id: string) => order.indexOf(id);
     expect(pos("pin")).toBeLessThan(pos("mark-unread"));
     expect(pos("mark-unread")).toBeLessThan(pos("new-window"));
-    expect(pos("copy-link")).toBe(pos("copy-id") - 1);
     expect(pos("hide")).toBeLessThan(pos("delete"));
-    // each of the three groups is set apart from the next by a divider
+    // each group is set apart from the next by a divider
     expect(html).toMatch(/data-menu-item="new-window"[\s\S]*?class="menu-divider[\s\S]*?data-menu-item="rename"/);
-    expect(html).toMatch(/data-menu-item="copy-id"[\s\S]*?class="menu-divider[\s\S]*?data-menu-item="archive-all-threads"/);
+    expect(html).toMatch(/data-menu-item="put-on-desktop"[\s\S]*?class="menu-divider[\s\S]*?data-menu-item="archive-all-threads"/);
   });
 
-  it("Mark as Unread flags the bot, Copy link copies its sagax://bot link, Copy conversation ID its conversation", () => {
+  it("has no Copy link and no Copy conversation ID row, and no empty group where they were (owner, 2026-11-25)", () => {
+    for (const html of [render().html, render({ ...bot, unread: true }).html]) {
+      expect(items(html)).not.toContain("copy-link");
+      expect(items(html)).not.toContain("copy-id");
+      expect(html).not.toContain("Copy link");
+      expect(html).not.toContain("Copy conversation ID");
+      // never two dividers in a row, nor one at either end of the menu
+      expect(html).not.toMatch(/class="menu-divider[^>]*>(?:<\/div>)?\s*<div[^>]*class="menu-divider/);
+    }
+    // Put on the desktop, then one divider, then the next group
+    const html = render().html;
+    const between = html.slice(html.indexOf('data-menu-item="put-on-desktop"'), html.indexOf('data-menu-item="archive-all-threads"'));
+    expect(between.match(/class="menu-divider/g)).toHaveLength(1);
+  });
+
+  it("Mark as Unread flags the bot", () => {
     render();
     const found = buttons();
     found.get("mark-unread")!.props.onClick();
     expect(fixture.dispatched).toContainEqual({ type: "markUnread", botId: bot.id });
-    found.get("copy-link")!.props.onClick();
-    found.get("copy-id")!.props.onClick();
-    expect(fixture.copied).toEqual(["sagax://bot/dumpling", "thread"]);
+    expect(found.has("copy-link")).toBe(false);
+    expect(found.has("copy-id")).toBe(false);
+    expect(fixture.copied).toEqual([]);
   });
 
   it("offers Mark as Read to a bot with unread messages", () => {
@@ -151,10 +165,10 @@ describe("the sidebar's bot menu", () => {
     expect(items(render().html)).not.toContain("new-window");
   });
 
-  it("sets the groups apart: five separators, Delete last", () => {
+  it("sets the groups apart: four separators, Delete last", () => {
     const { html } = render();
     // #4183: the menu family's divider (MenuDivider, menu-look.tsx)
-    expect(html.match(/class="menu-divider /g)).toHaveLength(5);
+    expect(html.match(/class="menu-divider /g)).toHaveLength(4);
     expect(items(html).at(-1)).toBe("delete");
   });
 
@@ -200,7 +214,8 @@ describe("the sidebar's bot menu", () => {
     setLocale("fr");
     const main = render().html;
     for (const label of [">Nouveau fil<", ">Épingler<", ">Déplacer vers<", ">Renommer le bot<", ">Modifier le bot<", ">Mettre sur le bureau<", ">Masquer de la barre latérale<", ">Archiver<", ">Supprimer<"]) expect(main).toContain(label);
-    for (const label of [">Marquer comme non lu<", ">Nouvelle fenêtre<", ">Copier le lien<", ">Copier l&#x27;ID de la conversation<"]) expect(main).toContain(label);
+    for (const label of [">Marquer comme non lu<", ">Nouvelle fenêtre<"]) expect(main).toContain(label);
+    for (const label of [">Copier le lien<", ">Copier l&#x27;ID de la conversation<"]) expect(main).not.toContain(label);
     for (const label of [">Tout marquer comme lu<", ">Modèle…<"]) expect(main).not.toContain(label);
     expect(main).not.toContain(">Plus<");
     expect(main).not.toContain("robot");
@@ -213,7 +228,7 @@ describe("Share in the sidebar's bot menu", () => {
   it("sits after Edit bot and opens the bot's Sharing page, for any member", () => {
     fixture.state = organization;
     const { html } = render();
-    expect(items(html)).toEqual(["new-thread", "pin", "move", "mark-unread", "new-window", "rename", "edit", "share", "put-on-desktop", "copy-link", "copy-id", "archive-all-threads", "delete-all-threads", "hide", "archive", "delete"]);
+    expect(items(html)).toEqual(["new-thread", "pin", "move", "mark-unread", "new-window", "rename", "edit", "share", "put-on-desktop", "archive-all-threads", "delete-all-threads", "hide", "archive", "delete"]);
     expect(html).toContain(">Share<");
     buttons().get("share")!.props.onClick();
     expect(fixture.dispatched).toEqual([{ type: "toggleSettings", open: true, botId: bot.id, section: "sharing" }]);

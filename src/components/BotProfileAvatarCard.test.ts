@@ -215,6 +215,29 @@ describe("BotProfileAvatarCard", () => {
       expect(drawn().innerHTML).toBe(atRest);
     });
 
+    it("G51: the pointer never lands on the avatar's drawing, which is redrawn as it moves: a press and its release are the button's own, so a click held as a hand holds it arrives", async () => {
+      const picture = makeBot({ avatarUrl: "/avatar.png", avatarCrop: "circle" });
+      const cards = [
+        ["a new bot's shape", makeBot({ mascotLook: shape }), 104],
+        ["the bot panel's shape", makeBot({ mascotLook: { ...shape, motion: "full" } as MascotLook }), 64],
+        ["an owl", makeBot({ mascotLook: completeMascotLook({ character: "owl" } as MascotLook) }), 104],
+        ["a picture", picture, 104],
+      ] as const;
+      for (const [name, bot, size] of cards) {
+        await act(async () => root.render(createElement(BotProfileAvatarCard, { bot, activeState: "idle", mascotMotion: null, onPatch: vi.fn(), size, fillBox: size === 64 })));
+        const drawn = [...avatar().children];
+        expect(drawn.length, name).toBeGreaterThan(0);
+        // pointer-events is inherited: off on each child of the button, the whole drawing is out of the pointer's way
+        for (const child of drawn) expect(avatar().className.includes("[&>*]:pointer-events-none") || child.className.includes("pointer-events-none"), `${name}: ${child.tagName}`).toBe(true);
+        // turned, the drawing moves: still the button's
+        if (name.endsWith("shape")) {
+          await key(avatar(), "ArrowRight");
+          for (const child of avatar().children) expect(avatar().className.includes("[&>*]:pointer-events-none") || child.className.includes("pointer-events-none"), `${name}, turned`).toBe(true);
+          await key(avatar(), "Escape");
+        }
+      }
+    });
+
     it("G42, a character that is not turned: Escape on a draft's owl with its picker open goes where it went before", async () => {
       const card = createElement(BotProfileAvatarCard, { bot: makeBot({ mascotLook: completeMascotLook({ character: "owl" } as MascotLook) }), activeState: "idle", mascotMotion: null, onPatch: vi.fn(), size: 104 });
       await act(async () => root.render(createElement(BotEditorContext.Provider, { value: { request: vi.fn(), draft: true } }, card)));

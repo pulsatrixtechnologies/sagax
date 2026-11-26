@@ -587,12 +587,25 @@ One row per gesture and state, one test per row, named by the row's id.
 "Site" is the open-bot-avatar site's stage (`apps/site/src/studio/Stage.tsx`,
 0.5.1); "page" is what the bot page did before the mascot was turned by hand
 (a click on the mascot toggles the picker, Escape closes the picker, then the
-page). The rule for Escape: it closes what it closed before, only when the
-mascot has nothing to cancel (a turn, a previewed state). The stage is the
-mascot and its Reset view button, in one wrapper (`[data-mascot-turn]`); on
-the site the button is inside the stage, so the keys and the focus treat the
-two as one. Tests: H is `floating-bots/mascot-turn.dom.test.ts`, P is
-`bot-profile/BotProfilePage.dom.test.ts`, C is `BotProfileAvatarCard.test.ts`.
+page). The stage is the mascot and its Reset view button, in one wrapper
+(`[data-mascot-turn]`); on the site the button is inside the stage, so the
+keys and the focus treat the two as one. Two rules hold on every surface that
+holds the mascot (the bot page, the bot panel, the New bot window, the
+creation wizard):
+
+- Escape: it closes what it closed before, only when the mascot has nothing
+  to cancel (a turn, a previewed state). The mascot takes a key by preventing
+  its default, and whatever holds the mascot leaves a taken key alone.
+- Focus: the focus of the stage is the mascot's. The Reset view button, which
+  hides once the mascot faces front, never takes the focus from a press (the
+  mascot has it from the press on) and hands over a focus the keyboard gave
+  it before it hides. The pointer lands on the button that holds the mascot,
+  never on the drawing inside, which is redrawn as it moves.
+
+Tests: H is `floating-bots/mascot-turn.dom.test.ts`, P is
+`bot-profile/BotProfilePage.dom.test.ts`, C is `BotProfileAvatarCard.test.ts`,
+W is `mascot-escape-hosts.dom.test.ts` (the real bot panel and the real New
+bot window, mounted).
 
 | Id | Gesture | State | What happens | From | Test |
 |---|---|---|---|---|---|
@@ -636,21 +649,27 @@ two as one. Tests: H is `floating-bots/mascot-turn.dom.test.ts`, P is
 | G38 | Escape in the panel | picker open | the picker closes; the focus goes back to the mascot that opened it | page | P |
 | G39 | Escape in the panel | turned, picker open | the picker closes; the mascot stays turned | site (keys are the focused stage's) | P |
 | G40 | Press outside | turned, picker open | the picker closes; the mascot stays turned | page | P |
-| G41 | Escape | a new bot's avatar, turned | front again; the window around it does not act on the key | site | C |
-| G42 | Escape | a new bot's avatar, front, its picker open | a shape: the picker closes alone (before, the key went to the window around it); another character: the key goes where it went before | ours | C |
-| G43 | Reset view button, then Escape | a new bot's avatar, its picker open | front again, the same picker, the focus on the avatar; Escape closes the picker alone | site, page | C |
+| G41 | Escape | a new bot's avatar, turned or previewing a state | front again, the preview dropped; the New bot window stays; with nothing to cancel the next Escape closes it, as before | site | C, W |
+| G42 | Escape | a new bot's avatar, front, its picker open | a shape: the picker closes alone (before, the key went to the window around it); another character: the key goes where it went before | ours | C, W |
+| G43 | Reset view button, then Escape | a new bot's avatar, its picker open | front again, the same picker, the focus on the avatar; Escape closes the picker alone, the window stays | site, page | C, W |
 | G44 | Every gesture above | the bot panel's avatar (64 px, filled to its box) | turned like the others; a click opens the bot's page, a right click its menu, as before; at rest it is the still image it was, the moving drawing only while turned, dragged or previewing | site; the still at rest is ours | C, `shape-stage.test.ts` |
 | G45 | Any | a picture, a character that is not a shape, a thumbnail | not turned | page | H, `shape-stage.test.ts` |
 | G46 | The look changes | turned | another character faces front; the shape comes back facing front | ours | H |
 | G47 | Double click on the Reset view button | turned, picker open or closed | one way back and nothing else: the second click, which lands on the mascot once the button is gone, is no click; the picker stays as it was | site | H, P |
 | G48 | Tab during the way back | coming back | the button is still shown but out of the Tab order; a focus on it when it hides goes to the mascot, so Escape then closes the picker, not the page | ours | H, P |
+| G49 | Escape | the bot panel's avatar, turned or previewing a state (from the mascot or its Reset view button) | front again, the preview dropped; the panel stays; with nothing to cancel the next Escape closes the panel, as before | site | W |
+| G50 | Press on the Reset view button, held while it hides | turned or coming back | the mascot has the focus from the press on, never the button; the button hiding under the press strands no focus, so Escape then closes the picker, not the page | ours | H |
+| G51 | Click or double click held as a hand holds it (40 ms and more) | the avatar card (the bot panel, a new bot), at rest, turned, full or reduced motion | it arrives: the pointer lands on the button, never on the drawing, which is redrawn as it moves | page | C |
 
 Ours (an agent's choice), not settled by the site or the page: the 4 px of
 G11 and the press that leaves before them (G12); the 250 ms of G03 (a double
 click slower than that toggles the picker once, then brings the mascot back);
 the previewed state and its Escape (G24, G25, G37); the focus handed to the
-mascot (G30, G31, G35, G48); Escape closing a new bot's picker alone (G42);
-the bot panel's avatar kept a still image at rest (G44).
+mascot (G30, G31, G35, G48, G50); Escape closing a new bot's picker alone
+(G42); the bot panel's avatar kept a still image at rest (G44). At rest the
+bot panel's avatar is the picture it was, with two differences that come with
+being turned: the open hand as its cursor (it was the pointing hand) and the
+stage's description for a screen reader.
 
 ## HD mascots (painted art, pilot: Shiba)
 

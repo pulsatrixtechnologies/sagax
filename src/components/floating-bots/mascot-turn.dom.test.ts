@@ -557,6 +557,37 @@ describe("the large mascot, turned by hand", () => {
       expect(onActivate).toHaveBeenCalledTimes(2);
     });
 
+    it("G50: a press on the Reset view button never gives it the focus: the mascot has it from the press on, so a press still held when the button hides strands nothing", async () => {
+      await mount();
+      const other = document.createElement("button");
+      document.body.append(other);
+      try {
+        for (const from of ["elsewhere", "the mascot"]) {
+          await key("ArrowRight");
+          expect(reset().hidden, from).toBe(false);
+          (from === "elsewhere" ? other : stageButton()).focus();
+          const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 });
+          await act(async () => { reset().dispatchEvent(press); });
+          // the browser gives the focus to what is pressed unless the press says no
+          expect(press.defaultPrevented, from).toBe(true);
+          expect(document.activeElement, from).toBe(stageButton());
+          // the mascot faces front while the press is still down (a key, the end of the way back): the button hides
+          await key("Home");
+          expect(reset().hidden, from).toBe(true);
+          expect(document.activeElement, from).toBe(stageButton());
+        }
+        // another button of the mouse is no press on it
+        await key("ArrowRight");
+        other.focus();
+        const right = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 2 });
+        await act(async () => { reset().dispatchEvent(right); });
+        expect(right.defaultPrevented).toBe(false);
+        expect(document.activeElement).toBe(other);
+      } finally {
+        other.remove();
+      }
+    });
+
     it("G48: on its way back the Reset view button is out of the Tab order, and a focus left on it goes to the mascot when it hides", async () => {
       const frame = { request: globalThis.requestAnimationFrame, cancel: globalThis.cancelAnimationFrame };
       const queued = new Map<number, FrameRequestCallback>();

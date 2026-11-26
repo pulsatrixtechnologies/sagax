@@ -29,6 +29,14 @@
 // when it hides goes to the mascot. A double click on the button is one way
 // back and nothing else: its second click, which lands on the mascot once the
 // button is gone, is no click on the mascot.
+//
+// Two rules, the same on every surface that holds the mascot (the bot page,
+// the bot panel, the New bot window, the wizard; docs/mascots.md):
+// - Escape: the mascot takes the key by preventing its default, and whatever
+//   holds the mascot leaves a taken key alone.
+// - Focus: the focus of the stage is the mascot's. A press never gives it to
+//   the Reset view button (the mascot has it from the press on), and the
+//   pointer lands on the button that holds the mascot, never on the drawing.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import type { AvatarState } from "open-bot-avatar";
 import { t } from "@/lib/i18n";
@@ -293,8 +301,9 @@ function focusMascot(reset: HTMLElement) {
 /**
  * Shown while the mascot is turned: brings it back to the front (the site's
  * "Reset view"). It hides once the mascot faces front, so it never keeps the
- * focus through its own press or a key: the mascot takes it first, or the
- * focus would fall to the document and the next Escape would close the page.
+ * focus through its own press or a key: the mascot takes it first (from the
+ * press itself, not from its click), or the focus would fall to the document
+ * and the next Escape would close the page.
  */
 export function MascotTurnReset({ turn, className }: { turn: MascotTurn; className?: string }) {
   const button = useRef<HTMLButtonElement>(null);
@@ -310,6 +319,14 @@ export function MascotTurnReset({ turn, className }: { turn: MascotTurn; classNa
         ref={button}
         type="button"
         data-mascot-turn-reset=""
+        // The focus of the stage is the mascot's: a press never gives it to the button, which is about to hide.
+        // A press still down when the button hides would leave the focus on the document, and the next Escape
+        // would close the page. The click still comes; the keyboard reaches the button by Tab as before.
+        onMouseDown={(event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          focusMascot(event.currentTarget);
+        }}
         onClick={(event) => {
           focusMascot(event.currentTarget);
           turn.resetPressed();

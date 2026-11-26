@@ -82,7 +82,7 @@ export function BotProfileAvatarCard({
   return (
     <div className="relative">
       {/* room above for a move's jump and effects: the panel scrolls, so anything past its top is cut by a straight edge.
-          pt-5 from 80px up (panel 92, wizard 104, profile 144) so a jump clears the box. */}
+          pt-5 from 80px up (wizard 104, profile 144; the panel's 64 is under it) so a jump clears the box. */}
       <div className={cn("flex justify-center pb-0", size >= 80 ? "pt-5" : "pt-3")}>
         <span
           className="relative inline-flex"
@@ -131,7 +131,9 @@ export function BotProfileAvatarCard({
           }}
           title={t("botPanel.avatar.dropOrPaste")}
           data-avatar-dropping={dropping ? "" : undefined}
-          className={cn("relative rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent", turnCursor(turn), dropping && "ring-2 ring-accent")}
+          // The pointer never lands on the drawing (pointer-events is inherited): a moving drawing rewrites its
+          // nodes on every frame, and a press whose node is gone at the release is no click for the browser.
+          className={cn("relative rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent [&>*]:pointer-events-none", turnCursor(turn), dropping && "ring-2 ring-accent")}
         >
           <ShapeStageContext.Provider value={turn.stage}>
           <MascotGlassCaustic turn={turn} bot={bot} state={agentStateForBot(bot)} />

@@ -179,6 +179,8 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
         broken: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_MODE: "api-error", FAKE_CLAUDE_API_ERROR: "429 Too Many Requests: rate limit reached" }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
         // A subscription engine: only a person's own sign-in runs it, never the organization's key.
         own: { driver: "claudeAgent", config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        // An account added beside the first one, on no bot: C5 removes it (#5351).
+        spare: { driver: "claudeAgent", config: { cli: FAKE_CLAUDE, fullAuto: true } },
       },
     }));
     await start();
@@ -640,7 +642,7 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
 
     expect((await admin("POST", "engines/claude/remove", ALICE)).body).toMatchObject({ code: "catalog_engine" });
     expect((await admin("POST", "engines/claude/key", ALICE, { key: "console-test-key-0001" })).body).toMatchObject({ code: "engine_takes_no_key" });
-    expect((await admin("POST", "engines/openrouter/key", ALICE, { key: "short" })).body).toMatchObject({ code: "engine_key_shape" });
+    expect((await admin("POST", "engines/openrouter/key", ALICE, { key: "short" })).body).toMatchObject({ code: "bad_request" });
 
     const saved = await admin("POST", "engines/openrouter/key", ALICE, { key: "console-test-key-0001" });
     expect(saved.status, saved.text).toBe(200);
@@ -672,6 +674,87 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     expect(restored.body.engines.find((engine: { id: string }) => engine.id === "openrouter")).toMatchObject({ hidden: false });
     expect((await api("GET", "/api/config", alice)).body.allowedEngines).toBeNull();
     await expect.poll(async () => (await admin("GET", "audit?category=engine&limit=50", ALICE)).text).toContain("engines.restore");
+  });
+
+  it("C5: the organization's engines are its admin's alone: no member, no manager, no other organization; an added account is removed, never hidden; hiding rewrites no stored list; the key is in no log (#5351)", async () => {
+    const KEY = "console-test-key-0002";
+    const writes: Array<[string, unknown?]> = [
+      ["engines/spare/remove"], ["engines/openrouter/key", { key: KEY }], ["engines/openrouter/key/remove"],
+      ["engines/openrouter/hide"], ["engines/openrouter/restore"],
+    ];
+    const before = (await admin("GET", "engines", ALICE)).body.engines;
+    expect(before.find((engine: { id: string }) => engine.id === "spare")).toMatchObject({ source: "added", removable: true, hideable: false, hidden: false });
+
+    // not an admin: a member and a manager are refused on each of the six
+    for (const person of [BOB, MONA]) {
+      expect((await admin("GET", "engines", person)).body.code).toBe("forbidden_role");
+      for (const [path, body] of writes) expect((await admin("POST", path, person, body ?? {})).body.code, path).toBe("forbidden_role");
+    }
+    // another organization: an assertion signed for another server or
+    // another address is no credential here, whatever role it carries
+    for (const other of [{ serverId: "01j9s3other000000000server" }, { aud: "https://other.example" }]) {
+      const listed = await admin("GET", "engines", ALICE, undefined, other);
+      expect([listed.status, listed.body.code]).toEqual([401, "assertion_invalid"]);
+      expect(listed.body.engines).toBeUndefined();
+      for (const [path, body] of writes) {
+        const refused = await admin("POST", path, ALICE, body ?? {}, other);
+        expect([refused.status, refused.body.code], path).toEqual([401, "assertion_invalid"]);
+      }
+    }
+    expect((await admin("GET", "engines", ALICE)).body.engines).toEqual(before);
+
+    // an added account is never hidden nor restored, a catalog engine never removed
+    expect((await admin("POST", "engines/spare/hide", ALICE, {})).body).toMatchObject({ code: "added_engine" });
+    expect((await admin("POST", "engines/spare/restore", ALICE, {})).body).toMatchObject({ code: "added_engine" });
+    expect((await admin("POST", "engines/openrouter/remove", ALICE, {})).body).toMatchObject({ code: "catalog_engine" });
+    expect((await admin("POST", "engines/ghost/remove", ALICE, {})).status).toBe(404);
+    expect((await admin("POST", "engines/spare/key/remove", ALICE, {})).body).toMatchObject({ code: "engine_takes_no_key" });
+    expect((await admin("POST", "engines/openrouter/key", ALICE, {})).body).toMatchObject({ code: "bad_request" });
+    expect((await admin("GET", "engines", ALICE)).body.engines).toEqual(before);
+
+    // hide and restore: the stored allowedEngines and disabledModels stay as they were
+    const every = before.map((engine: { id: string }) => engine.id);
+    const models = (await admin("GET", "settings", ALICE)).body.policies.engineModels as Record<string, Array<{ id: string }>>;
+    const [engineWithModel] = Object.entries(models).filter(([id, list]) => id !== "openrouter" && list.length > 0);
+    expect(engineWithModel, "the fixture has an engine with a model").toBeTruthy();
+    const off = [`${engineWithModel![0]}/${engineWithModel![1][0]!.id}`];
+    const stored = (await admin("POST", "settings", ALICE, { allowedEngines: every, disabledModels: off })).body.settings.policies;
+    expect(stored.allowedEngines).toEqual(every);
+    expect(stored.disabledModels).toEqual(off);
+    const alice = await signIn(ALICE);
+    expect((await api("GET", "/api/config", alice)).body.allowedEngines).toContain("openrouter");
+    expect((await admin("POST", "engines/openrouter/hide", ALICE, {})).body).toMatchObject({ ok: true, hidden: true });
+    const during = (await admin("GET", "settings", ALICE)).body.policies;
+    expect(during.allowedEngines).toEqual(stored.allowedEngines);
+    expect(during.disabledModels).toEqual(stored.disabledModels);
+    expect((await api("GET", "/api/config", alice)).body.allowedEngines).not.toContain("openrouter");
+    expect((await admin("POST", "engines/openrouter/restore", ALICE, {})).body).toMatchObject({ ok: true, hidden: false });
+    const after = (await admin("GET", "settings", ALICE)).body.policies;
+    expect(after.allowedEngines).toEqual(stored.allowedEngines);
+    expect(after.disabledModels).toEqual(stored.disabledModels);
+    expect((await api("GET", "/api/config", alice)).body.allowedEngines).toContain("openrouter");
+    await admin("POST", "settings", ALICE, { allowedEngines: null, disabledModels: [] });
+
+    // the added account goes, with the list answered; a second removal finds nothing
+    const removed = await admin("POST", "engines/spare/remove", ALICE, {});
+    expect(removed.status, removed.text).toBe(200);
+    expect(removed.body.ok).toBe(true);
+    expect(removed.body.engines.map((engine: { id: string }) => engine.id)).not.toContain("spare");
+    expect((await admin("POST", "engines/spare/remove", ALICE, {})).status).toBe(404);
+
+    // the key: in no answer, no audit row and no line of the server's log
+    const saved = await admin("POST", "engines/openrouter/key", ALICE, { key: KEY });
+    expect(saved.body.configured, saved.text).toBe(true);
+    expect(saved.text).not.toContain(KEY);
+    const cleared = await admin("POST", "engines/openrouter/key/remove", ALICE, {});
+    expect(cleared.body.configured, cleared.text).toBe(false);
+    await expect.poll(async () => (await admin("GET", "audit?category=engine&limit=100", ALICE)).text).toContain("engines.key.remove");
+    const audit = (await admin("GET", "audit?category=engine&limit=100", ALICE)).text;
+    expect(audit).toContain("engines.remove");
+    for (const secret of [KEY, "console-test-key-0001"]) {
+      expect(audit).not.toContain(secret);
+      expect(log).not.toContain(secret);
+    }
   });
 
   it("C5: the vault export policy (2026-10-18), and a pairing code is no recent sign-in", async () => {

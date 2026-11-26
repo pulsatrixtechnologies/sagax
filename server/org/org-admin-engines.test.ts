@@ -27,7 +27,7 @@ function setup(options: { hosted?: boolean; busy?: boolean } = {}) {
       return { ok: true, moved: [{ botId: "b1", to: "claude" }] };
     },
     setKey: async (id, key) => {
-      if (key === "short") return { ok: false, status: 400, error: "Enter the access key as a single line, between 8 and 400 characters.", code: "engine_key_shape" };
+      if (key === "short") return { ok: false, status: 400, error: "Enter the access key as a single line, between 8 and 400 characters.", code: "bad_request" };
       if (key) keys.set(id, key);
       else keys.delete(id);
       return { ok: true, configured: Boolean(key) };
@@ -115,7 +115,9 @@ describe("engines", () => {
     expect((await console.call("POST", "engines/ghost/key", { body: { key: FAKE_KEY } })).status).toBe(404);
     expect((await console.call("POST", "engines/claudeApi/key", { body: { key: FAKE_KEY, extra: 1 } })).status).toBe(400);
     expect((await console.call("POST", "engines/claudeApi/key", { body: { key: "  " } })).status).toBe(400);
-    expect(await console.call("POST", "engines/claudeApi/key", { body: { key: "short" } })).toMatchObject({ status: 400, body: { code: "engine_key_shape" } });
+    expect(await console.call("POST", "engines/claudeApi/key", { body: { key: "short" } })).toMatchObject({ status: 400, body: { code: "bad_request" } });
+    expect(await console.call("POST", "engines/claudeApi/key", { body: {} })).toMatchObject({ status: 400, body: { code: "bad_request" } });
+    expect(await console.call("POST", "engines/claude/key/remove")).toMatchObject({ status: 400, body: { code: "engine_takes_no_key" } });
     expect(keys.size).toBe(0);
     expect(console.records).toEqual([]);
   });

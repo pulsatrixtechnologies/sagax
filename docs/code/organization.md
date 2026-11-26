@@ -337,6 +337,21 @@ Covered by `src/components/SettingsModal.orgCleanup.test.ts`,
   `server/routes/credential-vault.test.ts`,
   `server/perspicax/perspicax-org-routes.test.ts`, `server/org/org-admin-ops.test.ts`, C5
   in `server/org/org-admin-console.e2e.test.ts`.
+- The organization's engines from the Perspicax console (2026-11-25,
+  #5351, `server/org/org-admin-engines.ts`, contract in
+  `docs/org-admin-api.md`, "Engines"): six admin routes under
+  `/api/org/admin/engines`, listed in `GET capabilities` `routes`. An added
+  account is removed through the instance routes' own removal
+  (`removeAccountMovingBots`); the organization's key of a key engine is
+  written where the provider card writes it (`saveOrgEngineKey`, the
+  `config` target of `engineKeyTarget`), never answered, logged or audited;
+  a catalog engine is hidden in `organization.hiddenEngines` and taken out
+  of the enforced list by `effectiveAllowedEngines`
+  (`shared/org-allowed-engines.ts`), with `allowedEngines` and
+  `disabledModels` left as stored. A person's own account, server and keys
+  are not in these routes. Tests: `server/org/org-admin-engines.test.ts`,
+  `shared/org-allowed-engines.test.ts`, C5 in
+  `server/org/org-admin-console.e2e.test.ts`.
 - Sharing in the organization is one compact row per bot (avatar, owner,
   sharing count, running or idle from `/api/org/bots` `look`/`running`);
   the grants open inline, the force actions sit in an admin-only row menu

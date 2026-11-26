@@ -1002,7 +1002,8 @@ engine is `400 catalog_engine` (it is hidden instead). Audited
 The key is one line, 8 to 400 characters. Saved where the Settings screen
 saves it, then the providers reload. Answers `{ "configured", "engines" }`;
 the key is never answered, logged or written in the audit row. An engine
-with no organization key is `400 engine_takes_no_key`. Audited
+with no organization key is `400 engine_takes_no_key`; a key of another
+shape is `400 bad_request`. Audited
 `engines.key.set` and `engines.key.remove`.
 
 A workspace whose provider settings are managed for it answers `403` to

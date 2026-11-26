@@ -245,7 +245,7 @@ export async function saveOrgEngineKey(deps: ConfigEngineKeyDeps, instanceId: st
   try {
     key = normalizeEngineKey(raw);
   } catch (error) {
-    return { ok: false, status: 400, error: error instanceof EngineKeyError ? error.message : "Enter the access key as a single line, between 8 and 400 characters.", code: "engine_key_shape" };
+    return { ok: false, status: 400, error: error instanceof EngineKeyError ? error.message : "Enter the access key as a single line, between 8 and 400 characters.", code: "bad_request" };
   }
   if (deps.getProviderConfigBusy()) return { ok: false, status: 409, error: "provider settings are already being updated" };
   deps.setProviderConfigBusy(true);

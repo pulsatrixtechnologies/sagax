@@ -654,6 +654,24 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     expect(cleared.status, cleared.text).toBe(200);
     expect(cleared.body.configured).toBe(false);
     expect(cleared.body.engines.find((engine: { id: string }) => engine.id === "openrouter")).toMatchObject({ orgKey: false });
+
+    // 2026-11-25: a catalog provider is hidden, never deleted. It leaves
+    // everyone's menus like one turned off; the stored list is untouched.
+    expect(caps.body.routes).toEqual(expect.arrayContaining(["POST engines/{id}/hide", "POST engines/{id}/restore"]));
+    expect((await admin("POST", "engines/openrouter/hide", MONA)).body.code).toBe("forbidden_role");
+    const alice = await signIn(ALICE);
+    expect((await api("GET", "/api/config", alice)).body.allowedEngines).toBeNull();
+    const hiddenAnswer = await admin("POST", "engines/openrouter/hide", ALICE);
+    expect(hiddenAnswer.status, hiddenAnswer.text).toBe(200);
+    expect(hiddenAnswer.body.engines.find((engine: { id: string }) => engine.id === "openrouter")).toMatchObject({ hidden: true, hideable: true });
+    const offered = (await api("GET", "/api/config", alice)).body.allowedEngines as string[];
+    expect(offered).toContain("claude");
+    expect(offered).not.toContain("openrouter");
+    expect((await admin("GET", "settings", ALICE)).body.policies.allowedEngines).toBeNull();
+    const restored = await admin("POST", "engines/openrouter/restore", ALICE);
+    expect(restored.body.engines.find((engine: { id: string }) => engine.id === "openrouter")).toMatchObject({ hidden: false });
+    expect((await api("GET", "/api/config", alice)).body.allowedEngines).toBeNull();
+    await expect.poll(async () => (await admin("GET", "audit?category=engine&limit=50", ALICE)).text).toContain("engines.restore");
   });
 
   it("C5: the vault export policy (2026-10-18), and a pairing code is no recent sign-in", async () => {

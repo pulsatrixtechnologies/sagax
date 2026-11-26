@@ -636,7 +636,7 @@ import { createAccountMovesHost, type AccountMovesHost } from "./engines/account
 import { threadModelFallback } from "./threads/thread-model.ts";
 import { engineProblem, namesEngine, noEngineError } from "./bots/bot-engine.ts";
 import { sameModelSelection } from "../shared/thread-model.ts";
-import { allowedFallbackSelection, engineAllowed } from "../shared/org-allowed-engines.ts";
+import { allowedFallbackSelection, effectiveAllowedEngines, engineAllowed } from "../shared/org-allowed-engines.ts";
 import { offeredEngines } from "../shared/offered-engines.ts";
 import { cleanDisabledModels, cleanFavoriteModels, modelOffer, type ModelSwitches } from "../shared/offered-models.ts";
 import { createModelSwitchRoutes } from "./routes/model-switches.ts";
@@ -1582,7 +1582,7 @@ import { createAccountSwitch } from "./usage/account-switch-host.ts";
 import { cleanModeModels, type ModeModels } from "../shared/mode-models.ts";
 import { outcomeOfSettledTurn } from "./usage/learned-routing.ts";
 import { createUsageForecast } from "./usage/usage-forecast.ts";
-import { addedAccount } from "../shared/added-account.ts";
+import { addedAccount, providerFirstAccount } from "../shared/added-account.ts";
 import { createCliTestRoutes } from "./routes/cli-test.ts";
 import { createMcpServersHttpRoutes } from "./routes/mcp-servers-http.ts";
 import { createConfigHttpRoutes } from "./routes/config-http.ts";
@@ -33303,7 +33303,19 @@ const orgEnginesDeps: EnginesDeps = {
     const configs = providerConfigs();
     return orgAdminEngines()
       .filter((engine: { voice?: boolean; image?: boolean }) => !engine.voice && !engine.image)
-      .map((engine: Parameters<typeof orgEngineRow>[0]) => orgEngineRow(engine, orgEngineDriver(engine.id), configs[engine.id]?.access));
+      .map((engine: Parameters<typeof orgEngineRow>[0]) => orgEngineRow(engine, orgEngineDriver(engine.id), configs[engine.id]?.access, orgHiddenEngines().includes(engine.id)));
+  },
+  setHidden: (instanceId, hidden) => {
+    const others = orgHiddenEngines().filter((id) => id !== instanceId);
+    const organization = { ...cfg.organization };
+    const next = hidden ? [...others, instanceId] : others;
+    if (next.length) organization.hiddenEngines = next;
+    else delete organization.hiddenEngines;
+    saveConfig({ organization });
+    cfg.organization = organization;
+    // as a change of allowedEngines: bots on it move, every picker redraws
+    applyOrgEngineAllowList();
+    broadcast({ kind: "config", ...configStatus() });
   },
   refusal: () => (hostedModels ? HOSTED_PROVIDER_SETTINGS_ERROR : null),
   remove: async (instanceId) => {
@@ -34357,10 +34369,25 @@ function orgOwnAccountsOutsideList(): boolean {
 /** Organization server: the engines its admin allows (Perspicax), null for
  * every engine (shared/org-allowed-engines.ts). */
 function orgAllowedEngines(): string[] | null {
-  const allowed = cfg.organization?.allowedEngines;
+  if (IDENTITY.kind !== "perspicax") return null;
+  const stored = cfg.organization?.allowedEngines;
   // [] is "none" (2026-10-17): only null or absent means every engine.
+  // 2026-11-25: a provider the organization hid is off like one left out of
+  // the list, which is not changed (effectiveAllowedEngines). "Every engine
+  // but these" names the organization's engines: a person's own account
+  // follows its provider's first one below, their own server stays theirs.
+  const hidden = orgHiddenEngines();
+  const every = hidden.length
+    ? registry.entries().map((entry) => entry.instanceId).filter((id) => !accountOwnerOf(cfg.instances, id) || !hidden.includes(providerFirstAccount(id, cfg.instances?.[id]?.driver ?? "") ?? ""))
+    : [];
+  const allowed = effectiveAllowedEngines(Array.isArray(stored) ? stored : null, hidden, every);
   // #4435: a person's own added account follows its provider's first one.
-  return IDENTITY.kind === "perspicax" && Array.isArray(allowed) ? allowedWithOwnedAccounts(allowed, cfg.instances) : null;
+  return allowed ? allowedWithOwnedAccounts(allowed, cfg.instances) : null;
+}
+/** 2026-11-25: the catalog engines the organization hid (Perspicax, Model
+ * providers, `POST engines/{id}/hide`). Empty on a solo server. */
+function orgHiddenEngines(): string[] {
+  return IDENTITY.kind === "perspicax" ? cfg.organization?.hiddenEngines ?? [] : [];
 }
 /** Why a model choice may not use this engine here, if it may not.
  * 2026-10-30: an engine outside the organization's list is refused to

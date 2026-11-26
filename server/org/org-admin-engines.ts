@@ -6,14 +6,20 @@
 //   POST /api/org/admin/engines/{id}/remove        admin
 //   POST /api/org/admin/engines/{id}/key           admin, { key }
 //   POST /api/org/admin/engines/{id}/key/remove    admin
+//   POST /api/org/admin/engines/{id}/hide          admin
+//   POST /api/org/admin/engines/{id}/restore       admin
 //
 // The rows are the organization-wide engines `GET capabilities` lists (never
 // a person's own account or server), each saying what it is:
 //
 // - `catalog`: an engine this server always carries (server/config.ts
-//   instanceConfigs: the subscription engines and the key engines). What
-//   removing one means is not decided, so `remove` refuses it here; the
-//   organization turns it off in its list of allowed engines.
+//   instanceConfigs: the subscription engines and the key engines). It is
+//   never deleted: `hide` takes it out of the organization's list and of
+//   everyone's model menus, `restore` puts it back with what it had
+//   (owner decision of 2026-11-25). A hidden engine is off exactly like one
+//   left out of `allowedEngines` (shared/org-allowed-engines.ts
+//   effectiveAllowedEngines); the stored list and the models turned off are
+//   not touched.
 // - `added`: an account added beside a provider's first one
 //   (shared/added-account.ts addedAccount). `remove` takes it away through
 //   the removal the instance routes use, its bots moved first.
@@ -40,11 +46,15 @@ export interface OrgEngineRow {
   removable: boolean;
   /** `POST engines/{id}/key` takes a key for it. */
   takesKey: boolean;
+  /** The organization hid it: off for everyone, back with `restore`. */
+  hidden: boolean;
+  /** `POST engines/{id}/hide` takes it (a catalog engine). */
+  hideable: boolean;
 }
 
 /** One row from what `GET capabilities` says of an engine, its driver and
  * its access (`api` for a key engine). */
-export function orgEngineRow(engine: Pick<AdminEngine, "id" | "name" | "kind" | "installed" | "auth" | "orgKey">, driver: string, access: string | undefined): OrgEngineRow {
+export function orgEngineRow(engine: Pick<AdminEngine, "id" | "name" | "kind" | "installed" | "auth" | "orgKey">, driver: string, access: string | undefined, hidden = false): OrgEngineRow {
   // A key engine of the same tool is a key, not an account (removeAddedAccount).
   const added = access !== "api" && addedAccount(engine.id, driver);
   return {
@@ -56,6 +66,8 @@ export function orgEngineRow(engine: Pick<AdminEngine, "id" | "name" | "kind" | 
     // organization server (engineKeyScope): only a configuration key is
     // the organization's.
     takesKey: engineKeyTarget(engine.id, driver)?.kind === "config",
+    hidden: !added && hidden,
+    hideable: !added,
   };
 }
 
@@ -77,6 +89,9 @@ export interface EnginesDeps {
   remove(id: string): Promise<EngineRemoval>;
   /** Saves (or, with an empty key, clears) the organization's key. */
   setKey(id: string, key: string): Promise<EngineKeySaved>;
+  /** Hides a catalog engine from the organization, or puts it back. The
+   * list of allowed engines and the models turned off stay as they are. */
+  setHidden(id: string, hidden: boolean): void;
 }
 
 const refused = (status: number, message: string, code?: string): ConsoleAnswer =>
@@ -98,6 +113,18 @@ export function enginesRoutes(deps: EnginesDeps): ConsoleRoute[] {
     ctx.record({ category: "engine", action: key ? "engines.key.set" : "engines.key.remove", target: { kind: "engine", id: row.id, name: row.name }, before: { orgKey: row.orgKey }, after: { orgKey: saved.configured } });
     return ok({ configured: saved.configured, engines: deps.engines() });
   };
+  // As `allowedEngines` in POST settings: the organization's own choice of
+  // what it offers, so a managed workspace takes it too.
+  const setHidden = (ctx: ConsoleContext, hidden: boolean): ConsoleAnswer => {
+    const row = deps.engines().find((candidate) => candidate.id === ctx.params.id);
+    if (!row) return notFound("No such engine.");
+    if (!row.hideable) return fail(400, "added_engine", "This is an added account. Remove it instead.");
+    if (row.hidden !== hidden) {
+      deps.setHidden(row.id, hidden);
+      ctx.record({ category: "engine", action: hidden ? "engines.hide" : "engines.restore", target: { kind: "engine", id: row.id, name: row.name }, before: { hidden: row.hidden }, after: { hidden } });
+    }
+    return ok({ ok: true, hidden, engines: deps.engines() });
+  };
   return [
     {
       method: "GET",
@@ -114,7 +141,7 @@ export function enginesRoutes(deps: EnginesDeps): ConsoleRoute[] {
       async handle(ctx) {
         const row = rowOf(ctx);
         if (!isRow(row)) return row;
-        if (!row.removable) return fail(400, "catalog_engine", "This engine is part of the server's catalog. Turn it off in the list of allowed providers.");
+        if (!row.removable) return fail(400, "catalog_engine", "This engine is part of the server's catalog. Hide it instead.");
         const removed = await deps.remove(row.id);
         if (!removed.ok) return refused(removed.status, removed.body.error, removed.body.code);
         ctx.record({ category: "engine", action: "engines.remove", target: { kind: "engine", id: row.id, name: row.name } });
@@ -137,6 +164,22 @@ export function enginesRoutes(deps: EnginesDeps): ConsoleRoute[] {
       min: "admin",
       handle(ctx) {
         return saveKey(ctx, "");
+      },
+    },
+    {
+      method: "POST",
+      path: "engines/{id}/hide",
+      min: "admin",
+      handle(ctx) {
+        return setHidden(ctx, true);
+      },
+    },
+    {
+      method: "POST",
+      path: "engines/{id}/restore",
+      min: "admin",
+      handle(ctx) {
+        return setHidden(ctx, false);
       },
     },
   ];

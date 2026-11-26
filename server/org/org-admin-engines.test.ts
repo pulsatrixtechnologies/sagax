@@ -12,10 +12,11 @@ const FAKE_KEY = "test-key-not-a-real-one";
 function setup(options: { hosted?: boolean; busy?: boolean } = {}) {
   const removed: string[] = [];
   const keys = new Map<string, string>();
+  const hidden = new Set<string>();
   const rows = (): OrgEngineRow[] => [
-    orgEngineRow({ ...base, id: "claude", name: "Claude" }, "claudeAgent", undefined),
-    orgEngineRow({ ...base, id: `claude-${UUID}`, name: "Second account" }, "claudeAgent", undefined),
-    orgEngineRow({ ...base, id: "claudeApi", name: "Claude (API key)", auth: "apiKey", orgKey: keys.has("claudeApi") }, "claudeAgent", "api"),
+    orgEngineRow({ ...base, id: "claude", name: "Claude" }, "claudeAgent", undefined, hidden.has("claude")),
+    orgEngineRow({ ...base, id: `claude-${UUID}`, name: "Second account" }, "claudeAgent", undefined, hidden.has(`claude-${UUID}`)),
+    orgEngineRow({ ...base, id: "claudeApi", name: "Claude (API key)", auth: "apiKey", orgKey: keys.has("claudeApi") }, "claudeAgent", "api", hidden.has("claudeApi")),
   ].filter((row) => !removed.includes(row.id));
   const deps: EnginesDeps = {
     engines: rows,
@@ -31,8 +32,12 @@ function setup(options: { hosted?: boolean; busy?: boolean } = {}) {
       else keys.delete(id);
       return { ok: true, configured: Boolean(key) };
     },
+    setHidden: (id, hide) => {
+      if (hide) hidden.add(id);
+      else hidden.delete(id);
+    },
   };
-  return { removed, keys, console: fakeConsole(enginesRoutes(deps)) };
+  return { removed, keys, hidden, console: fakeConsole(enginesRoutes(deps)) };
 }
 
 describe("orgEngineRow", () => {
@@ -69,6 +74,8 @@ describe("engines", () => {
       "POST engines/{id}/remove admin",
       "POST engines/{id}/key admin",
       "POST engines/{id}/key/remove admin",
+      "POST engines/{id}/hide admin",
+      "POST engines/{id}/restore admin",
     ]);
   });
 
@@ -136,6 +143,37 @@ describe("engines", () => {
     const { console, removed } = setup({ busy: true });
     expect(await console.call("POST", `engines/claude-${UUID}/remove`)).toMatchObject({ status: 409, body: { code: "conflict", message: "provider settings are already being updated" } });
     expect(removed).toEqual([]);
+    expect(console.records).toEqual([]);
+  });
+
+  it("hide: a catalog engine is hidden, not removed; restore brings it back; both audited", async () => {
+    const { console, hidden, removed } = setup();
+    expect(orgEngineRow({ ...base, id: "cursor", name: "Cursor" }, "cursorAgent", undefined)).toMatchObject({ hidden: false, hideable: true });
+    expect(orgEngineRow({ ...base, id: `claude-${UUID}`, name: "Second account" }, "claudeAgent", undefined)).toMatchObject({ hidden: false, hideable: false });
+    const answer = await console.call("POST", "engines/claudeApi/hide");
+    expect(answer).toMatchObject({ status: 200, body: { ok: true, hidden: true } });
+    // still listed, and it says so: the console draws it under "Add"
+    expect(answer.body.engines.find((row: OrgEngineRow) => row.id === "claudeApi")).toMatchObject({ hidden: true, hideable: true, source: "catalog" });
+    expect([...hidden]).toEqual(["claudeApi"]);
+    expect(removed).toEqual([]);
+    expect(console.records.at(-1)).toMatchObject({ category: "engine", action: "engines.hide", target: { kind: "engine", id: "claudeApi", name: "Claude (API key)" } });
+    // hiding twice changes nothing and writes no second row
+    expect((await console.call("POST", "engines/claudeApi/hide")).status).toBe(200);
+    expect(console.records.length).toBe(1);
+
+    const back = await console.call("POST", "engines/claudeApi/restore");
+    expect(back).toMatchObject({ status: 200, body: { ok: true, hidden: false } });
+    expect(back.body.engines.find((row: OrgEngineRow) => row.id === "claudeApi")).toMatchObject({ hidden: false });
+    expect(hidden.size).toBe(0);
+    expect(console.records.at(-1)).toMatchObject({ action: "engines.restore", target: { kind: "engine", id: "claudeApi" } });
+  });
+
+  it("hide: an added account is removed, never hidden; an unknown engine is not found; members are refused by the route's role", async () => {
+    const { console, hidden } = setup();
+    expect(await console.call("POST", `engines/claude-${UUID}/hide`)).toMatchObject({ status: 400, body: { code: "added_engine" } });
+    expect((await console.call("POST", "engines/ghost/hide")).status).toBe(404);
+    expect((await console.call("POST", "engines/ghost/restore")).status).toBe(404);
+    expect(hidden.size).toBe(0);
     expect(console.records).toEqual([]);
   });
 });

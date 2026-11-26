@@ -972,10 +972,12 @@ a person's own account or server.
 | `POST engines/{id}/remove` | admin | remove an added account |
 | `POST engines/{id}/key` | admin | set the organization's key of a key engine, `{ "key" }` |
 | `POST engines/{id}/key/remove` | admin | clear that key |
+| `POST engines/{id}/hide` | admin | hide a catalog engine from the organization |
+| `POST engines/{id}/restore` | admin | put a hidden engine back |
 
 ### `GET engines`
 
-`{ "engines": [{ "id", "name", "kind", "installed", "auth", "orgKey", "source", "removable", "takesKey" }] }`
+`{ "engines": [{ "id", "name", "kind", "installed", "auth", "orgKey", "source", "removable", "takesKey", "hidden", "hideable" }] }`
 
 - `source`: `catalog` is an engine this server always carries (the
   subscription engines and the key engines); `added` is an account added
@@ -984,13 +986,16 @@ a person's own account or server.
 - `removable`: `POST engines/{id}/remove` takes it (an added account).
 - `takesKey`: the engine has one place for the organization's key in the
   server's configuration. `orgKey` says a key serves it, never the key.
+- `hideable`: `POST engines/{id}/hide` takes it (a catalog engine).
+  `hidden`: the organization hid it. A hidden engine is still listed here,
+  so the console can offer it back.
 
 ### `POST engines/{id}/remove`
 
 Removes an added account as `DELETE /api/instances/:id` does: its bots move
 first. Answers `{ "ok": true, "moved"?, "noEngine"?, "engines" }`. A catalog
-engine is `400 catalog_engine` (it is turned off in `allowedEngines`,
-`POST settings`). Audited `engines.remove`.
+engine is `400 catalog_engine` (it is hidden instead). Audited
+`engines.remove`.
 
 ### `POST engines/{id}/key`, `POST engines/{id}/key/remove`
 
@@ -1000,8 +1005,27 @@ the key is never answered, logged or written in the audit row. An engine
 with no organization key is `400 engine_takes_no_key`. Audited
 `engines.key.set` and `engines.key.remove`.
 
-A workspace whose provider settings are managed for it answers `403` to the
-three writes.
+A workspace whose provider settings are managed for it answers `403` to
+these three writes.
+
+### `POST engines/{id}/hide`, `POST engines/{id}/restore` (2026-11-25)
+
+A catalog engine is never deleted: hiding it takes it out of the
+organization's list and out of everyone's model menus, and restoring it puts
+it back as it was. Stored as `organization.hiddenEngines`; `allowedEngines`
+and `disabledModels` are not changed, so what was allowed and the models
+that were on come back with it.
+
+A hidden engine is off exactly like one left out of `allowedEngines`: the
+app's `allowedEngines` no longer names it, a model on it is refused, Auto
+never picks it, and a bot that was on it moves to Auto on an allowed engine
+with one line in its conversation. Restoring the engine does not move that
+bot back.
+
+Answers `{ "ok": true, "hidden", "engines" }`; hiding a hidden engine or
+restoring a shown one changes nothing. An added account is
+`400 added_engine` (it is removed instead). Audited `engines.hide` and
+`engines.restore`.
 
 ## Usage and cost
 

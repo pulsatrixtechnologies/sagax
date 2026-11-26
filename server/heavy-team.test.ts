@@ -4,7 +4,7 @@
 // holds every expert to.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HEAVY_MAX_ROUNDS, heavyIsRunning, heavyThoughtMs } from "../shared/heavy-team.ts";
+import { HEAVY_MAX_EXPERTS, HEAVY_MAX_ROUNDS, HEAVY_MIN_EXPERTS, heavyIsRunning, heavyThoughtMs } from "../shared/heavy-team.ts";
 import type { HeavyTeamLine } from "../shared/heavy-team.ts";
 import type { ModeModel } from "../shared/model-mode.ts";
 import { allowsTool, narrowToolScope } from "../shared/tool-scope.ts";
@@ -150,22 +150,34 @@ describe("the leader stops at 5 rounds at most (D-20261119-085)", () => {
   });
 });
 
-describe("the leader's plan (D-20261119-084)", () => {
-  it("asks for 2 to 5 experts with a persona each, as JSON", () => {
-    const prompt = planPrompt({ request: "Audit our firewall rules.", seats: 5 });
-    expect(prompt).toContain("2 to 5");
+describe("the leader's plan (D-20261119-084, D-20261126-023)", () => {
+  const asked = (count: number) => JSON.stringify({ experts: Array.from({ length: count }, (_, i) => ({ persona: `P${i + 1}`, focus: `focus ${i + 1}` })) });
+
+  it("asks for the fewest experts that suffice, 2 to 8, with a persona each, as JSON", () => {
+    expect(HEAVY_MIN_EXPERTS).toBe(2);
+    expect(HEAVY_MAX_EXPERTS).toBe(8);
+    const prompt = planPrompt({ request: "Audit our firewall rules.", seats: HEAVY_MAX_EXPERTS });
+    expect(prompt).toContain("2 to 8");
+    expect(prompt).toMatch(/smallest number of experts that is enough/);
+    expect(prompt).toMatch(/simple question/);
     expect(prompt).toContain("\"persona\"");
     expect(prompt.endsWith("The request:\nAudit our firewall rules.")).toBe(true);
   });
 
-  it("reads the leader's choice, between 2 and 5", () => {
+  it("reads the leader's choice, between 2 and 8", () => {
     const four = parseTeamPlan('Sure: {"experts":[{"persona":"Skeptic","focus":"a"},{"persona":"Network","focus":"b"},{"persona":"Cost","focus":"c"},{"persona":"Ops","focus":"d"}]}');
     expect(four.map((brief) => brief.persona)).toEqual(["Skeptic", "Network", "Cost", "Ops"]);
-    const seven = parseTeamPlan(JSON.stringify({ experts: Array.from({ length: 7 }, (_, i) => ({ persona: `P${i}`, focus: "" })) }));
-    expect(seven).toHaveLength(5);
+    // the leader that asks 8 gets 8, its own personas in its order
+    expect(parseTeamPlan(asked(8)).map((brief) => brief.persona)).toEqual(["P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8"]);
+    expect(parseTeamPlan(asked(7))).toHaveLength(7);
+    // 9 is brought down to 8
+    expect(parseTeamPlan(asked(9)).map((brief) => brief.persona)).toEqual(["P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8"]);
+    // 1 is brought up to 2: its expert first, then one default persona
     const one = parseTeamPlan('{"experts":[{"persona":"Lawyer","focus":"contracts"}]}');
-    expect(one.length).toBeGreaterThanOrEqual(2);
-    expect(one[0]!.persona).toBe("Lawyer");
+    expect(one.map((brief) => brief.persona)).toEqual(["Lawyer", "Skeptic"]);
+    // a smaller pool of seats lowers the ceiling, never the floor
+    expect(parseTeamPlan(asked(8), 3)).toHaveLength(3);
+    expect(parseTeamPlan(asked(1), 1)).toHaveLength(2);
   });
 
   it("falls back on three default personas when the reply does not read", () => {
@@ -185,6 +197,38 @@ describe("the seats: different accounts first, then different models", () => {
   it("shares the seats in turn when there are fewer than experts", () => {
     expect(assignSeats([seat("local", "qwen")], 3).map((one) => one.model)).toEqual(["qwen", "qwen", "qwen"]);
     expect(assignSeats([], 3)).toEqual([]);
+    // eight experts on five seats: each seat once, then the strongest again
+    expect(assignSeats(pool, HEAVY_MAX_EXPERTS).map((one) => `${one.instanceId}/${one.model}`)).toEqual([
+      "claude-a/opus", "claude-b/opus", "codex/gpt", "claude-a/sonnet", "claude-b/sonnet", "claude-a/opus", "claude-b/opus", "codex/gpt",
+    ]);
+  });
+});
+
+describe("a team of eight (D-20261126-023)", () => {
+  const eight = (): ExpertSeat[] => Array.from({ length: HEAVY_MAX_EXPERTS }, (_, index) => ({ persona: `P${index + 1}`, focus: "", n: index + 1, seat: seat(`acct-${index}`, `model-${index}`) }));
+
+  it("every expert of a round speaks at once, and each critique reads the seven others", async () => {
+    const line = tracker();
+    let inFlight = 0;
+    let most = 0;
+    const prompts: string[] = [];
+    const fn = vi.fn(async (expert: ExpertSeat, prompt: string): Promise<HeavyAgentOutcome> => {
+      inFlight += 1;
+      most = Math.max(most, inFlight);
+      prompts.push(prompt);
+      await Promise.resolve();
+      inFlight -= 1;
+      return { status: "reply", text: prompt.startsWith("Round 2") ? `plan of ${expert.persona}\nVERDICT: AGREE` : `plan of ${expert.persona}` };
+    });
+    line.setTeam(eight());
+    const result = await runRounds({ experts: eight(), tracker: line, request: "Plan the office move.", ask: fn });
+    expect(most).toBe(8);
+    expect(result.agreed).toBe(true);
+    expect(result.rounds).toBe(2);
+    expect(fn).toHaveBeenCalledTimes(16);
+    expect(line.line.agents).toHaveLength(8);
+    const critique = prompts.find((prompt) => prompt.startsWith("Round 2"))!;
+    expect(critique.match(/^### Expert \d/gm)).toHaveLength(7);
   });
 });
 

@@ -111,7 +111,7 @@ describe("Settings > Modes", () => {
     expect(row("expert").querySelector("[data-mode-effort]")).toBeNull();
   });
 
-  it("Heavy's experts are added and removed one by one, at most five, never the same twice", () => {
+  it("Heavy's experts are added and removed one by one, at most eight, never the same twice", () => {
     mount({ heavy: [{ instanceId: "claude", model: "claude-opus-5-5" }] });
     expect([...row("heavy").querySelectorAll("[data-mode-expert]")].map((node) => node.querySelector("[data-mode-expert-name]")?.textContent)).toEqual(["Claude Opus 5.5 · Claude · ada@acme.test"]);
     expect(list(row("heavy"), "data-mode-expert-add").options.map((option) => option.textContent)).not.toContain("Claude Opus 5.5 · Claude · ada@acme.test");
@@ -120,7 +120,13 @@ describe("Settings > Modes", () => {
     expect(change).toHaveBeenLastCalledWith({ heavy: [{ instanceId: "claude", model: "claude-opus-5-5" }, { instanceId: "codex", model: "gpt-6-astra" }] });
     act(() => row("heavy").querySelector<HTMLButtonElement>("[data-mode-expert-remove]")!.click());
     expect(change).toHaveBeenLastCalledWith({});
-    mount({ heavy: engines.flatMap((engine) => engine.models.map((model) => ({ instanceId: engine.instanceId, model: model.id }))).concat({ instanceId: "codex", model: "extra" }) });
+    // D-20261126-023: up to eight; a ninth is never offered
+    const seats = (count: number) => Array.from({ length: count }, (_, at) => ({ instanceId: "codex", model: `extra-${at + 1}` }));
+    mount({ heavy: seats(7) });
+    expect(row("heavy").querySelectorAll("[data-mode-expert]")).toHaveLength(7);
+    expect(row("heavy").querySelector("[data-mode-expert-add]")).not.toBeNull();
+    mount({ heavy: seats(9) });
+    expect(row("heavy").querySelectorAll("[data-mode-expert]")).toHaveLength(8);
     expect(row("heavy").querySelector("[data-mode-expert-add]")).toBeNull();
   });
 

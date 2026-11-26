@@ -2,6 +2,7 @@
 // with one provider, several providers, and only local models.
 import { describe, expect, it } from "vitest";
 
+import { HEAVY_MAX_EXPERTS } from "../../shared/heavy-team.ts";
 import { FORCED_MODEL_MODES, HEAVY_MAX_AGENTS, isForcedModelMode } from "../../shared/model-mode.ts";
 import { bareModelId, modelForTier, type AutoEngine, type AutoRequest, type CatalogFacts, type CatalogLookup } from "./model-auto.ts";
 import { MODE_TIER, bestPerProvider, heavySeats, localSize, pickModeModel, rankForMode, resolveModes } from "./model-mode.ts";
@@ -177,6 +178,9 @@ describe("modes with several providers", () => {
   });
 
   it("Heavy keeps at most HEAVY_MAX_AGENTS providers", () => {
+    // D-20261126-023: as many seats as the most experts a team may have
+    expect(HEAVY_MAX_AGENTS).toBe(HEAVY_MAX_EXPERTS);
+    expect(HEAVY_MAX_AGENTS).toBe(8);
     const many = [claudeOpus(), codex, grok, gemini, kimi, server()];
     expect(pickModeModel(request(many), "heavy")!.team).toHaveLength(HEAVY_MAX_AGENTS);
   });

@@ -2730,3 +2730,13 @@ describe("the Claude Code MCP servers switch (#1098)", () => {
     expect(claudeUserMcpEnabled({ features: { claudeUserMcp: true } } as AppConfig, true)).toBe(true);
   });
 });
+
+describe("a solo server's own modes (M-20261125-074, D-20261126-023)", () => {
+  const seats = (count: number) => Array.from({ length: count }, (_, at) => ({ instanceId: `acct-${at + 1}`, model: `model-${at + 1}` }));
+
+  it("keeps up to eight Heavy experts, saved and read back, and refuses a ninth", () => {
+    expect(parseConfigPatch({ modeModels: { heavy: seats(8) } }).modeModels?.heavy).toEqual(seats(8));
+    expect(parseStoredConfig({ modeModels: { heavy: seats(8) } }).modeModels?.heavy).toHaveLength(8);
+    expect(() => parseConfigPatch({ modeModels: { heavy: seats(9) } })).toThrow();
+  });
+});

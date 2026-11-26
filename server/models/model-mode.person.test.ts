@@ -4,7 +4,7 @@
 // nothing every mode runs exactly what it ran before (D-20261119-031).
 import { describe, expect, it } from "vitest";
 
-import { cleanModeModels } from "../../shared/mode-models.ts";
+import { MODE_MAX_EXPERTS, cleanModeModels } from "../../shared/mode-models.ts";
 import { bareModelId, type AutoEngine, type AutoRequest, type CatalogFacts, type CatalogLookup } from "./model-auto.ts";
 import { pickModeModel, resolveModes } from "./model-mode.ts";
 
@@ -80,15 +80,17 @@ describe("a person's own modes", () => {
 });
 
 describe("the stored setting", () => {
-  it("keeps only well formed choices: a model per mode, a known level, at most five experts, no duplicate", () => {
+  it("keeps only well formed choices: a model per mode, a known level, at most eight experts, no duplicate", () => {
+    const seat = (n: number) => ({ instanceId: `acct-${n}`, model: String(n) });
+    expect(MODE_MAX_EXPERTS).toBe(8);
     expect(cleanModeModels({
       fast: { instanceId: "claude", model: "claude-haiku-4-5", effort: "medium", extra: 1 },
       expert: { instanceId: "", model: "x" },
-      heavy: [{ instanceId: "a", model: "1" }, { instanceId: "a", model: "1" }, "junk", { instanceId: "b", model: "2" }, { instanceId: "c", model: "3" }, { instanceId: "d", model: "4" }, { instanceId: "e", model: "5" }, { instanceId: "f", model: "6" }],
+      heavy: [seat(1), seat(1), "junk", seat(2), seat(3), seat(4), seat(5), seat(6), seat(7), seat(8), seat(9)],
       build: { instanceId: "a", model: "1" },
     })).toEqual({
       fast: { instanceId: "claude", model: "claude-haiku-4-5", effort: "medium" },
-      heavy: [{ instanceId: "a", model: "1" }, { instanceId: "b", model: "2" }, { instanceId: "c", model: "3" }, { instanceId: "d", model: "4" }, { instanceId: "e", model: "5" }],
+      heavy: [seat(1), seat(2), seat(3), seat(4), seat(5), seat(6), seat(7), seat(8)],
     });
     expect(cleanModeModels({ fast: { instanceId: "claude", model: "m", effort: "ludicrous" } })).toEqual({ fast: { instanceId: "claude", model: "m" } });
     expect(cleanModeModels("x")).toEqual({});

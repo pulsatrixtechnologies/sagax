@@ -3,6 +3,7 @@
 import { pickOrchestrationModel, pickWorkerModel } from "../models/model-auto.ts";
 import { heavyWorthy, pickModeModel, resolveModes } from "../models/model-mode.ts";
 import { isForcedModelMode, type ModeResolution, type ModelMode } from "../../shared/model-mode.ts";
+import { effortAcceptedByEngine } from "../../shared/ultracode-effort.ts";
 import { statSync } from "node:fs";
 export type Host = Record<string, any>;
 
@@ -52,6 +53,15 @@ function autoPickForTurn(input: {
       chain: moved < 0 ? [{ instanceId: to, model: from.model }, ...pick.chain] : pick.chain.map((entry, index) => index === moved ? { ...entry, instanceId: to } : entry),
     };
   };
+  // D-20261126-017: under Auto the person's choice always holds. The Effort level she clicked is used on
+  // every turn, whatever model and engine Auto takes for it (a turn Auto hands to Heavy included), wherever
+  // that engine takes the level. Fast, Expert and Heavy chosen by the person keep setting their own.
+  const held = (pick: AutoPick): AutoPick => {
+    const level = bot.modelSelection.effort;
+    if (!level || isForcedModelMode(bot.modelSelection.mode)) return pick;
+    const engine = engines.find((candidate) => candidate.instanceId === pick.selection.instanceId);
+    return engine?.effortLevels && effortAcceptedByEngine(level, engine.effortLevels) ? { ...pick, selection: { ...pick.selection, effort: level } } : pick;
+  };
   if (input.role === "continue") {
     const record = host.store.taskByThread(bot.id, input.threadId)?.autoModel;
     if (record && host.autoRecordUsable(record, engines, skip)) {
@@ -62,12 +72,12 @@ function autoPickForTurn(input: {
       }
       return {
         payer,
-        pick: {
+        pick: held({
           role: record.role, selection, engineLabel: record.engineLabel, modelLabel: record.modelLabel, tier: record.tier,
           ...(record.taskClass ? { taskClass: record.taskClass } : {}), reason: record.reason,
           ...(record.via ? { via: record.via } : {}), ...(record.fromEngineLabel ? { fromEngineLabel: record.fromEngineLabel } : {}),
           chain: [{ instanceId: record.instanceId, model: record.model }, { instanceId: bot.modelSelection.instanceId, model: bot.modelSelection.model }]
-        }
+        })
       };
     }
   }
@@ -97,10 +107,10 @@ function autoPickForTurn(input: {
   const why = input.role === "orchestration" ? heavyWorthy(input.text) : null;
   if (why) {
     const heavy = pickModeModel(request, "heavy");
-    if (heavy?.team?.length) return { payer, pick: onAccount({ ...heavy, autoHeavy: why }), ...modes };
+    if (heavy?.team?.length) return { payer, pick: held(onAccount({ ...heavy, autoHeavy: why })), ...modes };
   }
   const quick = host.parsedQuickTask(input.text);
-  return { payer, pick: onAccount(pickOrchestrationModel(request, quick)), ...modes };
+  return { payer, pick: held(onAccount(pickOrchestrationModel(request, quick))), ...modes };
 
 }
   return autoPickForTurn;

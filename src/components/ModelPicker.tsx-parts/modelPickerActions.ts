@@ -147,6 +147,8 @@ export interface MenuToggleCtx {
   headless: boolean;
   windowOnly: boolean;
   fallbackAnchor?: () => HTMLElement | null;
+  /** The width of the menu that opens (the chat bar's mode menu is narrower than the model menu). */
+  width?: number;
 }
 
 /** Opens or closes the model menu and places it next to its anchor. */
@@ -158,7 +160,7 @@ export function makeToggleMenu(ctx: MenuToggleCtx) {
       closeMenu();
       return;
     }
-    const MENU_WIDTH = BASE_MENU_WIDTH;
+    const MENU_WIDTH = ctx.width ?? BASE_MENU_WIDTH;
     anchorRef.current = anchor;
     setMenuDoneCall(onDone ? { call: onDone } : null);
     const box = anchor ? (anchor.closest<HTMLElement>('[role="menu"]') ?? anchor) : null;

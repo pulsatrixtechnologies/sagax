@@ -1041,11 +1041,47 @@ describe("the composer's mode menu (#4900, #5088)", () => {
     expect(render(onAuto(), { contained: true }).html).not.toContain("data-composer-model-glyph");
   });
 
-  it("M-20261126-104: the chat bar's menu is 240 px wide; the model menu of the other places keeps its width", () => {
+  it("M-20261126-104: the chat bar's menu is 280 px wide (about 240 in the mockup, wider so Custom names its model whole); the model menu of the other places keeps its width", () => {
     fixture.instances = [signedIn(), codex];
-    expect(menu(open(onAuto(), composerModes).html)).toMatch(/^data-model-menu[^>]*style="[^"]*width:240px/);
+    expect(menu(open(onAuto(), composerModes).html)).toMatch(/^data-model-menu[^>]*style="[^"]*width:280px/);
     fixture.values = [];
     expect(menu(open(onAuto(), { inComposer: true, modes: false }).html)).toMatch(/^data-model-menu[^>]*style="[^"]*width:360px/);
+  });
+
+  // D-20261126-017: what the menu's Effort level SENDS under Auto (the panel's onPick is the picker's setEffort;
+  // which click calls it with which level is ModelPanel.cascade.dom.test.ts; what a turn then runs is
+  // server/index-leaves/autoPickForTurn.mode.test.ts)
+  describe("D-20261126-017: under Auto the Effort level the person clicked is written with the selection", () => {
+    const levels = () => ({ ...signedIn(), capabilities: { withholdsHostTools: true, effortLevels: ["low", "medium", "high"] } }) as InstanceInfo;
+    const sent = () => (vi.mocked(fixture.dispatch).mock.calls.at(-1)![0] as { selection: Record<string, unknown> }).selection;
+
+    it("nothing clicked: the menu is handed no level and nothing is written", async () => {
+      fixture.instances = [levels(), codex];
+      const shown = (await modeMenu(open(onAuto(), composerModes)))!;
+      expect(shown.props.current).toBe("auto");
+      expect(shown.panel.effort!.value).toBeUndefined();
+      expect(fixture.dispatch).not.toHaveBeenCalled();
+    });
+
+    it.each(["low", "medium", "high"] as const)("a level clicked is sent as itself and Auto stays on: %s", async (level) => {
+      fixture.instances = [levels(), codex];
+      const shown = (await modeMenu(open(onAuto(), composerModes)))!;
+      shown.panel.effort!.onPick(level);
+      expect(sent()).toEqual({ instanceId: "claude", model: "claude-opus-5-5", auto: true, effort: level });
+      // the stored level is the one the menu checks the next time it opens
+      fixture.values = [];
+      const again = (await modeMenu(open({ ...onAuto(), modelSelection: { ...onAuto().modelSelection, effort: level } }, composerModes)))!;
+      expect(again.panel.effort!.value).toBe(level);
+    });
+
+    it("the checked level clicked again: no level is sent any more, Auto decides again", async () => {
+      fixture.instances = [levels(), codex];
+      const chosen = { ...onAuto(), modelSelection: { ...onAuto().modelSelection, effort: "high" as const } };
+      const shown = (await modeMenu(open(chosen, composerModes)))!;
+      shown.panel.effort!.onPick(undefined);
+      expect(sent().auto).toBe(true);
+      expect(sent().effort).toBeUndefined();
+    });
   });
 
   it("M-20261126-104: one Effort everywhere: while the bot works the chat bar opens its mode menu, locked but for the effort, never a window of its own", async () => {

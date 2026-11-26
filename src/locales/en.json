@@ -4502,7 +4502,7 @@
   "model.effort.deeper": "Deeper",
   "model.effort.defaultTitle": "Send no effort level and let the provider decide",
   "model.effort.defaultWith": "Default ({level})",
-  "model.effort.levelTitle": "Ask for {level} reasoning effort",
+  "model.effort.levelTitle": "Ask for {level} effort",
   "model.effort.slowerHint": "More effort is slower",
   "model.effort.explain": "More effort gives more thorough answers, but it takes longer and uses your limits faster.",
   "model.effort.recommended": "Recommended",

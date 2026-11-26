@@ -11,8 +11,8 @@
 //
 // #5088, then the owner on 2026-11-23 (M-20261123-040, M-20261123-045,
 // M-20261123-047) and on 2026-11-26 (M-20261126-104, M-20261126-103): in the
-// composer the short view is the mode menu instead (ModeMenu.tsx), about
-// 240 px wide: Auto, Fast, Expert, Heavy, Custom, then Effort (D-20261124-002:
+// composer the short view is the mode menu instead (ModeMenu.tsx),
+// 280 px wide: Auto, Fast, Expert, Heavy, Custom, then Effort (D-20261124-002:
 // Auto's Optimize for is no row of this menu, it is set in Manage models and
 // in a bot's Model cell of Settings). Custom and Effort open beside the menu,
 // which stays on screen (owner 2026-11-25, M-20261125-035, D-20261125-012,
@@ -30,7 +30,7 @@
 // closes the deepest one. The star of a model still adds or removes a
 // favorite; a model turned off is turned back on in Manage models.
 import { useEffect, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
-import { Check, ChevronLeft, ChevronRight, Info, Search, Settings, Star } from "lucide-react";
+import { Bot, Check, ChevronLeft, ChevronRight, Info, Search, Settings, Star } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -40,7 +40,7 @@ import { AUTO_OPTIMIZE_VALUES, type AutoOptimize } from "../../shared/model-auto
 import type { EffortLevel } from "../../shared/wire";
 import { filterModelSections, modelCascade, type ModelMenuRow, type ModelMenuSection } from "@/lib/model-menu";
 import { currentInCascade, openProvider, panelBack, providerOpens, reasoningRow, settlePanel, type MenuPanel, type ReasoningRow } from "../../shared/mode-menu";
-import { ModeMenu, type ModeMenuProps } from "./ModeMenu";
+import { MENU_SEPARATOR, MODE_MENU_WIDTH, ModeMenu, type ModeMenuProps } from "./ModeMenu";
 import { ModeMenuLevel } from "./ModeMenuLevel";
 import { CLOSE_DELAY_MS, OPEN_DELAY_MS } from "./SidebarPopoverMenu";
 import { runsWithOptionLabel, runsWithShown, type RunsWithChoice } from "@/lib/runs-with";
@@ -127,15 +127,13 @@ const GROUP_HEADING = "px-2 pb-0.5 pt-2 text-[12px] leading-4 text-popover-ink-s
  * check; it stays empty on every other row. */
 export const ROW_SIDE_SLOT = "flex w-5 shrink-0 items-center justify-center";
 export const ROW_ICON_SLOT = "flex size-7 shrink-0 items-center justify-center";
-// the hairline between the groups of a level (ModeMenu.tsx's own)
-const LEVEL_SEPARATOR = "mx-2 my-1 border-t border-popover-hairline";
 // a row of the mode menu's panels (a level, a provider, an account): ModeMenu.tsx's row
 const PANEL_ROW = "group flex h-9 items-center gap-1 rounded-lg hover:bg-popover-hover focus-within:bg-popover-hover";
 const PANEL_ROW_BUTTON = "flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg pl-2 text-left text-[13px] text-popover-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50";
 
-/** The widths of the two levels the menu opens (M-20261126-104, the mockup's): Effort's and Custom's. */
+/** The widths of the two levels the menu opens (M-20261126-104): Effort's (the mockup's) and Custom's (the menu's own, so its rows read whole). */
 const EFFORT_LEVEL_WIDTH = 260;
-const CUSTOM_LEVEL_WIDTH = 240;
+const CUSTOM_LEVEL_WIDTH = MODE_MENU_WIDTH;
 /** The room Custom asks of one side of the menu before it opens there: its three levels (providers, accounts, models) side by side. */
 const CASCADE_ROOM = 900;
 
@@ -283,12 +281,9 @@ export function ModelPanel(props: ModelPanelProps) {
   // a thread's "use the bot's model" row leads All models, as it led the Manual list
   const cascadeLead = modes && inAll ? leadRows : [];
   const rovingRows = modes ? listedRows : all ? [...lead, ...listedRows] : [...(autoRow ? [autoRow] : []), ...lead, ...shortModels];
-  // in the mode menu each level roves on its own rows: the models of an account, or the rows that lead the providers
-  const providerLevelRows = cascadeLead;
   const modelRow = (row: ModelMenuRow, group?: string, level?: MenuPanel) => {
-    const roving = level?.panel === "providers" ? providerLevelRows : rovingRows;
-    const rovingHasCurrent = (modes || all ? false : autoOn) || roving.some((candidate) => candidate.current);
-    const rovingFirst = roving[0];
+    const rovingHasCurrent = (modes || all ? false : autoOn) || rovingRows.some((candidate) => candidate.current);
+    const rovingFirst = rovingRows[0];
     const starred = favorites.keys.includes(row.key);
     const description = rowDescription(row);
     const check = row.current ? <Check size={14} aria-hidden="true" className="text-popover-accent" /> : null;
@@ -368,12 +363,16 @@ export function ModelPanel(props: ModelPanelProps) {
   // levels of the model in use; Fast, Expert and Heavy set their own each
   // turn, so the row is greyed and shows the level they impose
   const imposed = modes && modes.current ? modes.resolutions?.[modes.current]?.effort : undefined;
-  // M-20261126-104: no "Auto" beside Effort; with no level chosen the row shows the model's own, under Auto too
-  // (the shared rule keeps "Auto" for the console, so Auto is read here as a model with no mode)
-  const levelsRow = reasoningRow({ mode: modes?.current === "auto" ? null : modes?.current ?? null, levels: effortLevels, value: effort?.value, modelDefault: effort?.modelDefault, imposed });
+  // D-20261126-017: under Auto the person's choice always holds. Any level she clicks, the "Recommended" one
+  // included, is sent and used every turn. Until she clicks one the row shows no value and no level is
+  // checked: Auto decides turn by turn. Clicking the checked level again hands it back to Auto. The shared
+  // rule's "no level" choice (the console's "Auto" row) is not drawn: the levels alone.
+  const autoDecides = modes?.current === "auto";
+  const sharedRow = reasoningRow({ mode: modes?.current ?? null, levels: effortLevels, value: effort?.value, modelDefault: effort?.modelDefault, imposed });
+  const levelsRow: ReasoningRow = autoDecides ? { ...sharedRow, choices: sharedRow.choices.filter((choice) => choice !== null) } : sharedRow;
   // an engine with model variants draws its own control in the panel
   const reasoningState: ReasoningRow = variantRow && !levelsRow.disabled ? { shown: true, disabled: false, choices: [] } : levelsRow;
-  const reasoningLabel = (level: string | undefined) => (level ? effortLabel(level as EffortLevel) : variantRow ? "" : t("model.defaultTag"));
+  const reasoningLabel = (level: string | undefined) => (level ? effortLabel(level as EffortLevel) : variantRow || autoDecides ? "" : t("model.defaultTag"));
   const hasReasoning = showSettings && !modes && (Boolean(variantRow) || effortLevels.length > 0);
   const runsShown = !autoOn && runsWith && runsWithShown(runsWith) ? runsWith : undefined;
   const runsCurrent = runsShown?.find((choice) => choice.current);
@@ -414,7 +413,8 @@ export function ModelPanel(props: ModelPanelProps) {
     <div data-mode-favorites="">
       <div data-mode-favorites-heading="" className={GROUP_HEADING}>{t("model.favorites")}</div>
       {menuFavorites.map((row) => (
-        <div key={row.key} className={PANEL_ROW}>
+        // a favorite that names its account takes a second line for it (M-20261119-015): both read whole
+        <div key={row.key} className={cn(PANEL_ROW, row.account && "h-auto min-h-11 py-0.5")}>
           <button type="button" role="radio" aria-checked={row.current} disabled={disabled}
             data-model-panel-row={row.key} data-mode-favorite={row.key} data-model-option={row.modelId}
             title={[row.title ?? row.label, row.account].filter(Boolean).join(" · ")}
@@ -423,18 +423,44 @@ export function ModelPanel(props: ModelPanelProps) {
             onPointerEnter={(event) => restOn(event, { panel: "providers" }, false)}
             onClick={() => onPick(row)}
             className={PANEL_ROW_BUTTON}>
-            <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center text-popover-accent">
-              <Star size={14} fill="currentColor" />
+            {/* the mockup's star: an outline, the colour of the other icons */}
+            <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center text-popover-ink-secondary">
+              <Star size={14} strokeWidth={1.75} />
             </span>
-            <span className="min-w-[55%] flex-1 truncate">{row.label}</span>
-            {/* the list is narrow: the name keeps most of the row, the whole account is in the tooltip */}
-            {row.account && <span data-model-row-account className="min-w-0 max-w-[35%] shrink truncate pl-1 text-right text-[12px] text-popover-ink-secondary">{row.account}</span>}
+            <span className="flex min-w-0 flex-1 flex-col justify-center">
+              <span className="truncate">{row.label}</span>
+              {row.account && <span data-model-row-account className="truncate text-[11.5px] leading-4 text-popover-ink-secondary">{row.account}</span>}
+            </span>
             <span aria-hidden="true" className={ROW_ICON_SLOT}>{row.current && <Check size={14} className="text-popover-accent" />}</span>
           </button>
         </div>
       ))}
     </div>
   ) : undefined;
+
+  // a thread's "Use <bot>'s model" row, over the providers of the list Custom opens: an icon before it as on
+  // every row of that list, its sentence whole (it wraps), the model it means on a line under it
+  const leadRow = (row: ModelMenuRow, level: MenuPanel) => {
+    const description = rowDescription(row);
+    return (
+      <div key={`lead:${row.key}`} className={cn(PANEL_ROW, "h-auto min-h-9 py-0.5")}>
+        <button type="button" role="radio" aria-checked={row.current} data-model-panel-row={row.key} data-model-option={row.modelId} data-model-row-kind={row.kind} data-follow-bot-model={row.kind === "follow" ? "true" : undefined}
+          disabled={disabled || Boolean(row.unavailable)} title={row.unavailable ?? row.title ?? (description ? `${row.label} · ${description}` : row.label)}
+          tabIndex={row.current || (!cascadeLead.some((candidate) => candidate.current) && row === cascadeLead[0]) ? 0 : -1}
+          onMouseDown={(event) => event.preventDefault()}
+          onPointerEnter={(event) => restOn(event, level, false)}
+          onClick={() => onPick(row)}
+          className={cn(PANEL_ROW_BUTTON, row.unavailable && "opacity-60")}>
+          <span aria-hidden="true" data-model-lead-icon="" className="flex size-4 shrink-0 items-center justify-center text-popover-ink-secondary"><Bot size={15} strokeWidth={1.75} /></span>
+          <span className="flex min-w-0 flex-1 flex-col justify-center py-0.5">
+            <span className="break-words leading-[18px]">{row.label}</span>
+            {description && <span data-model-panel-description data-model-row-warning={row.warning ? "" : undefined} className="truncate text-[11.5px] leading-4 text-popover-ink-secondary">{description}</span>}
+          </span>
+          <span aria-hidden="true" className={ROW_ICON_SLOT}>{row.current && <Check size={14} className="text-popover-accent" />}</span>
+        </button>
+      </div>
+    );
+  };
 
   // the mode menu's levels (D-20261125-012): each one's rows, drawn beside the row that opened it
   const levelLabel = (level: MenuPanel) => (level.panel === "reasoning" ? t("model.effort") : level.panel === "providers" ? t("model.mode.custom.name")
@@ -455,8 +481,9 @@ export function ModelPanel(props: ModelPanelProps) {
               title={level === undefined ? t("model.effort.defaultTitle") : info ?? t("model.effort.levelTitle", { level: effortLabel(level) })}
               tabIndex={on || (reasoningState.value === undefined && choice === reasoningState.choices[0]) ? 0 : -1}
               onMouseDown={(event) => event.preventDefault()}
-              // the model's own level is picked as "no level sent"
-              onClick={() => { effort.onPick(level === undefined || level === effort.modelDefault ? undefined : level); go({ panel: "root" }, false); }}
+              // under Auto (D-20261126-017) the level clicked is the level sent, the recommended one included, and a
+              // click on the checked one sends none again; off the modes the model's own level is "no level sent"
+              onClick={() => { effort.onPick(autoDecides ? (on ? undefined : level) : level === undefined || level === effort.modelDefault ? undefined : level); go({ panel: "root" }, false); }}
               className={PANEL_ROW_BUTTON}>
               <span className="flex min-w-0 flex-1 items-center gap-1.5">
                 <span className={cn("truncate", level !== undefined && isUltracodeEffort(level) && "ultracode-effort-option")}>{reasoningLabel(choice ?? undefined)}</span>
@@ -475,9 +502,9 @@ export function ModelPanel(props: ModelPanelProps) {
       return (
         <>
           {menuFavoriteRows}
-          {menuFavoriteRows && <div role="separator" className={LEVEL_SEPARATOR} />}
+          {menuFavoriteRows && <div role="separator" className={MENU_SEPARATOR} />}
           <div data-mode-all-heading="" className={GROUP_HEADING}>{t("model.auto.rail")}</div>
-          {cascadeLead.map((row) => modelRow(row, undefined, level))}
+          {cascadeLead.map((row) => leadRow(row, level))}
           {cascade.map((provider) => {
             const on = cascadeCurrent?.provider.id === provider.id;
             const opened = atProvider?.id === provider.id;

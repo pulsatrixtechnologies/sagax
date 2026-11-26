@@ -67,7 +67,7 @@ import { modelPickerComposerLabel, modelPickerFollowLine, modelPickerSummary } f
 import { currentProvider } from "@/lib/model-menu-steps";
 import { chatBarChipLabel, shownMode } from "@/lib/model-mode";
 import type { ModelPanelProps } from "./ModelPanel";
-import { CUSTOM_GLYPH, MODE_GLYPHS } from "./ModeMenu";
+import { CUSTOM_GLYPH, MODE_GLYPHS, MODE_MENU_WIDTH } from "./ModeMenu";
 
 export {
   COMPOSER_MODEL_EVENT,
@@ -395,6 +395,8 @@ export function ModelPicker({
 
   const toggleMenu = makeToggleMenu({
     locked, menu, closeMenu, anchorRef, triggerRef, setMenuDoneCall, setMenuAt, setMenu, headless, windowOnly, fallbackAnchor,
+    // the chat bar's mode menu is placed with its own width
+    width: modeUi ? MODE_MENU_WIDTH : undefined,
   });
   if (menuControl) menuControl.current = { toggle: (anchor, onDone) => toggleMenu(anchor, onDone), close: () => closeMenu() };
 

@@ -108,34 +108,60 @@ describe("Effort", () => {
     expect(given.effort!.onPick).toHaveBeenCalledWith(undefined);
   });
 
-  it("M-20261126-104: under Auto the row no longer reads Auto; with no level chosen it shows the model's own, and picking that one sends no level", () => {
+  // D-20261126-017: under Auto the person's choice always holds. What is asserted is what is SENT (onPick
+  // is the picker's setEffort, which writes the selection: ModelPicker.interaction.test.ts), then what shows.
+  it("D-20261126-017, nothing clicked: under Auto the row shows no value, no level is checked and nothing is sent", () => {
     const given = render();
-    expect(find("[data-mode-reasoning-value]").textContent).toBe("Medium");
+    expect(document.querySelector("[data-mode-reasoning-value]")).toBeNull();
+    expect(find('[data-mode-row="reasoning"]').textContent).toBe("Effort");
     click('[data-mode-row="reasoning"]');
+    // the levels alone: no "Auto" and no "Default" row, the model's own level marked Recommended but not checked
     expect(rowsOf("data-model-effort-choice")).toEqual(["Low", "MediumRecommended", "High"]);
-    expect(document.body.textContent).not.toContain("Auto ");
-    expect(find('[data-model-effort-choice="medium"]').getAttribute("aria-checked")).toBe("true");
-    click('[data-model-effort-choice="high"]');
-    expect(given.effort!.onPick).toHaveBeenCalledWith("high");
-    click('[data-mode-row="reasoning"]');
-    // back on the model's own level: each turn uses its mode's level again
-    click('[data-model-effort-choice="medium"]');
-    expect(given.effort!.onPick).toHaveBeenLastCalledWith(undefined);
+    expect(document.querySelectorAll('[data-model-effort-choice][aria-checked="true"]')).toHaveLength(0);
+    // opening and closing the levels sends nothing: Auto keeps deciding turn by turn
+    key(document.activeElement!, "Escape");
+    expect(given.effort!.onPick).not.toHaveBeenCalled();
   });
 
-  it("a level the person chose under Auto reads on the row and is the one checked", () => {
-    render({ effort: { title: "Effort", levels: ["low", "medium", "high"], modelDefault: "medium", value: "high", onPick: vi.fn() } });
-    expect(find("[data-mode-reasoning-value]").textContent).toBe("High");
+  it.each(["low", "medium", "high"] as const)("D-20261126-017, a level clicked under Auto is the level sent, the Recommended one included: %s", (level) => {
+    const given = render();
     click('[data-mode-row="reasoning"]');
-    expect(find('[data-model-effort-choice="high"]').getAttribute("aria-checked")).toBe("true");
-    expect(find('[data-model-effort-choice="medium"]').getAttribute("aria-checked")).toBe("false");
+    click(`[data-model-effort-choice="${level}"]`);
+    // "medium" is the model's own (Recommended): it is sent as itself, never as "no level"
+    expect(given.effort!.onPick).toHaveBeenCalledTimes(1);
+    expect(given.effort!.onPick).toHaveBeenCalledWith(level);
+    expect(panel()).toBe("root");
+  });
+
+  it("D-20261126-017, the checked level clicked again hands the level back to Auto: no level is sent, the Recommended one included", () => {
+    for (const level of ["high", "medium"] as const) {
+      const given = render({ effort: { title: "Effort", levels: ["low", "medium", "high"], modelDefault: "medium", value: level, onPick: vi.fn() } });
+      click('[data-mode-row="reasoning"]');
+      expect([...document.querySelectorAll<HTMLElement>('[data-model-effort-choice][aria-checked="true"]')].map((node) => node.dataset.modelEffortChoice)).toEqual([level]);
+      click(`[data-model-effort-choice="${level}"]`);
+      expect(given.effort!.onPick).toHaveBeenCalledTimes(1);
+      expect(given.effort!.onPick).toHaveBeenCalledWith(undefined);
+      // another level than the checked one is sent as itself
+      click('[data-mode-row="reasoning"]');
+      click('[data-model-effort-choice="low"]');
+      expect(given.effort!.onPick).toHaveBeenLastCalledWith("low");
+    }
+  });
+
+  it("off the modes (Custom) the PR's rule stays: the model's own level shows with no level chosen, and picking it sends no level", () => {
+    const given = render({ autoOn: false, modes: { current: null, onPick: vi.fn(), pinnedLabel: "Claude · opus" } });
+    expect(find("[data-mode-reasoning-value]").textContent).toBe("Medium");
+    click('[data-mode-row="reasoning"]');
+    expect(find('[data-model-effort-choice="medium"]').getAttribute("aria-checked")).toBe("true");
+    click('[data-model-effort-choice="medium"]');
+    expect(given.effort!.onPick).toHaveBeenLastCalledWith(undefined);
   });
 
   it("Escape returns to the menu without a pick, the focus back on the Effort row", () => {
     const given = render();
     click('[data-mode-row="reasoning"]');
-    // the click moved the focus into the levels, on the one in use
-    expect(document.activeElement).toBe(find('[data-model-effort-choice="medium"]'));
+    // the click moved the focus into the levels: on the first one, none being in use under Auto
+    expect(document.activeElement).toBe(find('[data-model-effort-choice="low"]'));
     key(document.activeElement!, "Escape");
     expect(panel()).toBe("root");
     expect(given.effort!.onPick).not.toHaveBeenCalled();
@@ -169,12 +195,12 @@ describe("Effort", () => {
     expect(given.effort!.onPick).toHaveBeenCalledWith("high");
   });
 
-  it("the Effort level is 260 px wide and the list Custom opens 240 px", () => {
+  it("the Effort level is 260 px wide and the list Custom opens 280 px, the menu's own width", () => {
     render();
     click('[data-mode-row="reasoning"]');
     expect(find('[data-mode-level="reasoning"]').style.width).toBe("260px");
     click('[data-mode-row="all"]');
-    expect(find('[data-mode-level="providers"]').style.width).toBe("240px");
+    expect(find('[data-mode-level="providers"]').style.width).toBe("280px");
   });
 });
 
@@ -205,6 +231,39 @@ describe("Custom", () => {
     expect(find('[data-model-cascade-provider="anthropic"]').firstElementChild?.querySelector('[data-mark="anthropic"]')).not.toBeNull();
     expect(find('[data-model-cascade-provider="xai"]').firstElementChild?.querySelector('[data-mark="xai"]')).not.toBeNull();
     expect(find("[data-model-manage]").firstElementChild?.querySelector("svg.lucide-settings")).not.toBeNull();
+  });
+
+  it("a favorite reads whole: its name on one line, its account on a line of its own under it, an outline star before it", () => {
+    const withAccount: ModelMenuSection[] = [sections()[0]!, { key: "favorites", label: "Favorites", rows: [row("claude-b", "Claude Sonnet 5", { account: "ada.admin@acme.test" }), row("grok", "grok-4")] }, ...sections().slice(1)];
+    render({ sections: withAccount, favorites: { keys: [], onToggle: vi.fn() } });
+    click('[data-mode-row="all"]');
+    const [first, second] = [...document.querySelectorAll<HTMLElement>("[data-mode-favorite]")];
+    const account = first!.querySelector<HTMLElement>("[data-model-row-account]")!;
+    expect(account.textContent).toBe("ada.admin@acme.test");
+    // under the name, at the row's whole width: no share of the name's line
+    expect(account.parentElement!.className).toContain("flex-col");
+    expect(account.className).not.toMatch(/max-w-/);
+    expect(account.previousElementSibling!.textContent).toBe("Claude Sonnet 5");
+    expect(first!.title).toBe("Claude Sonnet 5 · ada.admin@acme.test");
+    expect(second!.querySelector("[data-model-row-account]")).toBeNull();
+    expect(first!.querySelector("svg.lucide-star")!.getAttribute("fill")).toBe("none");
+  });
+
+  it("a thread's \"Use <bot>'s model\" row has its icon and its whole sentence, the model it means on a line under it", () => {
+    const withFollow = sections();
+    withFollow[0]!.rows.push({ key: "follow", kind: "follow", label: "Use Reviewer bot's model", detail: "Claude Sonnet 5", current: false });
+    render({ sections: withFollow, autoOn: false, modes: { current: null, onPick: vi.fn() } });
+    click('[data-mode-row="all"]');
+    const lead = find('[data-follow-bot-model="true"]');
+    expect(lead.firstElementChild!.querySelector("svg")).not.toBeNull();
+    const [sentence, model] = [...lead.children[1]!.children] as HTMLElement[];
+    expect(sentence!.textContent).toBe("Use Reviewer bot's model");
+    // the sentence wraps instead of being cut
+    expect(sentence!.className).not.toContain("truncate");
+    expect(model!.textContent).toBe("Claude Sonnet 5");
+    expect(lead.title).toBe("Use Reviewer bot's model · Claude Sonnet 5");
+    // the arrows still reach it first, then the providers
+    expect(lead.tabIndex).toBe(0);
   });
 
   it("with no favorite the list starts at All models; the arrows reach Manage models", () => {

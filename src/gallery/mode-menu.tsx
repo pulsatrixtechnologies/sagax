@@ -10,13 +10,15 @@
  * ?skin=<id>&lang=<code>&mode=auto|fast|expert|heavy|pinned&view=short|all
  * &open=0 (the bar at rest, no menu) &meter=context|usage (a detail open)
  * &place=left|right (the bar at a side of the window)
+ * &pin=<name> (the model picked by hand, to try a long name) &level=<effort> (a level the person clicked)
+ * &follow=1 (a thread: the "Use <bot>'s model" row leads the list Custom opens)
  * &settings=modes (Settings > Models > Modes alone; &set=1 with choices made)
  * (the capture hovers a row with a real pointer, as a person would) */
 import { StrictMode, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AudioLines } from "lucide-react";
 import { COMPOSER_PILL } from "../components/Composer.tsx-parts/ComposerEditor";
-import { ATTACH_ICON, ComposerMicButton, ComposerPlusMenu, RecordMark, SECONDARY_CIRCLE } from "../components/ComposerControls";
+import { ATTACH_ICON, COMPOSER_WIDE_ONLY, ComposerMicButton, ComposerPlusMenu, RecordMark, SECONDARY_CIRCLE } from "../components/ComposerControls";
 import { ModelPanel } from "../components/ModelPanel";
 import { ClaudeMark, ProviderMonogram } from "../components/ProviderIcons";
 import { ModelPickerTrigger } from "../components/ModelPicker.tsx-parts/ModelPickerTrigger";
@@ -35,6 +37,7 @@ import type { ModeModels } from "../../shared/mode-models";
 import { trackInputModality } from "../lib/input-modality";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import type { ModeModel, ModeResolution } from "../../shared/model-mode";
+import type { EffortLevel } from "../../shared/wire";
 import type { InstanceInfo } from "../state/store";
 import "../styles.css";
 
@@ -88,7 +91,7 @@ const resolutions: Record<ModelMode, ModeResolution> = {
 function Chip({ label }: { label: string }) {
   const ref = useRef<HTMLButtonElement>(null);
   return ModelPickerTrigger({
-    windowOnly: false, inComposer: true, headless: false, contained: false, bot: { id: "demo", busy: false } as never, triggerRef: ref, menu: true,
+    windowOnly: false, inComposer: true, headless: false, contained: false, bot: { id: "demo", busy: false } as never, triggerRef: ref, menu: menuOpen,
     toggleMenu: () => {}, composerLabel: label, chipGlyph: current === "pinned" ? CUSTOM_GLYPH : MODE_GLYPHS[current], followLine: "", summary: label, selection: { instanceId: "demo", model: "demo" }, autoOn: current !== "pinned",
     autoRecord: null, autoInstance: undefined, active: undefined, showActiveAccount: false, selectedVariantLabel: undefined, advanced: false,
   });
@@ -126,15 +129,17 @@ function Gallery() {
   const [stars, setStars] = useState<string[]>(["grok\u0000grok-4.7", "claude-team\u0000claude-mythos-5-2"]);
   const bot = { id: "bot-1", name: "Wren", threadId: "t1", modelSelection: selection, tasks: [] };
   const sections = buildModelPickerSections({
-    orgMode: false, accountModels: new Map(), selection, switches: {}, autoOn, follows: undefined, selectedVariantLabel: undefined,
+    orgMode: false, accountModels: new Map(), selection, switches: {}, autoOn, follows: params.get("follow") === "1" ? false : undefined, selectedVariantLabel: undefined,
     fallback: undefined, instances, selectable: instances, viewerLocal: false, autoPreview: null, autoRecord: null,
     profile: bot as never, botModelInstance: instances[1], botModelName: "", health: { orgMode: false, myEngines: null },
     myEngines: null, ranOnName: () => "", favoriteKeys: stars,
   }).menuSections;
   // Custom's row names the model picked by hand, under a mode too (the selection keeps it)
-  const pinnedLabel = "Claude Opus 5.5";
-  const pinnedTitle = "Claude Opus 5.5 · ada.admin@acme.test";
-  const chip = current === "pinned" ? "Claude Opus 5.5" : chatBarChipLabel(current, current === "auto" ? undefined : resolutions[current].effort);
+  const pinnedLabel = params.get("pin") ?? "Claude Opus 5.5";
+  const pinnedTitle = `${pinnedLabel} · ada.admin@acme.test`;
+  // D-20261126-017: under Auto the chip and the Effort row name a level only once the person clicked one
+  const level = (params.get("level") ?? undefined) as EffortLevel | undefined;
+  const chip = current === "pinned" ? pinnedLabel : chatBarChipLabel(current, current === "auto" ? level : resolutions[current].effort);
   return (
     <div className="flex min-h-screen flex-col bg-app p-4 text-ink sm:p-8">
       <div className={cn("relative mt-auto flex w-full min-w-0 flex-col justify-end pt-[560px]", atLeft ? "mr-auto max-w-[600px]" : atRight ? "ml-auto max-w-[600px]" : "mx-auto max-w-[760px]")}>
@@ -146,7 +151,7 @@ function Gallery() {
             favorites={{ keys: stars, onToggle: (candidate) => setStars((list) => (list.includes(candidate.key) ? list.filter((key) => key !== candidate.key) : [...list, candidate.key])) }}
             mark={(key) => (key === "anthropic" || key === "claude" ? <ClaudeMark size={14} /> : <ProviderMonogram label={key === "xai" ? "Grok" : key === "computer" ? "Local" : "OpenAI"} />)}
             autoOn={autoOn}
-            effort={{ title: t("model.effort"), levels: ["low", "medium", "high", "xhigh", "max"], modelDefault: "high", onPick: () => undefined }}
+            effort={{ title: t("model.effort"), levels: ["low", "medium", "high", "xhigh", "max"], modelDefault: "high", value: level, onPick: () => undefined }}
             manage={{ onManage: () => undefined, turnedOff: 3, openProviders: () => undefined }}
             showSettings
             view={view}
@@ -161,7 +166,8 @@ function Gallery() {
             ]} />
             <textarea rows={1} placeholder="Message Wren · Assistant" className="block min-h-6 w-full flex-1 resize-none bg-transparent chat-input-text px-1 py-1.5 placeholder:text-ink-secondary focus:outline-none" />
             {/* M-20261126-104: the chip inside the box, just before the voice button (ComposerActionBar.tsx) */}
-            <span data-gallery-chip="" data-composer-model-chip="" className="composer-band flex items-center"><Chip label={chip} /></span>
+            {/* folded away under 560 px of box, as in the app (COMPOSER_WIDE_ONLY) */}
+            <span data-gallery-chip="" data-composer-model-chip="" className={COMPOSER_WIDE_ONLY}><Chip label={chip} /></span>
             {/* the one voice button (ComposerVoiceButton.tsx): its face, its arrow, its menu */}
             <ComposerVoiceButton engine="xai"
               dictation={<ComposerMicButton onClick={() => undefined} engine="xai" shortcut="⌘D" />}

@@ -2028,21 +2028,23 @@ Rules that hold at every width:
   Model row below that.
 - Mode menu (owner, 2026-11-19, #5088; 2026-11-23, M-20261123-040,
   M-20261123-045, M-20261123-047): the chip reads the mode's name ("Expert ⌄")
-  and opens the model panel's short view as the mode menu, 240px wide (owner,
+  and opens the model panel's short view as the mode menu, 280px wide (owner,
   2026-11-26, M-20261126-104, #5408): Auto, Fast, Expert, Heavy (never Build, D-20261126-005), Custom, a hairline, Effort;
   the panel's 36px rows, an icon before every row in a 16px slot, the check or
   the chevron in the right icon slot, no heading over the rows, no footer. A hovered or
   keyboard focused mode opens a small tooltip beside the menu, level with the
   row: what the mode does, then the model behind it in secondary ink ("Quick
   responses · Grok 4.7"); a click's own focus stays quiet. Effort shows the
-  level in use at its right, in 12px secondary ink (the model's own when none
-  is chosen, never "Auto"), and opens beside the menu a 260px level: one
+  level in use at its right, in 12px secondary ink (never "Auto"; under Auto
+  nothing until the person clicks a level, and no level checked,
+  D-20261126-017; off the modes the model's own when none is chosen), and opens beside the menu a 260px level: one
   explaining sentence, the levels of the model in use, "Recommended" beside
   the model's own, an info mark on Max; under Fast, Expert and Heavy it is greyed and
   shows the level the mode imposes. Custom names the model picked by hand at its
-  right and opens three levels as cascading submenus (owner, 2026-11-25,
-  M-20261125-035, D-20261125-012, #5338): a 240px list (the favorites under
-  "Favorites", a star before each; "All models" and the providers, each with
+  right, whole (cut in its middle only past the row's room, the whole name in
+  the tooltip), and opens three levels as cascading submenus (owner, 2026-11-25,
+  M-20261125-035, D-20261125-012, #5338): a 280px list (the favorites under
+  "Favorites", an outline star before each, an account on a second line; "All models" and the providers, each with
   its mark; the lines of a model picked by hand; "Manage models" at the foot,
   a gear before it), the provider's accounts, the account's models with a search past eight rows,
   each in the menu family's box beside the row that opened it, 4px over the

@@ -16,7 +16,7 @@ import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
 import { POPOVER_LAYER } from "./AnchoredPopover";
 import { MENU_BOX } from "./menu-look";
-import { submenuPlace } from "./SidebarPopoverMenu";
+import { SUBMENU_WINDOW_TOP, submenuPlace } from "./SidebarPopoverMenu";
 
 /** The level's own padding above its first row: the row lines up with the one that opened it. */
 const LEVEL_PAD = 4;
@@ -50,20 +50,26 @@ export function ModeMenuLevel({ level, anchor, label, room = 0, width, focus, on
       if (!node || !row) return;
       // beside the box that holds the row (the menu, or the level before), level with the row
       const box = (row.closest<HTMLElement>("[data-model-menu]") ?? row).getBoundingClientRect();
-      const top = row.getBoundingClientRect().top;
+      const rowTop = row.getBoundingClientRect().top;
       node.style.maxHeight = "";
       const from = row.closest<HTMLElement>("[data-mode-level]");
       const right = window.innerWidth - box.right;
       const left = from ? from.dataset.side === "left" : right < room && box.left > right;
       const next = submenuPlace(
-        { left: box.left, right: box.right, top: top - LEVEL_PAD },
+        { left: box.left, right: box.right, top: rowTop - LEVEL_PAD },
         { width: node.offsetWidth, height: node.offsetHeight },
         { width: window.innerWidth, height: window.innerHeight },
         left ? "left" : from ? "right" : undefined,
       );
+      // a level never runs lower than the menu it belongs to: what sits under the menu (the message
+      // box, the voice button, the meter) stays in view; a level taller than the room above scrolls
+      const menu = document.querySelector<HTMLElement>("[data-model-menu]:not([data-mode-level])");
+      const floor = menu ? menu.getBoundingClientRect().bottom : window.innerHeight;
+      const height = Math.min(node.offsetHeight, next.maxHeight);
+      const top = Math.round(Math.max(SUBMENU_WINDOW_TOP, Math.min(next.top, floor - height)));
       node.style.left = `${next.left}px`;
-      node.style.top = `${next.top}px`;
-      node.style.maxHeight = `${next.maxHeight}px`;
+      node.style.top = `${top}px`;
+      node.style.maxHeight = `${Math.max(0, Math.min(next.maxHeight, floor - top))}px`;
       node.dataset.side = next.left < box.left ? "left" : "right";
     };
     place();

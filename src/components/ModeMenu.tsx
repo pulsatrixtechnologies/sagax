@@ -1,11 +1,13 @@
 // The composer's mode menu (#4900, #5088; owner 2026-11-26, M-20261126-104,
-// M-20261126-103): about 240 px wide, at the top of the one model menu
+// M-20261126-103): 280 px wide, at the top of the one model menu
 // (ModelPanel.tsx): Auto, Fast, Expert, Heavy, then Custom (the model the
-// person picks by hand: its row names it and opens the model list beside the
-// menu), a hairline, then Effort (the level in use, opening the levels of the
-// model in use; greyed with the imposed level under a mode that sets its
-// own). No "All models" row and no footer: Manage models sits at the foot of
-// the list Custom opens.
+// person picks by hand: its row names it, whole, and opens the model list
+// beside the menu), a hairline, then Effort (the level in use, opening the
+// levels of the model in use; greyed with the imposed level under a mode that
+// sets its own; no level beside it under Auto until the person clicks one,
+// D-20261126-017). No "All models" row and no footer: Manage models sits at
+// the foot of the list Custom opens. The mockup gives "about 240 px"; the menu
+// is 280 px so a model's name reads whole beside "Custom" (an agent's choice).
 // A hovered or focused mode opens a small tooltip beside the menu: what the
 // mode does, then which model backs it ("Quick responses · Grok 4.7"). The
 // models are not the person's to pick here: Sagax maps each mode to the best
@@ -42,8 +44,27 @@ export const MODE_GLYPHS: Record<ModelMode, LucideIcon> = { auto: Sparkles, fast
 /** Custom's icon (an agent's choice, the mockup's sliders) and Effort's. */
 export const CUSTOM_GLYPH: LucideIcon = SlidersHorizontal;
 export const EFFORT_GLYPH: LucideIcon = Gauge;
-/** The menu's width (M-20261126-104: about 240 px). */
-export const MODE_MENU_WIDTH = 240;
+/** The menu's width (M-20261126-104: about 240 px; 280 so Custom's row names its model whole). */
+export const MODE_MENU_WIDTH = 280;
+/** The hairline between the groups of the menu and of its levels. */
+export const MENU_SEPARATOR = "mx-2 my-1 border-t border-popover-hairline";
+/** A name longer than this may be cut in the middle (its start and its end stay). */
+const MIDDLE_CUT_FROM = 14;
+const MIDDLE_CUT_TAIL = 7;
+
+/** A name that never loses its end: whole while it fits, else cut in the
+ * middle ("Claude Sonnet 5 (1M co…ontext)"), the whole name in the row's
+ * tooltip. The text read by a screen reader or a test is the whole name. */
+export function MiddleCut({ text, className, ...rest }: { text: string; className?: string } & Record<`data-${string}`, string>) {
+  const cut = text.length > MIDDLE_CUT_FROM ? text.length - MIDDLE_CUT_TAIL : text.length;
+  return (
+    <span {...rest} className={cn("flex min-w-0 justify-end whitespace-pre", className)}>
+      {/* whitespace-pre on both halves: the space at the cut is drawn */}
+      <span className="min-w-0 overflow-hidden text-ellipsis">{text.slice(0, cut)}</span>
+      {cut < text.length && <span className="shrink-0">{text.slice(cut)}</span>}
+    </span>
+  );
+}
 
 export interface ModeMenuProps {
   /** The mode in use; null while a model the person pinned in All models runs. */
@@ -103,7 +124,8 @@ export function ModeMenu({ current, resolutions, disabled = false, onPick, effor
     </span>
   );
   const pinned = current === null;
-  const value = "min-w-0 max-w-[60%] shrink truncate pl-1 text-right text-[12px] text-popover-ink-secondary";
+  // the value at a row's right takes all the room its name leaves
+  const value = "min-w-0 flex-1 text-right text-[12px] text-popover-ink-secondary";
   return (
     <div ref={rootRef} data-mode-menu="" className="contents">
       {rows.map((row) => {
@@ -138,7 +160,7 @@ export function ModeMenu({ current, resolutions, disabled = false, onPick, effor
           <button type="button" role="radio" aria-checked={pinned} aria-haspopup="menu" aria-expanded={Boolean(custom.open)} disabled={disabled}
             data-mode-row="all" data-model-panel-row="mode:all" data-mode-current={pinned ? "" : undefined}
             aria-label={custom.label ? `${t("model.mode.custom.name")}. ${custom.label}` : t("model.mode.custom.name")}
-            title={custom.title ?? custom.label}
+            title={custom.title ?? custom.label ?? undefined}
             tabIndex={pinned ? 0 : -1}
             onMouseDown={(event) => event.preventDefault()}
             onPointerEnter={custom.onRest}
@@ -147,8 +169,8 @@ export function ModeMenu({ current, resolutions, disabled = false, onPick, effor
             className={buttonShape}>
             {glyph(CUSTOM_GLYPH, pinned)}
             <span className="shrink-0">{t("model.mode.custom.name")}</span>
-            <span className="min-w-0 flex-1" />
-            {custom.label && <span data-mode-pinned-model="" className={value}>{custom.label}</span>}
+            {/* the model's name keeps every pixel "Custom" leaves; the check and the chevron follow it, never over it */}
+            {custom.label ? <MiddleCut data-mode-pinned-model="" text={custom.label} className={value} /> : <span className="min-w-0 flex-1" />}
             {pinned && <Check size={14} aria-hidden="true" data-mode-custom-check="" className="shrink-0 text-popover-accent" />}
             <span aria-hidden="true" className={ICON_SLOT}><ChevronRight size={14} className="text-popover-ink-secondary" /></span>
           </button>
@@ -156,7 +178,7 @@ export function ModeMenu({ current, resolutions, disabled = false, onPick, effor
       )}
       {effort?.row.shown && (
         <>
-          <div role="separator" data-mode-separator="" className="mx-2 my-1 border-t border-popover-hairline" />
+          <div role="separator" data-mode-separator="" className={MENU_SEPARATOR} />
           {/* the row keeps the hook `reasoning` (its state is shared/mode-menu.ts reasoningRow) */}
           <div className={cn(rowShape, effort.open && "bg-popover-hover")}>
             <button type="button" aria-haspopup="menu" aria-expanded={Boolean(effort.open)} disabled={effort.row.disabled}
@@ -170,8 +192,8 @@ export function ModeMenu({ current, resolutions, disabled = false, onPick, effor
               className={buttonShape}>
               {glyph(EFFORT_GLYPH, false)}
               <span className="shrink-0">{t("model.effort")}</span>
-              <span className="min-w-0 flex-1" />
-              <span data-mode-reasoning-value="" className={value}>{effort.label(effort.row.value)}</span>
+              {/* D-20261126-017: no level beside Effort while Auto decides (the label is empty) */}
+              {effort.label(effort.row.value) ? <span data-mode-reasoning-value="" className={cn(value, "truncate")}>{effort.label(effort.row.value)}</span> : <span className="min-w-0 flex-1" />}
               <span aria-hidden="true" className={ICON_SLOT}><ChevronRight size={14} className="text-popover-ink-secondary" /></span>
             </button>
           </div>

@@ -128,11 +128,14 @@ describe("the model panel with the composer's modes", () => {
     expect(html({ modes: undefined })).toContain("4 off");
   });
 
-  it("M-20261123-040, M-20261126-104: Effort is a row with the level in use, never the segmented control at the foot and never Auto", () => {
+  it("M-20261123-040, M-20261126-104, D-20261126-017: Effort is a row with the level in use, never the segmented control at the foot and never Auto", () => {
     const markup = html();
     expect(markup).not.toContain("data-model-panel-reasoning");
-    // no level chosen: the model's own
-    expect(markup).toMatch(/data-mode-row="reasoning"[^>]*>.*>Effort<.*data-mode-reasoning-value[^>]*>Medium</);
+    // under Auto with no level clicked: the row alone, no value beside it (Auto decides turn by turn)
+    expect(markup).toMatch(/data-mode-row="reasoning"[^>]*>.*>Effort</);
+    expect(markup).not.toContain("data-mode-reasoning-value");
+    // off the modes with no level chosen: the model's own
+    expect(html({ autoOn: false, modes: { current: null, onPick: vi.fn(), pinnedLabel: "Claude · opus" } })).toMatch(/data-mode-reasoning-value[^>]*>Medium</);
     // a level the person chose reads on the row
     expect(html({ effort: { ...props().effort!, value: "high" } })).toMatch(/data-mode-reasoning-value[^>]*>High</);
   });
@@ -160,7 +163,7 @@ describe("the model panel with the composer's modes", () => {
 
   it("Custom names the model picked by hand on its row, checked while it runs", () => {
     const markup = html({ autoOn: false, modes: { current: null, onPick: vi.fn(), pinnedLabel: "opus", pinnedTitle: "Claude · opus" } });
-    expect(markup).toMatch(/aria-checked="true"[^>]*data-mode-row="all"[^>]*>.*>Custom<.*data-mode-pinned-model[^>]*>opus</);
+    expect(markup).toMatch(/aria-checked="true"[^>]*data-mode-row="all"[^>]*>.*>Custom<.*data-mode-pinned-model[^>]*><span[^>]*>opus</);
     expect(markup).toMatch(/data-mode-row="all"[^>]*title="Claude · opus"/);
   });
 

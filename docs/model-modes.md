@@ -25,7 +25,7 @@ Auto without an error (`RETIRED_MODEL_MODE`, `shared/model-mode.ts`).
   the right (`Composer.tsx-parts/ComposerUnderRow.tsx`).
 - The chip reads the icon of the mode, the mode, then the effort ("Expert ·
   High"), or the model the person picked by hand (Custom's icon). Its menu,
-  about 240 px wide (M-20261126-104, M-20261126-103): Auto, Fast, Expert,
+  280 px wide (M-20261126-104, M-20261126-103): Auto, Fast, Expert,
   Heavy, Custom, then Effort; no "All models" row, no footer. See "The mode
   menu" below. A star on a model adds or removes a favorite
   (`src/lib/model-favorites.ts`).
@@ -78,7 +78,9 @@ Tests: `src/components/ComposerMeter.dom.test.ts`, `src/lib/composer-meter.test.
 ## The mode menu
 
 The chat bar's model button opens the mode menu. On the desktop (owner
-2026-11-26, M-20261126-104, M-20261126-103, #5408) it is about 240 px wide:
+2026-11-26, M-20261126-104, M-20261126-103, #5408) it is 280 px wide (the
+mockup says "about 240 px"; 280 is an agent's choice so a model's name reads
+whole on Custom's row):
 
 ```
 Auto / Fast / Expert / Heavy
@@ -125,18 +127,36 @@ explaining sentence and the levels the model in use takes
 model's own level, an info mark on Max (and on Ultracode). Under a mode that
 sets its own level (Fast, Expert, Heavy) the row is greyed and shows the level
 the mode imposes. A model that takes no level has no row. The row never reads
-"Auto": with no level chosen it shows the model's own level, under Auto too,
-and picking that level again sends none, so each turn uses its mode's level
-(an agent's choice on M-20261126-104; the shared rule keeps "Auto" for the
-console). While the bot works the chat bar still opens this menu, its modes
+"Auto".
+
+Under Auto, the person's choice always holds (owner, D-20261126-017). Any
+Effort level she clicks, even the "Recommended" one, is sent and used every
+turn, even under Auto: the selection keeps it, and the server runs every Auto
+turn at that level, whatever model and engine Auto takes for the turn (a turn
+Auto hands to Heavy included), wherever that engine takes the level
+(`server/index-leaves/autoPickForTurn.ts`). Until she clicks one, the Effort
+row shows no value and no level is checked: Auto decides turn by turn.
+Clicking the checked level again hands it back to Auto. The levels listed are
+the model's alone: no "Auto" and no "Default" row (the shared rule keeps
+"Auto" for the console).
+
+Off the modes (a model picked by hand, Custom), with no level chosen the row
+shows the model's own level, and picking that level sends none. Fast, Expert
+and Heavy set their own level every turn. While the bot works the chat bar still opens this menu, its modes
 and models locked and its Effort row open: a level chosen mid-turn applies
 from the next turn. There is no Effort window of its own in the chat bar.
 
 **Custom** is the person's own model. Its row names the model picked by hand
 (the one the selection keeps under a mode too), is checked while that model
-runs, and opens the model list, each option with an icon before it: the
-starred favorites under "Favorites" (a star; one click runs the model; one
-that cannot run now is absent), then "All models", a cascade of three levels,
+runs, and opens the model list. No name is cut short: the model's name takes
+all the room "Custom" leaves, the check and the chevron after it; a name
+longer than that is cut in its middle, its start and its end kept, the whole
+name in the tooltip. The list is as wide as the menu, each option with an
+icon before it: a thread's "Use <bot>'s model" row first (its sentence whole,
+the model it means on a line under it), the starred favorites under
+"Favorites" (an outline star; one click runs the model; one that cannot run
+now is absent; a favorite that names its account says it on a line of its
+own under its name), then "All models", a cascade of three levels,
 each beside the one before: the provider (its mark), then the account, then
 the model. A provider with a single account goes straight to its models. Only
 what can run a turn now is listed: an account signed out or not responding, a

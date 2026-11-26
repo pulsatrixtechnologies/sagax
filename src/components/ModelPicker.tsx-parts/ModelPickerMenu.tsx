@@ -125,7 +125,7 @@ export function ModelPickerMenu({
    * Expert, Heavy, Custom, Effort), the model panel's short view. */
   modeMenu?: ModelPanelProps["modes"];
 }) {
-  // M-20261126-104: the chat bar's mode menu is about 240 px wide
+  // M-20261126-104: the chat bar's mode menu has its own width (ModeMenu.tsx)
   const width = modeMenu ? MODE_MENU_WIDTH : MENU_WIDTH;
   const currentOptimize = autoOptimizeOf(selection.autoOptimize);
   // The settings of the model in use, under the composer's list (the maintainer,

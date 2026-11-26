@@ -3545,7 +3545,7 @@
   "model.effort.aria": "Effort de raisonnement",
   "model.effort.defaultTitle": "N'envoyer aucun niveau d'effort et laisser le fournisseur décider",
   "model.effort.defaultWith": "Par défaut ({level})",
-  "model.effort.levelTitle": "Demander un effort de raisonnement {level}",
+  "model.effort.levelTitle": "Demander un effort {level}",
   "model.effort.summary": "effort {level}",
   "model.effort.explain": "Plus d'effort donne des réponses plus fouillées, mais c'est plus long et ça use tes limites plus vite.",
   "model.effort.recommended": "Recommandé",

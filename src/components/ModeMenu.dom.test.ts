@@ -185,6 +185,30 @@ describe("the mode menu", () => {
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
+  it("Custom's model name is never capped: it takes the room the row leaves, and a longer one is cut in the middle, whole in the tooltip", () => {
+    render(base({ current: null, custom: { label: "Claude Sonnet 5", onOpen: vi.fn() } }));
+    const name = row("all").querySelector<HTMLElement>("[data-mode-pinned-model]")!;
+    expect(name.textContent).toBe("Claude Sonnet 5");
+    expect(row("all").title).toBe("Claude Sonnet 5");
+    // no cap on its width, and the check and the chevron come after it, each in its own place
+    expect(name.className).toContain("flex-1");
+    expect(name.className).not.toMatch(/max-w-/);
+    expect([...row("all").children].map((node) => (node as HTMLElement).dataset.modePinnedModel !== undefined ? "name" : (node as HTMLElement).dataset.modeCustomCheck !== undefined ? "check" : "")).toEqual(["", "", "name", "check", ""]);
+    // the end of the name is a part that never shrinks: only its middle can go
+    const [head, tail] = [...name.children] as HTMLElement[];
+    expect(head!.textContent! + tail!.textContent!).toBe("Claude Sonnet 5");
+    expect(tail!.textContent).toBe("onnet 5");
+    expect(tail!.className).toContain("shrink-0");
+    expect(head!.className).toContain("text-ellipsis");
+  });
+
+  it("D-20261126-017: with no level to show (Auto deciding) Effort's row carries no value at all", () => {
+    render(base({ current: "auto", effort: { ...effort({ value: undefined }), label: () => "" } }));
+    expect(row("reasoning").textContent).toBe("Effort");
+    expect(row("reasoning").querySelector("[data-mode-reasoning-value]")).toBeNull();
+    expect((row("reasoning") as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("under a mode Custom still names the model picked by hand, unchecked", () => {
     render(base({ current: "auto", custom: { label: "flash", onOpen: vi.fn() } }));
     expect(row("all").querySelector("[data-mode-pinned-model]")?.textContent).toBe("flash");

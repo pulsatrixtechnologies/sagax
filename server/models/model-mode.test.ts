@@ -171,9 +171,10 @@ describe("modes with several providers", () => {
   });
 
 
-  it("Heavy's seats are each account's strongest model first, the strongest leading", () => {
+  it("Heavy's seats are each account's strongest model first, the strongest leading, then their second ones", () => {
     const pick = pickModeModel(all, "heavy")!;
-    expect(models(pick.team)).toEqual(["gpt-6-astra", "claude-opus-5-5", "gemini-3-pro", "grok-4.7", "k3"]);
+    // the five firsts used to fill the five seats; with eight, the second models follow (D-20261126-023)
+    expect(models(pick.team)).toEqual(["gpt-6-astra", "claude-opus-5-5", "gemini-3-pro", "grok-4.7", "k3", "k3-256k"]);
     expect(pick.selection.model).toBe("gpt-6-astra");
   });
 
@@ -181,7 +182,8 @@ describe("modes with several providers", () => {
     // D-20261126-023: as many seats as the most experts a team may have
     expect(HEAVY_MAX_AGENTS).toBe(HEAVY_MAX_EXPERTS);
     expect(HEAVY_MAX_AGENTS).toBe(8);
-    const many = [claudeOpus(), codex, grok, gemini, kimi, server()];
+    const many = [claudeOpus(), codex, grok, gemini, kimi, server(), claude({ instanceId: "claude-b" }), claude({ instanceId: "claude-c" }), claude({ instanceId: "claude-d" })];
+    expect(heavySeats(request(many)).length).toBe(HEAVY_MAX_AGENTS);
     expect(pickModeModel(request(many), "heavy")!.team).toHaveLength(HEAVY_MAX_AGENTS);
   });
 

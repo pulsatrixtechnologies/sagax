@@ -18,7 +18,7 @@ import { engineFailureKind, httpStatusOf, providerReason } from "./drivers/engin
 
 /** The hidden threads of the experts working now. They are the one turn's own work, not threads the
  * person opened: they do not count toward the bot's limit of parallel threads (the leader's turn and
- * five experts would never fit under the default three). */
+ * up to eight experts would never fit under the default three). */
 const agentThreads = new Set<string>();
 export const heavyAgentThreads = {
   add: (threadId: string): void => { agentThreads.add(threadId); },
@@ -127,21 +127,24 @@ const HEAVY_MAX_REFUSALS = 12;
 
 const clip = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
 
-/** What the leader is asked first: how big a team this task needs, and who. */
+/** What the leader is asked first: how big a team this task needs, and who.
+ * D-20261126-023: the fewest that suffice, 2 to 8; the wording is the
+ * agent's choice. */
 export function planPrompt(input: { request: string; context?: string; seats: number }): string {
   const most = Math.max(HEAVY_MIN_EXPERTS, Math.min(HEAVY_MAX_EXPERTS, input.seats));
   const context = input.context?.trim();
   return [
-    `[You are the leader of a team of experts that will work on the person's request before you act. Decide how many experts this task needs (${HEAVY_MIN_EXPERTS} to ${most}: more for a big or risky task, fewer for a narrow one) and give each one a persona chosen for this task (for example a skeptic, security, cost, the user's advocate, or anything the task calls for).]`,
-    "Reply with JSON only, no prose: {\"experts\":[{\"persona\":\"short name\",\"focus\":\"one sentence\"}]}",
+    `[You are the leader of a team of experts that will work on the person's request before you act. Read the request, then choose the smallest number of experts that is enough for it, from ${HEAVY_MIN_EXPERTS} to ${most}. Every expert adds time and cost: a simple question gets ${HEAVY_MIN_EXPERTS}, and you go higher only when the request is big, risky or has distinct parts that each need their own expert; never add an expert to fill the team. Give each one a persona chosen for this task (for example a skeptic, security, cost, the user's advocate, or anything the task calls for), each a different angle.]`,
+    "Reply with JSON only, no prose, one entry per expert: {\"experts\":[{\"persona\":\"short name\",\"focus\":\"one sentence\"}]}",
     ...(context ? [`The conversation so far:\n${context}`] : []),
     `The request:\n${input.request.trim()}`,
   ].join("\n\n");
 }
 
-/** The leader's plan, read from its reply: 2 to `seats` experts (never more
- * than HEAVY_MAX_EXPERTS). A reply that does not read gives three of the
- * default personas. */
+/** The leader's plan, read from its reply: the number it asked, held
+ * between 2 and `seats` (never more than HEAVY_MAX_EXPERTS, 8): 9 is
+ * brought down to 8, 1 up to 2 with a default persona beside it. A reply
+ * that does not read gives three of the default personas. */
 export function parseTeamPlan(text: string, seats = HEAVY_MAX_EXPERTS): ExpertBrief[] {
   const most = Math.max(HEAVY_MIN_EXPERTS, Math.min(HEAVY_MAX_EXPERTS, seats));
   const fallback = DEFAULT_EXPERTS.slice(0, Math.min(3, most));
@@ -158,8 +161,10 @@ export function parseTeamPlan(text: string, seats = HEAVY_MAX_EXPERTS): ExpertBr
       return persona ? [{ persona, focus }] : [];
     }).slice(0, most);
     if (experts.length >= HEAVY_MIN_EXPERTS) return experts;
-    // one persona named: the team still needs a second voice
-    return [...experts, ...DEFAULT_EXPERTS.filter((brief) => !experts.some((one) => one.persona === brief.persona))].slice(0, Math.max(HEAVY_MIN_EXPERTS, Math.min(3, most)));
+    // no persona read: the reply does not read
+    if (!experts.length) return [...fallback];
+    // one persona named: the team still needs a second voice, and no more (D-20261126-023)
+    return [...experts, ...DEFAULT_EXPERTS.filter((brief) => !experts.some((one) => one.persona === brief.persona))].slice(0, HEAVY_MIN_EXPERTS);
   } catch {
     return [...fallback];
   }

@@ -11,6 +11,7 @@
 // every path that already treats Auto (recovery, routines, hand-offs, a
 // voice call turn) keeps working, and the same persistence carries it: the
 // selection of the bot, or of a thread that picked its own.
+import { HEAVY_MAX_EXPERTS } from "./heavy-team.ts";
 import type { EffortLevel, ModelSelection } from "./model-selection.ts";
 import { MENU_MODES, type MenuMode } from "./mode-menu.ts";
 
@@ -77,5 +78,6 @@ export interface ModeResolution {
   team?: ModeModel[];
 }
 
-/** Heavy: at most this many seats, and experts (D-20261119-084: 2 to 5). */
-export const HEAVY_MAX_AGENTS = 5;
+/** Heavy: at most this many seats, as many as the most experts a team may
+ * have (D-20261119-084, D-20261126-023: 2 to 8, shared/heavy-team.ts). */
+export const HEAVY_MAX_AGENTS = HEAVY_MAX_EXPERTS;

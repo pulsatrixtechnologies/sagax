@@ -2,6 +2,7 @@
 //   { "xai": {"key":"xai-…"}, "box": {"token":"…"},
 //     "instances": { "<instanceId>": {"driver":"grok", …} } }
 import { DEFAULT_MAX_PARALLEL_PER_PERSON, MAX_PARALLEL_PER_PERSON } from "../shared/parallel-tasks.ts";
+import { MODE_MAX_EXPERTS } from "../shared/mode-models.ts";
 import { readFileSync, mkdirSync, existsSync, renameSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -671,7 +672,7 @@ const appConfigSchema = z.object({
   modeModels: z.object({
     fast: z.object({ instanceId: z.string().min(1).max(200), model: z.string().min(1).max(200), effort: z.enum(["none", "low", "medium", "high", "xhigh", "max", "ultracode"]).optional() }).optional(),
     expert: z.object({ instanceId: z.string().min(1).max(200), model: z.string().min(1).max(200), effort: z.enum(["none", "low", "medium", "high", "xhigh", "max", "ultracode"]).optional() }).optional(),
-    heavy: z.array(z.object({ instanceId: z.string().min(1).max(200), model: z.string().min(1).max(200) })).max(5).optional(),
+    heavy: z.array(z.object({ instanceId: z.string().min(1).max(200), model: z.string().min(1).max(200) })).max(MODE_MAX_EXPERTS).optional(),
   }).optional(),
   /** Historical config section name "box" (the persisted config.json key); the
    * provider is Boat now and the key is kept for compatibility. */

@@ -2,8 +2,9 @@
  * D-20261119-084, D-20261119-085): the experts of a Heavy turn. Before the
  * turn's own model (the leader, Expert's pick) acts:
  *
- * 1. the leader plans the team: how many experts (2 to 5) and each one's
- *    persona, on a short hidden ask of its own;
+ * 1. the leader plans the team: how many experts (2 to 8, the fewest that
+ *    suffice, D-20261126-023) and each one's persona, on a short hidden ask
+ *    of its own;
  * 2. each expert takes a seat of the person's own accounts and models,
  *    different accounts first, then different models (server/heavy-team.ts
  *    assignSeats, server/models/model-mode.ts heavySeats);
@@ -128,7 +129,7 @@ async function runHeavyTeam(state: any): Promise<void> {
   };
 
   try {
-    // 1. the leader plans the team (D-20261119-084: 2 to 5, its choice)
+    // 1. the leader plans the team (D-20261119-084, D-20261126-023: 2 to 8, its choice)
     const leaderSeat = { instanceId: pick.selection.instanceId, model: pick.selection.model, engineLabel: pick.engineLabel, modelLabel: pick.modelLabel };
     const planThread = openExpert(leaderSeat, "Heavy plan");
     const plan = planThread ? await askOn(planThread, planPrompt({ request, context, seats: HEAVY_MAX_EXPERTS }), undefined, PLAN_WAIT_MS) : { status: "error", text: "" };

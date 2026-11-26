@@ -3,6 +3,11 @@
 // tested without a server.
 import { t } from "@/lib/i18n";
 
+/** How often GET /api/plan-usage is read again in the background (the chat
+ * bar's notices, the menu bar's icon). One minute is kept for a usage detail
+ * that is open (D-20261125-014). */
+export const PLAN_USAGE_REFRESH_MS = 10 * 60_000;
+
 export interface PlanWindow {
   available: boolean;
   remainingPercent: number | null;

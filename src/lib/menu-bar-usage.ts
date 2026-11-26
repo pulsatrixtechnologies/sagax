@@ -1,8 +1,10 @@
 // The usage icon of the macOS menu bar and of the Windows notification area
-// (#5407, electron/usage-tray.mjs draws it). The desktop shell asks this page
-// for its figures (when the icon comes on, then once a minute) and the page
-// answers with one small value: the week and the short session window as
-// percents, and the figure written beside the icon.
+// (#5407, electron/usage-tray.mjs draws it). This page hands the shell one
+// small value: the week and the short session window as percents, and the
+// figure written beside the icon. It does so when it loads, at the app's
+// background cadence (PLAN_USAGE_REFRESH_MS, ten minutes), and at once each
+// time the shell asks: the icon came on or was clicked, the window came back
+// to the front, the account on screen changed.
 //
 // No limit is computed here: the rows are the ones GET /api/plan-usage
 // already gives the account menu's Usage and Settings > Usage, and the
@@ -12,7 +14,7 @@
 import { usagePercent } from "./account-menu";
 import { usageMenuBarChoice } from "./desktop-shell-preferences";
 import { t } from "./i18n";
-import { connectedPlanRows, type PlanRow, type PlanUsageReport, type PlanWindow } from "./plan-usage";
+import { connectedPlanRows, PLAN_USAGE_REFRESH_MS, type PlanRow, type PlanUsageReport, type PlanWindow } from "./plan-usage";
 
 /** What the icon shows. `week` and `session` are used percents (0 to 100),
  * null when no account reports that window; `text` is the figure beside the
@@ -67,10 +69,12 @@ export interface MenuBarUsageDeps {
   bridge?: NonNullable<NonNullable<Window["ogb"]>["usageTray"]>;
   read?: () => Promise<PlanUsageReport>;
   enabled?: () => boolean;
+  setIntervalImpl?: (fn: () => void, ms: number) => unknown;
+  clearIntervalImpl?: (timer: never) => void;
 }
 
-/** Answer the shell's requests for figures. Nothing is read while the switch
- * is off, and this page keeps no timer: the shell's own minute asks. */
+/** Hand the figures to the shell: now, every ten minutes, and each time the
+ * shell asks. Nothing is read while the switch is off. */
 export function installMenuBarUsage(deps: MenuBarUsageDeps = {}): () => void {
   const bridge = deps.bridge ?? (typeof window === "undefined" ? undefined : window.ogb?.usageTray);
   if (!bridge) return () => {};
@@ -92,5 +96,10 @@ export function installMenuBarUsage(deps: MenuBarUsageDeps = {}): () => void {
   };
   // this page just loaded: the icon may already be waiting for its figures
   void answer();
-  return bridge.onRefresh(() => void answer());
+  const timer = (deps.setIntervalImpl ?? setInterval)(() => void answer(), PLAN_USAGE_REFRESH_MS);
+  const unlisten = bridge.onRefresh(() => void answer());
+  return () => {
+    (deps.clearIntervalImpl ?? clearInterval)(timer as never);
+    unlisten();
+  };
 }

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import zlib from "node:zlib";
 
-import { USAGE_TRAY_REFRESH_MS, createUsageTray, drawUsageIcon, normalizeUsageValues, usageIconShapes, usageTraySupported } from "./usage-tray.mjs";
+import { createUsageTray, drawUsageIcon, normalizeUsageValues, usageIconShapes, usageTraySupported } from "./usage-tray.mjs";
 
 /** A PNG back to its size and RGBA pixels (8-bit RGBA, filter 0 rows only:
  * what encodePng writes). */
@@ -34,10 +35,8 @@ function decodePng(png) {
   return { width, height, pixel };
 }
 
-function fakes(platform = "darwin") {
+function fakes(platform = "darwin", scale = { value: 1 }) {
   const trays = [];
-  const timers = new Map();
-  let nextTimer = 1;
   const asked = [];
   const clicks = [];
   class Tray {
@@ -71,10 +70,9 @@ function fakes(platform = "darwin") {
     platform,
     onClick: () => clicks.push("click"),
     requestFigures: () => asked.push("ask"),
-    setIntervalImpl: (fn, ms) => { const id = nextTimer++; timers.set(id, { fn, ms }); return id; },
-    clearIntervalImpl: (id) => timers.delete(id),
+    displayScale: () => scale.value,
   });
-  return { tray, trays, timers, asked, clicks };
+  return { tray, trays, asked, clicks };
 }
 
 test("only the macOS menu bar and the Windows notification area get the icon", () => {
@@ -84,7 +82,7 @@ test("only the macOS menu bar and the Windows notification area get the icon", (
   const linux = fakes("linux");
   linux.tray.setEnabled(true);
   assert.equal(linux.trays.length, 0);
-  assert.equal(linux.timers.size, 0);
+  assert.equal(linux.asked.length, 0);
 });
 
 test("the page's value is made safe: percents from 0 to 100, one short line of text", () => {
@@ -133,11 +131,12 @@ test("Windows: two bars standing in 16 by 16, coloured by how full they are", ()
   assert.equal(warn.length, 3);
 });
 
-test("off: no icon and no timer; on: the icon, the figures asked now and once a minute", () => {
-  const { tray, trays, timers, asked } = fakes();
+test("off: no icon, nothing asked; on: the icon, the figures asked now, at a click and at a refresh, never on a timer", () => {
+  const { tray, trays, asked } = fakes();
   tray.update({ week: 10, session: 10, text: "10 %" });
+  tray.refresh();
   assert.equal(trays.length, 0);
-  assert.equal(timers.size, 0);
+  assert.equal(asked.length, 0);
   tray.setEnabled(false);
   assert.equal(trays.length, 0);
 
@@ -145,19 +144,21 @@ test("off: no icon and no timer; on: the icon, the figures asked now and once a 
   assert.equal(trays.length, 1);
   assert.equal(tray.isShown(), true);
   assert.equal(asked.length, 1);
-  assert.deepEqual([...timers.values()].map((timer) => timer.ms), [USAGE_TRAY_REFRESH_MS]);
-  assert.equal(USAGE_TRAY_REFRESH_MS, 60_000);
-  [...timers.values()][0].fn();
+  // the window came back to the front, or the account on screen changed
+  tray.refresh();
   assert.equal(asked.length, 2);
-  // turned on twice: still one icon and one timer
+  trays[0].handlers.get("click")();
+  assert.equal(asked.length, 3);
+  // turned on twice: still one icon, nothing asked again
   tray.setEnabled(true);
   assert.equal(trays.length, 1);
-  assert.equal(timers.size, 1);
+  assert.equal(asked.length, 3);
 
   tray.setEnabled(false);
   assert.equal(trays[0].destroyed, true);
-  assert.equal(timers.size, 0);
   assert.equal(tray.isShown(), false);
+  tray.refresh();
+  assert.equal(asked.length, 3);
   tray.update({ week: 10, session: 10, text: "10 %" });
   assert.equal(trays[0].images.length, 1);
 });
@@ -201,32 +202,69 @@ test("Windows: the icon alone, the figure and the detail in the tooltip", () => 
   assert.equal(icon.tooltips.at(-1), "Sagax · week 44 %, 5 h 20 %");
 });
 
-test("a click opens the detail; quitting removes the icon and the timer for good", () => {
-  const { tray, trays, timers, clicks } = fakes();
+test("a click opens the detail; quitting removes the icon for good", () => {
+  const { tray, trays, asked, clicks } = fakes();
   tray.setEnabled(true);
   trays[0].handlers.get("click")();
   assert.deepEqual(clicks, ["click"]);
   tray.dispose();
   assert.equal(trays[0].destroyed, true);
-  assert.equal(timers.size, 0);
   tray.setEnabled(true);
+  tray.refresh();
   assert.equal(trays.length, 1);
-  assert.equal(timers.size, 0);
+  assert.equal(asked.length, 2);
 });
 
-test("a shell that cannot make the icon stays without one, and without a timer", () => {
-  const timers = new Map();
+test("the module keeps no timer of its own: the page's background cadence hands the figures over", () => {
+  const source = readFileSync(new URL("./usage-tray.mjs", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /setInterval|setTimeout/);
+});
+
+test("Windows: one bitmap, drawn at the display's scale, since the tray reads the 1x bitmap alone", () => {
+  // Electron's Windows tray never reads a 2x representation of an image made
+  // from a buffer: the one representation carries the pixels for the display.
+  const size = (image) => {
+    assert.deepEqual(image.representations.map((entry) => entry.scaleFactor), [1]);
+    const { width, height } = decodePng(image.representations[0].png);
+    return [width, height];
+  };
+  for (const [factor, pixels] of [[1, 16], [1.25, 20], [1.5, 24], [2, 32], [9, 64], [Number.NaN, 16]]) {
+    const { tray, trays } = fakes("win32", { value: factor });
+    tray.setEnabled(true);
+    assert.deepEqual(size(trays[0].image), [pixels, pixels], `scale ${factor}`);
+    tray.update({ week: 44, session: 100, text: "44 %" });
+    assert.deepEqual(size(trays[0].image), [pixels, pixels], `scale ${factor}, figures`);
+  }
+  // the 32 px image is the same drawing as the 2x file
+  const two = fakes("win32", { value: 2 });
+  two.tray.setEnabled(true);
+  two.tray.update({ week: 44, session: 100, text: "44 %" });
+  assert.deepEqual(two.trays[0].image.representations[0].png, drawUsageIcon({ week: 44, session: 100 }, "win32")[1].png);
+
+  // the display's scale changed: the same figures are drawn again, larger
+  const scale = { value: 1 };
+  const { tray, trays } = fakes("win32", scale);
+  tray.setEnabled(true);
+  tray.update({ week: 44, session: 20, text: "44 %" });
+  assert.deepEqual(size(trays[0].image), [16, 16]);
+  const drawn = trays[0].images.length;
+  tray.update({ week: 44, session: 20, text: "44 %" });
+  assert.equal(trays[0].images.length, drawn);
+  scale.value = 2;
+  tray.update({ week: 44, session: 20, text: "44 %" });
+  assert.equal(trays[0].images.length, drawn + 1);
+  assert.deepEqual(size(trays[0].image), [32, 32]);
+});
+
+test("a shell that cannot make the icon stays without one", () => {
   const logged = [];
   const tray = createUsageTray({
     Tray: class { constructor() { throw new Error("no status area"); } },
     nativeImage: { createFromBuffer: () => ({ addRepresentation() {}, setTemplateImage() {} }) },
     platform: "win32",
-    setIntervalImpl: (fn) => { timers.set(1, fn); return 1; },
-    clearIntervalImpl: (id) => timers.delete(id),
     log: (line) => logged.push(line),
   });
   tray.setEnabled(true);
   assert.equal(tray.isShown(), false);
-  assert.equal(timers.size, 0);
   assert.match(logged[0], /no status area/);
 });

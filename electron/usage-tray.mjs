@@ -10,9 +10,6 @@
 // drawing, the text and the life cycle are tested with plain fakes.
 import zlib from "node:zlib";
 
-/** How often the shell asks the page for fresh figures while the icon is on. */
-export const USAGE_TRAY_REFRESH_MS = 60_000;
-
 const MAX_TEXT = 24;
 const MAX_TOOLTIP = 120; // Windows cuts a notification tooltip at 127 characters
 
@@ -182,6 +179,12 @@ export function usageIconShapes({ week, session }, platform) {
   return { ...size, shapes };
 }
 
+/** The scale the Windows icon is drawn at: the display's own (1.5 at 150 %),
+ * between 1 and 4, 1 when unknown. */
+function windowsScale(value) {
+  return typeof value === "number" && Number.isFinite(value) ? Math.min(4, Math.max(1, value)) : 1;
+}
+
 /** The icon as PNG files, one per scale factor (1x and 2x). */
 export function drawUsageIcon(values, platform, scales = [1, 2]) {
   const { width, height, shapes } = usageIconShapes(values, platform);
@@ -196,10 +199,12 @@ export function usageTraySupported(platform) {
 }
 
 /**
- * The icon's life: nothing exists while the setting is off (no icon, no
- * timer); turned on, the icon appears, the page is asked for its figures now
- * and then once a minute, and the icon is redrawn only when a figure changed.
- * Off again or on quit, the icon and the timer are gone.
+ * The icon's life: nothing exists while the setting is off; turned on, the
+ * icon appears and the page is asked for its figures now, then at each click
+ * and each `refresh()` (the window came back to the front, the account on
+ * screen changed). This file keeps no timer: the page hands fresh figures
+ * over at the app's background cadence (src/lib/menu-bar-usage.ts). The icon
+ * is redrawn only when a figure changed. Off again or on quit, it is gone.
  */
 export function createUsageTray({
   Tray,
@@ -208,18 +213,29 @@ export function createUsageTray({
   appName = "Sagax",
   onClick = () => {},
   requestFigures = () => {},
-  setIntervalImpl = setInterval,
-  clearIntervalImpl = clearInterval,
+  displayScale = () => 1,
   log = () => {},
 }) {
   let tray = null;
-  let timer = null;
   let enabled = false;
   let disposed = false;
   let shown = null; // what the icon shows now, as one string
   let shownIcon = null; // the bars drawn now
 
+  const scaleNow = () => {
+    if (platform !== "win32") return 1;
+    try { return windowsScale(displayScale()); } catch { return 1; }
+  };
+
   const image = (values) => {
+    if (platform === "win32") {
+      // Electron's Windows tray builds its icon from the image's 1x bitmap
+      // alone (NativeImage::GetHICON, Electron 44): a 2x representation is
+      // never read. So the one bitmap is drawn at the display's own scale
+      // (16 px at 100 %, 24 at 150 %, 32 at 200 %).
+      const [only] = drawUsageIcon(values, platform, [scaleNow()]);
+      return nativeImage.createFromBuffer(only.png, { scaleFactor: 1 });
+    }
     const [first, ...rest] = drawUsageIcon(values, platform);
     const icon = nativeImage.createFromBuffer(first.png, { width: first.width, height: first.height, scaleFactor: first.scale });
     for (const next of rest) icon.addRepresentation({ scaleFactor: next.scale, width: next.width * next.scale, height: next.height * next.scale, buffer: next.png });
@@ -229,9 +245,9 @@ export function createUsageTray({
 
   const show = (values) => {
     if (!tray) return;
-    const key = JSON.stringify(values);
+    const iconKey = `${values.week}|${values.session}|${scaleNow()}`;
+    const key = `${JSON.stringify(values)}|${iconKey}`;
     if (key === shown) return;
-    const iconKey = `${values.week}|${values.session}`;
     shown = key;
     try {
       if (iconKey !== shownIcon) tray.setImage(image(values));
@@ -244,8 +260,6 @@ export function createUsageTray({
   };
 
   const remove = () => {
-    if (timer !== null) clearIntervalImpl(timer);
-    timer = null;
     if (tray) {
       try { tray.destroy(); } catch { /* already gone */ }
     }
@@ -255,7 +269,7 @@ export function createUsageTray({
   };
 
   const ask = () => {
-    try { requestFigures(); } catch { /* no page yet: the next minute asks again */ }
+    try { requestFigures(); } catch { /* no page yet: it hands its figures over when it loads */ }
   };
 
   return {
@@ -272,17 +286,18 @@ export function createUsageTray({
       try {
         tray = new Tray(image(empty));
         tray.setIgnoreDoubleClickEvents?.(true);
-        tray.on("click", () => onClick());
+        tray.on("click", () => {
+          onClick();
+          ask();
+        });
       } catch (error) {
         log(`usage tray: not created: ${error?.message ?? error}`);
         remove();
         return;
       }
       // the tray was built with the empty bars: only its text is left to set
-      shownIcon = `${empty.week}|${empty.session}`;
+      shownIcon = `${empty.week}|${empty.session}|${scaleNow()}`;
       show(empty);
-      timer = setIntervalImpl(ask, USAGE_TRAY_REFRESH_MS);
-      timer?.unref?.();
       ask();
     },
     /** The page's figures. Ignored while the setting is off. */
@@ -290,12 +305,13 @@ export function createUsageTray({
       if (!enabled || !tray) return;
       show(normalizeUsageValues(values));
     },
-    /** Ask the page again now (the account on screen changed). */
+    /** Ask the page again now (the window came back to the front, the
+     * account on screen changed). */
     refresh() {
       if (enabled && tray) ask();
     },
     isShown: () => tray !== null,
-    /** Quit: the icon and the timer go, for good. */
+    /** Quit: the icon goes, for good. */
     dispose() {
       disposed = true;
       enabled = false;

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { installMenuBarUsage, menuBarUsage, menuBarUsageDetail } from "./menu-bar-usage";
-import { connectedPlanRows, type PlanProvider, type PlanUsageReport } from "./plan-usage";
+import { connectedPlanRows, PLAN_USAGE_REFRESH_MS, type PlanProvider, type PlanUsageReport } from "./plan-usage";
 
 function account(id: string, week: number | null, session: number | null, hours?: number): PlanProvider {
   const window = (used: number | null, extra: object = {}) => used === null
@@ -48,6 +48,29 @@ describe("the page answers the shell", () => {
     shell.ask();
     await vi.waitFor(() => expect(shell.update).toHaveBeenCalledTimes(2));
     stop();
+    expect(shell.stop).toHaveBeenCalled();
+  });
+
+  it("hands the figures over again at the app's background cadence, ten minutes, until stopped", async () => {
+    const shell = bridge();
+    const read = vi.fn(async () => report(account("ada", 44, 20)));
+    const timers: Array<{ fn: () => void; ms: number }> = [];
+    const cleared: unknown[] = [];
+    const stop = installMenuBarUsage({
+      bridge: shell,
+      read,
+      enabled: () => true,
+      setIntervalImpl: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+      clearIntervalImpl: (timer) => { cleared.push(timer); },
+    });
+    expect(timers.map((timer) => timer.ms)).toEqual([PLAN_USAGE_REFRESH_MS]);
+    expect(PLAN_USAGE_REFRESH_MS).toBe(10 * 60_000);
+    await vi.waitFor(() => expect(shell.update).toHaveBeenCalledTimes(1));
+    timers[0].fn();
+    await vi.waitFor(() => expect(shell.update).toHaveBeenCalledTimes(2));
+    expect(read).toHaveBeenCalledTimes(2);
+    stop();
+    expect(cleared).toEqual([1]);
     expect(shell.stop).toHaveBeenCalled();
   });
 

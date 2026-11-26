@@ -352,8 +352,9 @@ const bridge = {
     },
   },
   /** The usage icon of the menu bar or of the notification area
-   * (electron/usage-tray.mjs): the page hands its figures over, and main
-   * asks for fresh ones once a minute while the icon is on. */
+   * (electron/usage-tray.mjs): the page hands its figures over, at the
+   * app's background cadence, and at once when main asks (the icon came on
+   * or was clicked, the window came back, the account changed). */
   usageTray: {
     update: (values) => ipcRenderer.send("usage-tray:update", values),
     onRefresh: (cb) => {

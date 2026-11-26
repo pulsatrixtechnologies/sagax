@@ -3058,6 +3058,8 @@ function navigateMainWindow(url, { reload = false, account = null } = {}) {
   }
   const shown = pageContexts.show(origin, url);
   if (!shown) return;
+  // the icon's figures are the account on screen's
+  if (otherAccount) usageTray.refresh();
   // A page kept open but showing this app's loading or error page (not its
   // account's address) loads the account now.
   let onItsAddress = false;
@@ -3932,7 +3934,7 @@ function createWindow({ deferNavigation = false } = {}) {
   for (const event of ["resize", "maximize", "unmaximize", "enter-full-screen", "leave-full-screen", "restore"]) {
     win.on(event, () => contexts.layout());
   }
-  win.on("focus", () => desktopAttention.settle());
+  win.on("focus", () => { desktopAttention.settle(); usageTray.refresh(); });
   win.on("close", (event) => {
     // macOS: the red button hides the window, as a chat app does, so its
     // page keeps the live stream and a nudge or a message still reaches
@@ -4554,6 +4556,7 @@ const usageTray = createUsageTray({
   appName: DISPLAY_NAME,
   onClick: () => openUsageDetail(),
   requestFigures: () => mainPage()?.send("usage-tray:refresh"),
+  displayScale: () => screen.getPrimaryDisplay().scaleFactor,
   log: (line) => slog(line),
 });
 function applyUsageTray() {

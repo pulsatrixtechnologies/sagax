@@ -1,31 +1,32 @@
-// A Heavy run in the chat (#4901, #5089, #5090, the reference app's Heavy):
-// while the team works, the experts' avatars orbit the bot's (HeavyOrbit:
-// the one speaking pulses, lines link them while they critique, they merge
-// into the bot on agreement), "Experts thinking · round 2 of 5 · 6s" beside
+// A Heavy run in the chat (#4901, #5089, the reference app's Heavy): the
+// row's small avatars are the run itself. While the team works, the bot's
+// own mascot divides in place into one cell per expert (HeavyDivision, owner
+// 2026-11-26, M-20261126-122), "Experts thinking · round 2 of 5 · 6s" against
 // it and a live preview of what each one writes, then the leader's step.
-// Once they are done, one quiet line, "Thought for 8s", and how it ended
-// (agreed in round 2, or the leader decided after 5); it opens the Thoughts
-// panel. When Auto chose Heavy on its own it says so in one line above. The
-// final answer is the leader's ordinary reply under it. State:
-// shared/heavy-team.ts.
-import { createContext, use, useEffect, useState, type ReactNode } from "react";
+// Once they are done, the same pile and one quiet line, "Thought for 8s",
+// and how it ended (agreed in round 2, or the leader decided after 5); it
+// opens the Thoughts panel. A bot whose mascot is a character, not a shape,
+// keeps the pile of owls and divides into nothing. When Auto chose Heavy on
+// its own it says so in one line above. The final answer is the leader's
+// ordinary reply under it. State: shared/heavy-team.ts.
+import { createContext, use, useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import {
-  AGENT_COLORS, agentPreview, expertName, heavyAutoText, heavyHeader, heavyIsRunning, heavyOutcomeText, leaderNow, leaderStepText, orbitMerged, refusalText,
+  AGENT_COLORS, agentPreview, expertName, heavyAutoText, heavyHeader, heavyIsRunning, heavyOutcomeText, leaderNow, leaderStepText, refusalText,
 } from "@/lib/heavy-team";
 import { toggleThoughts, useOpenThoughts } from "@/lib/thoughts-panel";
 import type { Message } from "@/state/store";
 import type { HeavyTeamLine } from "../../shared/heavy-team";
-import { MausAvatar } from "./Avatar";
-import { HeavyOrbit } from "./HeavyOrbit";
+import { MausAvatar, type BotAvatarProps } from "./Avatar";
+import { HeavyDivision, useDivisionArt } from "./HeavyDivision";
 
-/** The bot's own avatar, at the orbit's centre (ChatViewShell provides it). */
-export const HeavyLeaderContext = createContext<ReactNode>(null);
+/** The bot of the conversation, the team's leader: its mascot is what divides (ChatViewShell provides it). */
+export const HeavyLeaderContext = createContext<BotAvatarProps["bot"] | null>(null);
 
-/** The experts' owls, overlapping, each in its own plumage: the row at rest. */
+/** The experts' owls, overlapping, each in its own plumage: the pile of a bot whose mascot is no shape. */
 export function AgentAvatars({ count, size = 22 }: { count: number; size?: number }) {
   return (
     <span data-heavy-avatars="" role="img" aria-label={t("heavy.avatars", { count })} className="flex shrink-0 items-center">
@@ -48,10 +49,9 @@ export function HeavyTeamRow({ message, busy = false }: { message: Message; busy
     return () => clearInterval(timer);
   }, [running]);
   const open = useOpenThoughts() === message.id;
-  const leaderAvatar = use(HeavyLeaderContext) ?? <MausAvatar color="white" size={34} state={running ? "thinking" : "idle"} animated={running} trackPointer={false} />;
+  // the bot's mascot when it is a shape: it divides into the experts; undefined for a character, which keeps the owls
+  const art = useDivisionArt(use(HeavyLeaderContext));
   const working = (line.phase === "planning" || line.phase === "agents") && busy;
-  // the orbit while the team works, and while the leader writes after the experts merged into it
-  const orbit = working || (orbitMerged(line) && line.phase === "leader" && busy);
   const header = heavyHeader(line, busy, now);
   const outcome = working ? null : heavyOutcomeText(line);
   const auto = heavyAutoText(line);
@@ -59,12 +59,13 @@ export function HeavyTeamRow({ message, busy = false }: { message: Message; busy
     <div data-heavy-team={line.phase} role="status" className="flex w-fit max-w-full flex-col">
       {auto && <p data-heavy-auto="" className="pb-1 text-[13px] leading-5 text-ink-secondary">{auto}</p>}
       <div className="flex max-w-full items-start gap-3">
-        {orbit && <HeavyOrbit line={line} busy={busy} leader={leaderAvatar} />}
         <div className="flex min-w-0 flex-col">
           <button type="button" data-heavy-open="" aria-expanded={open} aria-label={`${header}. ${t("heavy.open")}`} title={t("heavy.open")}
             onClick={() => toggleThoughts(message.id)}
             className="group -ml-1.5 flex max-w-full items-center gap-2 rounded-xl px-1.5 py-1 text-[13px] leading-5 text-ink-secondary outline-none hover:bg-menu-hover hover:text-ink focus-visible:bg-menu-hover focus-visible:ring-2 focus-visible:ring-focus">
-            {!orbit && line.agents.length > 0 && <AgentAvatars count={line.agents.length} />}
+            {art
+              ? (running || line.agents.length > 0) && <HeavyDivision art={art} count={line.agents.length} running={running} runId={message.id} />
+              : art === undefined && line.agents.length > 0 && <AgentAvatars count={line.agents.length} />}
             <span data-heavy-header="" className="whitespace-nowrap">{header}</span>
             {outcome && <span data-heavy-outcome="" className="whitespace-nowrap text-ink-tertiary">· {outcome}</span>}
             <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 text-ink-tertiary transition-transform group-hover:text-ink-secondary", open && "rotate-180")} />

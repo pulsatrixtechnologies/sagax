@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
- * Headless screenshots of a Heavy run (#4901, #5089, #5090), dark and light:
- * the orbit while the experts propose (one pulsing, Auto's one line above),
- * while they critique (the lines), on agreement (merged into the bot), the
- * row after ("Thought for 26s", the leader's plan and the disputes) and the
- * Thoughts panel. Synthetic data and demo accounts only. Real Chrome
- * headless, DPR 2.
+ * Headless screenshots of a Heavy run (#4901, #5089), dark and light: the
+ * row while the experts propose (the bot's mascot divided into them, Auto's
+ * one line above), while they critique, while the leader writes after they
+ * agreed, the row after ("Thought for 26s", the leader's plan and the
+ * disputes) and the Thoughts panel. The division itself, frame by frame, is
+ * scripts/capture/heavy-division.mjs. Synthetic data and demo accounts
+ * only. Real Chrome headless, DPR 2.
  * Usage: node scripts/capture/heavy-team.mjs [--out DIR] [--port N]
  */
 import { spawn } from "node:child_process";
@@ -23,8 +24,8 @@ const port = Number(arg("--port", "5389"));
 const skins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }];
 const shots = [
   { name: "heavy-propose-auto", query: "case=propose&auto=risky", header: "Experts thinking · round 1 of 5 · 14s" },
-  { name: "heavy-critique-lines", query: "case=critique", header: "Experts thinking · round 3 of 5 · 14s" },
-  { name: "heavy-merged", query: "case=merged", header: "Thought for 14s" },
+  { name: "heavy-critique", query: "case=critique", header: "Experts thinking · round 3 of 5 · 14s" },
+  { name: "heavy-leader-writing", query: "case=merged", header: "Thought for 14s" },
   { name: "heavy-done-decided", query: "case=done", header: "Thought for 26s" },
   { name: "heavy-panel-decided", query: "case=panel", header: "Thought for 26s", panel: true, open: [2] },
   // M-20261123-040: a seat that refused (HTTP 403), in French: the row, then the panel

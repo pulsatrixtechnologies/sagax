@@ -1,8 +1,6 @@
 // Heavy mode (#4901, #5089, #5090) in the person's words and shapes: the
 // row's header, the round, the outcome, the leader's steps, an expert's
-// state, and the orbit's geometry (who sits where, who is linked while they
-// critique, when they merge into the bot). The state itself is
-// shared/heavy-team.ts.
+// state. The state itself is shared/heavy-team.ts.
 import { t } from "@/lib/i18n";
 import { formatElapsed } from "@/lib/working-time";
 import {
@@ -12,8 +10,8 @@ import {
 
 export { heavyIsRunning, heavyThoughtMs };
 
-/** The owls that stand for the experts, one plumage each (the palette's vivid colours). */
-export const AGENT_COLORS = ["blue", "green", "orange", "purple", "pink"] as const;
+/** The experts' colours, one each (the palette's vivid colours): eight, the most the row's division draws apart (M-20261126-120). */
+export const AGENT_COLORS = ["blue", "green", "orange", "purple", "pink", "teal", "yellow", "coral"] as const;
 
 /** The row's header: the leader picking the team, then "Experts thinking ·
  * round 2 of 5 · 6s" while they work, "Thought for 8s" after. */
@@ -118,30 +116,4 @@ export function agentStatusText(agent: HeavyAgentLine): string {
 /** Whether a message is a Heavy run's row. */
 export function heavyLineOf(message: { kind: string; tool?: { team?: HeavyTeamLine } }): HeavyTeamLine | null {
   return message.kind === "activity" ? message.tool?.team ?? null : null;
-}
-
-// ── the orbit (HeavyOrbit.tsx) ────────────────────────────────────────────
-
-/** Where each expert sits around the bot: evenly on a circle, the first at the top. */
-export function orbitPlaces(count: number, radius: number): Array<{ x: number; y: number }> {
-  return Array.from({ length: count }, (_, index) => {
-    const angle = -Math.PI / 2 + (index * 2 * Math.PI) / Math.max(1, count);
-    return { x: Math.round(radius * Math.cos(angle) * 10) / 10, y: Math.round(radius * Math.sin(angle) * 10) / 10 };
-  });
-}
-
-/** While a critique round runs, every two experts still in it are linked
- * (each reads and critiques the others); none while they propose. */
-export function critiqueLinks(line: HeavyTeamLine): Array<[number, number]> {
-  const round = heavyCurrentRound(line);
-  if (line.phase !== "agents" || round?.kind !== "critique") return [];
-  const live = line.agents.filter((agent) => agent.status === "working").map((agent) => agent.n);
-  const out: Array<[number, number]> = [];
-  for (let a = 0; a < live.length; a += 1) for (let b = a + 1; b < live.length; b += 1) out.push([live[a]!, live[b]!]);
-  return out;
-}
-
-/** On agreement the experts merge into the bot (once the rounds are over). */
-export function orbitMerged(line: HeavyTeamLine): boolean {
-  return line.outcome === "agreed" && (line.phase === "leader" || line.phase === "done");
 }

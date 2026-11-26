@@ -376,8 +376,12 @@ avec l'app de référence : #3388 ; ce patron : #3398.
   repos), mesuré sur ce qui est dessiné au premier rendu (M-20261119-081,
   `src/components/floating-bots/drawn-inset.ts`). Partager (bouton rond à icône, même disque que Fermer ; infobulle et nom accessible « Partager ») puis le bouton rond Fermer ensemble en
   haut à droite (Partager reste la seule porte du partage des personnes et des
-  groupes) ; la barre devient floue avec la petite mascotte et le nom quand le nom
-  passe dessous.
+  groupes). Aucune barre en haut de la page (owner 2026-11-25, #5371, remplace le
+  2026-11-08) : les deux boutons ronds flottent seuls en haut à droite, sans fond, sans
+  filet, sans mascotte ni nom, en haut de la page comme pendant le défilement ; leur
+  rangée a la hauteur partagée du cadre (`--app-topbar-height`), donc ils sont à la même
+  distance du bord du haut que les autres boutons ronds de la rangée du haut (#5379).
+  Une fois l'en-tête défilé, le nom du bot n'est plus affiché sur la page.
 - Onglets en pilules : Général, Objectifs, Connaissances, Analytique (Simple
   masque Analytique). Apparence n'est plus un onglet (owner 2026-11-19, remplace #4420) :
   c'est le sélecteur de mascotte (8.3, #5369), un petit panneau ancré sous la mascotte,

@@ -106,6 +106,7 @@ import { AccountsCard, Block, ChannelsCard, Note, ProfileCard, sectionLabel, typ
 import { BotFolderCard } from "./BotProfilePage.tsx-parts/BotFolderCard";
 import { BotProfileHeader, useBotProfileHero } from "./BotProfilePage.tsx-parts/BotProfileHeader";
 import { BotProfileTabBar, useBotProfileSearch } from "./BotProfilePage.tsx-parts/BotProfileTabs";
+import { useCaptionChrome } from "../DesktopCapabilities";
 import { BotProfileInsetStrip, BotProfileTopBar } from "./BotProfilePage.tsx-parts/BotProfileTopBar";
 import { AppearanceRow, GROUP_LABEL, SUBPAGE_META, SubPageModal, SubPageRow } from "./BotProfilePage.tsx-parts/subpages";
 import { BotPageModal } from "./BotPageModal";
@@ -682,25 +683,11 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   const wearsPicture = Boolean(avatar.avatarUrl) && avatar.avatarCrop !== "mascot";
   const banner = profileBannerColors(bannerAccent, wearsPicture ? null : mascotDominantColor(bot));
   const bannerStyle = { "--bot-profile-banner-from": banner.from, "--bot-profile-banner-to": banner.to } as CSSProperties;
+  const { dragProps } = useCaptionChrome();
 
   const { heroSlot, hero } = useBotProfileHero({ bot, derived, // a click on the mascot opens the picker under it; a second click closes it
     onOpenAppearance: shown("appearance") ? () => (appearanceOpen ? setAppearanceOpen(false) : openCategory("appearance")) : undefined,
   });
-
-  // Once the name scrolls under the top bar, the bar turns opaque (blurred)
-  // and shows the small mascot and the name: the content scrolls under it,
-  // never cut by a coloured band (JC 2026-11-08).
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [condensed, setCondensed] = useState(false);
-  const onScroll = () => {
-    const scroller = scrollRef.current;
-    const title = scroller?.querySelector<HTMLElement>("[data-bot-profile-title]");
-    if (!scroller || !title) return;
-    const bar = scroller.querySelector<HTMLElement>("[data-bot-profile-topbar]")?.offsetHeight ?? 56;
-    const titleTop = title.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-    const next = titleTop < bar;
-    setCondensed((prev) => (prev === next ? prev : next));
-  };
 
   return (
     <MascotHeroSlotContext.Provider value={heroSlot}>
@@ -736,9 +723,23 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
       className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-app text-ink outline-none"
     >
       <BotProfileInsetStrip />
-      <div ref={scrollRef} onScroll={onScroll} data-bot-profile-scroll="" className="content-card-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-        {/* The bar floats over the banner (sticky, no height of its own in
-            the flow) and the banner scrolls away under it with the page. */}
+      <div data-bot-profile-scroll="" className="content-card-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        {/* Banner in the mascot's colour from the very top, the mascot over
+            its lower edge. It is the window's drag handle (the top of the
+            page moves the window, as every view's top does) and it scrolls
+            away with the page, so the handle never sits over a row. */}
+        <div
+          aria-hidden="true"
+          data-bot-profile-banner=""
+          data-bot-profile-banner-palette={bannerPalette}
+          {...dragProps}
+          style={{ ...bannerStyle, ...dragProps.style }}
+          className="bot-profile-banner h-[124px] w-full shrink-0"
+        />
+        {/* No bar (#5371): Share and the X float at the top right (sticky,
+            no height of their own in the flow) and the banner scrolls away
+            under them with the page. After the banner, so the two buttons
+            are cut out of its drag region. */}
         <BotProfileTopBar
           bot={bot}
           onClose={onClose}
@@ -747,15 +748,6 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
           shareVisibility={shareVisibility}
           shareOpen={shareOpen}
           onShareOpenChange={setShareOpen}
-          condensed={condensed}
-        />
-        {/* Banner in the mascot's colour from the very top, the mascot over its lower edge. */}
-        <div
-          aria-hidden="true"
-          data-bot-profile-banner=""
-          data-bot-profile-banner-palette={bannerPalette}
-          style={bannerStyle}
-          className="bot-profile-banner h-[124px] w-full shrink-0"
         />
         {/* One centred column, the reference's reading width (920px, 32px
             gutters, #4420), a 16px gutter on a phone. */}

@@ -5,6 +5,7 @@
 // then five pill tabs at most, each one column of cards (the owner 2026-11-06).
 // Every section of the former editor is still there, on its tab; locked
 // sections are shown with their reason instead of hidden.
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -96,6 +97,7 @@ vi.mock("@/state/store", async (importOriginal) => {
 });
 
 const { PersonaEditorModal } = await import("./PersonaEditorModal");
+const { DesktopCapabilitiesProvider } = await import("../DesktopCapabilities");
 const { BOT_PROFILE_TABS, BOT_PROFILE_SUBPAGE_SECTIONS, KNOWLEDGE_SECTIONS, botProfileSubPageFor, botProfileTabFor, personaCategoryForSection } = await import("@/lib/persona-sections");
 
 const bot = {
@@ -110,6 +112,18 @@ function render(section: BotSettingsSection, state: Partial<AppState> = {}) {
   fixture.state = { config: { tts: { configured: false } } as AppState["config"], bots: [bot, other], personaEditor: { botId: bot.id, section }, ...state };
   return renderToStaticMarkup(createElement(PersonaEditorModal));
 }
+
+/** The page in a desktop window of that platform (its own title bar on macOS and Windows). */
+function renderOn(platform: string) {
+  vi.stubGlobal("window", { addEventListener() {}, removeEventListener() {}, ogb: { platform } });
+  fixture.state = { config: { tts: { configured: false } } as AppState["config"], bots: [bot, other], personaEditor: { botId: bot.id, section: "overview" } };
+  return renderToStaticMarkup(createElement(DesktopCapabilitiesProvider, null, createElement(PersonaEditorModal)));
+}
+/** The opening tag that carries a marker. */
+const tagOf = (html: string, marker: string) => {
+  const index = html.indexOf(marker);
+  return index < 0 ? "" : html.slice(html.lastIndexOf("<", index), html.indexOf(">", index) + 1);
+};
 
 const memberConfig = {
   viewer: { role: "member", principalId: "pr_me", operator: false },
@@ -324,22 +338,99 @@ describe("bot profile page shell", () => {
     const bar = at(html, "data-bot-profile-topbar");
     const banner = at(html, 'data-bot-profile-banner=""');
     expect(scroll).toBeGreaterThan(0);
-    // inside the scroll, before the banner: the banner and the mascot scroll away under it, whole
-    expect(bar).toBeGreaterThan(scroll);
-    expect(bar).toBeLessThan(banner);
-    const barHtml = html.slice(bar, banner);
+    // inside the scroll, right after the banner and before the column: the
+    // banner and the mascot scroll away under it, whole (after the banner
+    // since the review of PR #5381: the banner is the window's drag handle
+    // and the two buttons are cut out of it, which takes a later element)
+    expect(banner).toBeGreaterThan(scroll);
+    expect(bar).toBeGreaterThan(banner);
+    const column = at(html, 'data-bot-profile-column=""');
+    expect(bar).toBeLessThan(column);
+    expect(html.slice(banner, bar)).toMatch(/^[^<]*><\/div><div $/);
+    const barHtml = html.slice(bar, column);
     expect(barHtml).toContain("data-window-close");
     expect(barHtml).not.toContain("data-bot-profile-visibility");
     const barTag = html.slice(html.lastIndexOf("<", bar), html.indexOf(">", bar) + 1);
     expect(barTag).toContain("sticky top-0");
     expect(barTag).toContain("bg-transparent");
-    expect(barTag).toMatch(/-mb-1[24] h-1[24]/);
+    // the frame's shared header height, so Share and the X sit as far under the top edge as every other round control of the top row (owner, 2026-11-25, #5379)
+    expect(barTag).toContain("h-(--app-topbar-height)");
+    // and no room in the flow: pulled up over the 124px banner, the rest of the banner's height given back under it
+    expect(barTag).toContain("-mt-[124px] mb-[calc(124px-var(--app-topbar-height))] h-(--app-topbar-height)");
+    expect(html).toMatch(/class="bot-profile-banner h-\[124px\] /);
     // never the skin's opaque header nor the banner's top colour
     expect(barTag).not.toContain("content-topbar");
     expect(barHtml).not.toContain("bot-profile-banner-top");
-    // the condensed head (small mascot and the name) is there, hidden until the name scrolls under the bar
-    expect(barHtml).toMatch(/data-bot-profile-condensed="" aria-hidden="true" class="[^"]*opacity-0/);
-    expect(barHtml).toContain(">Pepper<");
+  });
+
+  // Owner, 2026-11-25 (#5371), the reference beside Sagax: "the top bar that
+  // says the bot name and the section is not doing that" there. No bar: the
+  // two round buttons float at the top right and nothing else is drawn, at
+  // the top of the page or once it has scrolled.
+  it("regression #5371: no top bar, only Share and the X floating at the top right, whatever the scroll", () => {
+    const html = render("overview");
+    const bar = at(html, "data-bot-profile-topbar");
+    const barHtml = html.slice(bar, at(html, 'data-bot-profile-column=""'));
+    const barTag = html.slice(html.lastIndexOf("<", bar), html.indexOf(">", bar) + 1);
+    // no mascot, no name, no section in it
+    expect(barHtml).not.toContain("data-bot-profile-condensed");
+    expect(barHtml).not.toContain("Pepper");
+    expect(barHtml).not.toMatch(/<img|<canvas/);
+    // its only children are the two round controls, at the right
+    expect(barTag).toContain("justify-end");
+    expect(barHtml.match(/<button/g)).toHaveLength(2);
+    expect(barHtml).toContain('data-bot-profile-share=""');
+    expect(barHtml).toContain("data-window-close");
+    // Share stays an icon, never the word
+    const share = at(html, 'data-bot-profile-share=""');
+    expect(html.slice(share, html.indexOf("</button>", share))).not.toMatch(/>\s*Share\s*</);
+    // and no state turns it into a strip: no ground, no blur, no rule under it
+    const source = readFileSync(new URL("../bot-profile/BotProfilePage.tsx-parts/BotProfileTopBar.tsx", import.meta.url), "utf8");
+    const code = source.slice(source.indexOf("export function BotProfileTopBar(")).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+    expect(code).not.toMatch(/condensed|backdrop-blur|shadow-|bg-app|border-b|hairline|BotAvatar/);
+    expect(code).toContain("bg-transparent");
+    const pageSource = readFileSync(new URL("../bot-profile/BotProfilePage.tsx", import.meta.url), "utf8");
+    expect(pageSource).not.toMatch(/setCondensed|condensed=\{/);
+  });
+
+  // Independent review of PR #5381 (#5371): the row was clear but still a
+  // full width, 56px box that took the clicks and, in the desktop app, was
+  // the window's drag handle, over whatever row had scrolled under it. "Two
+  // buttons float, no bar": only the two buttons take the pointer. The
+  // window is still moved by the top of the page: the banner is the handle,
+  // and it scrolls away with the page, so it never sits over a row.
+  it.each([["macOS", "darwin"], ["Windows", "win32"]])("regression #5371 (review): on %s the clear row takes no click and is no window handle, the two buttons do, the banner is the handle", (_name, platform) => {
+    const html = renderOn(platform);
+    const barTag = tagOf(html, "data-bot-profile-topbar");
+    const actionsTag = tagOf(html, 'data-bot-profile-topbar-actions=""');
+    const bannerTag = tagOf(html, 'data-bot-profile-banner=""');
+    // the row lets every click through to the page under it; the group of the two buttons takes its own
+    expect(barTag).toMatch(/class="[^"]*\bpointer-events-none\b/);
+    expect(actionsTag).toMatch(/class="[^"]*\bpointer-events-auto\b/);
+    expect(actionsTag).not.toContain("pointer-events-none");
+    // the sticky row is no drag region: it stays over the page while it scrolls
+    expect(barTag).not.toContain("data-window-drag");
+    expect(barTag).not.toContain("app-region");
+    // the banner is, by the app's one means (useCaptionChrome().dragProps)
+    expect(bannerTag).toContain('data-window-drag=""');
+    expect(bannerTag).toContain("-webkit-app-region:drag");
+    // the two buttons float over the banner at the top of the page and the
+    // mascot overlaps its lower edge: both are cut out of the handle, and
+    // both come after the banner, since a later no-drag cuts an earlier drag
+    expect(actionsTag).toContain("-webkit-app-region:no-drag");
+    expect(tagOf(html, 'data-bot-profile-hero=""')).toContain("-webkit-app-region:no-drag");
+    expect(at(html, 'data-bot-profile-banner=""')).toBeLessThan(at(html, "data-bot-profile-topbar"));
+    expect(at(html, 'data-bot-profile-banner=""')).toBeLessThan(at(html, 'data-bot-profile-hero=""'));
+  });
+
+  it("regression #5371 (review): with a native title bar (Linux, a browser) the row still takes no click and nothing drags", () => {
+    const html = renderOn("linux");
+    expect(tagOf(html, "data-bot-profile-topbar")).toMatch(/class="[^"]*\bpointer-events-none\b/);
+    expect(tagOf(html, 'data-bot-profile-topbar-actions=""')).toMatch(/class="[^"]*\bpointer-events-auto\b/);
+    for (const marker of ["data-bot-profile-topbar", 'data-bot-profile-topbar-actions=""', 'data-bot-profile-banner=""', 'data-bot-profile-hero=""']) {
+      expect(tagOf(html, marker), marker).not.toContain("app-region");
+      expect(tagOf(html, marker), marker).not.toContain("data-window-drag");
+    }
   });
 
   it("regression #4470: a link to a sub-page's section opens the bot page with that sub-page as a modal over it, and no link back in the top bar", () => {
@@ -472,7 +563,7 @@ describe("regression #4420: the bot page's header is the reference's", () => {
   it("puts Share then the round close button together at the top right, nothing at the top left of the home", () => {
     const html = render("overview");
     const bar = at(html, "data-bot-profile-topbar");
-    const banner = at(html, 'data-bot-profile-banner=""');
+    const column = at(html, 'data-bot-profile-column=""');
     const actions = at(html, 'data-bot-profile-topbar-actions=""');
     const share = at(html, 'data-bot-profile-share=""');
     const close = at(html, "data-window-close");
@@ -480,8 +571,8 @@ describe("regression #4420: the bot page's header is the reference's", () => {
     // the right group holds Share, then the X, its last control
     expect(share).toBeGreaterThan(actions);
     expect(close).toBeGreaterThan(share);
-    expect(close).toBeLessThan(banner);
-    // the left group: no X there any more (the condensed name only)
+    expect(close).toBeLessThan(column);
+    // nothing before the right group: no X, no name (#5371)
     expect(html.slice(bar, actions)).not.toContain("data-window-close");
     // Share is a round icon button with no word (2026-11-19), named for assistive tech
     const shareButton = html.slice(share, html.indexOf("</button>", share));

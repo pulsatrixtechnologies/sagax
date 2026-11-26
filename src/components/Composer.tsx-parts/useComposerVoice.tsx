@@ -7,6 +7,7 @@ import { ATTACH_ICON, RecordMark, type PlusMenuItem } from "../ComposerControls"
 import { useComposerDictation } from "../useComposerDictation";
 import { useVoiceNoteRecorder } from "../useVoiceNoteRecorder";
 import { dictationEngine, isDictationHold, joinDictated } from "@/lib/composer-dictation";
+import { noteVoiceModeUsed } from "@/lib/composer-voice";
 import { botCtaColors } from "@/lib/voice-cta";
 import { useVoiceModeCheck } from "@/lib/voice-mode/api";
 import { openProviderKeyDialog } from "../settings/ProviderKeys";
@@ -99,6 +100,13 @@ export function useComposerVoice({
     // the xAI key carries voice and dictation (2026-10-14)
     openProviderKeyDialog("xai");
   };
+  // D-20261126-006: a dictation the person starts (the mic, a hold, the
+  // shortcut) is the mode used last, where the voice conversation is offered
+  // too (a lone bot's chat, as ComposerActionBar offers it).
+  const startDictation = () => {
+    if (bot && !group) noteVoiceModeUsed("dictation");
+    void dictation.start();
+  };
   const toggleMic = () => {
     // one microphone at a time: a voice note keeps it until sent or cancelled
     if (voiceNoting) return;
@@ -110,7 +118,7 @@ export function useComposerVoice({
       openDictationSetup();
       return;
     }
-    void dictation.start();
+    startDictation();
   };
   // Hold to dictate: a press that starts the mic and is kept down (the mic
   // button, or the shortcut) stops it on release; a tap keeps listening.
@@ -118,7 +126,7 @@ export function useComposerVoice({
   const pressMic = () => {
     const started = !dictating && !voiceNoting && Boolean(engine);
     micHold.current = { at: Date.now(), started };
-    if (started) void dictation.start();
+    if (started) startDictation();
   };
   const releaseMic = () => {
     const hold = micHold.current;

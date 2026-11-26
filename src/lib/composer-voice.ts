@@ -1,8 +1,10 @@
 // The chat bar's one voice button (owner 2026-11-25, M-20261125-071,
 // M-20261125-072, #5372): dictation and the voice conversation are one
-// button. A click starts the mode the person kept; the button's arrow opens
-// a menu that chooses between the two, then the microphone and the
-// dictation's language. Both choices are preferences of the person: kept in
+// button. A click does the mode the person used last (owner 2026-11-26,
+// D-20261126-006): a dictation or a voice conversation they start, by any
+// path, is the next click's mode. The button's arrow opens a menu that
+// reaches the other one, then the microphone and the dictation's language.
+// Both are preferences of the person: kept in
 // localStorage and, on an organization server, following the person
 // (shared/user-preferences.ts); a bot changes them through the settings tool
 // (shared/settings-actions.ts, models.composerVoiceMode, models.dictationLanguage).
@@ -13,8 +15,8 @@ export const COMPOSER_VOICE_MODE_KEY = "sagax.composerVoiceMode.v1";
 export const COMPOSER_VOICE_MODES = ["dictation", "conversation"] as const;
 export type ComposerVoiceMode = (typeof COMPOSER_VOICE_MODES)[number];
 
-/** Dictation until the person chooses the voice conversation (an agent's
- * choice: the owner's mock-up draws the mic). */
+/** Dictation until the person uses or chooses the voice conversation (an
+ * agent's choice: the owner's mock-up draws the mic). */
 const voiceModeChoice = localChoice<ComposerVoiceMode>(COMPOSER_VOICE_MODE_KEY, COMPOSER_VOICE_MODES, "dictation");
 
 export function parseComposerVoiceMode(value: string | null | undefined): ComposerVoiceMode {
@@ -23,6 +25,18 @@ export function parseComposerVoiceMode(value: string | null | undefined): Compos
 
 export function setComposerVoiceMode(next: ComposerVoiceMode): void {
   voiceModeChoice.set(next);
+}
+
+export function readComposerVoiceMode(): ComposerVoiceMode {
+  return voiceModeChoice.get();
+}
+
+/** The person just started this mode (D-20261126-006): it is the one the
+ * button's next click does. Called where a dictation or a voice conversation
+ * starts in a chat that offers both; a chat with dictation alone (a group)
+ * leaves the mode kept as it is, like shownVoiceMode. */
+export function noteVoiceModeUsed(used: ComposerVoiceMode): void {
+  voiceModeChoice.set(used);
 }
 
 /** The mode kept, followed live (this window, another window, a bot, another device). */

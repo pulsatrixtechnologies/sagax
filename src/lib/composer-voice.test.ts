@@ -1,11 +1,12 @@
+// @vitest-environment happy-dom
 // The chat bar's one voice button (owner 2026-11-25, M-20261125-071,
 // M-20261125-072, #5372): dictation and the voice conversation are one
-// button; the mode a person chose is kept, per person, with the dictation's
-// language.
+// button; the mode a person used last is kept, per person, with the
+// dictation's language.
 import { describe, expect, it } from "vitest";
 
 import { USER_PREFERENCE_KEYS } from "../../shared/user-preferences";
-import { COMPOSER_VOICE_MODE_KEY, DICTATION_LANGUAGE_KEY, dictationLanguageOptions, parseComposerVoiceMode, parseDictationLanguage, shownVoiceMode } from "./composer-voice";
+import { COMPOSER_VOICE_MODE_KEY, DICTATION_LANGUAGE_KEY, dictationLanguageOptions, noteVoiceModeUsed, parseComposerVoiceMode, parseDictationLanguage, readComposerVoiceMode, shownVoiceMode } from "./composer-voice";
 
 describe("the voice button's mode", () => {
   it("is dictation until the person chooses the voice conversation", () => {
@@ -23,6 +24,19 @@ describe("the voice button's mode", () => {
     expect(shownVoiceMode("conversation", { conversation: false })).toBe("dictation");
     expect(shownVoiceMode("conversation", { conversation: true })).toBe("conversation");
     expect(shownVoiceMode("dictation", { conversation: true })).toBe("dictation");
+  });
+});
+
+describe("the mode used last (D-20261126-006)", () => {
+  it("a use is kept as the mode of the next click; before any use it is dictation", () => {
+    localStorage.clear();
+    expect(readComposerVoiceMode()).toBe("dictation");
+    noteVoiceModeUsed("conversation");
+    expect(readComposerVoiceMode()).toBe("conversation");
+    expect(localStorage.getItem(COMPOSER_VOICE_MODE_KEY)).toBe("conversation");
+    noteVoiceModeUsed("dictation");
+    expect(readComposerVoiceMode()).toBe("dictation");
+    localStorage.clear();
   });
 });
 

@@ -35,8 +35,9 @@ export function useOrganizationCall(botId?: string): boolean {
   return (check.state === "ready" && check.status.organization === true) || managed;
 }
 
-/** The composer's Voice button. `tone`: the open bot's color (src/lib/voice-cta.ts). */
-export function CallButton({ bot, tone }: { bot: Bot; tone?: BotCtaColors | null }) {
+/** The composer's Voice button. `tone`: the open bot's color (src/lib/voice-cta.ts).
+ * `onStart`: the person started a voice conversation from it. */
+export function CallButton({ bot, tone, onStart }: { bot: Bot; tone?: BotCtaColors | null; onStart?: () => void }) {
   const voiceMode = useVoiceModeStatus(bot.id);
   const organization = useOrganizationCall(bot.id);
   if (organization) {
@@ -46,7 +47,7 @@ export function CallButton({ bot, tone }: { bot: Bot; tone?: BotCtaColors | null
         targetName={bot.name}
         botId={bot.id}
         tone={tone}
-        onStart={() => track("call_started", { driver: bot.modelSelection?.instanceId, voice: "xai" })}
+        onStart={() => { onStart?.(); track("call_started", { driver: bot.modelSelection?.instanceId, voice: "xai" }); }}
       />
     );
   }
@@ -59,7 +60,7 @@ export function CallButton({ bot, tone }: { bot: Bot; tone?: BotCtaColors | null
       requireExplicitVoices={false}
       voiceMode={voiceMode}
       tone={tone}
-      onStart={() => track("call_started", { driver: bot.modelSelection?.instanceId, ...(voiceMode?.available ? { voice: "xai" } : {}) })}
+      onStart={() => { onStart?.(); track("call_started", { driver: bot.modelSelection?.instanceId, ...(voiceMode?.available ? { voice: "xai" } : {}) }); }}
     />
   );
 }

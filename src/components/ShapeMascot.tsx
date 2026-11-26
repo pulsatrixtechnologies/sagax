@@ -30,10 +30,10 @@ import { DEFAULT_ENGINE_LOOK, isBodyShape, MASCOT_SHAPES, SHAPE_DEPTH, SHAPE_SKI
 import type { MascotAvatarDef } from "../../shared/mascot-look";
 import { bakedShapeFor, engineFrame, enginePose, eyeMarkup, isMarkSlice, lookDefinition, moodFrame, pathsMarkup, runtimeStill, shapesMarkup, stateStill, stillUrl, type BakedStill, type EnginePose, type ShapeMood, type StillFrame, type StillPath } from "./shape-avatar";
 import { ShapeCanvas, useShapeMaterial } from "./shape-material";
-import { useAliveSeat } from "./shape-alive";
 import { mixHex, MOVE_TIMING, ShapeEngine, stillFrame as restFrame, isShapeMove, rainbowStops, type ShapeFrame, type ShapeMove } from "./shape-engine";
 import { loadBakedStill, useBakedStill } from "./shape-stills";
 import { shapeSkinBase, shapeSkinLayers, type ShapeSkinBase, type ShapeSkinLayers } from "./skin-fx/shape-skins";
+import { useAliveSeat } from "./shape-alive";
 import { EquipFx, MoveFx } from "./skin-fx/SkinFx";
 import { fxDetail, fxPalette, useEquipBurst, useFxVisibility, useMoveBurst, useReducedMotion, useReplayMove, type FxDetail, type FxMoveRequest } from "./skin-fx/skin-fx";
 

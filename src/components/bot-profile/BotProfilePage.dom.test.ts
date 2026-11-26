@@ -542,8 +542,10 @@ describe("bot profile page: General cards in place (#3398)", () => {
 
   // #5384, the review of #5389: the mascot is the picker's preview, turned by hand. A double click on a turned
   // mascot brings it back to the front, as Reset view does, and leaves the picker as it was: each of its two
-  // clicks opened or closed the picker, which came back mounted anew on Shapes.
-  describe("a double click on the turned header mascot", () => {
+  // clicks opened or closed the picker, which came back mounted anew on Shapes. The second review of #5389: the
+  // Reset view button sits beside the mascot, outside the picker's anchor and panel, so its press was a press
+  // outside and closed the picker; it is the mascot's own control and leaves the picker as it was too.
+  describe("bringing the turned header mascot back to the front", () => {
     // reduced motion: the drawing holds still between two events, so the page settles (the way back is immediate)
     const shape = { ...completeMascotLook({ character: "shape", shape: "cup" } as MascotLook), motion: "reduced" } as MascotLook;
     beforeAll(async () => { await loadAllBakedStills(); });
@@ -575,7 +577,7 @@ describe("bot profile page: General cards in place (#3398)", () => {
     /** Past any click still held. */
     const wait = async () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 500)); });
 
-    it("picker closed: the mascot faces front again and the picker never opens", async () => {
+    it("a double click, picker closed: the mascot faces front again and the picker never opens", async () => {
       await mount("en", true, shape);
       await home("general");
       await turn();
@@ -587,7 +589,7 @@ describe("bot profile page: General cards in place (#3398)", () => {
       expect(popover(), "the picker stays closed").toBeNull();
     });
 
-    it("picker open on Characters: the mascot faces front again and the same picker stays, on Characters", async () => {
+    it("a double click, picker open on Characters: the mascot faces front again and the same picker stays, on Characters", async () => {
       await mount("en", true, shape);
       await home("general");
       await click(stage(), "the mascot");
@@ -603,6 +605,54 @@ describe("bot profile page: General cards in place (#3398)", () => {
       expect(viewOf(), "back to the front").toBeNull();
       expect(popover()?.querySelector("[data-mascot-picker]"), "the same picker, never mounted anew").toBe(picker);
       expect(selected(), "still on Characters").toBe("characters");
+    });
+
+    /** What a browser sends for a press and a click, and whether the picker was there after each event. */
+    const press = async (node: HTMLElement) => {
+      const seen: boolean[] = [];
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+        const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: 100, clientY: 100, button: 0, detail: 1 });
+        if (type.startsWith("pointer")) Object.defineProperty(event, "pointerId", { value: 1 });
+        await act(async () => { node.dispatchEvent(event); });
+        seen.push(popover() !== null);
+      }
+      return seen;
+    };
+    const openOnCharacters = async () => {
+      await mount("en", true, shape);
+      await home("general");
+      await click(stage(), "the mascot");
+      await until(() => document.querySelector("[data-mascot-picker-popover] [data-mascot-picker]"));
+      await click(popover()!.querySelector<HTMLElement>('[data-mascot-picker-tab="characters"]'), "the Characters tab");
+      await turn();
+      return popover()!.querySelector<HTMLElement>("[data-mascot-picker]")!;
+    };
+    const selected = () => popover()?.querySelector('[data-mascot-picker-tab][aria-selected="true"]')?.getAttribute("data-mascot-picker-tab");
+
+    it("the Reset view button, picker open on Characters: the mascot faces front again and the same picker stays, on Characters", async () => {
+      const picker = await openOnCharacters();
+      expect(selected()).toBe("characters");
+      const reset = host.querySelector<HTMLButtonElement>("[data-bot-profile-hero] [data-mascot-turn-reset]");
+      expect(reset, "the Reset view button").not.toBeNull();
+      expect(reset!.hidden, "shown while the mascot is turned").toBe(false);
+      expect(stage().contains(reset), "beside the mascot, not in its button").toBe(false);
+      expect(await press(reset!), "the picker after each event").not.toContain(false);
+      await wait();
+      await settle();
+      expect(viewOf(), "back to the front").toBeNull();
+      expect(popover()?.querySelector("[data-mascot-picker]"), "the same picker, never mounted anew").toBe(picker);
+      expect(selected(), "still on Characters").toBe("characters");
+    });
+
+    it("a press outside the mascot, its Reset view button and the picker still closes the picker, the mascot left turned", async () => {
+      await openOnCharacters();
+      const outside = host.querySelector<HTMLElement>("[data-bot-profile-page]")!;
+      expect(outside.closest("[data-mascot-turn], [data-mascot-picker-popover]"), "outside both").toBeNull();
+      const seen = await press(outside);
+      expect(seen[0], "closed at the press").toBe(false);
+      await settle();
+      expect(popover(), "the picker is closed").toBeNull();
+      expect(viewOf(), "still turned").toBe("0.2 0");
     });
   });
 

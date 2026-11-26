@@ -372,6 +372,42 @@ file in `docs/releases`; no list to edit. Tests:
 `src/lib/bundled-release-notes.test.ts`, `src/lib/release-notes.test.ts`,
 `src/components/SidebarProfileMenu.test.ts`.
 
+## Minimum app version (2026-11-26, #5397)
+
+Decision D-20261126-004: an app older than 0.8.173 does not know the look
+keys of the shape mascots (material, mood, eyes, depth) and draws the default
+owl in their place, so it is asked to update before it goes on.
+
+- The desktop app and the phone draw a server with the code they were
+  installed with (`electron/bundled-ui.cjs`, the iOS app), and no release up
+  to 0.8.173 has a "minimum version" screen: an installed app cannot be given
+  one. The server is the only place that can ask.
+- `server/app-update-gate.ts`, called in `handleRequest` after
+  authentication: a person's send (`POST /api/bots/:id/messages`,
+  `/messages/guarded`, `/messages/:messageId/edit`,
+  `POST /api/groups/:id/messages`) from an app older
+  than `MINIMUM_APP_VERSION` is answered 426 `app_update_required` with one
+  sentence, in the app's language, that says to update and how. Every app
+  already shows a refused send's sentence as it is (the desktop's
+  `showError`, the phone's `APIError.status` message) and nothing is posted.
+  Reading, signing in, settings, stopping a bot and routines go on.
+- Which app sends: the desktop's User-Agent carries its release
+  (`openmausbot/X.Y.Z ... Electron/...`, or `Sagax/X.Y.Z`); the phone's says
+  its build only (`Sagax/<build> CFNetwork/...`), so
+  `IOS_LAST_BUILD_BELOW_MINIMUM` names the last build below the minimum
+  (0.8.172 is build 234). From 0.8.174 the phone and the iPad send their
+  release in `x-sagax-app-version` (`ios/Sources/CompanionCore/AppRelease.swift`),
+  which wins.
+- Never held: a browser (it runs the server's own page), a script, an AI
+  client, a bot's own call, a version that cannot be read, and a development
+  build of the desktop app (it runs at the server's own base version).
+- The desktop's own updater is separate and unchanged: it checks at launch and
+  every hour and offers "Update ready" with Later.
+- Raising the minimum: change `MINIMUM_APP_VERSION`, and
+  `IOS_LAST_BUILD_BELOW_MINIMUM` only while phones older than 0.8.174 matter.
+- Tests: `server/app-update-gate.test.ts`, `server/app-update-gate.e2e.test.ts`,
+  `ios/Tests/CompanionCoreTests/AppReleaseTests.swift`.
+
 ## Updates: confirmed, visible, never silent on Windows (2026-10-19)
 
 A Windows report: account menu > Help > "Check for updates" on an update

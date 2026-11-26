@@ -81,7 +81,7 @@ afterEach(() => {
 
 describe("Reasoning", () => {
   it("opens the levels of the model in use, the level in use checked, and a pick returns to the menu", () => {
-    const given = render({ modes: { current: "build", onPick: vi.fn() } });
+    const given = render({ autoOn: false, modes: { current: null, onPick: vi.fn(), pinnedLabel: "Claude · opus" } });
     click('[data-mode-row="reasoning"]');
     expect(panel()).toBe("reasoning");
     expect(rowsOf("data-model-effort-choice")).toEqual(["Low", "Medium", "High"]);
@@ -96,7 +96,7 @@ describe("Reasoning", () => {
   });
 
   it("offers Default while the model names no level of its own, sent as no level", () => {
-    const given = render({ modes: { current: "build", onPick: vi.fn() }, effort: { title: "Reasoning effort", levels: ["low", "high"], onPick: vi.fn() } });
+    const given = render({ autoOn: false, modes: { current: null, onPick: vi.fn(), pinnedLabel: "Claude · opus" }, effort: { title: "Reasoning effort", levels: ["low", "high"], onPick: vi.fn() } });
     click('[data-mode-row="reasoning"]');
     expect(rowsOf("data-model-effort-choice")).toEqual(["Default", "Low", "High"]);
     click('[data-model-effort-choice="default"]');

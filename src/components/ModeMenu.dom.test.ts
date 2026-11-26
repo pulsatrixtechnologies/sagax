@@ -37,9 +37,10 @@ const resolutions = (over: Partial<Record<ModelMode, ModeResolution>> = {}): Rec
   fast: { mode: "fast", pick: model("Grok 4.7") },
   expert: { mode: "expert", pick: model("Grok 4.7"), effort: "high" },
   heavy: { mode: "heavy", pick: model("Grok 4.7"), team: [model("Grok 4.7"), model("Grok 4.7"), model("Grok 4.7")] },
-  build: { mode: "build", pick: model("Grok Code 2") },
   ...over,
 });
+/** What a server from before D-20261126-005 still answers. */
+const withBuild = { build: { mode: "build", pick: model("Grok Code 2") } } as unknown as Partial<Record<ModelMode, ModeResolution>>;
 const base = (over: Partial<ModeMenuProps> = {}): ModeMenuProps => ({ current: "auto", resolutions: resolutions(), onPick: vi.fn(), allModels: { onOpen: vi.fn() }, ...over });
 const reasoning = (row: Partial<ReasoningRow>, onOpen = vi.fn()): NonNullable<ModeMenuProps["reasoning"]> => ({
   row: { shown: true, disabled: false, choices: ["low", "high"], ...row }, label: (level) => (level ? level.toUpperCase() : "Default"), onOpen,
@@ -174,7 +175,7 @@ describe("the mode menu", () => {
   });
 
   it("M-20261125-073: Build left the menu, even while the server still answers it", () => {
-    render(base({ current: "fast" }));
+    render(base({ current: "fast", resolutions: resolutions(withBuild) }));
     expect(host.querySelector('[data-mode-row="build"]')).toBeNull();
     expect(host.textContent).not.toContain("Build");
   });

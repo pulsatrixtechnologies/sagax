@@ -1,11 +1,14 @@
 // Composer mode selection and model menu navigation on iPhone and iPad.
 import Foundation
 
+/// Build stopped everywhere (owner 2026-11-26, D-20261126-005): it is no mode
+/// here, so no menu offers it, and a selection a server still keeps on it
+/// reads as Auto (`ComposerModes.mode(of:)`).
 public enum ComposerMode: String, CaseIterable, Hashable, Sendable {
-    case auto, fast, expert, heavy, build
+    case auto, fast, expert, heavy
 
     /// The modes that pick a model by their own rule (everything but Auto).
-    public static let forced: [ComposerMode] = [.fast, .expert, .heavy, .build]
+    public static let forced: [ComposerMode] = [.fast, .expert, .heavy]
 }
 
 public enum ComposerModes {

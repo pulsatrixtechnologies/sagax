@@ -2028,7 +2028,7 @@ Rules that hold at every width:
 - Mode menu (owner, 2026-11-19, #5088; 2026-11-23, M-20261123-040,
   M-20261123-045, M-20261123-047): the chip reads the mode's name ("Expert ⌄")
   and opens the model panel's short view as the mode menu, the same rows as the
-  Perspicax console's (`shared/mode-menu.ts`): Auto, Fast, Expert, Heavy, Build, a hairline, Reasoning, a hairline, All
+  Perspicax console's (`shared/mode-menu.ts`): Auto, Fast, Expert, Heavy (never Build, D-20261126-005), a hairline, Reasoning, a hairline, All
   models; the panel's 36px rows, a mode's glyph in a 16px slot, the check or
   the chevron in the right icon slot, no heading over the rows. A hovered or
   keyboard focused mode opens a small tooltip beside the menu, level with the

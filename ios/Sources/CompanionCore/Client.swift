@@ -668,7 +668,7 @@ public struct CompanionClient: Sendable {
 
     // MARK: - Requests
 
-    func makeRequest(_ method: String, _ path: String, query: [URLQueryItem] = [], body: [String: Any]? = nil) throws -> URLRequest {
+    func makeRequest(_ method: String, _ path: String, query: [URLQueryItem] = [], body: [String: Any]? = nil, release: String? = AppRelease.current()) throws -> URLRequest {
         guard let base = connection.baseURL,
               var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
         else { throw APIError.badURL }
@@ -689,6 +689,8 @@ public struct CompanionClient: Sendable {
         // This client knows threads in a conversation between two people
         // (PersonThreads.swift); the desktop's api() sends the same.
         request.setValue("1", forHTTPHeaderField: PersonThreads.header)
+        // The release this app runs (AppRelease.swift, D-20261126-004).
+        if let release { request.setValue(release, forHTTPHeaderField: AppRelease.header) }
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: body)

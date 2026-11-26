@@ -1,8 +1,8 @@
 // The chat bar's one voice button (owner 2026-11-25, M-20261125-071,
 // M-20261125-072, #5372): dictation and the voice conversation are one
-// button. Its face is the mode kept: the mic for dictation, the waves for
-// the conversation, and a click starts it. Its arrow opens a menu that
-// chooses between the two, then the microphone (with its live level) and
+// button. Its face is the mode the person used last (D-20261126-006): the
+// mic for dictation, the waves for the conversation, and a click starts it.
+// Its arrow opens a menu that reaches the other one, then the microphone (with its live level) and
 // the dictation's language. Both functions stay whole: the faces are the
 // composer's own mic button and the bot's call button. What cannot be is
 // absent: no mode choice where a conversation cannot start (a group), no

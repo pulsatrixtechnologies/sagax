@@ -5,6 +5,7 @@ import type { Bot, Group } from "@/state/store";
 import { CallButton } from "../CallView";
 import { NudgeButton } from "../NudgeButton";
 import { ComposerVoiceButton } from "../ComposerVoiceButton";
+import { noteVoiceModeUsed } from "@/lib/composer-voice";
 import {
   ComposerCtaSeat,
   ComposerMicButton,
@@ -163,7 +164,7 @@ export function ComposerActionBar({
         engine={engine}
         dictation={<ComposerMicButton onClick={clickMic} onPress={pressMic} onRelease={releaseMic} needsSetup={!engine} engine={engine} shortcut={dictationShortcut} />}
         // voice mode cannot start in a group chat: no conversation there
-        conversation={bot && !group ? <CallButton bot={bot} tone={ctaTone} /> : undefined}
+        conversation={bot && !group ? <CallButton bot={bot} tone={ctaTone} onStart={() => noteVoiceModeUsed("conversation")} /> : undefined}
       />
     );
     if (!voice) return typed ? sendButton : null;

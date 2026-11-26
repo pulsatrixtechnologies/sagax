@@ -83,7 +83,6 @@ const resolutions: Record<ModelMode, ModeResolution> = {
   expert: { mode: "expert", pick: m("codex", "OpenAI", "GPT-6 Astra"), effort: "high" },
   heavy: { mode: "heavy", pick: m("codex", "OpenAI", "GPT-6 Astra"), effort: "high",
     team: [m("codex", "OpenAI", "GPT-6 Astra"), m("claude-personal", "Claude", "Claude Fable 5.2"), m("claude-team", "Claude", "Claude Opus 5.5"), m("grok", "Grok", "Grok 4.7")] },
-  build: { mode: "build", pick: m("grok", "Grok", "Grok Code 2") },
 };
 
 function Chip({ label }: { label: string }) {

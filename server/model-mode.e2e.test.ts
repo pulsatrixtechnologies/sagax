@@ -27,8 +27,8 @@ it("stores a mode, names what each mode runs, and runs the turn on it", () => fi
   expect((await f.bots()).find((b: any) => b.id === f.bot.id).modelSelection).toMatchObject({ auto: true, mode: "fast" });
 
   const preview = await f.api(`/api/bots/${f.bot.id}/auto-model`, undefined, "GET");
-  expect(Object.keys(preview.modes)).toEqual(["auto", "fast", "expert", "heavy", "build"]);
-  expect(preview.modes.build).toMatchObject({ mode: "build", pick: { model: "claude-sonnet-5-5" } });
+  // D-20261126-005: Build is answered nowhere
+  expect(Object.keys(preview.modes)).toEqual(["auto", "fast", "expert", "heavy"]);
   expect(preview.modes.fast).toMatchObject({ pick: { model: "claude-haiku-5-5" } });
   expect(preview.modes.expert.pick.model).toBe("claude-fable-5-2");
   // #5089: one account here: Heavy seats its two strongest models
@@ -42,6 +42,16 @@ it("stores a mode, names what each mode runs, and runs the turn on it", () => fi
   // the bot keeps its mode and its base model
   expect((await f.bots()).find((b: any) => b.id === f.bot.id).modelSelection).toMatchObject({ ...f.bot.modelSelection, auto: true, mode: "fast" });
 }), 60_000);
+
+it("D-20261126-005: a client that still sends Build gets Auto, without an error", () => fixture(async f => {
+  await f.api(`/api/bots/${f.bot.id}`, { modelSelection: withMode(f.bot.modelSelection, "expert") }, "PATCH");
+  await f.api(`/api/bots/${f.bot.id}`, { modelSelection: withMode(f.bot.modelSelection, "build") }, "PATCH");
+  const saved = (await f.bots()).find((b: any) => b.id === f.bot.id).modelSelection;
+  expect(saved.auto).toBe(true);
+  expect(saved.mode).toBeUndefined();
+  const preview = await f.api(`/api/bots/${f.bot.id}/auto-model`, undefined, "GET");
+  expect(preview.pick?.mode).toBeUndefined();
+}), 45_000);
 
 it("refuses a mode that does not exist, drops one with no Auto, and a pinned model clears it", () => fixture(async f => {
   await expect(f.api(`/api/bots/${f.bot.id}`, { modelSelection: withMode(f.bot.modelSelection, "turbo") }, "PATCH")).rejects.toThrow(/mode must be/);

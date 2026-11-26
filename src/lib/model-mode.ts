@@ -14,8 +14,6 @@ export { FORCED_MODEL_MODES, MODEL_MODES, modeOfSelection, selectionForMode, typ
 
 export function modeName(mode: ModelMode): string {
   switch (mode) {
-    // Build left the menu (M-20261125-073): what is still set on it reads as Auto
-    case "build":
     case "auto": return t("model.mode.auto.name");
     case "fast": return t("model.mode.fast.name");
     case "expert": return t("model.mode.expert.name");
@@ -26,7 +24,6 @@ export function modeName(mode: ModelMode): string {
 /** What the mode does, in a few words. */
 export function modeBlurb(mode: ModelMode): string {
   switch (mode) {
-    case "build":
     case "auto": return t("model.mode.auto.blurb");
     case "fast": return t("model.mode.fast.blurb");
     case "expert": return t("model.mode.expert.blurb");
@@ -49,10 +46,10 @@ export function modeTooltip(mode: ModelMode, resolution: ModeResolution | undefi
   return models ? t("model.mode.tip", { what: modeBlurb(mode), models }) : modeBlurb(mode);
 }
 
-/** The chat bar's modes on the desktop (owner 2026-11-25, M-20261125-073,
- * M-20261125-075): Build left the menu. The shared list (shared/mode-menu.ts,
- * the console's copy) still names it for the surfaces that have not moved. */
-export const CHAT_BAR_MODES: readonly ModelMode[] = MODEL_MODES.filter((mode) => mode !== "build");
+/** The chat bar's modes (owner 2026-11-25, M-20261125-073, M-20261125-075;
+ * 2026-11-26, D-20261126-005): Build is no mode of Sagax any more, so these
+ * are every mode there is (shared/model-mode.ts). */
+export const CHAT_BAR_MODES: readonly ModelMode[] = MODEL_MODES;
 
 /** The modes the person is offered: Auto always, the others only with a model
  * they can use (a choice that cannot work is not shown). Before the server
@@ -62,11 +59,10 @@ export function offeredModes(resolutions: Record<ModelMode, ModeResolution> | un
 }
 
 /** The mode a selection reads as in the chat bar: one still set on Build
- * reads (and runs, server/index-leaves/autoPickForTurn.ts) as Auto; nothing
- * stored is rewritten. Null for a model the person pinned. */
+ * (kept by an older server) reads, and runs, as Auto (D-20261126-005). Null
+ * for a model the person pinned. */
 export function shownMode(selection: Pick<ModelSelection, "auto" | "mode"> | undefined): ModelMode | null {
-  const mode = modeOfSelection(selection);
-  return mode === "build" ? "auto" : mode;
+  return modeOfSelection(selection);
 }
 
 /** The chip under the message box (M-20261125-074): the mode, then the

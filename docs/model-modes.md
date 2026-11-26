@@ -4,7 +4,14 @@
 
 M-20261125-070 to M-20261125-076, M-20261125-084. Desktop only for now: the
 iPhone, the iPad and the console's chat keep the menu described further down
-(Build included) until their own lots.
+until their own lots.
+
+Build stopped everywhere (owner 2026-11-26, D-20261126-005, #5398): it is no
+mode of Sagax. The server never picks it (Auto included), answers no `build`
+in `modes`, and stores it nowhere; the iPhone and iPad menus no longer offer
+it. A bot or a conversation still stored on Build loads as Auto (the mode is
+dropped, the model kept), and an app that still sends `mode: "build"` gets
+Auto without an error (`RETIRED_MODEL_MODE`, `shared/model-mode.ts`).
 
 ```
 ( + )  Message <bot>                                   ( mic v )
@@ -19,10 +26,10 @@ iPhone, the iPad and the console's chat keep the menu described further down
   "Favorites" (the starred models); then Reasoning; then All models (the
   cascade); then Manage models. A star in All models adds or removes a
   favorite (`src/lib/model-favorites.ts`).
-- Build is no row of the chat bar. A bot or a conversation still set on Build
-  reads Auto and runs as Auto; nothing stored is rewritten (an agent's
-  choice). `shared/mode-menu.ts` is unchanged (the console's copy is
-  byte-identical); the desktop list is `CHAT_BAR_MODES` (`src/lib/model-mode.ts`).
+- Build is no row of the chat bar, and no mode at all (D-20261126-005, above).
+  `shared/mode-menu.ts` is unchanged and still names it (the console's copy is
+  byte-identical); Sagax's own list is `MODEL_MODES` (`shared/model-mode.ts`),
+  which the desktop draws as `CHAT_BAR_MODES` (`src/lib/model-mode.ts`).
 - The meter (`src/components/ComposerMeter.tsx`, rules
   `src/lib/composer-meter.ts`) replaces the limit dot in the chat bar: two
   halves, each a ring and its percentage. Left: the share of the model's
@@ -39,11 +46,15 @@ iPhone, the iPad and the console's chat keep the menu described further down
   no token figure any more.
 - The voice button (`src/components/ComposerVoiceButton.tsx`,
   `src/lib/composer-voice.ts`): the mic for dictation or the waves for the
-  voice conversation; a click starts the mode kept; its arrow opens a menu
-  that chooses between the two, then the microphone with its live level and
-  the dictation's language. The mode and the language are the person's
-  preferences (`sagax.composerVoiceMode.v1`, `sagax.dictationLanguage.v1`).
-  Dictation is the mode until the person chooses (an agent's choice).
+  voice conversation; a click does the mode the person used last
+  (D-20261126-006, #5399): a dictation (the mic, a hold, its shortcut) or a
+  voice conversation they start in a bot's chat is the next click's mode
+  (`noteVoiceModeUsed`). Its arrow opens a menu that reaches the other one,
+  then the microphone with its live level and the dictation's language. The
+  mode and the language are the person's preferences
+  (`sagax.composerVoiceMode.v1`, `sagax.dictationLanguage.v1`), so they follow
+  the person. Dictation is the mode before any use (an agent's choice), and a
+  dictation in a group, where no conversation can start, changes nothing kept.
 - Settings > Providers > Models > Modes (`settings/ModesSettings.tsx`): the
   person chooses the model and the reasoning of Fast and Expert, and Heavy's
   experts; favorites first; one button puts the defaults back. Per person, no
@@ -68,7 +79,7 @@ The chat bar's model button opens the mode menu. Since the owner's decision of
 menu, row for row, in the Sagax app and in the Perspicax console:
 
 ```
-Auto / Fast / Expert / Heavy / Build
+Auto / Fast / Expert / Heavy
 ──────────
 Reasoning        <level>  ›   (the levels of the model in use)
 ──────────
@@ -84,8 +95,7 @@ The button reads the mode's name ("Expert ⌄"), or the model the person pinned
 in All models. A hovered or focused mode opens a small tooltip beside the
 menu: what the mode does, then which model backs it ("Quick responses · Grok
 4.7", "Thinks hard · Grok 4.7", "Team of Experts · GPT-6 Astra, Claude Opus
-5.5", "A model made for code · Grok Code 2"). Auto never names a model: it
-reads each request.
+5.5"). Auto never names a model: it reads each request.
 
 Sagax maps every mode, on every turn, to the best models the person can use:
 their connected providers and accounts, and their local models.
@@ -108,7 +118,7 @@ same path is the system's nested menus (see `ios/App/Features/Chat`).
 levels the model in use takes (`modelEffortLevels`, so they follow the model).
 Under a mode that sets its own level (Fast, Expert, Heavy) the row is greyed
 and shows the level the mode imposes. A model that takes no level has no row.
-Under Auto, the row reads Auto until the person chooses a level. Choosing Auto again lets each turn use its mode's level. Build shows its model's default until the person chooses a level.
+Under Auto, the row reads Auto until the person chooses a level. Choosing Auto again lets each turn use its mode's level.
 
 **All models** is the person's own model. Its row names the pinned model while
 it runs and opens a cascade of three levels, each beside the one before: the
@@ -148,15 +158,12 @@ providers against each other.
 - **Heavy**: Expert's model leads. The team is the best model of each provider
   (at most five, strongest first). With one provider, `HEAVY_SINGLE_PROVIDER_AGENTS`
   agents on its strongest model.
-- **Build**: the provider's model made for code (the `coding` tier), at no level
-  of its own: the level the person chose in Reasoning is sent where the picked
-  engine takes it.
 - A mode with no usable model is not shown. A mode with nothing to run falls back
   on Auto.
 
 ## Where it lives
 
-- `ModelSelection.mode` (`fast | expert | heavy | build`) rides `auto: true`, so
+- `ModelSelection.mode` (`fast | expert | heavy`) rides `auto: true`, so
   routines, hand-offs, recovery and call turns keep treating it as Auto.
   Absent means plain Auto; a pinned model has none. `checkedModelSelection`
   validates it; the bot or the thread stores it like a model choice
@@ -187,7 +194,8 @@ On iPhone and iPad, `ModelMenuSheet.swift` and `DesktopModelMenu.swift` use
 the same `ComposerModes` selection, reasoning and navigation rules. The
 server preview is scoped to the open thread. All models preserves the bot
 model and favorites above the runnable providers. `ComposerModesTests` covers
-Build persistence, mode availability and the cascade (#5245).
+a selection still on Build reading as Auto, mode availability and the cascade
+(#5245, #5398).
 The Heavy row (`HeavyTeamRowView.swift`, the state
 `HeavyTeamLine.swift`) draws the server's Heavy run (#5089) like the
 desktop's (#5090); the engine stays on the server. Tests:

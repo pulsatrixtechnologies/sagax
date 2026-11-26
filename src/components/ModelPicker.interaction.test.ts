@@ -1025,7 +1025,7 @@ describe("the composer's mode menu (#4900, #5088)", () => {
   it("hands the menu what each mode runs for this person, from the server's preview", async () => {
     fixture.instances = [signedIn(), codex];
     const resolution = { mode: "expert" as const, pick: { instanceId: "claude", model: "claude-opus-5-5", engineLabel: "Claude", modelLabel: "Claude Opus 5.5" } };
-    fixture.autoStatus = { auto: true, pick: null, chain: [], excluded: [], backups: [], modes: { auto: { mode: "auto", pick: null }, fast: { mode: "fast", pick: null }, expert: resolution, heavy: { mode: "heavy", pick: null }, build: { mode: "build", pick: null } } };
+    fixture.autoStatus = { auto: true, pick: null, chain: [], excluded: [], backups: [], modes: { auto: { mode: "auto", pick: null }, fast: { mode: "fast", pick: null }, expert: resolution, heavy: { mode: "heavy", pick: null } } };
     const menu = (await modeMenu(open(onAuto("expert"), composerModes)))!;
     expect(menu.props.resolutions?.expert.pick?.modelLabel).toBe("Claude Opus 5.5");
   });

@@ -910,6 +910,7 @@ import { clearHeldSteersForThread,
   recordHeldSteer } from "./turns/held-steers.ts";
 import { continuationSpeaker } from "./turns/continuation-speaker.ts";
 import { acquireDataDirLeaseForProcess } from "./data-dir-lease.ts";
+import { appUpdateRefusal } from "./app-update-gate.ts";
 import { environmentDescriptor, environmentLabel, linkVersion, loadEnvironmentId, releaseVersion, serverVersion } from "./environment.ts";
 import { deployFacts, hostFacts, overviewRoutes, readBackupStatus, selfCheckEngines } from "./org/org-admin-overview.ts";
 import { appendProblem, pruneProblemLog, readProblems } from "./org/org-problem-log.ts";
@@ -38709,6 +38710,9 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
     if (!auth) return;
     // lot S1: a surface bot and its conversations are its person's alone
     if (surfaceTargetRefused(auth, path)) return void json(res, 404, { error: "no such bot" });
+    // D-20261126-004: an app older than the minimum is asked to update before it sends
+    const outdated = appUpdateRefusal({ method, path, headers: req.headers, baseVersion: serverVersion });
+    if (outdated) return void json(res, outdated.status, outdated.body);
     // The app's language, for a person who never saved one (#2803, #2805).
     const askedIn = requestLanguage(req.headers);
     requestLanguages.note(actorPrincipalId(auth), askedIn);

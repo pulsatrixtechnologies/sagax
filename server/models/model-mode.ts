@@ -28,7 +28,7 @@ import {
 } from "./model-auto.ts";
 
 /** The tier each mode reads in TIER_TABLE (Heavy's Leader is the Expert pick). */
-export const MODE_TIER: Readonly<Record<ForcedModelMode, Tier>> = { fast: "fast", expert: "top", heavy: "top", build: "coding" };
+export const MODE_TIER: Readonly<Record<ForcedModelMode, Tier>> = { fast: "fast", expert: "top", heavy: "top" };
 
 /** The reasoning level each mode asks for, best first: the first one the
  * engine offers. */
@@ -36,8 +36,6 @@ const MODE_EFFORT: Readonly<Record<ForcedModelMode, readonly EffortLevel[]>> = {
   fast: ["low", "medium"],
   expert: ["high", "xhigh", "medium"],
   heavy: ["high", "xhigh", "medium"],
-  // Build (M-20261123-045, as the console's): the coding model, at the person's own level
-  build: [],
 };
 
 /** Heavy's agents think a step lighter than the Leader, so the team answers in seconds. */
@@ -321,7 +319,7 @@ function pickUsualModeModel(request: AutoRequest, mode: ForcedModelMode): AutoPi
   const effort = effortForMode(MODE_EFFORT[mode], first.engine.effortLevels);
   if (effort) selection.effort = effort;
   // no level of the mode's own: the person's (the menu's Reasoning row), where the engine takes it
-  else if ((mode === "build" || first.engine.instanceId === base.instanceId) && base.effort && effortAcceptedByEngine(base.effort, first.engine.effortLevels ?? [])) selection.effort = base.effort;
+  else if (first.engine.instanceId === base.instanceId && base.effort && effortAcceptedByEngine(base.effort, first.engine.effortLevels ?? [])) selection.effort = base.effort;
   const own = request.engines.find((engine) => engine.instanceId === base.instanceId);
   const chain: AutoChainEntry[] = ranked.slice(0, 3).map((contender) => ({ instanceId: contender.engine.instanceId, model: contender.id }));
   const baseEntry: AutoChainEntry = { instanceId: base.instanceId, model: base.model };

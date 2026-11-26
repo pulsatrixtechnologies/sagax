@@ -34,38 +34,6 @@
         }
       }
     },
-    "Build": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Build"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Build"
-          }
-        }
-      }
-    },
-    "A model made for code": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A model made for code"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Un modèle fait pour le code"
-          }
-        }
-      }
-    },
     "Reasoning": {
       "localizations": {
         "en": {

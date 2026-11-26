@@ -155,7 +155,6 @@ struct DesktopModelMenu: View {
         case .auto: Text("Auto")
         case .fast: Text("Fast")
         case .expert: Text("Expert")
-        case .build: Text("Build")
         case .heavy: Text("Heavy")
         }
     }
@@ -165,7 +164,6 @@ struct DesktopModelMenu: View {
         case .auto: Text("Picks from the request")
         case .fast: Text("Quick responses")
         case .expert: Text("Thinks hard")
-        case .build: Text("A model made for code")
         case .heavy: Text("Team of Experts")
         }
     }

@@ -144,7 +144,8 @@ export function ComposerActionBar({
   )}
   {/* No Send button: Enter sends. The seat holds the one voice button
       (M-20261125-072: the mic for dictation or the waves for the voice
-      conversation, and its arrow), and the send arrow once something is typed. */}
+      conversation, and its arrow), and the send arrow beside it once
+      something is typed (M-20261125-071: the voice button stays usable). */}
   {!dictating && !voiceNoting && (() => {
     const sendButton = !retroSkin && !locked ? (
       <ComposerSendButton

@@ -73,6 +73,15 @@ const $ = <T extends Element = HTMLElement>(selector: string) => host.querySelec
 const textarea = () => $<HTMLTextAreaElement>("textarea")!;
 const click = (element: Element | null) => flushSync(() => (element as HTMLElement).click());
 
+/** Inert, out of reach of a click or faded out, anywhere between the node and the bar's right-hand buttons. */
+function faded(node: Element): boolean {
+  const actions = node.closest("[data-composer-actions]");
+  for (let at: Element | null = node; at && at !== actions; at = at.parentElement) {
+    if (at.hasAttribute("inert") || at.classList.contains("pointer-events-none") || at.classList.contains("opacity-0")) return true;
+  }
+  return !actions;
+}
+
 function type(value: string) {
   const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
   flushSync(() => {
@@ -114,6 +123,44 @@ describe("composer controls (the reference app's prompt bar)", () => {
     expect($("[data-composer-cta]")?.getAttribute("data-composer-cta")).toBe("send");
     click($("[data-composer-send]"));
     expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "send", text: "hello" }));
+  });
+
+  // #5372 review, MEDIUM 1 (M-20261125-071: both voice functions stay whole):
+  // with a draft the one voice button stays in the box, usable, beside Send,
+  // where the mic sat before; dictation still joins the draft by a click.
+  it("with a draft, keeps a usable voice button beside Send, and its mic dictates into the draft", () => {
+    fixture.dictation = true;
+    let transcript: ((line: { text?: string }) => void) | undefined;
+    const speechStart = vi.fn(async () => {});
+    window.ogb = {
+      speechStart, speechStop: vi.fn(async () => {}),
+      onSpeechTranscript: (cb: (line: { text?: string }) => void) => { transcript = cb; return () => {}; },
+      onSpeechEnd: () => () => {},
+    } as unknown as NonNullable<Window["ogb"]>;
+    render(createElement(Composer, { bot: bot("teal") }));
+    type("Note:");
+    const usable = (selector: string) => [...host.querySelectorAll<HTMLButtonElement>(selector)].filter((node) => !node.disabled && !faded(node));
+    expect(usable("[data-composer-voice-button] [data-composer-mic]")).toHaveLength(1);
+    expect(usable("[data-composer-voice-menu-toggle]")).toHaveLength(1);
+    expect(usable("[data-composer-send]")).toHaveLength(1);
+    // the voice button sits before Send, as the mic did
+    const voice = $("[data-composer-voice-button]")!;
+    expect(voice.compareDocumentPosition($("[data-composer-send]")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    click(usable("[data-composer-voice-button] [data-composer-mic]")[0]!);
+    expect(speechStart).toHaveBeenCalled();
+    flushSync(() => transcript?.({ text: "buy milk" }));
+    expect(textarea().value).toBe("Note: buy milk");
+  });
+
+  it("with a draft and the voice conversation kept, the waves stay usable beside Send", () => {
+    setComposerVoiceMode("conversation");
+    render(createElement(Composer, { bot: bot("teal") }));
+    type("hello");
+    const voice = $("[data-composer-voice-button]")!;
+    expect(faded(voice)).toBe(false);
+    expect(voice.dataset.mode).toBe("conversation");
+    expect(voice.querySelector("button:not([data-composer-voice-menu-toggle])")).not.toBeNull();
+    expect(faded($("[data-composer-send]")!)).toBe(false);
   });
 
   it("paints the Voice button in the open bot's color, and keeps a grey bot on the ink button", () => {

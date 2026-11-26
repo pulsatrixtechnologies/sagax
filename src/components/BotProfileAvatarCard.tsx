@@ -133,7 +133,9 @@ export function BotProfileAvatarCard({
           data-avatar-dropping={dropping ? "" : undefined}
           // The pointer never lands on the drawing (pointer-events is inherited): a moving drawing rewrites its
           // nodes on every frame, and a press whose node is gone at the release is no click for the browser.
-          className={cn("relative rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent [&>*]:pointer-events-none", turnCursor(turn), dropping && "ring-2 ring-accent")}
+          // The button's own layer over its whole box takes the pointer instead, corners included: the box is
+          // round, and the drawing's corners were part of what a press reached.
+          className={cn("relative rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent [&>*]:pointer-events-none after:absolute after:inset-0 after:content-['']", turnCursor(turn), dropping && "ring-2 ring-accent")}
         >
           <ShapeStageContext.Provider value={turn.stage}>
           <MascotGlassCaustic turn={turn} bot={bot} state={agentStateForBot(bot)} />

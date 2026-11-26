@@ -225,6 +225,8 @@ describe("BotProfileAvatarCard", () => {
       ] as const;
       for (const [name, bot, size] of cards) {
         await act(async () => root.render(createElement(BotProfileAvatarCard, { bot, activeState: "idle", mascotMotion: null, onPatch: vi.fn(), size, fillBox: size === 64 })));
+        // the button's own layer over its whole box takes the press, the corners outside its round edge included
+        for (const part of ["after:absolute", "after:inset-0", "after:content-['']"]) expect(avatar().className, name).toContain(part);
         const drawn = [...avatar().children];
         expect(drawn.length, name).toBeGreaterThan(0);
         // pointer-events is inherited: off on each child of the button, the whole drawing is out of the pointer's way

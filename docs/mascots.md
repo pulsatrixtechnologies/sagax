@@ -660,6 +660,7 @@ bot window, mounted).
 | G49 | Escape | the bot panel's avatar, turned or previewing a state (from the mascot or its Reset view button) | front again, the preview dropped; the panel stays; with nothing to cancel the next Escape closes the panel, as before | site | W |
 | G50 | Press on the Reset view button, held while it hides | turned or coming back | the mascot has the focus from the press on, never the button; the button hiding under the press strands no focus, so Escape then closes the picker, not the page | ours | H |
 | G51 | Click or double click held as a hand holds it (40 ms and more) | the avatar card (the bot panel, a new bot), at rest, turned, full or reduced motion | it arrives: the pointer lands on the button, never on the drawing, which is redrawn as it moves | page | C |
+| G52 | Click | the avatar card, a shape that moves | the mascot is poked as before (it winks), and the click is one click on the avatar; the button hands its click on to the drawing, which the pointer no longer reaches | page | C |
 
 Ours (an agent's choice), not settled by the site or the page: the 4 px of
 G11 and the press that leaves before them (G12); the 250 ms of G03 (a double

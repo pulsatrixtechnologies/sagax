@@ -73,10 +73,19 @@ export function BotProfileAvatarCard({
     small: size < LIVE_MIN,
     onMood: (mood) => onPatch({ mascotLook: withEngineLook(completeMascotLook(bot.mascotLook), { mood }) as MascotLook }),
   });
-  const open = () => {
+  const poking = useRef(false);
+  const open = (event: React.MouseEvent<HTMLButtonElement>) => {
+    // the poke below, coming back up: it is the drawing's click, not a second one on the avatar
+    if (poking.current) return;
     if (draft) setDraftOpen((value) => !value);
     else if (onOpen) onOpen();
     else dispatch({ type: "openPersonaEditor", botId: bot.id });
+    // A click pokes the mascot, as it did when the pointer landed on the drawing (a shape winks, ShapeMascot):
+    // the pointer lands on the button now, so the button hands its click on to the drawing.
+    const drawn = event.currentTarget.querySelector("[data-shape]");
+    if (!drawn) return;
+    poking.current = true;
+    try { drawn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); } finally { poking.current = false; }
   };
 
   return (

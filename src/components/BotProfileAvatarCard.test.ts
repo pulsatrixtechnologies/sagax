@@ -197,6 +197,9 @@ describe("BotProfileAvatarCard", () => {
       // a click is a click at once
       await act(async () => { avatar().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 })); });
       expect(onOpen).toHaveBeenCalledTimes(1);
+      // the click pokes the mascot (G52): once its wink is over it is the still image again
+      for (let tick = 0; tick < 300 && drawn().hasAttribute("data-shape-move"); tick++) await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+      expect(drawn().innerHTML, "the still image again after the wink").toBe(atRest);
       // turned: the moving drawing under that view, and the Reset view button
       expect((await key(avatar(), "ArrowRight")).defaultPrevented).toBe(true);
       expect(viewOf()).toBe("0.2 0");
@@ -238,6 +241,17 @@ describe("BotProfileAvatarCard", () => {
           await key(avatar(), "Escape");
         }
       }
+    });
+
+    it("G52: a click still pokes the mascot (a shape winks), now that the pointer lands on the button and not on the drawing; it stays one click on the avatar", async () => {
+      const onOpen = vi.fn();
+      await act(async () => root.render(createElement(BotProfileAvatarCard, { bot: makeBot({ mascotLook: { ...shape, motion: "full" } as MascotLook }), activeState: "idle", mascotMotion: null, onPatch: vi.fn(), size: 64, fillBox: true, onOpen })));
+      const drawn = () => avatar().querySelector("[data-shape]")!;
+      expect(drawn().hasAttribute("data-shape-move")).toBe(false);
+      // the press lands on the button itself
+      await act(async () => { avatar().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 })); });
+      expect(onOpen, "one click on the avatar").toHaveBeenCalledTimes(1);
+      expect(drawn().getAttribute("data-shape-move")).toBe("wink");
     });
 
     it("G42, a character that is not turned: Escape on a draft's owl with its picker open goes where it went before", async () => {

@@ -122,6 +122,50 @@ describe("Escape on a turned mascot, in the real windows that hold it", () => {
     expect(closes(), "the panel closes").toBe(1);
   });
 
+  it("an offer put away by its own Escape takes no later key: the bot panel still closes on Escape", async () => {
+    const { OpenAtLoginOffer } = await import("./OpenAtLoginOffer");
+    const page = window as unknown as { ogb?: unknown };
+    const before = page.ogb;
+    page.ogb = { openAtLogin: { get: () => Promise.resolve({ choice: "unset", platform: "darwin" }), set: () => Promise.resolve({ choice: "off", platform: "darwin" }) } };
+    // the browser takes a listener off only when asked with the phase it was put on with; this window forgives it
+    const add = vi.spyOn(window, "addEventListener");
+    const remove = vi.spyOn(window, "removeEventListener");
+    const captures = (options: unknown) => options === true || (typeof options === "object" && options !== null && (options as { capture?: boolean }).capture === true);
+    const held = () => {
+      const on = new Set<unknown>();
+      for (const [type, listener, options] of add.mock.calls) if (type === "keydown" && captures(options)) on.add(listener);
+      for (const [type, listener, options] of remove.mock.calls) if (type === "keydown" && captures(options)) on.delete(listener);
+      return on.size;
+    };
+    try {
+      const actions: Array<{ type: string; open?: boolean }> = [];
+      const store = {
+        state: { ...initialState, bots: [nimbus], groups: [], routines: [], routineRuns: [], routinesLoadState: "ready", selectedId: nimbus.id, settingsOpen: true, config: null },
+        dispatch: (action: { type: string; open?: boolean }) => { actions.push(action); },
+        flushBotPatches: () => Promise.resolve(nimbus),
+      } as never;
+      await mount(createElement("div", null, createElement(OpenAtLoginOffer), createElement(BotEditorStore, { value: store, children: createElement(BotSettingsDialog, { bot: nimbus }) })));
+      await settle();
+      const offer = () => host.querySelector("[data-open-at-login-offer]");
+      expect(offer(), "the offer is shown").not.toBeNull();
+      const closes = () => actions.filter((action) => action.type === "toggleSettings" && action.open === false).length;
+      // the offer takes the first Escape and goes away
+      await key(document.body, "Escape");
+      await settle(2);
+      expect(closes()).toBe(0);
+      expect(offer(), "the offer is put away").toBeNull();
+      expect(held(), "its key listener is taken off in the phase it was put on in").toBe(0);
+      // from then on the key is whoever's it was: the panel closes
+      avatar().focus();
+      expect((await key(avatar(), "Escape")).defaultPrevented, "the panel took it").toBe(true);
+      expect(closes(), "the panel closes").toBe(1);
+    } finally {
+      add.mockRestore();
+      remove.mockRestore();
+      page.ogb = before;
+    }
+  });
+
   describe("the New bot window", () => {
     const open = async () => {
       const onClose = vi.fn();

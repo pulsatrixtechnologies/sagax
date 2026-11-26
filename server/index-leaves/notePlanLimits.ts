@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** notePlanLimits (#1388). Pure move from server/index.ts. */
+import { limitScopeOfPayer } from "../usage/plan-report-watch.ts";
 export type Host = Record<string, any>;
 
 export function createNotePlanLimits(getHost: () => Host): any {
@@ -8,6 +9,7 @@ function notePlanLimits(report: PlanUsageReport, scope: string) {
 
   const payer = scope.toLowerCase();
   const now = Date.now();
+  let spent = false;
   for (const row of report.providers) {
     const until = host.spentPlanUntil(row);
     // #2192: fullest window used-percent per payer and engine, from the last report.
@@ -19,7 +21,7 @@ function notePlanLimits(report: PlanUsageReport, scope: string) {
     if (row.state === undefined || row.state === "windows") host.accountMeter?.notePlan(payer, [...ids], row);
     for (const id of ids) {
       const key = `${payer}\u0000${id}`;
-      if (until !== null && until > now) host.spentPlans.set(key, until);
+      if (until !== null && until > now) { host.spentPlans.set(key, until); spent = true; }
       else host.spentPlans.delete(key);
       if (used !== null) host.planUsedPercents.set(key, used);
       else host.planUsedPercents.delete(key);
@@ -33,6 +35,10 @@ function notePlanLimits(report: PlanUsageReport, scope: string) {
   while (host.spentPlans.size > 2_000) host.spentPlans.delete(host.spentPlans.keys().next().value as string);
   while (host.planUsedPercents.size > 2_000) host.planUsedPercents.delete(host.planUsedPercents.keys().next().value as string);
   while (host.planSiblings && host.planSiblings.size > 2_000) host.planSiblings.delete(host.planSiblings.keys().next().value as string);
+  // M-20261126-101: a plan read as spent keeps its account out of the modes'
+  // picks, so the payer's limit clock exists and reads usage again by itself
+  // (plan-report-watch.ts); the next reading that shows room clears it here.
+  if (spent) host.limitReset?.clockFor(limitScopeOfPayer(payer));
 
 }
   return notePlanLimits;

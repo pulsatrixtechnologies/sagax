@@ -741,6 +741,9 @@ describe("what Sagax knows of a limit, and says of its reset", () => {
       { instanceId: "claude-3", driverKind: "claudeAgent" }, { instanceId: "codex", driverKind: "codex" },
     ];
     expect([...host.autoExcluded("server", engines, "report")]).toEqual(["claude", "claude-2"]);
+    // review M1: when the first of them is expected back, for the menu's line; none known for accounts with room
+    expect(host.limitedUntil("server", engines)).toBe(resetsAt);
+    expect(host.limitedUntil("server", engines.slice(2))).toBeNull();
     // another person's report says nothing of this one's accounts
     expect([...host.autoExcluded("ada", engines, "report")]).toEqual([]);
     // the window reset: the accounts are back

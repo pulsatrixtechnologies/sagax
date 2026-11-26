@@ -360,3 +360,15 @@ export function resolveModes(request: AutoRequest): Record<ModelMode, ModeResolu
   }
   return out as Record<ModelMode, ModeResolution>;
 }
+
+/** M-20261126-101: what the menu's preview says of each mode while every
+ * account the person could use is at its usage limit: no model is named,
+ * only when the first account is expected back (the level a mode asks for
+ * stays, the chip shows it). */
+export function modesAtLimit(modes: Record<ModelMode, ModeResolution>, until: number | null): Record<ModelMode, ModeResolution> {
+  const out: Partial<Record<ModelMode, ModeResolution>> = {};
+  for (const [mode, resolution] of Object.entries(modes) as Array<[ModelMode, ModeResolution]>) {
+    out[mode] = { mode, pick: null, ...(resolution.effort ? { effort: resolution.effort } : {}), limited: { until } };
+  }
+  return out as Record<ModelMode, ModeResolution>;
+}

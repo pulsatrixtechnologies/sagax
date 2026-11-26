@@ -78,16 +78,13 @@ export interface LimitFailoverHostDeps {
    * that model is not picked again for this payer before `until`, and the
    * engine's other models stay theirs (Auto's refusal memory). */
   refuseModel?: (payer: string, selection: ModelSelection, until: number) => void;
-  /** J4 plan usage: until when a plan window of this engine is spent for
-   * this payer (used at 100 % with no extra usage or credit left, with the
-   * reset its provider reported), from the last usage report Sagax read;
-   * null when none is known. A report is only a hint (an early reset, a
-   * top-up it shows only later, an allowance it does not show): Sagax's quick
-   * pick skips such an engine, and so does a mode's or Auto's (M-20261126-101). A
-   * refusal on it that names no reset is still held for Sagax's estimate,
-   * never until that window's reset. A backup and a run's takeover
-   * read only the refusals Sagax saw for other providers; same-provider
-   * accounts rotate on the report too (#2192). */
+  /** J4 plan usage: until when a plan window of this engine is spent for this payer (used at 100 % with no extra
+   * usage or credit left, with the reset its provider reported), from the last usage report Sagax read (an app's, or
+   * the server's own while one is spent: plan-report-watch.ts); null when none is known. A report is only a hint (an
+   * early reset, a top-up it shows only later, an allowance it does not show): Sagax's quick pick skips such an engine,
+   * and so does a mode's or Auto's (M-20261126-101). A refusal on it that names no reset is still held for Sagax's
+   * estimate, never until that window's reset. A backup and a run's takeover read only the refusals Sagax saw for
+   * other providers; same-provider accounts rotate on the report too (#2192). */
   planLimitUntil?: (payer: string, instanceId: string) => number | null;
   /** #2192: fullest window used-percent (0–100) from the last plan usage
    * report for this payer and instance; null when unknown. A backup of
@@ -165,13 +162,13 @@ export interface LimitFailoverHost {
   dispatchOf(threadId: string): LimitDispatch | undefined;
   /** Readiness uses the same selection as beforeTurn without moving a thread. */
   backupFor(botId: string, threadId: string, speaker: unknown, from: string): Promise<ModelSelection | null>;
-  /** The engines Sagax must not pick for this payer now: one a refusal holds
-   * at its usage limit. Sibling accounts of the same provider stay available
-   * for silent rotation (#2192). `pick` "quick" (a wake's or a call's fast
-   * model) and "report" (a mode's or Auto's pick and the menu's preview,
-   * M-20261126-101) also skip an engine whose plan the payer's usage report
-   * showed spent (planLimitUntil); without it, only the refusals Sagax saw. */
+  /** The engines Sagax must not pick for this payer now: one a refusal holds at its usage limit. Sibling accounts
+   * of the same provider stay available for silent rotation (#2192). `pick` "quick" (a wake's or a call's fast
+   * model) and "report" (a mode's or Auto's pick and the menu's preview, M-20261126-101) also skip an engine whose
+   * plan the payer's usage report showed spent (planLimitUntil); without it, only the refusals Sagax saw. */
   autoExcluded(payer: string, engines: readonly LimitEngine[], pick?: "quick" | "report"): Set<string>;
+  /** When the first of these engines a "report" pick leaves out is expected back for this payer; null when none is. */
+  limitedUntil(payer: string, engines: readonly LimitEngine[]): number | null;
   /** #2192: after a limit or provider error the backup answered with no text:
    * try the next pool member once (same provider first), with the steps
    * already taken. True when a resend was started. */
@@ -795,15 +792,18 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     },
     autoExcluded(payer, engines, pick) {
       try {
-        // A refusal's hold (for Sagax's quick pick, a mode's and Auto's, also
-        // a plan window the payer's usage report showed spent). Sibling
-        // accounts of the same provider stay available for silent rotation (#2192).
+        // A refusal's hold (for Sagax's quick pick, a mode's and Auto's, also a plan window the payer's usage report
+        // showed spent). Sibling accounts of the same provider stay available for silent rotation (#2192).
         return outOf(payer, engines, pick !== undefined);
       } catch (failure) {
         console.warn(`[limit-failover] auto: ${failure instanceof Error ? failure.message : String(failure)}`);
         return new Set<string>();
       }
     },
+    limitedUntil: (payer, engines) => engines.reduce<number | null>((first, engine) => {
+      const at = quickHeldUntil(payer, engine.instanceId);
+      return at !== null && (first === null || at < first) ? at : first;
+    }, null),
 
     emptyReplyRetry({ botId, threadId, speaker, messageId, turnId, trigger }) {
       try {

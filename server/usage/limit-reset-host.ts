@@ -14,7 +14,7 @@ import { AFTER_RESET_MS, isLimitResetSchedule, type EngineLimitsReport, type Lim
 import type { RoutineSchedule } from "../../shared/routines.ts";
 import { LimitResetClock, type LimitClockOptions } from "./limit-resets.ts";
 import { limitResetRunOwed } from "./limit-reset-owed.ts";
-import type { PlanAccount } from "./plan-usage.ts";
+import type { PlanAccount, PlanUsageReport } from "./plan-usage.ts";
 
 /** The server's own engine accounts. */
 export const SERVER_LIMIT_SCOPE = "server";
@@ -41,6 +41,11 @@ export function createLimitResetHost(options: LimitClockOptions & {
   routineScope?: (routine: LimitRoutine, engine: string) => string;
   /** Where a scope's clock keeps its refusals across a restart. Absent: memory only. */
   holdsFile?: (scope: string) => string | undefined;
+  /** M-20261126-101: the last usage report shows a plan of this scope's payer spent, which keeps that account out of
+   * the modes' picks: the scope's clock reads usage again on its own, as it does while a refusal holds an engine. */
+  reportHeld?: (scope: string) => boolean;
+  /** A scope's clock just read usage (plan-report-watch.ts notes it as an app's reading of the report is noted). */
+  onScopeUsage?: (scope: string, report: PlanUsageReport) => void;
   /** The runs made so far, so a routine still owed the run of a passed reset is not re-timed past it (limit-reset-owed.ts). */
   runs?: () => ReadonlyArray<{ routineId: string; scheduledFor: number }>;
 }) {
@@ -60,8 +65,9 @@ export function createLimitResetHost(options: LimitClockOptions & {
       ...(options.describe ? { describe: options.describe } : {}),
       now: options.now,
       ...(options.holdsFile?.(key) ? { file: options.holdsFile(key) } : {}),
-      waiting: () => options.routines().some((routine) =>
+      waiting: () => options.reportHeld?.(key) === true || options.routines().some((routine) =>
         waitingOn(routine) && routine.schedule.at === null && scopeOf(routine, routine.schedule.engine) === key),
+      ...(options.onScopeUsage ? { onUsage: (report: PlanUsageReport) => options.onScopeUsage?.(key, report) } : {}),
       onChange: () => {
         options.onChange?.();
         let runs: ReadonlyArray<{ routineId: string; scheduledFor: number }> | undefined;

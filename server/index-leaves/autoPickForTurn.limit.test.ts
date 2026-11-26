@@ -28,7 +28,7 @@ const grok: AutoEngine = {
 type ModeModels = Record<string, unknown>;
 /** `spent`: the accounts the person's usage report shows at their limit. No
  * turn was refused yet, so only a pick that reads the report knows of them. */
-function world(spent: readonly string[], modeModels: ModeModels = {}) {
+function world(spent: readonly string[], modeModels: ModeModels = {}, last?: Record<string, unknown>) {
   const asked: Array<string | undefined> = [];
   const host = {
     autoPayerKey: () => "me",
@@ -39,23 +39,29 @@ function world(spent: readonly string[], modeModels: ModeModels = {}) {
         asked.push(pick);
         return new Set(pick === "report" ? engines.map((engine) => engine.instanceId).filter((id) => spent.includes(id)) : []);
       },
+      limitedUntil: (_payer: string, engines: readonly AutoEngine[]) => engines.some((engine) => spent.includes(engine.instanceId)) ? BACK_AT : null,
     },
     autoCatalogLookup: (_driver: string, id: string) => FACTS[bareModelId(id)],
     autoModeModelsFor: () => modeModels,
     attachmentsInText: (text: string) => ({ text, attachments: [] }),
     parsedQuickTask: (text: string) => ({ text, attachments: [] }),
     effortAcceptedByEngine: () => true,
-    store: { taskByThread: () => undefined },
-    autoRecordUsable: () => false,
+    // the conversation's last pick (WireTask.autoModel), and server/index.ts's rule for keeping it
+    store: { taskByThread: () => last ? { autoModel: last } : undefined },
+    autoRecordUsable: (record: { instanceId: string; model: string }, engines: readonly AutoEngine[]) =>
+      engines.some((engine) => engine.instanceId === record.instanceId && engine.models.options.some((option) => option.id === record.model)),
   };
   const pickFor = createAutoPickForTurn(() => host);
-  const turn = (mode?: "fast" | "expert" | "heavy", withModes = false) => pickFor({
+  const turn = (mode?: "fast" | "expert" | "heavy", withModes = false, role: "orchestration" | "worker" | "continue" = "orchestration", speaker: Record<string, unknown> = { origin: "person" }) => pickFor({
     bot: { id: "b1", title: "", soul: "", modelSelection: { instanceId: "grok", model: "grok-4.7", auto: true as const, ...(mode ? { mode } : {}) } },
-    threadId: "t1", speaker: { origin: "person" }, role: "orchestration", text: withModes ? "" : "hello there", withModes,
+    threadId: "t1", speaker, role, text: withModes ? "" : "hello there", withModes,
   });
   return { turn, asked };
 }
 const CLAUDE = ["claude", "claude-2"];
+const ALL = [...CLAUDE, "grok"];
+/** When the first account at its limit is expected back. */
+const BACK_AT = Date.parse("2026-11-26T20:40:00Z");
 const onClaude = (instanceId: string | undefined) => CLAUDE.includes(instanceId ?? "");
 
 describe("M-20261126-101: a mode skips a model whose accounts are at their limit", () => {
@@ -109,8 +115,51 @@ describe("M-20261126-101: a mode skips a model whose accounts are at their limit
     expect(open.turn("heavy")?.pick.team?.map((seat: { modelLabel: string }) => seat.modelLabel)).toEqual(["Claude Opus 5.5", "Grok 4 Fast"]);
   });
 
-  it("with every account at its limit the pick keeps its list, as before (the limit says when)", () => {
-    const w = world(["claude", "claude-2", "grok"]);
+  it("with every account at its limit the turn's pick keeps its list, as before (the limit says when)", () => {
+    const w = world(ALL);
     expect(w.turn("expert")?.pick).toMatchObject({ mode: "expert", selection: { model: "claude-opus-5-5" } });
+    expect(w.turn("heavy")?.pick.team?.length).toBeGreaterThan(0);
+    expect(w.turn(undefined)?.pick.selection.model).toBeTruthy();
+  });
+
+  // review M1: the preview then names no model at all, and says when one is back
+  it("with every account at its limit the menu's preview names no model and says when one is back", () => {
+    const modes = world(ALL).turn(undefined, true)?.modes;
+    for (const mode of ["auto", "fast", "expert", "heavy"] as const) {
+      expect(modes?.[mode]).toMatchObject({ mode, pick: null, limited: { until: BACK_AT } });
+      expect(modes?.[mode].team).toBeUndefined();
+    }
+    expect(JSON.stringify(modes)).not.toMatch(/Claude|Grok/);
+    // one account with room: models are named again, and nothing reads as limited
+    const open = world(CLAUDE).turn(undefined, true)?.modes;
+    expect(open?.expert.pick?.modelLabel).toBe("Grok 4.7");
+    expect(open?.expert.limited).toBeUndefined();
+  });
+});
+
+// review M2: every turn Sagax starts takes its model from this one function
+// (a routine's run: server/index.ts routineReadinessBot and the routine's
+// startTurn, role "worker"; a bot talking to another bot and every started
+// turn: server/turns/start-turn-prepare-validate.ts; a group room:
+// server/turns/group-member-turn-prepare.ts), so each skips a flagged account.
+describe("M-20261126-101: routines, workers and continued conversations skip a flagged account too", () => {
+  const routine = { origin: "routine", routineId: "r1" };
+
+  it("a routine's run (a worker turn) takes the next available model", () => {
+    const pick = world(CLAUDE).turn(undefined, false, "worker", routine)?.pick;
+    expect(pick?.selection.instanceId).toBe("grok");
+    expect(pick?.chain.some((entry: { instanceId: string }) => onClaude(entry.instanceId))).toBe(false);
+    // with room on one Claude account the worker may run there, never on the flagged one
+    const one = world(["claude"]).turn(undefined, false, "worker", routine)?.pick;
+    expect(one?.selection.instanceId).not.toBe("claude");
+    expect(one?.chain.some((entry: { instanceId: string }) => entry.instanceId === "claude")).toBe(false);
+  });
+
+  it("a continued conversation leaves its earlier pick when that account is flagged, and keeps it otherwise", () => {
+    const last = { instanceId: "claude", model: "claude-opus-5-5", engineLabel: "Claude Code", modelLabel: "Claude Opus 5.5", role: "orchestration", tier: "top", reason: "strongest-other", at: 1 };
+    expect(world([], {}, last).turn(undefined, false, "continue")?.pick.selection).toMatchObject({ instanceId: "claude", model: "claude-opus-5-5" });
+    const moved = world(["claude"], {}, last).turn(undefined, false, "continue")?.pick;
+    expect(moved?.selection.instanceId).not.toBe("claude");
+    expect(moved?.chain.some((entry: { instanceId: string }) => entry.instanceId === "claude")).toBe(false);
   });
 });

@@ -219,14 +219,34 @@ window the person's usage report shows used up with no extra usage left
   available models: with fewer left the team is smaller.
 - A model the person set for a mode (Settings > Modes) is skipped the same
   way for the turn; the setting is kept and runs again once the limit resets.
-- With every account at its limit the pick keeps its list, as before: the
-  turn's refusal says when the limit resets.
+- With every account at its limit the turn's pick keeps its list, as before:
+  the turn's refusal says when the limit resets. The menu's preview then names
+  no model (`modesAtLimit`: every mode's `pick` is null, with
+  `limited: { until }`, the first account expected back,
+  `limitFailover.limitedUntil`). The modes stay in the menu and each tooltip
+  reads "No model you can use right now · resets 3:40 PM", from the texts the
+  app already had (`model.cascade.none`, `limits.resets`).
+- A report at 100 % is read again by the server, with no app asking: while a
+  payer has a live entry from the report (`spentPlans`), that payer's limit
+  clock (`LimitResetClock`, the timer that already reads usage every 5 minutes
+  while a refusal holds an engine) reads usage too, and the reading is noted
+  by the same `notePlanLimits` as an app's (`server/usage/plan-report-watch.ts`).
+  An early reset or extra usage bought since brings the account back within
+  about 5 minutes on an iPhone alone, in a routine or an unattended bot;
+  before, only a desktop app asking for the report did (every 10 minutes).
+- Every turn Sagax starts takes its model here, so all of this holds for a
+  routine's run (role `worker`, `routineReadinessBot` and the routine's
+  `startTurn`), a bot talking to another bot and every started turn
+  (`server/turns/start-turn-prepare-validate.ts`), a group room
+  (`server/turns/group-member-turn-prepare.ts`) and workers. A continued
+  conversation leaves its earlier pick while that account is flagged.
 - The desktop reads the preview again each time the menu opens
   (`useAutoModelStatus`, `open`), the last answer staying on screen meanwhile.
 
 Tests: `server/index-leaves/autoPickForTurn.limit.test.ts`,
 `server/usage/limit-failover-host.test.ts`, `server/routes/bots-mutate.test.ts`,
-`src/lib/auto-model-preview.dom.test.ts`.
+`src/lib/auto-model-preview.dom.test.ts`, `server/usage/plan-report-watch.test.ts`,
+`src/lib/model-mode.chatbar.test.ts`.
 
 ## Heavy: a team of read-only experts (#5089)
 

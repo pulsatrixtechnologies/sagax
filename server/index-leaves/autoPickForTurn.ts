@@ -1,7 +1,7 @@
 // @ts-nocheck
 /** autoPickForTurn (#1388). Pure move from server/index.ts. */
 import { pickOrchestrationModel, pickWorkerModel } from "../models/model-auto.ts";
-import { heavyWorthy, pickModeModel, resolveModes } from "../models/model-mode.ts";
+import { heavyWorthy, modesAtLimit, pickModeModel, resolveModes } from "../models/model-mode.ts";
 import { isForcedModelMode, type ModeResolution, type ModelMode } from "../../shared/model-mode.ts";
 import { statSync } from "node:fs";
 export type Host = Record<string, any>;
@@ -33,11 +33,13 @@ function autoPickForTurn(input: {
   // 5-hour or weekly window the payer's usage report shows used up
   // (M-20261126-101: Auto and every mode take the next model they can be
   // served now; each account on its own, so a model stays while one of its
-  // accounts has room). With nothing else left, Auto keeps its list and the
-  // limit says when.
+  // accounts has room). With nothing else left, the turn keeps its list and
+  // the limit says when; the menu's preview then names no model, only when
+  // the first account is expected back (modesAtLimit).
   const limited = host.limitFailover.autoExcluded(payer, offered, "report");
   const open = offered.filter((engine) => !limited.has(engine.instanceId));
   const engines = open.length ? open : offered;
+  const allLimited = offered.length > 0 && open.length === 0;
   // #4329 lot 5: the engines the owner chose to run with come right after the bot's own
   const request = { base: bot.modelSelection, engines, catalog: host.autoCatalogLookup, skip, ...(host.autoHarnessesFor ? { harness: host.autoHarnessesFor(bot) } : {}), ...(host.autoModeModelsFor ? { modeModels: host.autoModeModelsFor(bot) } : {}) };
   // #5014: among the accounts of the picked model's provider that offer it,
@@ -89,7 +91,7 @@ function autoPickForTurn(input: {
   // mode's rule picks among the engines they can use (never a pinned model's
   // own engine rule: a call turn takes the pick as a typed turn does, #4888).
   // With nothing usable for the mode the bot's Auto reads the request as before.
-  const modes = input.withModes ? { modes: resolveModes(request) } : {};
+  const modes = input.withModes ? { modes: allLimited ? modesAtLimit(resolveModes(request), host.limitFailover.limitedUntil(payer, offered)) : resolveModes(request) } : {};
   // D-20261126-005: Build is no mode (shared/model-mode.ts); a selection that
   // still names it is no forced mode, so the turn runs as Auto (the request is read)
   if (isForcedModelMode(bot.modelSelection.mode)) {

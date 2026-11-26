@@ -716,7 +716,9 @@ line), it keeps Sagax's own picks off that engine until a turn on it works
 again (`planWorked`, from `turnSucceeded`): the quick pick (a wake's or a
 call's fast model, `autoExcluded(..., "quick")`), and since M-20261126-101
 (#5403) Auto's and every mode's pick and the menu's preview
-(`autoExcluded(..., "report")`, see `docs/model-modes.md`). A real refusal there that names no
+(`autoExcluded(..., "report")`, see `docs/model-modes.md`). While such an
+entry is live the payer's limit clock reads the report again every 5 minutes
+by itself (`server/usage/plan-report-watch.ts`), so it never waits for an app. A real refusal there that names no
 reset is still held for the one-hour estimate, marked as one, and the engine
 tried again after it, never until that window's reset: a top-up shows only in
 a later report, which clears the hint and never a hold, so such a hold kept

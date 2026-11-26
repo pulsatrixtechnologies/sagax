@@ -55,6 +55,8 @@ Rules only. How the code works (files, routes, tests, history) lives in
 
 - Every UI change reads `docs/design/ux-reference-grokbot-cursor.md` (section 8 holds the appearance rules per surface) and passes the UX gate there, with headless before and after captures beside the conforming neighbour page (2026-11-07).
 - The composer mode menu follows `docs/model-modes.md`. Under Auto, Reasoning displays Auto until the person chooses a level.
+- Build is no mode: the server never picks it and no menu offers it; a stored or sent Build is Auto, never an error (2026-11-26, #5398).
+- The chat bar's voice button does the mode the person used last; dictation before any use (2026-11-26, #5399).
 - A bot's title always sits under its name, plain secondary grey, never a tag, pill or outline, on every surface (2026-11-06).
 - A surface that was a window stays a window, and a page stays a page, unless the owner asks (2026-11-02).
 - Never hard-code a colour in a component; fix a failing contrast pair in the skin, never in the `.tsx` (2026-10-08).
@@ -194,6 +196,7 @@ Rules only. How the code works (files, routes, tests, history) lives in
 
 - Every release has its notes in `docs/releases/X.Y.Z.md`, shown in the app before and after an update.
 - Updates are confirmed and visible, never silent, Windows included (2026-10-19).
+- An app older than `MINIMUM_APP_VERSION` is asked to update by the server's answer to its send (`server/app-update-gate.ts`); never hold an app whose version cannot be read (2026-11-26, #5397).
 
 ## Where the descriptions live
 

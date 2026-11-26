@@ -1859,8 +1859,11 @@ and `sidebar-logo-preferences.test.ts`:
   the glyph in the primary ink, never a dimmer grey on the rail.
   New still opens the compose-to picker (which holds Create new Bot). With a
   title bar (macOS inset lights, or the browser's stand-in dots) and no
-  logo, they sit in the title bar's own 48px row (`SIDEBAR_TITLE_ROW`,
-  `pr-4`), level with the lights, and the tiles start right under. The logo
+  logo, they sit in the title bar's own row (`SIDEBAR_TITLE_ROW`, `pr-4`),
+  whose height is the frame's shared header height (`--app-topbar-height`,
+  56px): the circles sit 10px under the window's top edge, like every other
+  round control of the top row (owner, 2026-11-25, #5379), and the tiles
+  start right under. The logo
   (Settings > Appearance > Sidebar logo) is off unless turned on (`"1"`);
   with it on, or without a title bar, the brand row under the inset strip
   holds them as before (`SIDEBAR_HEAD_ROW`, the chat header's 56px).

@@ -222,10 +222,12 @@ export const SIDEBAR_HEAD_BUTTON = cn(
  * toggle on every platform. */
 export const SIDEBAR_HEAD_ROW = "flex h-14 items-center justify-between gap-2 pl-4 pr-3";
 /** The head inside the title bar (macOS inset lights or the browser's dots,
- * no logo): one 48px row, the 36px circles centred 24px down, 8px below the
- * lights' centre, ending 16px from the edge, as the owner's reference window
- * draws them. */
-export const SIDEBAR_TITLE_ROW = "flex h-12 items-center justify-between gap-2 pl-4 pr-4";
+ * no logo): one row of the frame's shared header height
+ * (`--app-topbar-height`, the chat header's and every docked panel's), so its
+ * 36px circles sit as far under the window's top edge as every other round
+ * control of the top row (owner, 2026-11-25, #5379), ending 16px from the
+ * edge. */
+export const SIDEBAR_TITLE_ROW = "flex h-(--app-topbar-height) items-center justify-between gap-2 pl-4 pr-4";
 
 /** The palette chord as this platform spells it: "⌘K" on macOS, "Ctrl+K"
  * on Windows and Linux, for the search button's tooltip. */
@@ -2602,7 +2604,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
           and the round New button (the edge collapses the sidebar, see the
           separator). With a title bar (macOS inset traffic lights, or the
           browser's stand-in dots) and no logo, they sit in the title bar's
-          own 48px row, level with the lights, and the pinned tiles start
+          own row, the frame's header height, and the pinned tiles start
           right under (the owner's reference window). With the logo on
           (Settings > Appearance, off by default) or no title bar, the brand
           row holds them under the inset strip. The whole head is the

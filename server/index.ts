@@ -636,7 +636,7 @@ import { createAccountMovesHost, type AccountMovesHost } from "./engines/account
 import { threadModelFallback } from "./threads/thread-model.ts";
 import { engineProblem, namesEngine, noEngineError } from "./bots/bot-engine.ts";
 import { sameModelSelection } from "../shared/thread-model.ts";
-import { allowedFallbackSelection, effectiveAllowedEngines, engineAllowed } from "../shared/org-allowed-engines.ts";
+import { allowedFallbackSelection, engineAllowed } from "../shared/org-allowed-engines.ts";
 import { offeredEngines } from "../shared/offered-engines.ts";
 import { cleanDisabledModels, cleanFavoriteModels, modelOffer, type ModelSwitches } from "../shared/offered-models.ts";
 import { createModelSwitchRoutes } from "./routes/model-switches.ts";
@@ -3072,6 +3072,9 @@ bindLeafHost({
   get modelSwitchRefusal() { return modelSwitchRefusal; },
   get orgOwnAccountsOutsideList() { return orgOwnAccountsOutsideList; },
   get orgAllowedEngines() { return orgAllowedEngines; },
+  get orgEngineHidden() { return orgEngineHidden; },
+  get orgEngineHiddenRefusal() { return orgEngineHiddenRefusal; },
+  get orgHiddenEnginesFor() { return orgHiddenEnginesFor; },
   get personPaysEngine() { return personPaysEngine; },
   get orgEngineName() { return orgEngineName; },
   get insideDataDir() { return insideDataDir; },
@@ -11566,13 +11569,14 @@ function selectableInstances<T extends SelectableInstance>(instances: readonly T
  * of their own wins over it; the organization's engine policy applies. */
 const selectionContext = {
   company: (instanceId: string) => managedDesktop.owns(instanceId),
-  refusal: (instance: SelectableInstance) => policyModelRefusal(instance) ?? orgEngineAllowRefusal(instance.instanceId)
+  // every use is a new choice: a hidden provider is never picked (D-20261126-018)
+  refusal: (instance: SelectableInstance) => policyModelRefusal(instance) ?? orgEngineAllowRefusal(instance.instanceId) ?? orgEngineHiddenRefusal(instance.instanceId)
 };
 /** #1098: the same for one person, who may pick an engine they pay for. */
 function selectionContextFor(principalId: string | null | undefined) {
   return {
     ...selectionContext,
-    refusal: (instance: SelectableInstance) => policyModelRefusal(instance) ?? orgEngineAllowRefusal(instance.instanceId, principalId)
+    refusal: (instance: SelectableInstance) => policyModelRefusal(instance) ?? orgEngineAllowRefusal(instance.instanceId, principalId) ?? orgEngineHiddenRefusal(instance.instanceId)
   };
 }
 
@@ -11621,8 +11625,9 @@ function accountMovesHost(): AccountMovesHost {
       if (person && IDENTITY.kind === "perspicax") {
         // the person's own access: their sign-in, their key or the organization's key
         const access = personEngineAccess(person) as Array<{ id: string; via: string }>;
+        // a move target is a new choice: never a provider the organization hid (D-20261126-018)
         return orgOfferedEngines(registry.entries(), person)
-          .filter((entry) => personalProviderInstances.visible(entry.instanceId, person) && !accountNames.removed(person, entry.instanceId))
+          .filter((entry) => personalProviderInstances.visible(entry.instanceId, person) && !accountNames.removed(person, entry.instanceId) && !orgEngineHidden(entry.instanceId))
           .map((entry) => ({
             instanceId: entry.instanceId,
             defaultModel: registry.get(entry.instanceId)?.models.default ?? "",
@@ -16788,7 +16793,8 @@ const limitFailover = createLimitFailoverHost({
     if (threadBusy(botId, threadId)) return "the conversation is working";
     const target = registry.get(to.instanceId);
     if (!target?.enabled) return "the engine is unavailable";
-    const refusal = policyModelRefusal(target) ?? orgEngineAllowRefusal(to.instanceId, effectiveBotOwner(current));
+    const refusal = policyModelRefusal(target) ?? orgEngineAllowRefusal(to.instanceId, effectiveBotOwner(current))
+      ?? (to.instanceId === current.modelSelection.instanceId ? undefined : orgEngineHiddenRefusal(to.instanceId));
     if (refusal) return refusal;
     const checked = checkedTaskModelSwitch(current, to, false, true);
     if (!checked.ok) return checked.error;
@@ -25527,6 +25533,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     },
     orgOfferedEngines,
     consoleEngineAllowed,
+    orgEngineHidden,
     orgOwnAccountsOutsideList,
     personPaysEngine,
     ownerBotsReadOnly,
@@ -33313,8 +33320,7 @@ const orgEnginesDeps: EnginesDeps = {
     else delete organization.hiddenEngines;
     saveConfig({ organization });
     cfg.organization = organization;
-    // as a change of allowedEngines: bots on it move, every picker redraws
-    applyOrgEngineAllowList();
+    // D-20261126-018: the menus redraw; no bot moves, on hide or on restore
     broadcast({ kind: "config", ...configStatus() });
   },
   refusal: () => (hostedModels ? HOSTED_PROVIDER_SETTINGS_ERROR : null),
@@ -33806,7 +33812,7 @@ const botZipHost: BotZipHost = {
   principalByEmail: (email) => principals.byEmail(email)?.id ?? undefined,
   mcpServer: mcpServerSummary,
   engineUsable: (selection) => Boolean(registry.get(selection.instanceId)) && engineInstalled(selection.instanceId)
-    && consoleEngineAllowed(selection.instanceId) && (!hostedModels || hostedModels.allows(selection)),
+    && consoleEngineAllowed(selection.instanceId) && !orgEngineHidden(selection.instanceId) && (!hostedModels || hostedModels.allows(selection)),
   defaultSelection: () => defaultSelection(),
   newBotSelection: (owner, selection, harness) => newBotSelection(owner, selection, harness),
   sectionExists: (name) => store.sections.includes(name),
@@ -34369,25 +34375,37 @@ function orgOwnAccountsOutsideList(): boolean {
 /** Organization server: the engines its admin allows (Perspicax), null for
  * every engine (shared/org-allowed-engines.ts). */
 function orgAllowedEngines(): string[] | null {
-  if (IDENTITY.kind !== "perspicax") return null;
-  const stored = cfg.organization?.allowedEngines;
+  const allowed = cfg.organization?.allowedEngines;
   // [] is "none" (2026-10-17): only null or absent means every engine.
-  // 2026-11-25: a provider the organization hid is off like one left out of
-  // the list, which is not changed (effectiveAllowedEngines). "Every engine
-  // but these" names the organization's engines: a person's own account
-  // follows its provider's first one below, their own server stays theirs.
-  const hidden = orgHiddenEngines();
-  const every = hidden.length
-    ? registry.entries().map((entry) => entry.instanceId).filter((id) => !accountOwnerOf(cfg.instances, id) || !hidden.includes(providerFirstAccount(id, cfg.instances?.[id]?.driver ?? "") ?? ""))
-    : [];
-  const allowed = effectiveAllowedEngines(Array.isArray(stored) ? stored : null, hidden, every);
   // #4435: a person's own added account follows its provider's first one.
-  return allowed ? allowedWithOwnedAccounts(allowed, cfg.instances) : null;
+  return IDENTITY.kind === "perspicax" && Array.isArray(allowed) ? allowedWithOwnedAccounts(allowed, cfg.instances) : null;
 }
 /** 2026-11-25: the catalog engines the organization hid (Perspicax, Model
  * providers, `POST engines/{id}/hide`). Empty on a solo server. */
 function orgHiddenEngines(): string[] {
   return IDENTITY.kind === "perspicax" ? cfg.organization?.hiddenEngines ?? [] : [];
+}
+/** D-20261126-018: a provider the organization hid is out of every new
+ * choice (a menu, a new bot, a backup, Auto's pick, a fallback), never off:
+ * what already runs on it goes on unchanged, and restoring it moves nothing.
+ * #4435: a person's own added account follows its provider's first one. */
+function orgEngineHidden(instanceId: string): boolean {
+  const hidden = orgHiddenEngines();
+  if (!hidden.length) return false;
+  if (hidden.includes(instanceId)) return true;
+  return Boolean(accountOwnerOf(cfg.instances, instanceId)) && hidden.includes(providerFirstAccount(instanceId, cfg.instances?.[instanceId]?.driver ?? "") ?? "");
+}
+/** The hidden engines the app leaves out of its menus (config `hiddenEngines`):
+ * the organization's, and for a person their own accounts that follow one. */
+function orgHiddenEnginesFor(person?: string | null): string[] {
+  if (!orgHiddenEngines().length) return [];
+  return registry.entries().map((entry) => entry.instanceId)
+    .filter((id) => orgEngineHidden(id) && (person ? personalProviderInstances.visible(id, person) : !personalProviderInstances.ownerOf(id)));
+}
+/** A new choice of this engine (a model picked by name, a new bot's start, a
+ * move target, Auto's pick) while the organization hid it. */
+function orgEngineHiddenRefusal(instanceId: string): string | undefined {
+  return orgEngineHidden(instanceId) ? ORG_ENGINE_NOT_ALLOWED : undefined;
 }
 /** Why a model choice may not use this engine here, if it may not.
  * 2026-10-30: an engine outside the organization's list is refused to

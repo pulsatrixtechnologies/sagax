@@ -345,13 +345,21 @@ Covered by `src/components/SettingsModal.orgCleanup.test.ts`,
   (`removeAccountMovingBots`); the organization's key of a key engine is
   written where the provider card writes it (`saveOrgEngineKey`, the
   `config` target of `engineKeyTarget`), never answered, logged or audited;
-  a catalog engine is hidden in `organization.hiddenEngines` and taken out
-  of the enforced list by `effectiveAllowedEngines`
-  (`shared/org-allowed-engines.ts`), with `allowedEngines` and
-  `disabledModels` left as stored. A person's own account, server and keys
-  are not in these routes. Tests: `server/org/org-admin-engines.test.ts`,
-  `shared/org-allowed-engines.test.ts`, C5 in
-  `server/org/org-admin-console.e2e.test.ts`.
+  a catalog engine is hidden in `organization.hiddenEngines`, with
+  `allowedEngines` and `disabledModels` left as stored. Hidden is for new
+  choices only (D-20261126-018): `orgEngineHidden` in `server/index.ts`
+  refuses it in `checkedModelSelection` (engine changed), the selection
+  contexts (new bot, move target, team setup and import), the console's
+  model change and Auto's pool (`autoEnginesFor`, the bot's own engine
+  kept); turns, `allowedEngines` and `applyOrgEngineAllowList` never read
+  it, so no bot moves. The app gets `hiddenEngines` in its config and
+  `offeredEngines` (`shared/offered-engines.ts`) leaves it out of every list
+  but the one of a bot already on it (`keep`). On a managed workspace the
+  rows say `removable: false` and `takesKey: false`; an engine not here is
+  `404 engine_not_found`. A person's own account, server and keys are not
+  in these routes. Tests: `server/org/org-admin-engines.test.ts`,
+  `shared/offered-engines.test.ts`, `src/components/ModelPicker.interaction.test.ts`,
+  C5 in `server/org/org-admin-console.e2e.test.ts`.
 - Sharing in the organization is one compact row per bot (avatar, owner,
   sharing count, running or idle from `/api/org/bots` `look`/`running`);
   the grants open inline, the force actions sit in an admin-only row menu

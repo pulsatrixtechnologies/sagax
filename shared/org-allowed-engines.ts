@@ -20,24 +20,6 @@ export function engineAllowed(allowed: AllowedEngines, instanceId: string): bool
   return allowed.includes(instanceId);
 }
 
-/**
- * The list the server enforces once the organization's hidden providers are
- * taken out of it (`hiddenEngines`, 2026-11-25, Perspicax "Model providers":
- * a catalog provider is hidden, never deleted). A hidden engine is off like
- * one left out of `allowedEngines`: no menu lists it, its turns are refused,
- * a bot on it moves to Auto on an allowed engine. The stored list is never
- * changed, so restoring the provider gives back what was allowed.
- * `every` names every engine of the server, for "every engine but these".
- */
-export function effectiveAllowedEngines(
-  allowed: readonly string[] | null,
-  hidden: readonly string[] | undefined,
-  every: readonly string[],
-): string[] | null {
-  if (!hidden?.length) return allowed ? [...allowed] : null;
-  return (allowed ?? every).filter((instanceId) => !hidden.includes(instanceId));
-}
-
 /** An engine as the fallback sees it: its id, whether it runs here, and the
  * model it starts on. */
 export interface FallbackEngine {

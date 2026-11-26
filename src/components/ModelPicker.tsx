@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import { Monitor } from "lucide-react";
 import { type Bot, type ModelSelection, type useStore } from "@/state/store";
 import { shallowEqual, useStoreCommands, useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
-import { engineOffer } from "../../shared/offered-engines";
+import { engineHidden, engineOffer } from "../../shared/offered-engines";
 import { engineOfferContext, modelSwitches } from "@/lib/offered-instances";
 import { accountPickChipLine } from "@/lib/account-pick";
 import { credentialFormLabelKey } from "../../shared/credential-resolver";
@@ -238,9 +238,11 @@ export function ModelPicker({
   const switches = modelSwitches(state.config);
   const notAllowed = (instance: typeof state.instances[number]) => engineOffer(offerContext, instance.instanceId) === "notAllowed";
   const notGiven = (instance: typeof state.instances[number]) => engineOffer(offerContext, instance.instanceId) === "notGiven";
+  // D-20261126-018: a provider the organization hid stays only in the menu
+  // of what is already on it, as its model in use
   const pickerInstances = offerContext.organization
     ? configured.filter((instance) => !notAllowed(instance) &&
-      (instance.instanceId === selection.instanceId || (!orgRefusesEngine(instance) && !notGiven(instance))))
+      (instance.instanceId === selection.instanceId || (!engineHidden(offerContext, instance.instanceId) && !orgRefusesEngine(instance) && !notGiven(instance))))
     : configured;
   // #4329 lot 6: "Runs with", the bot's own setting (src/components/RunsWith.tsx):
   // the engines offered here that may run its model; a pick writes the bot's choice

@@ -658,7 +658,8 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     expect(cleared.body.engines.find((engine: { id: string }) => engine.id === "openrouter")).toMatchObject({ orgKey: false });
 
     // 2026-11-25: a catalog provider is hidden, never deleted. It leaves
-    // everyone's menus like one turned off; the stored list is untouched.
+    // everyone's menus for a new choice (D-20261126-018: the app reads
+    // `hiddenEngines`); the stored list is untouched.
     expect(caps.body.routes).toEqual(expect.arrayContaining(["POST engines/{id}/hide", "POST engines/{id}/restore"]));
     expect((await admin("POST", "engines/openrouter/hide", MONA)).body.code).toBe("forbidden_role");
     const alice = await signIn(ALICE);
@@ -666,13 +667,13 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     const hiddenAnswer = await admin("POST", "engines/openrouter/hide", ALICE);
     expect(hiddenAnswer.status, hiddenAnswer.text).toBe(200);
     expect(hiddenAnswer.body.engines.find((engine: { id: string }) => engine.id === "openrouter")).toMatchObject({ hidden: true, hideable: true });
-    const offered = (await api("GET", "/api/config", alice)).body.allowedEngines as string[];
-    expect(offered).toContain("claude");
-    expect(offered).not.toContain("openrouter");
+    const shown = (await api("GET", "/api/config", alice)).body;
+    expect(shown.allowedEngines).toBeNull();
+    expect(shown.hiddenEngines).toEqual(["openrouter"]);
     expect((await admin("GET", "settings", ALICE)).body.policies.allowedEngines).toBeNull();
     const restored = await admin("POST", "engines/openrouter/restore", ALICE);
     expect(restored.body.engines.find((engine: { id: string }) => engine.id === "openrouter")).toMatchObject({ hidden: false });
-    expect((await api("GET", "/api/config", alice)).body.allowedEngines).toBeNull();
+    expect((await api("GET", "/api/config", alice)).body).toMatchObject({ allowedEngines: null, hiddenEngines: [] });
     await expect.poll(async () => (await admin("GET", "audit?category=engine&limit=50", ALICE)).text).toContain("engines.restore");
   });
 
@@ -707,7 +708,7 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     expect((await admin("POST", "engines/spare/hide", ALICE, {})).body).toMatchObject({ code: "added_engine" });
     expect((await admin("POST", "engines/spare/restore", ALICE, {})).body).toMatchObject({ code: "added_engine" });
     expect((await admin("POST", "engines/openrouter/remove", ALICE, {})).body).toMatchObject({ code: "catalog_engine" });
-    expect((await admin("POST", "engines/ghost/remove", ALICE, {})).status).toBe(404);
+    expect((await admin("POST", "engines/ghost/remove", ALICE, {})).body).toMatchObject({ code: "engine_not_found" });
     expect((await admin("POST", "engines/spare/key/remove", ALICE, {})).body).toMatchObject({ code: "engine_takes_no_key" });
     expect((await admin("POST", "engines/openrouter/key", ALICE, {})).body).toMatchObject({ code: "bad_request" });
     expect((await admin("GET", "engines", ALICE)).body.engines).toEqual(before);
@@ -727,7 +728,9 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     const during = (await admin("GET", "settings", ALICE)).body.policies;
     expect(during.allowedEngines).toEqual(stored.allowedEngines);
     expect(during.disabledModels).toEqual(stored.disabledModels);
-    expect((await api("GET", "/api/config", alice)).body.allowedEngines).not.toContain("openrouter");
+    // the app's list stays the stored one; the hidden provider rides beside it
+    expect((await api("GET", "/api/config", alice)).body.allowedEngines).toContain("openrouter");
+    expect((await api("GET", "/api/config", alice)).body.hiddenEngines).toEqual(["openrouter"]);
     expect((await admin("POST", "engines/openrouter/restore", ALICE, {})).body).toMatchObject({ ok: true, hidden: false });
     const after = (await admin("GET", "settings", ALICE)).body.policies;
     expect(after.allowedEngines).toEqual(stored.allowedEngines);
@@ -740,7 +743,9 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     expect(removed.status, removed.text).toBe(200);
     expect(removed.body.ok).toBe(true);
     expect(removed.body.engines.map((engine: { id: string }) => engine.id)).not.toContain("spare");
-    expect((await admin("POST", "engines/spare/remove", ALICE, {})).status).toBe(404);
+    // a stale row: its own code, never the not_found a console reads as "update Sagax"
+    const again = await admin("POST", "engines/spare/remove", ALICE, {});
+    expect([again.status, again.body.code]).toEqual([404, "engine_not_found"]);
 
     // the key: in no answer, no audit row and no line of the server's log
     const saved = await admin("POST", "engines/openrouter/key", ALICE, { key: KEY });
@@ -756,6 +761,74 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
       expect(log).not.toContain(secret);
     }
   });
+
+  it("C5: hiding a provider is for new choices only: a bot on it keeps its engine and model and runs a turn there, restoring moves nothing, another bot cannot pick it while hidden (D-20261126-018, #5351)", async () => {
+    const alice = await signIn(ALICE);
+    // GET engines lists the ids GET capabilities lists, less the voice and image rows, in the same order
+    const caps = (await admin("GET", "capabilities", ALICE)).body.engines as Array<{ id: string; voice?: boolean; image?: boolean }>;
+    const listed = (await admin("GET", "engines", ALICE)).body.engines as Array<{ id: string }>;
+    expect(listed.map((engine) => engine.id)).toEqual(caps.filter((engine) => !engine.voice && !engine.image).map((engine) => engine.id));
+    expect(listed.map((engine) => engine.id)).toEqual(expect.arrayContaining(["claude", "hold", "openrouter"]));
+
+    type Bot = { id: string; modelSelection: Record<string, unknown> };
+    const selectionOf = async (id: string) => ((await api("GET", "/api/bots", alice)).body.bots as Bot[]).find((bot) => bot.id === id)!.modelSelection;
+    const moveLines = async () => ((await api("GET", `/api/threads/${bots.atlas!.threadId}/messages?limit=200`, alice)).body.messages as Array<{ tool?: { engineMove?: unknown } }>)
+      .filter((message) => message.tool?.engineMove).length;
+    const atlasTurns = async () => ((await admin("GET", "usage", ALICE)).body.rows as Array<{ botId: string; engine: string; turns: number }>)
+      .filter((row) => row.botId === bots.atlas!.id && row.engine === "claude").reduce((sum, row) => sum + row.turns, 0);
+    // Atlas runs on claude, pinned; Comet, another of Alice's bots, on hold
+    const comet = await createBot(alice, "Comet", "hold");
+    const atlasBefore = await selectionOf(bots.atlas!.id);
+    expect(atlasBefore).toMatchObject({ instanceId: "claude", model: "fake-model" });
+    expect(atlasBefore.auto).toBeUndefined();
+    const linesBefore = await moveLines();
+    const turnsBefore = await atlasTurns();
+
+    const hid = await admin("POST", "engines/claude/hide", ALICE, {});
+    try {
+      expect(hid.status, hid.text).toBe(200);
+      expect(hid.body).toMatchObject({ ok: true, hidden: true });
+      expect(hid.body.moved).toBeUndefined();
+      // the app's menus leave it out for a new choice; the stored list is untouched
+      const shown = (await api("GET", "/api/config", alice)).body;
+      expect(shown.hiddenEngines).toEqual(["claude"]);
+      expect(shown.allowedEngines).toBeNull();
+      // still in the app's engines, so Atlas's own menu can name its model in use
+      expect(((await api("GET", "/api/instances", alice)).body.instances as Array<{ instanceId: string }>).map((row) => row.instanceId)).toContain("claude");
+
+      // Atlas: the same engine and model, not on Auto, no line in its conversation
+      expect(await selectionOf(bots.atlas!.id)).toEqual(atlasBefore);
+      expect(await moveLines()).toBe(linesBefore);
+      // its own choice on it stays writable
+      const own = await api("PATCH", `/api/bots/${bots.atlas!.id}/tasks/${bots.atlas!.threadId}`, alice, { modelSelection: { instanceId: "claude", model: "fake-model" }, updateBotDefault: true });
+      expect(own.status, own.text).toBe(200);
+      // and it runs a turn there
+      const sent = await api("POST", `/api/bots/${bots.atlas!.id}/messages`, alice, { text: "still on claude while it is hidden", threadId: bots.atlas!.threadId });
+      expect(sent.status, sent.text).toBe(202);
+      await waitFor(async () => (await atlasTurns()) > turnsBefore, 30_000);
+      expect(await selectionOf(bots.atlas!.id)).toEqual(atlasBefore);
+
+      // another bot cannot pick it while it is hidden: by name, for its conversation, from the console
+      const byName = await api("PATCH", `/api/bots/${comet.id}`, alice, { modelSelection: { instanceId: "claude", model: "fake-model" } });
+      expect(byName.status, byName.text).toBe(403);
+      const forThread = await api("PATCH", `/api/bots/${comet.id}/tasks/${comet.threadId}`, alice, { modelSelection: { instanceId: "claude", model: "fake-model" }, updateBotDefault: true });
+      expect(forThread.status, forThread.text).toBe(403);
+      expect((await admin("POST", `bots/${comet.id}/model`, ALICE, { engineInstanceId: "claude", model: null })).body.code).toBe("engine_not_allowed");
+      expect(await selectionOf(comet.id)).toMatchObject({ instanceId: "hold", model: "fake-model" });
+    } finally {
+      const back = await admin("POST", "engines/claude/restore", ALICE, {});
+      expect(back.status, back.text).toBe(200);
+      expect(back.body.moved).toBeUndefined();
+    }
+    // restored: nothing of Atlas moved, back or forth
+    expect(await selectionOf(bots.atlas!.id)).toEqual(atlasBefore);
+    expect(await moveLines()).toBe(linesBefore);
+    expect((await api("GET", "/api/config", alice)).body.hiddenEngines).toEqual([]);
+    // and it is a choice again for Comet
+    const picked = await api("PATCH", `/api/bots/${comet.id}`, alice, { modelSelection: { instanceId: "claude", model: "fake-model" } });
+    expect(picked.status, picked.text).toBe(200);
+    expect(await selectionOf(comet.id)).toMatchObject({ instanceId: "claude", model: "fake-model" });
+  }, 60_000);
 
   it("C5: the vault export policy (2026-10-18), and a pairing code is no recent sign-in", async () => {
     // on by default; the console and Settings > Organization both carry it

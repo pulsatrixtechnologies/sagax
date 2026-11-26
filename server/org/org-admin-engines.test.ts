@@ -9,7 +9,7 @@ const base = { kind: "cloud" as const, installed: true, auth: "oauth" as const, 
 const UUID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 const FAKE_KEY = "test-key-not-a-real-one";
 
-function setup(options: { hosted?: boolean; busy?: boolean } = {}) {
+function setup(options: { hosted?: boolean; busy?: boolean; gone?: boolean } = {}) {
   const removed: string[] = [];
   const keys = new Map<string, string>();
   const hidden = new Set<string>();
@@ -23,6 +23,8 @@ function setup(options: { hosted?: boolean; busy?: boolean } = {}) {
     refusal: () => (options.hosted ? "Provider settings are managed for this workspace." : null),
     remove: async (id) => {
       if (options.busy) return { ok: false, status: 409, body: { error: "provider settings are already being updated" } };
+      // another admin removed it between the list and this call
+      if (options.gone) return { ok: false, status: 404, body: { error: "not found", code: "not_found" } };
       removed.push(id);
       return { ok: true, moved: [{ botId: "b1", to: "claude" }] };
     },
@@ -92,7 +94,7 @@ describe("engines", () => {
     const { console, removed } = setup();
     expect(await console.call("POST", "engines/claude/remove")).toMatchObject({ status: 400, body: { code: "catalog_engine" } });
     expect(await console.call("POST", "engines/claudeApi/remove")).toMatchObject({ status: 400, body: { code: "catalog_engine" } });
-    expect((await console.call("POST", "engines/ghost/remove")).status).toBe(404);
+    expect(await console.call("POST", "engines/ghost/remove")).toMatchObject({ status: 404, body: { code: "engine_not_found" } });
     expect(removed).toEqual([]);
     expect(console.records).toEqual([]);
   });
@@ -112,7 +114,8 @@ describe("engines", () => {
   it("key: refused on an engine that takes none, on a bad body, on an empty key, on a bad shape", async () => {
     const { console, keys } = setup();
     expect(await console.call("POST", "engines/claude/key", { body: { key: FAKE_KEY } })).toMatchObject({ status: 400, body: { code: "engine_takes_no_key" } });
-    expect((await console.call("POST", "engines/ghost/key", { body: { key: FAKE_KEY } })).status).toBe(404);
+    expect(await console.call("POST", "engines/ghost/key", { body: { key: FAKE_KEY } })).toMatchObject({ status: 404, body: { code: "engine_not_found" } });
+    expect(await console.call("POST", "engines/ghost/key/remove")).toMatchObject({ status: 404, body: { code: "engine_not_found" } });
     expect((await console.call("POST", "engines/claudeApi/key", { body: { key: FAKE_KEY, extra: 1 } })).status).toBe(400);
     expect((await console.call("POST", "engines/claudeApi/key", { body: { key: "  " } })).status).toBe(400);
     expect(await console.call("POST", "engines/claudeApi/key", { body: { key: "short" } })).toMatchObject({ status: 400, body: { code: "bad_request" } });
@@ -131,9 +134,20 @@ describe("engines", () => {
     expect(console.records.at(-1)).toMatchObject({ action: "engines.key.remove", target: { kind: "engine", id: "claudeApi" } });
   });
 
-  it("a workspace whose provider settings are managed refuses every write, still lists", async () => {
+  it("a workspace whose provider settings are managed refuses every write, still lists, and its rows offer no removal and no key", async () => {
     const { console, removed, keys } = setup({ hosted: true });
-    expect((await console.call("GET", "engines")).status).toBe(200);
+    const listed = await console.call("GET", "engines");
+    expect(listed.status).toBe(200);
+    // what the server would refuse is not offered: the console draws no button that cannot work
+    expect(listed.body.engines.map((row: OrgEngineRow) => [row.id, row.removable, row.takesKey])).toEqual([
+      ["claude", false, false],
+      [`claude-${UUID}`, false, false],
+      ["claudeApi", false, false],
+    ]);
+    // hiding stays open there, like allowedEngines, and its answer says the same
+    const hid = await console.call("POST", "engines/claudeApi/hide");
+    expect(hid.status).toBe(200);
+    expect(hid.body.engines.every((row: OrgEngineRow) => !row.removable && !row.takesKey)).toBe(true);
     expect((await console.call("POST", `engines/claude-${UUID}/remove`)).status).toBe(403);
     expect((await console.call("POST", "engines/claudeApi/key", { body: { key: FAKE_KEY } })).status).toBe(403);
     expect((await console.call("POST", "engines/claudeApi/key/remove")).status).toBe(403);
@@ -145,6 +159,12 @@ describe("engines", () => {
     const { console, removed } = setup({ busy: true });
     expect(await console.call("POST", `engines/claude-${UUID}/remove`)).toMatchObject({ status: 409, body: { code: "conflict", message: "provider settings are already being updated" } });
     expect(removed).toEqual([]);
+    expect(console.records).toEqual([]);
+  });
+
+  it("an account already gone when its removal runs is engine_not_found, never the generic not_found", async () => {
+    const { console } = setup({ gone: true });
+    expect(await console.call("POST", `engines/claude-${UUID}/remove`)).toMatchObject({ status: 404, body: { code: "engine_not_found" } });
     expect(console.records).toEqual([]);
   });
 
@@ -173,8 +193,8 @@ describe("engines", () => {
   it("hide: an added account is removed, never hidden; an unknown engine is not found; members are refused by the route's role", async () => {
     const { console, hidden } = setup();
     expect(await console.call("POST", `engines/claude-${UUID}/hide`)).toMatchObject({ status: 400, body: { code: "added_engine" } });
-    expect((await console.call("POST", "engines/ghost/hide")).status).toBe(404);
-    expect((await console.call("POST", "engines/ghost/restore")).status).toBe(404);
+    expect(await console.call("POST", "engines/ghost/hide")).toMatchObject({ status: 404, body: { code: "engine_not_found" } });
+    expect(await console.call("POST", "engines/ghost/restore")).toMatchObject({ status: 404, body: { code: "engine_not_found" } });
     expect(hidden.size).toBe(0);
     expect(console.records).toEqual([]);
   });

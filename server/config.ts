@@ -530,8 +530,9 @@ const appConfigSchema = z.object({
      * switched to from the console. Absent means every engine. */
     allowedEngines: z.array(z.string().max(80)).max(100).optional(),
     /** 2026-11-25: catalog engines the organization hid from its list and
-     * from everyone's model menus (Perspicax, Model providers). Off like an
-     * engine left out of `allowedEngines`, which is not changed. */
+     * from everyone's model menus (Perspicax, Model providers), for new
+     * choices only: a bot already on one keeps it (D-20261126-018).
+     * `allowedEngines` is not changed. */
     hiddenEngines: z.array(z.string().max(80)).max(100).optional(),
     /** 2026-10-30: a member may run an engine outside `allowedEngines` on
      * their own subscription or key (the #1098 exception, now the admin's

@@ -171,6 +171,10 @@ function configStatus() {
     // organization server: the model providers its admin allows (null: all);
     // a person's own added accounts are added for them alone (configForPerson, #4435)
     ...(host.IDENTITY.kind === "perspicax" ? { allowedEngines: host.orgAllowedEngines()?.filter((id) => !host.personalProviderInstances.ownerOf(id)) ?? null, ownAccountsOutsideList: host.orgOwnAccountsOutsideList() } : {}),
+    // D-20261126-018: the providers its admin hid, left out of every menu for
+    // a new choice; what already runs on one keeps it (configForPerson adds
+    // a person's own accounts that follow one)
+    ...(host.IDENTITY.kind === "perspicax" ? { hiddenEngines: host.orgHiddenEnginesFor(null) } : {}),
     // 2026-10-30 (lot 2): the models the organization turned off; on a solo
     // server, the installation's own switches (a person's own come with configForPerson)
     ...(host.IDENTITY.kind === "perspicax" ? { disabledModels: host.orgDisabledModels() } : { myDisabledModels: host.personDisabledModels(null) }),

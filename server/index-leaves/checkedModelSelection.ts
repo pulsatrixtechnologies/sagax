@@ -42,8 +42,11 @@ function checkedModelSelection(
     return { ok: false, status: 400, error: `model instance "${selection.instanceId}" is unavailable` };
   }
   // The organization's allowed providers; the engine a bot already runs on
-  // stays writable (its effort) until the fallback moves it.
-  if ((!current || current.selection.instanceId !== selection.instanceId) && host.orgEngineAllowRefusal(selection.instanceId, payer)) {
+  // stays writable (its effort) until the fallback moves it. A provider the
+  // organization hid is refused as a new choice only: a bot already on it
+  // keeps it, its models included (D-20261126-018).
+  if ((!current || current.selection.instanceId !== selection.instanceId)
+    && (host.orgEngineAllowRefusal(selection.instanceId, payer) || host.orgEngineHiddenRefusal(selection.instanceId))) {
     return { ok: false, status: 403, error: host.ORG_ENGINE_NOT_ALLOWED };
   }
   // 2026-10-30 (lot 2): a model turned off is never picked by name (Auto

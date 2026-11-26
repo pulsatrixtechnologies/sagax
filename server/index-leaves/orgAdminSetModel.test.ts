@@ -101,6 +101,34 @@ describe("the console sets a bot's model", () => {
     expect(refusal(() => setModel("b1", { model: "deep", effort: "turbo" }))).toMatchObject({ status: 400, code: "bad_request" });
     expect(patches).toEqual([]);
   });
+
+  it("D-20261126-018: a provider the organization hid is no new choice; a bot already on it keeps it, its models and levels", () => {
+    const { setModel, patches, refusal, host, bot } = setup({ instanceId: "nimbus", model: "deep", effort: "high" });
+    const hidden = new Set<string>();
+    const cirrus = { instanceId: "cirrus", adapter: { capabilities: { effortLevels: [] } }, models: { default: "wisp", options: [{ id: "wisp", label: "Wisp" }] } };
+    const nimbus = (host.registry as { get(id: string): unknown }).get("nimbus");
+    Object.assign(host, {
+      orgEngineHidden: (id: string) => hidden.has(id),
+      orgEngineHiddenRefusal: (id: string) => (hidden.has(id) ? "Your organization does not allow this model provider." : undefined),
+      registry: { get: (id: string) => (id === "nimbus" ? nimbus : id === "cirrus" ? cirrus : undefined), entries: () => [{ instanceId: "nimbus" }, { instanceId: "cirrus" }] },
+      engineInstalled: (id: string) => id === "nimbus" || id === "cirrus",
+    });
+    hidden.add("nimbus");
+    // the bot on it: another of its models, then a level, as before
+    setModel("b1", { model: "light" });
+    setModel("b1", { model: "deep", effort: "xhigh" });
+    expect(bot.modelSelection).toEqual({ instanceId: "nimbus", model: "deep", effort: "xhigh" });
+    // a bot elsewhere cannot move onto it while it is hidden
+    setModel("b1", { engineInstanceId: "cirrus", model: null });
+    expect(bot.modelSelection).toEqual({ instanceId: "cirrus", model: "wisp" });
+    const count = patches.length;
+    expect(refusal(() => setModel("b1", { engineInstanceId: "nimbus", model: "deep" }))).toMatchObject({ status: 400, code: "engine_not_allowed" });
+    expect(patches.length).toBe(count);
+    // restored: a choice again
+    hidden.delete("nimbus");
+    setModel("b1", { engineInstanceId: "nimbus", model: "deep" });
+    expect(bot.modelSelection).toEqual({ instanceId: "nimbus", model: "deep" });
+  });
 });
 
 describe("a console bot row says its reasoning", () => {

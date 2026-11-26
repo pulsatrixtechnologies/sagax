@@ -989,6 +989,16 @@ a person's own account or server.
 - `hideable`: `POST engines/{id}/hide` takes it (a catalog engine).
   `hidden`: the organization hid it. A hidden engine is still listed here,
   so the console can offer it back.
+- The ids are those of `GET capabilities` `engines`, less the voice and
+  image rows.
+- A workspace whose provider settings are managed for it refuses removals
+  and keys (below): its rows say `removable: false` and `takesKey: false`,
+  so the console offers neither.
+
+An engine that is not here (an unknown id, or an account another admin
+already removed) answers `404 engine_not_found` on every write below, never
+the generic `not_found`, which a console reads as a route this server does
+not have yet.
 
 ### `POST engines/{id}/remove`
 
@@ -1006,8 +1016,9 @@ with no organization key is `400 engine_takes_no_key`; a key of another
 shape is `400 bad_request`. Audited
 `engines.key.set` and `engines.key.remove`.
 
-A workspace whose provider settings are managed for it answers `403` to
-these three writes.
+A workspace whose provider settings are managed for it answers
+`403 forbidden` to these three writes. `409 conflict`: the provider
+settings are already being updated; try again.
 
 ### `POST engines/{id}/hide`, `POST engines/{id}/restore` (2026-11-25)
 
@@ -1017,11 +1028,14 @@ it back as it was. Stored as `organization.hiddenEngines`; `allowedEngines`
 and `disabledModels` are not changed, so what was allowed and the models
 that were on come back with it.
 
-A hidden engine is off exactly like one left out of `allowedEngines`: the
-app's `allowedEngines` no longer names it, a model on it is refused, Auto
-never picks it, and a bot that was on it moves to Auto on an allowed engine
-with one line in its conversation. Restoring the engine does not move that
-bot back.
+Hidden is for new choices only (D-20261126-018). The app reads the list in
+its config (`hiddenEngines`) and leaves the engine out of every menu, New
+bot, backups and Settings; a model on it is refused when picked by name for
+a bot or conversation that is not on it; a new bot never starts on it; Auto
+and a limit failover never pick it for a bot whose own engine it is not.
+A bot or conversation already on it keeps its engine and model, runs its
+turns there and still shows it as its model in use in its own menu. Neither
+`hide` nor `restore` moves a bot: nothing to count, nothing to put back.
 
 Answers `{ "ok": true, "hidden", "engines" }`; hiding a hidden engine or
 restoring a shown one changes nothing. An added account is

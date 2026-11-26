@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowedFallbackSelection, effectiveAllowedEngines, engineAllowed } from "./org-allowed-engines.ts";
+import { allowedFallbackSelection, engineAllowed } from "./org-allowed-engines.ts";
 
 const engines = [
   { instanceId: "claude", installed: true, defaultModel: "claude-opus-5-5" },
@@ -40,25 +40,5 @@ describe("the organization's allowed model providers", () => {
 
   it("keeps the model when no allowed engine can take the bot", () => {
     expect(allowedFallbackSelection({ instanceId: "codex", model: "gpt-5.6" }, ["grok"], engines)).toBeNull();
-  });
-});
-
-describe("effectiveAllowedEngines (hidden providers, 2026-11-25)", () => {
-  const all = ["claude", "codex", "cursor"];
-  it("nothing hidden: the organization's list as it is, null included", () => {
-    expect(effectiveAllowedEngines(null, [], all)).toBeNull();
-    expect(effectiveAllowedEngines(null, undefined, all)).toBeNull();
-    expect(effectiveAllowedEngines(["claude"], [], all)).toEqual(["claude"]);
-  });
-  it("a hidden engine leaves the list like one turned off; every engine becomes every engine but it", () => {
-    expect(effectiveAllowedEngines(null, ["cursor"], all)).toEqual(["claude", "codex"]);
-    expect(effectiveAllowedEngines(["claude", "cursor"], ["cursor"], all)).toEqual(["claude"]);
-    expect(engineAllowed(effectiveAllowedEngines(null, ["cursor"], all), "cursor")).toBe(false);
-  });
-  it("the stored list is never changed: restoring gives back what was allowed", () => {
-    const stored = ["claude", "cursor"];
-    effectiveAllowedEngines(stored, ["cursor"], all);
-    expect(stored).toEqual(["claude", "cursor"]);
-    expect(effectiveAllowedEngines(stored, [], all)).toEqual(["claude", "cursor"]);
   });
 });

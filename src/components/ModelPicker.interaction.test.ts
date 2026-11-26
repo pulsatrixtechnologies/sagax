@@ -661,6 +661,26 @@ describe("the composer's model menu (2026-10-12)", () => {
     const opened = open(bot("claude", "claude-opus-5-5"), composer);
     expect(lists(opened)[0]!.props.sections.map((section) => section.key)).toEqual(["top", "anthropic", "openai"]);
   });
+
+  it("D-20261126-018: a provider the organization hid stays in the menu of a bot already on it, as its model in use, and in no other bot's", () => {
+    fixture.org = { org: { name: "Example", identity: { kind: "perspicax", issuer: "https://px.example.test" } }, link: { state: "ok" }, viewerRole: "member", settings: {} };
+    const facts = (instanceId: string) => ({ instanceId, driver: "x", displayName: instanceId, installed: true,
+      subscription: { supported: true, signedIn: true }, myKey: false, orgKey: false, myTurns: "subscription" });
+    fixture.myEngines = [facts("claude"), facts("codex")];
+    fixture.instances = [signedIn(), codex];
+    fixture.config = { allowedEngines: null, hiddenEngines: ["claude"] };
+    // the bot on the hidden provider: its model is still there, checked
+    const onIt = open(bot("claude", "claude-opus-5-5"), composer);
+    expect(listed(onIt)).toEqual(expect.arrayContaining(["anthropic", "openai"]));
+    expect(row(onIt, "claude-opus-5-5")?.props).toMatchObject({ kind: "model", modelId: "claude-opus-5-5" });
+    // another bot cannot choose it while it is hidden
+    fixture.values = [];
+    fixture.own = 0;
+    const other = open(bot("codex", "gpt-5.6"), composer);
+    expect(listed(other)).not.toContain("anthropic");
+    expect(row(other, "claude-opus-5-5")).toBeUndefined();
+    expect(row(other, "gpt-5.6")?.props).toMatchObject({ kind: "model", modelId: "gpt-5.6" });
+  });
 });
 
 describe("the models window (windowOnly, #2963)", () => {

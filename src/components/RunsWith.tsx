@@ -80,10 +80,15 @@ export function pickBotHarness(dispatch: ReturnType<typeof useStore>["dispatch"]
  * the engines offered here that may run its model. No state of its own:
  * the bot is the state. */
 export function useBotsRunsWith(): (bot: Pick<Bot, "id" | "modelSelection" | "harness">) => RunsWithChoice[] {
-  const { dispatch } = useStore();
-  const instances = useOfferedInstances();
+  const { state, dispatch } = useStore();
+  // each bot keeps its own engine, even one the organization hid (D-20261126-018)
+  const hidden = state.config?.hiddenEngines;
+  const instances = useOfferedInstances("pick", hidden);
   const place = usePlace();
-  return (bot) => botRunsWith({ instances, place, selection: bot.modelSelection, chosen: bot.harness, onPick: pickBotHarness(dispatch, bot.id) });
+  return (bot) => botRunsWith({
+    instances: hidden?.length ? instances.filter((instance) => !hidden.includes(instance.instanceId) || instance.instanceId === bot.modelSelection.instanceId) : instances,
+    place, selection: bot.modelSelection, chosen: bot.harness, onPick: pickBotHarness(dispatch, bot.id),
+  });
 }
 
 /** The person's default per provider ("Runs with" on a provider's page),

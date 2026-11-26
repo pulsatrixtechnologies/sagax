@@ -16,10 +16,10 @@
 //   instanceConfigs: the subscription engines and the key engines). It is
 //   never deleted: `hide` takes it out of the organization's list and of
 //   everyone's model menus, `restore` puts it back with what it had
-//   (owner decision of 2026-11-25). A hidden engine is off exactly like one
-//   left out of `allowedEngines` (shared/org-allowed-engines.ts
-//   effectiveAllowedEngines); the stored list and the models turned off are
-//   not touched.
+//   (owner decision of 2026-11-25). Hidden is for new choices only
+//   (D-20261126-018): a bot already on it keeps its engine and model and
+//   runs on it, and neither `hide` nor `restore` moves a bot. The stored
+//   `allowedEngines` and the models turned off are not touched.
 // - `added`: an account added beside a provider's first one
 //   (shared/added-account.ts addedAccount). `remove` takes it away through
 //   the removal the instance routes use, its bots moved first.
@@ -28,10 +28,16 @@
 // `takesKey` says the engine has one place for it in the server's
 // configuration, `orgKey` that it is set. The key is never answered, never
 // logged and never written in the audit row.
+//
+// A workspace whose provider settings are managed for it refuses `remove`,
+// `key` and `key/remove`: its rows say `removable: false` and `takesKey:
+// false`, so the console offers neither. An engine that is not (or no
+// longer) here answers `404 engine_not_found`, never the generic
+// `not_found` a console reads as a route this server does not have.
 import { addedAccount } from "../../shared/added-account.ts";
 import { engineKeyTarget } from "../engines/engine-api-keys.ts";
 import type { AdminEngine } from "./org-admin-routes.ts";
-import { badRequest, fail, notFound, objectBody, ok, onlyKeys, type ConsoleAnswer, type ConsoleContext, type ConsoleRoute } from "./org-admin-console.ts";
+import { badRequest, fail, objectBody, ok, onlyKeys, type ConsoleAnswer, type ConsoleContext, type ConsoleRoute } from "./org-admin-console.ts";
 
 export interface OrgEngineRow {
   id: string;
@@ -46,7 +52,8 @@ export interface OrgEngineRow {
   removable: boolean;
   /** `POST engines/{id}/key` takes a key for it. */
   takesKey: boolean;
-  /** The organization hid it: off for everyone, back with `restore`. */
+  /** The organization hid it: in no menu for a new choice, back with
+   * `restore`; a bot already on it keeps it. */
   hidden: boolean;
   /** `POST engines/{id}/hide` takes it (a catalog engine). */
   hideable: boolean;
@@ -90,18 +97,28 @@ export interface EnginesDeps {
   /** Saves (or, with an empty key, clears) the organization's key. */
   setKey(id: string, key: string): Promise<EngineKeySaved>;
   /** Hides a catalog engine from the organization, or puts it back. The
-   * list of allowed engines and the models turned off stay as they are. */
+   * list of allowed engines, the models turned off and every bot stay as
+   * they are. */
   setHidden(id: string, hidden: boolean): void;
 }
 
+/** An engine that is not here: its own code, never the generic `not_found`
+ * a console reads as a route this server does not have yet. */
+const engineNotFound = (): ConsoleAnswer => fail(404, "engine_not_found", "No such engine.");
+
 const refused = (status: number, message: string, code?: string): ConsoleAnswer =>
-  fail(status, code ?? (status === 409 ? "conflict" : status === 404 ? "not_found" : status === 403 ? "forbidden" : status === 400 ? "bad_request" : "error"), message);
+  status === 404 ? engineNotFound()
+    : fail(status, code ?? (status === 409 ? "conflict" : status === 403 ? "forbidden" : status === 400 ? "bad_request" : "error"), message);
 
 export function enginesRoutes(deps: EnginesDeps): ConsoleRoute[] {
+  // A managed workspace takes no removal and no key: its rows offer neither.
+  const rows = (): OrgEngineRow[] => (deps.refusal()
+    ? deps.engines().map((row) => ({ ...row, removable: false, takesKey: false }))
+    : deps.engines());
   const rowOf = (ctx: ConsoleContext): OrgEngineRow | ConsoleAnswer => {
     const managed = deps.refusal();
     if (managed) return fail(403, "forbidden", managed);
-    return deps.engines().find((row) => row.id === ctx.params.id) ?? notFound("No such engine.");
+    return deps.engines().find((row) => row.id === ctx.params.id) ?? engineNotFound();
   };
   const isRow = (value: OrgEngineRow | ConsoleAnswer): value is OrgEngineRow => typeof (value as OrgEngineRow).source === "string";
   const saveKey = async (ctx: ConsoleContext, key: string): Promise<ConsoleAnswer> => {
@@ -111,19 +128,19 @@ export function enginesRoutes(deps: EnginesDeps): ConsoleRoute[] {
     const saved = await deps.setKey(row.id, key);
     if (!saved.ok) return refused(saved.status, saved.error, saved.code);
     ctx.record({ category: "engine", action: key ? "engines.key.set" : "engines.key.remove", target: { kind: "engine", id: row.id, name: row.name }, before: { orgKey: row.orgKey }, after: { orgKey: saved.configured } });
-    return ok({ configured: saved.configured, engines: deps.engines() });
+    return ok({ configured: saved.configured, engines: rows() });
   };
   // As `allowedEngines` in POST settings: the organization's own choice of
   // what it offers, so a managed workspace takes it too.
   const setHidden = (ctx: ConsoleContext, hidden: boolean): ConsoleAnswer => {
     const row = deps.engines().find((candidate) => candidate.id === ctx.params.id);
-    if (!row) return notFound("No such engine.");
+    if (!row) return engineNotFound();
     if (!row.hideable) return fail(400, "added_engine", "This is an added account. Remove it instead.");
     if (row.hidden !== hidden) {
       deps.setHidden(row.id, hidden);
       ctx.record({ category: "engine", action: hidden ? "engines.hide" : "engines.restore", target: { kind: "engine", id: row.id, name: row.name }, before: { hidden: row.hidden }, after: { hidden } });
     }
-    return ok({ ok: true, hidden, engines: deps.engines() });
+    return ok({ ok: true, hidden, engines: rows() });
   };
   return [
     {
@@ -131,7 +148,7 @@ export function enginesRoutes(deps: EnginesDeps): ConsoleRoute[] {
       path: "engines",
       min: "admin",
       handle() {
-        return ok({ engines: deps.engines() });
+        return ok({ engines: rows() });
       },
     },
     {
@@ -145,7 +162,7 @@ export function enginesRoutes(deps: EnginesDeps): ConsoleRoute[] {
         const removed = await deps.remove(row.id);
         if (!removed.ok) return refused(removed.status, removed.body.error, removed.body.code);
         ctx.record({ category: "engine", action: "engines.remove", target: { kind: "engine", id: row.id, name: row.name } });
-        return ok({ ok: true, ...(removed.moved !== undefined ? { moved: removed.moved } : {}), ...(removed.noEngine !== undefined ? { noEngine: removed.noEngine } : {}), engines: deps.engines() });
+        return ok({ ok: true, ...(removed.moved !== undefined ? { moved: removed.moved } : {}), ...(removed.noEngine !== undefined ? { noEngine: removed.noEngine } : {}), engines: rows() });
       },
     },
     {

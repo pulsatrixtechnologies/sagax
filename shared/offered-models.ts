@@ -121,8 +121,10 @@ export function offeredModels<T extends { instanceId: string; models: ModelsOf }
   context: EngineOfferContext,
   switches: ModelSwitches | null | undefined,
   purpose: "pick" | "settings" = "pick",
+  /** A hidden provider kept (shared/offered-engines.ts `keep`). */
+  keep?: string | readonly string[],
 ): T[] {
-  const engines = offeredEngines(instances, context, purpose);
+  const engines = offeredEngines(instances, context, purpose, keep);
   if (purpose === "settings" || (!switches?.org?.length && !switches?.mine?.length)) return engines;
   const out: T[] = [];
   for (const instance of engines) {

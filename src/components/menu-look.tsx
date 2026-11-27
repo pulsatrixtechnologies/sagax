@@ -86,17 +86,31 @@ export type MenuPoint = { left: number; top: number; right?: boolean };
  * from each edge. A menu sizes to its content (MENU_FIT), so a long name or
  * a French label makes it wider than its 228px floor: placing it with a
  * guessed width let it run past the window's right edge and cut its text.
- * Runs after every render, before paint (the rows change with the locale,
- * permissions and the page shown), and again when the window resizes. */
+ * Near the bottom it opens upward when that side has more room; near the
+ * right edge it stays left of the point (`right: true` keeps the menu's
+ * right edge on the point). Runs after every render, before paint (the rows
+ * change with the locale, permissions and the page shown), and again when
+ * the window resizes. */
 export function useMenuInWindow(ref: RefObject<HTMLElement | null>, at: MenuPoint | null | undefined | false): void {
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element || !at) return;
     const place = () => {
       const { width, height } = element.getBoundingClientRect();
+      const edge = 8;
+      const viewW = window.innerWidth;
+      const viewH = window.innerHeight;
+      const roomBelow = viewH - at.top - edge;
+      const roomAbove = at.top - edge;
+      const flipUp = height > roomBelow && roomAbove > roomBelow;
+      const top = flipUp
+        ? Math.max(edge, at.top - height)
+        : Math.max(edge, Math.min(at.top, viewH - height - edge));
       const left = at.right ? at.left - width : at.left;
-      element.style.top = `${Math.max(8, Math.min(at.top, window.innerHeight - height - 8))}px`;
-      element.style.left = `${Math.max(8, Math.min(left, window.innerWidth - width - 8))}px`;
+      element.style.top = `${top}px`;
+      element.style.left = `${Math.max(edge, Math.min(left, viewW - width - edge))}px`;
+      if (flipUp) element.setAttribute("data-menu-flipped", "");
+      else element.removeAttribute("data-menu-flipped");
     };
     place();
     window.addEventListener("resize", place);

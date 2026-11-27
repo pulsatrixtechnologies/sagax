@@ -10,9 +10,10 @@ export { waitingSources } from "./../../lib/activity-waiting-sources.ts";
 // the conversation's own approval and question cards); then the body. Wide
 // (WIDE_PX): the summary at the left (a failed run's note, its access card,
 // the sub-agents with the waiting one first, the facts folded under
-// Details, and the composer at the bottom) and the Steps (grouped,
-// ActivityStepGroups) or the live Conversation at the right. Narrow: one
-// column with a Summary view, the composer under it.
+// Details) and the Steps (grouped, ActivityStepGroups) or the live
+// Conversation at the right. Narrow: one column with a Summary view.
+// Writing goes through "Open <bot>'s chat" only (D-20261127-005): no steer
+// composer in this panel.
 //
 // The server decides what this person may read (server/routes/bot-activity.ts):
 // a routine run seen without its thread comes with no steps and no thread.
@@ -45,7 +46,6 @@ import { useWaitingNotPinned, WaitingOnYou, waitingKind, type WaitingNote } from
 import { StepBoundary, stepFallbackText } from "../MessageBoundary";
 import { ActivityStepGroups } from "../task/ActivityStepGroups";
 import { SubagentList } from "../task/SubagentList";
-import { TaskComposer } from "../task/TaskComposer";
 import { TaskFacts, taskFacts } from "../task/TaskFacts";
 
 const POLL_MS = 3_000;
@@ -79,7 +79,7 @@ const VIEW_KEYS = {
 const NO_BOT = () => undefined;
 
 /** The body, without fetching: tests and galleries render it with a fixed detail. */
-export function ActivityDetailBody({ item, detail, error, now, engineName, onStop, onOpenThread, onOpenChild, onSteer, stopping = false, viewer, onSignIn, wide = true, renderConversation, onBack, backLabel, initialView, bot, botFor = NO_BOT, waiting = [], factsOpen = false }: {
+export function ActivityDetailBody({ item, detail, error, now, engineName, onStop, onOpenThread, onOpenChild, stopping = false, viewer, onSignIn, wide = true, renderConversation, onBack, backLabel, initialView, bot, botFor = NO_BOT, waiting = [], factsOpen = false }: {
   item: BotActivityItem;
   /** Who reads the access card of a refused run (the server already sent
    * it to its audience only). */
@@ -92,8 +92,6 @@ export function ActivityDetailBody({ item, detail, error, now, engineName, onSto
   onStop: () => void;
   onOpenThread: (botId: string, threadId: string) => void;
   onOpenChild: (child: BotActivityItem) => void;
-  /** Send a message into this running task (it joins the work in progress). */
-  onSteer?: (text: string) => Promise<void>;
   stopping?: boolean;
   /** Two columns (summary | steps) rather than one with a Summary view. */
   wide?: boolean;
@@ -219,10 +217,6 @@ export function ActivityDetailBody({ item, detail, error, now, engineName, onSto
     </div>
   );
 
-  const composer = running && detail?.canStop && detail.threadId && onSteer
-    ? <div className="shrink-0 px-5 pb-4 pt-2"><TaskComposer key={detail.id} onSend={onSteer} /></div>
-    : null;
-
   const steps = detail && (
     detail.steps.length === 0
       ? <p className="text-[12.5px] text-ink-secondary">{t("botPanel.activity.stepsEmpty")}</p>
@@ -273,7 +267,6 @@ export function ActivityDetailBody({ item, detail, error, now, engineName, onSto
         <div className="flex min-h-0 min-w-0 flex-1 border-t border-hairline-weak">
           <div data-activity-summary className="flex min-h-0 w-[340px] shrink-0 flex-col border-r border-hairline-weak">
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-4 pt-4">{summary}</div>
-            {composer}
           </div>
           <div data-activity-detail-right className="flex min-h-0 min-w-0 flex-1 flex-col pt-2">
             {tabs}
@@ -293,7 +286,6 @@ export function ActivityDetailBody({ item, detail, error, now, engineName, onSto
           {summary}
         </div>
       ) : panel}
-      {view !== "conversation" && composer}
     </div>
   );
 }
@@ -385,14 +377,6 @@ export function ActivityDetailPane({ item, wide, onClose, onChanged, onBack }: {
         if (!child.threadId) return;
         setParents((list) => [...list, current]);
         setCurrent(child);
-      }}
-      onSteer={async (text) => {
-        if (!detail?.threadId) return;
-        await api(`/api/bots/${detail.botId}/messages`, {
-          method: "POST",
-          body: JSON.stringify({ text, threadId: detail.threadId, busyMode: "steer", sendId: crypto.randomUUID() }),
-        });
-        void load();
       }}
       stopping={stopping}
       viewer={{ principalId: state.config?.viewer?.principalId ?? null, admin: state.config?.viewer?.role === "admin" || state.config?.viewer?.role === "owner" }}

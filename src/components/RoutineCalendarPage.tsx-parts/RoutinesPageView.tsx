@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { DetailPanel } from "@/components/DetailPanel";
+import { RoutinePanelPage } from "@/components/bot-settings/RoutinePanelPage";
 import { CalendarSidebar } from "@/components/routines/CalendarSidebar";
 import { RightRailStrip } from "@/components/RightRail";
 import { RoutineMenuPortal, routineRowActions, RoutineRowMenuItems } from "@/components/routines/RoutineRowMenu";
@@ -260,15 +261,50 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
       </div>
 
       {quick && <QuickComposer seed={quick} bots={visibleBots} routinesOnly={routinesOnly} onClose={() => setQuick(null)} onMore={(seed: EventSeed) => { setQuick(null); setSelected(null); setEditor(seed); }} onSavedRoutine={(routine: Routine) => dispatch({ type: "routinePatched", routine })} onSavedCall={upsertCall} />}
-      {/* 2026-11-01 (no modals): the editor and an event's details share
-          the one right detail panel (DetailPanel.tsx); the editor
-          opened from the details goes back to them when it closes. */}
+      {/* 2026-11-01 (no modals): new/copy editors and calendar calls share
+          the right detail panel. An existing routine opens the same
+          RoutinePanelPage as the bot chat (D-20261127-005). */}
       {editor && (
         <DetailPanel bare label={editor.routine || editor.call ? t("routineCalendar.editEventAria") : t("routineCalendar.createEventAria")} onClose={() => setEditor(null)} data-calendar-editor-panel="">
           <EventEditor key={`${editor.kind}:${editor.routine?.id ?? editor.call?.id ?? editor.copyOf?.id ?? "new"}`} seed={editor} bots={visibleBots} routinesOnly={routinesOnly} presentation="panel" onClose={() => setEditor(null)} onDismiss={() => { setEditor(null); setSelected(null); }} onDeleted={() => { setEditor(null); setSelected(null); }} onDuplicate={duplicateRoutine} onSavedCall={upsertCall} />
         </DetailPanel>
       )}
-      {!editor && liveSelected && <EventDetails key={`${liveSelected.kind}:${liveSelected.id}`} item={liveSelected} bots={state.bots} onClose={() => setSelected(null)} onEdit={(mode: "edit" | "view" = "edit") => { const seed: EventSeed = liveSelected.kind === "call" ? { kind: "call", at: liveSelected.at, durationMinutes: liveSelected.call.durationMinutes, botIds: liveSelected.call.botIds, call: liveSelected.call } : { kind: "routine", at: liveSelected.at, durationMinutes: liveSelected.routine?.durationMinutes ?? liveSelected.run?.durationMinutes ?? 30, botIds: [liveSelected.routine?.botId ?? liveSelected.run?.botId ?? ""].filter(Boolean), routine: liveSelected.routine ?? undefined, mode }; setEditor(seed); }} onCallChanged={(id?: string) => { if (id) setCalls((current) => current.filter((call) => call.id !== id)); else void loadCalls(); }} onOpenRoom={onOpenRoom} />}
+      {!editor && liveSelected?.kind === "call" && (
+        <EventDetails
+          key={`call:${liveSelected.id}`}
+          item={liveSelected}
+          bots={state.bots}
+          onClose={() => setSelected(null)}
+          onEdit={() => {
+            setEditor({
+              kind: "call",
+              at: liveSelected.at,
+              durationMinutes: liveSelected.call.durationMinutes,
+              botIds: liveSelected.call.botIds,
+              call: liveSelected.call,
+            });
+          }}
+          onCallChanged={(id?: string) => { if (id) setCalls((current) => current.filter((call) => call.id !== id)); else void loadCalls(); }}
+          onOpenRoom={onOpenRoom}
+        />
+      )}
+      {!editor && liveSelected?.kind === "routine" && liveSelected.routine && (
+        <DetailPanel bare label={t("routineCalendar.eventDetails")} onClose={() => setSelected(null)} data-routine-panel-page="">
+          <RoutinePanelPage
+            key={liveSelected.routine.id}
+            routine={liveSelected.routine}
+            bot={state.bots.find((bot) => bot.id === liveSelected.routine!.botId)}
+            bots={state.bots}
+            runs={state.routineRuns}
+            lockedBotId={liveSelected.routine.botId}
+            onOpenRun={openRun}
+            onBack={() => setSelected(null)}
+            onDismiss={() => setSelected(null)}
+            onDeleted={() => setSelected(null)}
+            onDuplicate={duplicateRoutine}
+          />
+        </DetailPanel>
+      )}
       </div>
     </main>
   );

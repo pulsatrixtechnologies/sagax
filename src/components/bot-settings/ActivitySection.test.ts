@@ -164,7 +164,7 @@ describe("activity detail modal", () => {
   });
 
   it("puts the actions in the head, the summary at the left and the steps at the right when wide", () => {
-    const html = body({ renderConversation: () => "LIVE", onSteer: async () => {} });
+    const html = body({ renderConversation: () => "LIVE" });
     expect(html).toContain('data-activity-layout="columns"');
     const head = html.slice(0, html.indexOf("data-activity-summary"));
     expect(head).toContain("data-task-actions");
@@ -172,7 +172,9 @@ describe("activity detail modal", () => {
     expect(head).toMatch(/Open Pepper(&#x27;|')s chat/);
     const left = html.slice(html.indexOf("data-activity-summary"), html.indexOf("data-activity-detail-right"));
     expect(left).toContain("Sub-agents");
-    expect(left).toContain("Send a message to this task");
+    // Writing goes through Open <bot>'s chat only (D-20261127-005).
+    expect(left).not.toContain("Send a message to this task");
+    expect(left).not.toContain("data-activity-steer");
     expect(left).toContain('data-task-facts="closed"');
     expect(left).not.toContain("data-activity-step=");
     const right = html.slice(html.indexOf("data-activity-detail-right"));
@@ -199,10 +201,11 @@ describe("activity detail modal", () => {
   });
 
   it("has one column with a Summary view when narrow, and Back in History", () => {
-    const html = body({ wide: false, renderConversation: () => "LIVE", onBack: () => {}, onSteer: async () => {} });
+    const html = body({ wide: false, renderConversation: () => "LIVE", onBack: () => {} });
     expect(html).toContain('data-activity-layout="single"');
     expect(html).toContain('data-activity-view="summary"');
-    expect(html).toContain("Send a message to this task");
+    expect(html).not.toContain("Send a message to this task");
+    expect(html).not.toContain("data-activity-steer");
     expect(html).not.toContain('data-activity-step="mcp__sagax-desktop__shell"');
     expect(html).toContain("data-activity-back");
     expect(body({ wide: false, initialView: "steps" })).toContain('data-activity-step="mcp__sagax-desktop__shell"');

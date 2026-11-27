@@ -17,7 +17,7 @@ import {
 import { GripVertical } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
-import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "../menu-look";
+import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE, useMenuInWindow } from "../menu-look";
 import {
   type ComposerBarItem,
   type ComposerBarLayout,
@@ -180,6 +180,9 @@ export function ComposerBarContextMenu({
   const [at, setAt] = useState<{ left: number; top: number } | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const labelId = useId();
+  // Same placement as every other context menu: stay in the window, flip up
+  // near the bottom (D-20261127-005).
+  useMenuInWindow(menuRef, at);
 
   useEffect(() => {
     const node = anchorRef.current;

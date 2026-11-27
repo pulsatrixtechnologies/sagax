@@ -8,6 +8,7 @@ import { GroupView } from "@/components/GroupView";
 import { SplitWorkspace } from "@/components/SplitWorkspace";
 import { SideThreadPanel } from "@/components/SideThreadPanel";
 import { useScreenPanelOpen } from "@/lib/screen-panel";
+import { ScreenPanelWindowHost } from "@/components/ScreenPanelWindowHost";
 import { ComposeToPicker } from "@/components/ComposeToPicker";
 import {
   AchievementsScreen, ActivityPanel, ApprovalsPage, ArtifactsHost, BotCatalogModal, BotSettingsDialog, BotWizard, CodePage, CommandPalette, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace,
@@ -210,6 +211,7 @@ export function ShellLayout(shell: ShellNavigation) {
       {showThreads && <SideThreadPanel />}
       {/* The bot's live screen, a column beside the one conversation (#4452). */}
       {screenPanelOpen && bot && state.activeView === "chat" && !profileFillsMain && <BotSurface key={`screen:${bot.id}`} id={bot.id}>{(current) => <ScreenPanel bot={current} />}</BotSurface>}
+      <ScreenPanelWindowHost />
       {/* The panels below are siblings, so their keys must differ even
           though each is remounted per bot. Two siblings keyed `bot.id`
           collide in React's keyed reconciliation whenever both are open

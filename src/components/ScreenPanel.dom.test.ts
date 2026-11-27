@@ -1,20 +1,31 @@
 // @vitest-environment happy-dom
 // The screen side panel (#4452): a docked column beside the chat with the
 // bot's live browser (not the Computer tab's preview square), closed by its
-// X or Escape, and resizable from its left edge.
-import { act, createElement } from "react";
+// X or Escape, and resizable from its left edge. Compact chrome
+// (M-20261127-064): no title header; Detach / Expand / Close sit on the
+// browser tab row.
+import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot } from "@/state/store";
 import { isScreenPanelOpen, setScreenPanelOpen } from "@/lib/screen-panel";
+import { openScreenPanelWindow } from "@/lib/screen-panel-window";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-const seen = vi.hoisted(() => ({ live: undefined as boolean | undefined, botId: "" }));
+const seen = vi.hoisted(() => ({ live: undefined as boolean | undefined, botId: "", docked: false }));
 vi.mock("./BrowserPanel", () => ({
-  BrowserPanel: ({ bot, live }: { bot: { id: string }; live?: boolean }) => {
-    seen.live = live; seen.botId = bot.id;
-    return null;
+  BrowserPanel: ({ bot, live, docked }: { bot: { id: string }; live?: boolean; docked?: { chrome?: ReactNode; placeSelector?: ReactNode } }) => {
+    seen.live = live; seen.botId = bot.id; seen.docked = Boolean(docked);
+    return createElement("div", { "data-mock-browser": "", "data-docked": seen.docked ? "1" : "0" },
+      docked?.placeSelector ?? null,
+      docked?.chrome ?? null,
+    );
   },
+}));
+vi.mock("@/lib/screen-panel-window", () => ({
+  openScreenPanelWindow: vi.fn(),
+  closeScreenPanelWindow: vi.fn(),
+  useScreenPanelWindow: () => null,
 }));
 const found = vi.hoisted(() => ({ places: ["browser"] as string[], vm: null as string | null, remote: null as unknown }));
 vi.mock("./ScreenPlaces", () => ({
@@ -33,7 +44,8 @@ let root: Root;
 
 beforeEach(() => {
   found.places = ["browser"]; found.vm = null; found.remote = null;
-  seen.live = undefined; seen.botId = "";
+  seen.live = undefined; seen.botId = ""; seen.docked = false;
+  vi.mocked(openScreenPanelWindow).mockClear();
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -43,12 +55,16 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); setScreenPanelOpen(false); });
 
 describe("ScreenPanel", () => {
-  it("is a labelled column that hosts the bot's live browser", () => {
+  it("is a labelled compact column that hosts the bot's live browser", () => {
     const aside = host.querySelector("aside[data-screen-panel]")!;
     expect(aside.getAttribute("aria-label")).toBe("Ada’s screen");
-    expect(host.textContent).toContain("Ada’s browser");
-    expect(seen).toEqual({ live: true, botId: "ada" });
+    expect(aside.hasAttribute("data-screen-compact")).toBe(true);
+    expect(seen).toEqual({ live: true, botId: "ada", docked: true });
     expect(host.querySelector("[role=separator]")?.getAttribute("aria-label")).toBe("Resize the screen panel");
+    expect(host.querySelector("[data-screen-panel-header]")).toBeNull();
+    expect(host.querySelector("[data-screen-panel-detach]")).not.toBeNull();
+    expect(host.querySelector("[data-screen-panel-expand]")).not.toBeNull();
+    expect(host.querySelector("[data-screen-panel-close]")).not.toBeNull();
   });
 
   it("shows the marking tools only while Mark up is on", () => {
@@ -67,6 +83,18 @@ describe("ScreenPanel", () => {
     expect(isScreenPanelOpen()).toBe(false);
   });
 
+  it("expands into the browser window without closing the panel", () => {
+    act(() => { (host.querySelector("[data-screen-panel-expand]") as HTMLButtonElement).click(); });
+    expect(isScreenPanelOpen()).toBe(true);
+    expect(openScreenPanelWindow).toHaveBeenCalledWith({ botId: "ada", mode: "expand", kind: "browser" });
+  });
+
+  it("detaches into a window and closes the side panel", () => {
+    act(() => { (host.querySelector("[data-screen-panel-detach]") as HTMLButtonElement).click(); });
+    expect(isScreenPanelOpen()).toBe(false);
+    expect(openScreenPanelWindow).toHaveBeenCalledWith({ botId: "ada", mode: "detach", kind: "browser" });
+  });
+
   it("closes on Escape, but not from inside a field", () => {
     const aside = host.querySelector("aside")!;
     const input = document.createElement("input");
@@ -77,13 +105,13 @@ describe("ScreenPanel", () => {
     expect(isScreenPanelOpen()).toBe(false);
   });
 
-  it("shows no tabs while the bot has one place, and tabs for each place when it has several", () => {
+  it("shows no place tabs while the bot has one place, and place tabs when it has several", () => {
     expect(host.querySelector("[role=tablist]")).toBeNull();
     found.places = ["browser", "vm", "remote"]; found.vm = "server"; found.remote = { id: "r1" };
     act(() => root.render(createElement(ScreenPanel, { bot })));
     const tabs = [...host.querySelectorAll<HTMLElement>("[role=tab]")];
     expect(tabs.map((tab) => tab.textContent)).toEqual(["Browser", "VM", "Remote computer"]);
-    expect(host.querySelector("[data-screen-pane]")).toBeNull();
+    expect(seen.docked).toBe(true);
   });
 
   it("switches to the VM and the remote computer in the same panel, watching first", () => {
@@ -95,13 +123,11 @@ describe("ScreenPanel", () => {
     expect(host.querySelector("[data-pane=vm]")!.getAttribute("data-control")).toBe("false");
     act(() => { (host.querySelector("[data-screen-control]") as HTMLElement).click(); });
     expect(host.querySelector("[data-pane=vm]")!.getAttribute("data-control")).toBe("true");
-    // the marks tools are the same ones as the browser's
     act(() => { (host.querySelector("[data-screen-panel-marks]") as HTMLElement).click(); });
     expect(host.querySelector("[data-screen-marks-bar]")).not.toBeNull();
     act(() => { (host.querySelector("[data-screen-tab=remote]") as HTMLElement).click(); });
     expect(host.querySelector("[data-pane=remote]")).not.toBeNull();
     expect(host.textContent).toContain("Ada’s remote computer");
-    // a new place starts watching again with the marks tools closed
     expect(host.querySelector("[data-screen-marks-bar]")).toBeNull();
   });
 
@@ -112,5 +138,23 @@ describe("ScreenPanel", () => {
     found.places = ["browser"]; found.vm = null;
     act(() => root.render(createElement(ScreenPanel, { bot })));
     expect(host.querySelector("aside")!.getAttribute("data-screen-place")).toBe("browser");
+  });
+
+  it("hosts an artifact with the same Detach, Expand and Close chrome", () => {
+    act(() => root.render(createElement(ScreenPanel, {
+      bot,
+      artifact: {
+        title: "Report",
+        body: createElement("div", { "data-artifact-body": "" }, "body"),
+        onDetach: vi.fn(),
+        onExpand: vi.fn(),
+      },
+    })));
+    expect(host.querySelector("aside")!.getAttribute("data-screen-place")).toBe("artifact");
+    expect(host.querySelector("[data-artifact-body]")?.textContent).toBe("body");
+    expect(host.querySelector("[data-screen-panel-detach]")).not.toBeNull();
+    expect(host.querySelector("[data-screen-panel-expand]")).not.toBeNull();
+    expect(host.querySelector("[data-screen-panel-close]")).not.toBeNull();
+    expect(host.textContent).toContain("Report");
   });
 });

@@ -27,17 +27,19 @@ export function browserFrameSize(imageWidth: number, imageHeight: number, width:
 }
 
 /** Map only the contained image, not its letterboxing, into the frame's CSS
- * coordinate space. Status events can describe a newer viewport than these pixels. */
+ * coordinate space. Status events can describe a newer viewport than these pixels.
+ * `align`: "center" (default) or "top" (docked panel scales to width). */
 export function browserViewportPoint(rect: { left: number; top: number; width: number; height: number },
   imageWidth: number, imageHeight: number, reportedWidth: number, reportedHeight: number,
-  clientX: number, clientY: number, captured = false) {
+  clientX: number, clientY: number, captured = false, align: "center" | "top" = "center") {
   if (![rect.width, rect.height, imageWidth, imageHeight, reportedWidth, reportedHeight].every((n) => Number.isFinite(n) && n > 0)) return null;
   if (![clientX, clientY].every(Number.isFinite)) return null;
   const { width, height } = browserFrameSize(imageWidth, imageHeight, reportedWidth, reportedHeight);
   const scale = Math.min(rect.width / imageWidth, rect.height / imageHeight);
   const visibleWidth = imageWidth * scale, visibleHeight = imageHeight * scale;
   const x = clientX - rect.left - (rect.width - visibleWidth) / 2;
-  const y = clientY - rect.top - (rect.height - visibleHeight) / 2;
+  const yPad = align === "top" ? 0 : (rect.height - visibleHeight) / 2;
+  const y = clientY - rect.top - yPad;
   if (!captured && (x < 0 || y < 0 || x >= visibleWidth || y >= visibleHeight)) return null;
   return { x: Math.max(0, Math.min(width - 1, x * width / visibleWidth)), y: Math.max(0, Math.min(height - 1, y * height / visibleHeight)) };
 }
@@ -67,9 +69,11 @@ export function createBrowserPressedInputs(input: BrowserInput) {
   };
 }
 
-export function BrowserViewport({ frame, width, height, driving, input: sendInput, acknowledge, onDecodeError, onReturnToToolbar }: {
+export function BrowserViewport({ frame, width, height, driving, input: sendInput, acknowledge, onDecodeError, onReturnToToolbar, fillWidth = false }: {
   frame: BrowserFrame; width: number; height: number; driving: boolean;
   input: BrowserInput; acknowledge: (seq: number) => void; onDecodeError: () => void; onReturnToToolbar: () => void;
+  /** Docked panel: scale to the stage width (no side letterbox); height follows without distortion. */
+  fillWidth?: boolean;
 }) {
   const screen = useRef<HTMLImageElement>(null);
   const lastAckedSrc = useRef("");
@@ -111,7 +115,7 @@ export function BrowserViewport({ frame, width, height, driving, input: sendInpu
     // not aim input using new metadata until that exact image is available.
     if (!image?.complete || image.currentSrc !== src) return null;
     return browserViewportPoint(image.getBoundingClientRect(), image.naturalWidth, image.naturalHeight,
-      frameWidth, frameHeight, clientX, clientY, captured);
+      frameWidth, frameHeight, clientX, clientY, captured, fillWidth ? "top" : "center");
   };
   useEffect(() => {
     const image = screen.current;
@@ -134,7 +138,9 @@ export function BrowserViewport({ frame, width, height, driving, input: sendInpu
       title={driving ? "Shift+Escape returns to the browser address bar." : undefined}
       aria-description={driving ? t("browser.viewport.keysHint") : undefined}
       aria-keyshortcuts={driving ? "Shift+Escape" : undefined}
-      className={`block h-full w-full object-contain select-none outline-none focus:ring-2 focus:ring-inset focus:ring-accent ${driving ? "cursor-default touch-none" : "cursor-not-allowed"}`}
+      className={fillWidth
+        ? `block w-full max-h-full object-contain object-top select-none outline-none focus:ring-2 focus:ring-inset focus:ring-accent ${driving ? "cursor-default touch-none" : "cursor-not-allowed"}`
+        : `block h-full w-full object-contain select-none outline-none focus:ring-2 focus:ring-inset focus:ring-accent ${driving ? "cursor-default touch-none" : "cursor-not-allowed"}`}
       onLoad={rendered} onError={onDecodeError}
       onBlur={() => { engaged.current = false; pressed.release(); }}
       onContextMenu={(e) => { if (driving) e.preventDefault(); }}

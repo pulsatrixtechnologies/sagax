@@ -348,6 +348,8 @@ export class LocalSemanticIndex implements SemanticIndex {
         if (state.dirty.size) this.catchUp(threadId, deadline);
       }
       if (!this.backlog.length && Date.now() - this.backlogListedAt > 10 * 60_000) {
+        // #5343: after the boot page-cache warm this SELECT is short; the
+        // cold-disk 9 s+ block was the warm's job to remove.
         this.backlogListedAt = Date.now();
         const known = new Set<string>();
         for (const threadId of messageThreadIds()) {

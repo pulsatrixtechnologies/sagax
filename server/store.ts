@@ -1324,10 +1324,26 @@ export class Store {
       const legacyFile = messagesFile(threadId);
       if (existsSync(legacyFile)) mdb.readThread(threadId, legacyFile);
     }
-    // #5343: repair off the constructor's turn so a cold messages.db scan
-    // (latestMessageAts) does not block /api/health during boot (46 s+).
-    setImmediate(() => this.repairThreadUpdatedAts());
+    // #5343: warm messages.db into the page cache in the search worker, then
+    // repair stamps once the OS cache is hot. Deferred so /api/health can
+    // answer first. askedAt fill stays on this turn (marker + one pass); it
+    // is cheap on an empty first boot and must not race deferred bots.json
+    // saves in tests.
     if (fillAskedAts) this.fillTaskAskedAts();
+    setImmediate(() => {
+      void (async () => {
+        try {
+          await mdb.warmMessagesDbPageCache();
+        } catch (error) {
+          console.warn("store: messages.db page-cache warm failed", error);
+        }
+        try {
+          this.repairThreadUpdatedAts();
+        } catch (error) {
+          console.warn("store: deferred thread stamp repair failed", error);
+        }
+      })();
+    });
     // After the roster is loaded, so identity resolution sees which opener
     // ids are still live.
     this.repairDuplicatePairConversations();

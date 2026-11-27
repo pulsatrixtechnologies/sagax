@@ -77,6 +77,41 @@ export function threadsReferencingInDatabase(database: DatabaseSync, fragments: 
   return out;
 }
 
+/** #5343: MAX(at) per thread, same statements as message-db newestAts, for
+ * the search worker so boot repair never runs them on the server's thread. */
+export type NewestAtsMode = "all" | "personLine";
+
+const PERSON_LINE_WHERE =
+  "AND role = 'user' AND kind = 'text' AND json_extract(json, '$.sendId') IS NOT NULL " +
+  "AND json_extract(json, '$.peerAsk') IS NULL AND json_extract(json, '$.relayed') IS NULL";
+
+export function newestAtsInDatabase(
+  database: DatabaseSync,
+  threadIds: readonly string[],
+  mode: NewestAtsMode = "all",
+): Map<string, number> {
+  const ids = [...new Set(threadIds.filter((id) => id.length > 0))];
+  const out = new Map<string, number>();
+  const where = mode === "personLine" ? PERSON_LINE_WHERE : "";
+  const chunk = 400;
+  for (let i = 0; i < ids.length; i += chunk) {
+    const slice = ids.slice(i, i + chunk);
+    const placeholders = slice.map(() => "?").join(", ");
+    const rows = database
+      .prepare(`SELECT thread_id, MAX(at) AS at FROM messages WHERE thread_id IN (${placeholders}) ${where} GROUP BY thread_id`)
+      .all(...slice) as Array<{ thread_id: string; at: number }>;
+    for (const row of rows) {
+      if (typeof row.at === "number" && Number.isFinite(row.at)) out.set(row.thread_id, row.at);
+    }
+  }
+  return out;
+}
+
+/** #5343: every thread that has at least one message, for the search worker. */
+export function messageThreadIdsInDatabase(database: DatabaseSync): string[] {
+  return (database.prepare("SELECT DISTINCT thread_id FROM messages").all() as Array<{ thread_id: string }>).map((row) => row.thread_id);
+}
+
 export function searchMessagesInDatabase(database: DatabaseSync, query: string, limit = 40, threadId?: string, sealed?: SealedSearch): SearchHit[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return [];

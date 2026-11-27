@@ -11,8 +11,10 @@
 // no rows pulls the old file in, after which the DB is the source of
 // truth (the JSON file is left behind as a one-time backup).
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync } from "node:fs";
+import { open as openFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
+import { setImmediate as yieldLoop } from "node:timers/promises";
 
 import { DATA_DIR } from "../config.ts";
 import { ContentSealError, fieldAad, messageAad, openField, openText, seal, sealField, sealedFieldKeyId } from "../encryption/content-crypto.ts";
@@ -26,7 +28,7 @@ import type { ResolvedSender, SteerQueueReason, WireMessage as Message } from ".
 import { withoutRunMarkersIn } from "../../shared/routine-result.ts";
 import type { UsageTrigger } from "../usage/usage-ledger.ts";
 import { MessageSearchWorker } from "../message-search-worker.ts";
-import { searchMessagesInDatabase, type SealedKeyMaterial, type SearchHit } from "./message-search-query.ts";
+import { messageThreadIdsInDatabase, newestAtsInDatabase, searchMessagesInDatabase, type SealedKeyMaterial, type SearchHit } from "./message-search-query.ts";
 import { cjkSearchText, cjkTokenParts, ensureSearchIndex, ftsPhrase, hasCjk, withoutSearchMarks } from "./cjk-search.ts";
 import { reportBackgroundError } from "../background-error.ts";
 import { ensureMemoryIndex } from "./message-db-memory-index.ts";
@@ -1675,7 +1677,7 @@ export function setActiveLeaf(threadId: string, leafId: string | null): void {
 /** Newest message timestamp per thread. One grouped read, chunked under
  * SQLite's variable limit. Threads with no rows are absent. */
 export function latestMessageAts(threadIds: readonly string[]): Map<string, number> {
-  return newestAts(threadIds, "");
+  return newestAtsInDatabase(db(), threadIds, "all");
 }
 
 /** Newest line a person sent from an app, per thread: a user line with the
@@ -1683,26 +1685,7 @@ export function latestMessageAts(threadIds: readonly string[]): Map<string, numb
  * none) that no bot delivered (peerAsk) and no other interface relayed.
  * Threads without one are absent. */
 export function latestPersonLineAts(threadIds: readonly string[]): Map<string, number> {
-  return newestAts(threadIds, "AND role = 'user' AND kind = 'text' AND json_extract(json, '$.sendId') IS NOT NULL " +
-    "AND json_extract(json, '$.peerAsk') IS NULL AND json_extract(json, '$.relayed') IS NULL");
-}
-
-/** MAX(at) per thread over the rows `where` keeps, as latestMessageAts reads it. */
-function newestAts(threadIds: readonly string[], where: string): Map<string, number> {
-  const ids = [...new Set(threadIds.filter((id) => id.length > 0))];
-  const out = new Map<string, number>();
-  const chunk = 400;
-  for (let i = 0; i < ids.length; i += chunk) {
-    const slice = ids.slice(i, i + chunk);
-    const placeholders = slice.map(() => "?").join(", ");
-    const rows = db()
-      .prepare(`SELECT thread_id, MAX(at) AS at FROM messages WHERE thread_id IN (${placeholders}) ${where} GROUP BY thread_id`)
-      .all(...slice) as Array<{ thread_id: string; at: number }>;
-    for (const row of rows) {
-      if (typeof row.at === "number" && Number.isFinite(row.at)) out.set(row.thread_id, row.at);
-    }
-  }
-  return out;
+  return newestAtsInDatabase(db(), threadIds, "personLine");
 }
 
 /** One transaction; `beforeCommit` throwing keeps the thread's rows. */
@@ -1767,6 +1750,51 @@ export function threadsReferencingAsync(fragments: readonly string[]): Promise<M
   db(); // the owner initializes/migrates the schema before any read-only scan
   searchWorker ??= new MessageSearchWorker(DB_FILE());
   return searchWorker.references(fragments);
+}
+
+function searchWorkerFor(file = DB_FILE()): MessageSearchWorker {
+  searchWorker ??= new MessageSearchWorker(file);
+  return searchWorker;
+}
+
+/** #5343: read messages.db into the OS page cache off the server's turn.
+ * Uses the libuv pool (fs.promises) with a reused 1 MiB buffer and a yield
+ * between chunks, so a cold multi-hundred-MB file never holds the event
+ * loop. No-op when the file is missing. The search worker's `warm()` remains
+ * for callers that already hold a worker. */
+export async function warmMessagesDbPageCache(): Promise<void> {
+  const file = DB_FILE();
+  if (!existsSync(file)) return;
+  db(); // schema ready; WAL present for a consistent read
+  const handle = await openFile(file, "r");
+  try {
+    const buffer = Buffer.alloc(1024 * 1024);
+    for (;;) {
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
+      if (bytesRead === 0) break;
+      await yieldLoop();
+    }
+  } finally {
+    await handle.close();
+  }
+}
+
+/** #5343: latestMessageAts in the search worker (boot repair). */
+export function latestMessageAtsAsync(threadIds: readonly string[]): Promise<Map<string, number>> {
+  db();
+  return searchWorkerFor().newestAts(threadIds, "all");
+}
+
+/** #5343: latestPersonLineAts in the search worker (askedAt fill). */
+export function latestPersonLineAtsAsync(threadIds: readonly string[]): Promise<Map<string, number>> {
+  db();
+  return searchWorkerFor().newestAts(threadIds, "personLine");
+}
+
+/** #5343: messageThreadIds in the search worker (semantic index backlog). */
+export function messageThreadIdsAsync(): Promise<string[]> {
+  db();
+  return searchWorkerFor().threadIds();
 }
 
 /** Case-insensitive substring search over text messages, newest first.
@@ -1972,7 +2000,7 @@ export function textMessagesAfter(threadId: string, afterRowid: number, limit: n
 
 /** Every thread that has at least one message. */
 export function messageThreadIds(): string[] {
-  return (db().prepare("SELECT DISTINCT thread_id FROM messages").all() as Array<{ thread_id: string }>).map((row) => row.thread_id);
+  return messageThreadIdsInDatabase(db());
 }
 
 /** Relevance-ranked recall over the text messages of the given threads:

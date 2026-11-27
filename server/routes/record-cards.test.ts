@@ -10,7 +10,7 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import type { CustomRule } from "../../shared/custom-rules.ts";
 import type { PersonProductsCall } from "../perspicax/person-products.ts";
 import { createRecordCardsClient, recordCardPath } from "../perspicax/record-cards.ts";
-import { createRecordCardsRoutes, fieldChange, recordReadOrgRule, recordRuleInput, recordWrite, type RecordCardsRouteDeps, type RecordReadRule } from "./record-cards.ts";
+import { actionVerb, createRecordCardsRoutes, fieldChange, recordReadOrgRule, recordRuleInput, recordWrite, type RecordCardsRouteDeps, type RecordReadRule } from "./record-cards.ts";
 import { PASS } from "./table.ts";
 
 const REF = { product: "nimbus_desk", kind: "ticket", id: "481516" };
@@ -315,6 +315,17 @@ describe("the record window's actions", () => {
     expect(answer.status).toBe(403);
     expect(answer.body).toEqual({ state: "org_refused", rule: { id: "o1", text: "rule" } });
     expect(denied.calls).toEqual([]);
+  });
+
+  it("reads an SMS or a reply as a send, and another plugin's write as that product's write (M-20261127-141)", () => {
+    expect(actionVerb(recordWrite({ action: "message.send", set: { text: "Bonjour" } }) as never)).toBe("send");
+    expect(actionVerb(recordWrite({ action: "post.reply", set: { text: "Merci" } }) as never)).toBe("send");
+    expect(actionVerb(recordWrite({ action: "post.remove" }) as never)).toBe("delete");
+    expect(actionVerb(recordWrite({ action: "threat.isolate" }) as never)).toBe("update");
+    const threat = { product: "sentinelone", kind: "threat", id: "1873402291" };
+    const rule: CustomRule = { id: "o2", ownerId: "p-admin", botId: null, when: "modifier SentinelOne", behavior: "deny", riskScope: [], enabled: true, createdAt: 1, updatedAt: 1, org: true, products: ["sentinelone"] };
+    expect(recordReadOrgRule([rule], threat, "SentinelOne", undefined, recordWrite({ action: "threat.isolate" })!).kind).toBe("deny");
+    expect(recordReadOrgRule([{ ...rule, when: "lire SentinelOne" }], threat, "SentinelOne", undefined, recordWrite({ action: "threat.isolate" })!).kind).toBe("none");
   });
 
   it("passes the console's code on when it refuses an action it does not take", async () => {

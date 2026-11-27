@@ -5598,3 +5598,64 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
 .custom-swatch-ring {
   background: conic-gradient(from 0deg, #f43f5e, #f59e0b, #84cc16, #10b981, #06b6d4, #6366f1, #d946ef, #f43f5e);
 }
+
+/* The two record windows that wear another product's look (M-20261127-146):
+   an X post, drawn the way X shows it (X's own inks: its dim and light
+   themes), and a folder, drawn like the macOS Finder (its folder blue, its
+   selection, its seven tags, its file badges). Dark by default, light under
+   the light skins; :is() so no line reads as a skin's own block to the
+   tools that look one up. The components only read these. */
+:is(:root, [data-skin]) {
+  --x-surface: #000000;
+  --x-ink: #e7e9ea;
+  --x-secondary: #71767b;
+  --x-line: #2f3336;
+  --x-hover: #080808;
+  --x-media: #16181c;
+  --x-accent: #1d9bf0;
+  --x-on-accent: #ffffff;
+  --x-like: #f91880;
+  --finder-sidebar: color-mix(in srgb, var(--color-popover-ink) 4%, transparent);
+  --finder-sidebar-glyph: #0a84ff;
+  --finder-selection: #0a5fd6;
+  --finder-selection-ink: #ffffff;
+  --finder-folder: #5aa8f0;
+  --finder-folder-tab: #3a86d6;
+  --finder-folder-shine: color-mix(in srgb, #8cc4f7 55%, transparent);
+  --finder-page: #ececec;
+  --finder-page-fold: #c9c9c9;
+  --finder-ext-ink: #ffffff;
+  --finder-ext-pdf: #e5534b;
+  --finder-ext-sheet: #1f9d55;
+  --finder-ext-doc: #2b6cd4;
+  --finder-ext-slide: #e0782f;
+  --finder-ext-drawing: #3b6fd8;
+  --finder-ext-image: #9b6ae0;
+  --finder-ext-archive: #8e8e93;
+  --finder-ext-audio: #e0457b;
+  --finder-ext-video: #5856d6;
+  --finder-ext-other: #8e8e93;
+  --finder-tag-red: #ff5f57;
+  --finder-tag-orange: #ffa53a;
+  --finder-tag-yellow: #ffd60a;
+  --finder-tag-green: #3ccf63;
+  --finder-tag-blue: #3b8ef7;
+  --finder-tag-purple: #bf5af2;
+  --finder-tag-gray: #98989d;
+}
+:is([data-skin="pulsatrix-light"], [data-skin="atelier"], [data-skin="lagoon"], [data-skin="linen"],
+  [data-skin="daylight"], [data-skin="retro98"], [data-skin="meadow"]) {
+  --x-surface: #ffffff;
+  --x-ink: #0f1419;
+  --x-secondary: #536471;
+  --x-line: #eff3f4;
+  --x-hover: #f7f9f9;
+  --x-media: #f7f9f9;
+  --finder-sidebar-glyph: #007aff;
+  --finder-selection: #0063e1;
+  --finder-page: #ffffff;
+  --finder-page-fold: #d8d8d8;
+}
+.x-look {
+  font-family: "Chirp", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}

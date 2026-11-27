@@ -55,8 +55,10 @@ export function recordWrite(body: unknown, recordKind?: string): RecordWrite | n
   return fieldChange(body) ?? parseRecordAction(body, recordKind);
 }
 
-/** The verb a rule reads for an action. */
-function actionVerb(action: RecordAction): string {
+/** The verb a rule reads for an action: an SMS or a reply leaves the person's
+ * product for someone else, a send. */
+export function actionVerb(action: RecordAction): string {
+  if (action.action === "message.send" || action.action === "post.reply") return "send";
   return action.action.endsWith(".add") ? "create" : action.action.endsWith(".remove") ? "delete" : "update";
 }
 
@@ -93,8 +95,19 @@ export type RecordReadRule = { kind: "none" } | { kind: "deny"; rule: { id: stri
 export function recordReadOrgRule(rules: readonly CustomRule[], ref: RecordRef, productName?: string, home?: string, change?: RecordWrite): RecordReadRule {
   const org = rules.filter((rule) => rule.org === true && rule.enabled && rule.behavior === "deny");
   if (!org.length) return { kind: "none" };
-  const tool = `${ref.product}_${change ? "tickets_write" : "query"}`;
-  const facts = factsForCall({ tool, mcpTool: `mcp__perspicax__${tool}`, input: JSON.stringify(recordRuleInput(ref, change)), hints: { readOnly: !change } }, home);
+  // a ticket's writes are the ticket write tool's; another kind's, its product's write
+  const tool = `${ref.product}_${change ? (ref.kind === "ticket" ? "tickets_write" : "write") : "query"}`;
+  const input = (() => {
+    if (!change) return { kind: ref.kind, id: ref.id };
+    if ("action" in change) {
+      // an action reads as a write of that product: what it is, the entry it names and what it sets (a file by its name and size, never its bytes)
+      const { base64, ...set } = change.set ?? {};
+      return { kind: ref.kind, id: ref.id, action: actionVerb(change), entry: change.action, ...(change.id ? { entryId: change.id } : {}), set: { ...set, ...(typeof base64 === "string" ? { bytes: Math.floor(base64.length * 3 / 4) } : {}) } };
+    }
+    // the title is written as text, every other field as the id of a choice
+    return { kind: ref.kind, id: ref.id, action: "update", set: { [change.field]: change.field === RECORD_TITLE_FIELD ? change.value : { id: change.value } } };
+  })();
+  const facts = factsForCall({ tool, mcpTool: `mcp__perspicax__${tool}`, input: JSON.stringify(input), hints: { readOnly: !change } }, home);
   if (!facts.products.includes(ref.product)) facts.products.push(ref.product);
   const decision = evaluateCustomRules(org, facts, {
     products: [{ id: ref.product, ...(productName ? { name: productName } : {}) }],

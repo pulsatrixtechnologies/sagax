@@ -8,7 +8,7 @@
 // Nothing here navigates, and the chip is a button with no address: the link's
 // own scheme is never handed to the shell, shown in a status bar, copied as a
 // link address or opened by a middle click (a thread reference is the same).
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import { FileText } from "lucide-react";
 
 import { RecordCard, RecordProductMark } from "@/components/RecordCard";
@@ -30,6 +30,7 @@ import { accountWindow } from "@/components/record-window/account/AccountWindow"
 import type { AccountTab } from "@/components/record-window/account/account-model";
 import { boardWindow, type BoardView } from "@/components/record-window/board/BoardWindow";
 import { invoiceWindow, type InvoiceView } from "@/components/record-window/invoice/InvoiceWindow";
+import { usePluginWindow } from "@/components/record-window/plugins/PluginWindow";
 import { useStoreOptional } from "@/state/store";
 import { recordKey, recordMarkdown, type RecordRef } from "../../shared/record-cards";
 
@@ -164,10 +165,19 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
   const kindWindow = refKind === "ticket" || refKind === "board" || refKind === "invoice" || account !== null;
   const detail = useRecordDetail(current.ref, kindWindow && Boolean(read.card), refreshCard);
   const { refresh: refreshDetail } = detail;
-  const refresh = useCallback(() => { refreshCard(); refreshDetail(); }, [refreshCard, refreshDetail]);
   // each record of the way keeps the tab the person chose, back and forth
   const [tabs, setTabs] = useState<Record<string, AccountTab>>({});
   const key = recordKey(current.ref);
+  // a record of another plugin with a window of its own (a threat, a page, a conversation, M-20261127-141)
+  const plugin = usePluginWindow({
+    record: current.ref, label: current.label, card: read.card, now: Date.now(), ask: onBotAsk,
+    compose: onAsk ? () => onAsk(current.ref, current.label) : undefined,
+    back: trail.length ? () => setTrail((steps) => steps.slice(0, -1)) : undefined,
+    onChanged: refreshCard,
+  });
+  const refreshPlugin = useRef(plugin.refresh);
+  refreshPlugin.current = plugin.refresh;
+  const refresh = useCallback(() => { refreshCard(); refreshDetail(); refreshPlugin.current?.(); }, [refreshCard, refreshDetail]);
   const link = recordMarkdown(current.label, current.ref);
   // what the person set in a window (its tab, a board's filters), kept while this card is open:
   // coming back to a record on the way finds it as it was left
@@ -205,11 +215,11 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
       label={current.label}
       kindName={recordKindName(kind)}
       product={product ? { name: product.name, ...(product.icon?.url ? { iconUrl: product.icon.url } : {}) } : undefined}
-      read={detail.detail ? { ...read, refresh } : read}
+      read={detail.detail || plugin.layout ? { ...read, refresh } : read}
       window={!read.card ? undefined : account ? accountWindow({
         kind: account, card: read.card, detail: detail.detail, type, now,
         tab: tabs[key], onTab: (tab) => setTabs((now) => ({ ...now, [key]: tab })), idPrefix: `record-${account}-${current.ref.id.replace(/[^A-Za-z0-9_-]/g, "_")}`,
-      }) : layout}
+      }) : layout ?? plugin.layout}
       edits={detail.edits}
       titleEdit={detail.title}
       trail={crumbs}

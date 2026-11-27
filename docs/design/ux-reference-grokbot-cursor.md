@@ -3682,6 +3682,38 @@ dark and light, French and English, each beside the mockup's capture with
 `--mockup`. The board and the invoice: `scripts/capture/record-window-board-invoice.mjs`
 (the same gallery, its board and invoice scenes).
 
+The windows of the other plugins (M-20261127-141, M-20261127-146), in the
+same frame, their tabs across the window under the head:
+
+- **SentinelOne, a threat** (M-20261127-141): the verdict and what the agent
+  already did; Undo the changes, Isolate from the network, True threat, False
+  positive, then "Create a ticket" at the right; the execution chain as a
+  tree, the file's facts, the endpoint; tabs Overview, Timeline, Device,
+  Notes, Exclusions only when it has some (M-20261127-143).
+- **Axcient x360Recover, a protected system** (M-20261127-141): four tiles
+  (last backup, next, boot check, retention), the last days as cells in their
+  tone, the volumes as bars, the vault, the actions; tabs Overview, Restore
+  points, Volumes.
+- **BookStack, a page** (M-20261127-141): the page to read beside the book's
+  contents, its facts and tags; tabs Page, Revisions, Attachments.
+- **Twilio, a conversation** (M-20261127-146): bubbles by day with their
+  delivery state, the chosen message the Twilio way beside it (SID, life of
+  its status, from and to, service, segments, price, an error with its cause
+  and what to do); tabs Conversation, Log (a grid), Calls, Number, Media only
+  when it has some.
+- **X, a post** (M-20261127-146): drawn as X shows it, in X's own inks (the
+  one exception to the app's look), its replies and its statistics.
+- **A folder** (M-20261127-146): the Finder's sidebar, toolbar, icon, list and
+  column views and path bar, whatever plugin serves it; its search and a tag
+  are its one filter.
+
+Agent's choices: the tones of a step, a day or a pill are the success,
+warning and danger tokens; an action a bot does with the person (create a
+ticket, restore files, suggest a reply) is a button with the sparkle that
+asks the conversation's bot; a console that serves only the card shows the
+card's facts. Captures: `scripts/capture/record-window-plugins.mjs` of
+`src/gallery/record-window-plugins.html`.
+
 ## The bot row menu and a bot's own window (owner, 2026-11-17, #4639)
 
 Read from the reference's renderer (read only): the row menu is one menu with

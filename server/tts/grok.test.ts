@@ -328,6 +328,10 @@ describe("xAI refusals say why (checked live 2026-10-28: an invalid key is a 400
     // a path that only contains "voices" is still the address
     expect(grok.grokVoiceFailure(grok.refusal(404, { error: "Not found: /v1/tts/voices" }))).toBe("key");
     expect(grok.grokVoiceFailure(grok.refusal(404, {}, { voice: true }))).toBe("voice");
+    // the speech socket refuses an invalid voice before the upgrade with a 400
+    // too: xAI's words naming the voice are the voice, a bare 400 never is
+    expect(grok.grokVoiceFailure(grok.refusal(400, { error: "Invalid voice: zed" }, { voice: true }))).toBe("voice");
+    expect(grok.grokVoiceFailure(grok.refusal(400, { code: "Client specified an invalid argument" }, { voice: true }))).toBe("other");
 
     const socketError = (open: (handlers: { onError(message: string): void; onClose(): void }) => void) => new Promise<string>((resolve) => {
       let said = "";

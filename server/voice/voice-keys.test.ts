@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import type { GrokVoiceFailure } from "../tts/grok.ts";
 import type { VoiceKeySource } from "../../shared/voice-mode.ts";
-import { describeVoiceKey, VOICE_KEY_REFUSAL_TTL_MS, voiceFailureCause, voiceKeyAuth, VoiceKeyFailure, VoiceKeyRefusals, withVoiceKeys, type VoiceKeyCandidate, type VoiceKeyRefusal } from "./voice-keys.ts";
+import { refusal } from "../tts/grok.ts";
+import { describeVoiceKey, speakOnKnownVoice, VOICE_KEY_REFUSAL_TTL_MS, voiceFailureCause, voiceKeyAuth, VoiceKeyFailure, VoiceKeyRefusals, withVoiceKeys, type VoiceKeyCandidate, type VoiceKeyRefusal } from "./voice-keys.ts";
 
 // Fake keys only.
 const MINE: VoiceKeyCandidate = { key: "xai-MINEfake9Qa2Ws4Ed6Rf8", via: "speaker-key", source: "voice-key", last4: "6Rf8", payerPrincipalId: "p-ada" };
@@ -143,7 +144,7 @@ describe("the keys that may serve a voice, in order (server/voice/voice-keys.ts)
     expect(refusals.untold("p-ada", [{ ...dry, last4: "0000", failure: "down" }, { ...dry, last4: "1111", failure: "busy" }])).toEqual([]);
   });
 
-  it("presents a connected Grok account through the CLI voice host, every other source as an API key", () => {
+  it("presents a connected Grok account with its session token and the CLI token header, every other source as an API key", () => {
     expect(voiceKeyAuth({ source: "grok-account" })).toBe("grok-account");
     for (const source of ["voice-key", "perspicax-key", "org-key", "server"]) expect(voiceKeyAuth({ source })).toBe("api-key");
   });
@@ -171,5 +172,33 @@ describe("the keys that may serve a voice, in order (server/voice/voice-keys.ts)
     // their own key dry, and a name the organization's key does not know:
     // the closest credential is theirs, so credits are the cause
     expect(voiceFailureCause([refused("grok-account", "4JGQ", "quota"), refused("org-key", "t6Yb", "voice")])).toBe("credits");
+  });
+});
+
+// M-20261126-145 review: a voice is remembered as unknown only when the
+// credential then speaks on its default voice. A default that is refused for
+// its address too proves the address, not the name.
+describe("a voice the credential does not know, remembered only when its default speaks", () => {
+  it("remembers the name after the default voice served, and goes there at once next time", async () => {
+    const refusals = new VoiceKeyRefusals();
+    const asked: Array<string | undefined> = [];
+    const speak = async (voice: string | undefined) => {
+      asked.push(voice);
+      if (voice) throw new Error(refusal(404, {}, { voice: true }));
+      return "spoken";
+    };
+    expect(await speakOnKnownVoice("p-ada", MINE, "eve", refusals, speak)).toBe("spoken");
+    expect(refusals.voiceUnknown("p-ada", MINE, "eve")).toBe(true);
+    expect(await speakOnKnownVoice("p-ada", MINE, "eve", refusals, speak)).toBe("spoken");
+    expect(asked).toEqual(["eve", undefined, undefined]);
+  });
+
+  it("never remembers the name when the default is refused for the address too", async () => {
+    const refusals = new VoiceKeyRefusals();
+    const speak = async (voice: string | undefined): Promise<string> => {
+      throw new Error(voice ? refusal(404, {}, { voice: true }) : refusal(404));
+    };
+    await expect(speakOnKnownVoice("p-ada", MINE, "eve", refusals, speak)).rejects.toThrow("does not serve this voice");
+    expect(refusals.voiceUnknown("p-ada", MINE, "eve")).toBe(false);
   });
 });

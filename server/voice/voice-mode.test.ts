@@ -739,13 +739,13 @@ describe("voice mode uses the key that has funds (2026-10-28)", () => {
     xai.synthesize.mockRejectedValue(new Error(CREDITS));
     const out = await call({ method: "POST", path: "/api/bots/b-quasar/voice/speak?locale=en", body: { text: "Bonjour." } });
     expect(out.status).toBe(502);
-    expect(out.body.error).toBe("No call was placed: the connected Grok account is out of credits, and the xAI API key is out of credits too.");
+    expect(out.body.error).toBe("No call was placed: your connected Grok account is out of credits. Add credits on the connected Grok account, then call back. Your xAI key in Perspicax and your organization's xAI key are out of credits.");
     expect(out.body.failure).toBe("quota");
     expect(xai.synthesize).toHaveBeenCalledTimes(3);
     expect(JSON.stringify(out.body)).not.toContain(ACCOUNT);
     expect(leaks(out.body)).toBe(false);
     const french = await call({ method: "POST", path: "/api/bots/b-quasar/voice/speak?locale=fr-CA", body: { text: "Bonjour.", language: "fr" } });
-    expect(french.body.error).toBe("Aucun appel : le compte Grok connecté n'a plus de crédit, et la clé API xAI non plus.");
+    expect(french.body.error).toBe("Aucun appel : ton compte Grok connecté n'a plus de crédits. Ajoute du crédit au compte Grok connecté, puis rappelle. Ta clé xAI dans Perspicax et la clé xAI de ton organisation n'ont plus de crédits.");
   });
 
   it("a solo server tries the connected account, then its own key", async () => {

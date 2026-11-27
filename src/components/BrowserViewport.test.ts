@@ -69,6 +69,12 @@ describe("browser frame coordinate mapping", () => {
     expect(browserViewportPoint({ left: 0, top: 0, width: 1200, height: 400 }, 800, 1600, 400, 800, 600, 200)).toEqual({ x: 200, y: 400 });
     expect(browserViewportPoint({ left: 0, top: 0, width: 1200, height: 400 }, 800, 1600, 400, 800, 100, 200)).toBeNull();
   });
+  it("aligns the contained image to the top for the docked panel fill", () => {
+    // 1280×720 in a taller 600×800 pane: centre would pad ~92.5 px; top pads 0.
+    const pane = { left: 0, top: 0, width: 600, height: 800 };
+    expect(browserViewportPoint(pane, 1280, 720, 1280, 720, 300, 10, false, "top")).toEqual({ x: 640, y: 10 * 720 / (720 * (600 / 1280)) });
+    expect(browserViewportPoint(pane, 1280, 720, 1280, 720, 300, 10, false, "center")).toBeNull();
+  });
 });
 
 describe("browser viewport input forwarding", () => {

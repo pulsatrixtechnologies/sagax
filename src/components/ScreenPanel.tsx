@@ -67,7 +67,7 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
     setScreenPanelOpen(false);
   };
 
-  const marksToggle = place !== "browser" || !artifact ? (
+  const marksToggle = !artifact ? (
     <button type="button" data-screen-panel-marks="" aria-pressed={marking} onClick={() => setMarking((on) => !on)}
       aria-label={t("screenMarks.toggle")} title={t("screenMarks.toggle")}
       className={cn(MARK_TOOL, marking && "ring-2 ring-accent/60")}>
@@ -79,8 +79,8 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
     <ScreenPanelChrome
       title={title}
       onClose={close}
-      onDetach={artifact ? artifact.onDetach ?? detach : detach}
-      onExpand={artifact ? artifact.onExpand ?? expand : expand}
+      onDetach={artifact ? artifact.onDetach : detach}
+      onExpand={artifact ? artifact.onExpand : expand}
       leading={marksToggle}
       trailing={place !== "browser" && !artifact && placeControllable(place, found.vm, found.remote)
         ? <ControlSwitch control={control} onChange={setControl} />

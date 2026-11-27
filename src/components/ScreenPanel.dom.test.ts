@@ -141,20 +141,40 @@ describe("ScreenPanel", () => {
   });
 
   it("hosts an artifact with the same Detach, Expand and Close chrome", () => {
+    const onDetach = vi.fn();
+    const onExpand = vi.fn();
     act(() => root.render(createElement(ScreenPanel, {
       bot,
       artifact: {
         title: "Report",
         body: createElement("div", { "data-artifact-body": "" }, "body"),
-        onDetach: vi.fn(),
-        onExpand: vi.fn(),
+        onDetach,
+        onExpand,
       },
     })));
     expect(host.querySelector("aside")!.getAttribute("data-screen-place")).toBe("artifact");
     expect(host.querySelector("[data-artifact-body]")?.textContent).toBe("body");
+    expect(host.querySelector("[data-screen-panel-marks]")).toBeNull();
     expect(host.querySelector("[data-screen-panel-detach]")).not.toBeNull();
     expect(host.querySelector("[data-screen-panel-expand]")).not.toBeNull();
     expect(host.querySelector("[data-screen-panel-close]")).not.toBeNull();
     expect(host.textContent).toContain("Report");
+    act(() => { (host.querySelector("[data-screen-panel-detach]") as HTMLButtonElement).click(); });
+    expect(onDetach).toHaveBeenCalledOnce();
+    expect(openScreenPanelWindow).not.toHaveBeenCalled();
+  });
+
+  it("omits Detach and Expand on an artifact that does not supply them", () => {
+    act(() => root.render(createElement(ScreenPanel, {
+      bot,
+      artifact: {
+        title: "Draft",
+        body: createElement("div", { "data-artifact-body": "" }, "body"),
+      },
+    })));
+    expect(host.querySelector("[data-screen-panel-detach]")).toBeNull();
+    expect(host.querySelector("[data-screen-panel-expand]")).toBeNull();
+    expect(host.querySelector("[data-screen-panel-close]")).not.toBeNull();
+    expect(host.querySelector("[data-screen-panel-marks]")).toBeNull();
   });
 });

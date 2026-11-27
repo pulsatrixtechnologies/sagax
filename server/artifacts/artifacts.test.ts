@@ -122,4 +122,24 @@ describe("artifact store", () => {
     expect(store.removeBot("bot-a")).toBe(1);
     expect(store.all().map((artifact) => artifact.botId)).toEqual(["bot-b"]);
   });
+
+  it("keeps a favorite or popped artifact when its conversation is deleted (#5396)", () => {
+    const { open } = setup();
+    const store = open();
+    const favorite = store.create("bot-a", "chat-1", widget);
+    const popped = store.create("bot-a", "chat-1", { ...widget, title: "Popped" });
+    const ordinary = store.create("bot-a", "chat-1", { ...widget, title: "Ordinary" });
+    const other = store.create("bot-a", "chat-2", { ...widget, title: "Other chat" });
+    if (!favorite.ok || !popped.ok || !ordinary.ok || !other.ok) throw new Error("create");
+    expect(store.setFlags(favorite.artifact.id, { favorite: true })).toMatchObject({ ok: true });
+    expect(store.setFlags(popped.artifact.id, { popped: true })).toMatchObject({ ok: true });
+    expect(store.detachThread("chat-1")).toBe(2);
+    expect(store.get(favorite.artifact.id)).toMatchObject({ id: favorite.artifact.id, favorite: true, botId: "bot-a" });
+    expect(store.get(favorite.artifact.id)).not.toHaveProperty("threadId");
+    expect(store.get(popped.artifact.id)).toMatchObject({ id: popped.artifact.id, popped: true });
+    expect(store.get(popped.artifact.id)).not.toHaveProperty("threadId");
+    expect(store.get(ordinary.artifact.id)).toMatchObject({ threadId: "chat-1", favorite: false, popped: false });
+    expect(store.get(other.artifact.id)).toMatchObject({ threadId: "chat-2" });
+    expect(store.list("bot-a")).toHaveLength(4);
+  });
 });

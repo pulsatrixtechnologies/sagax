@@ -18,7 +18,7 @@ import { t } from "@/lib/i18n";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { useAllArtifacts, useBotArtifacts, type ArtifactList } from "@/lib/artifacts";
 import { classifyFile, threadFileUrl, type ThreadFile } from "@/lib/chat-files";
-import { groupLibraryItems, libraryItems, OLDER_PREVIEW, type LibraryItem } from "@/lib/library-items";
+import { artifactsKeptForThreads, groupLibraryItems, libraryItems, OLDER_PREVIEW, type LibraryItem } from "@/lib/library-items";
 import { AttachmentPreviewDialog, canonicalDownloadFilename } from "../AttachmentPreview";
 import type { ArtifactSummary } from "../../../shared/artifacts";
 import { ConfirmDialog } from "../ConfirmDialog";
@@ -78,11 +78,16 @@ export function LibraryTab({ bot }: { bot: Bot }) {
 export function GroupLibraryTab({ group }: { group: Group }) {
   const threads = groupThreadIds(group);
   const threadKey = [...threads].sort().join(",");
+  const memberKey = [...group.memberIds].sort().join(",");
   const all = useAllArtifacts();
   const list = useMemo<ArtifactList>(() => {
-    const keep = new Set(threadKey.split(","));
-    return { ...all, artifacts: all.artifacts ? all.artifacts.filter((artifact) => artifact.threadId !== undefined && keep.has(artifact.threadId)) : null };
-  }, [all, threadKey]);
+    const keep = new Set(threadKey.split(",").filter(Boolean));
+    const bots = new Set(memberKey.split(",").filter(Boolean));
+    return {
+      ...all,
+      artifacts: all.artifacts ? artifactsKeptForThreads(all.artifacts, keep, bots) : null,
+    };
+  }, [all, threadKey, memberKey]);
   const pages = usePagesWhere(`group:${group.id}:${threadKey}`, (page) => threads.has(page.threadId));
   const files = useThreadFiles(group);
   return <LibraryTabView list={list} pages={pages} files={files} />;

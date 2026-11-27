@@ -32,6 +32,22 @@ export function libraryItems(files: readonly ThreadFile[] | null, artifacts: rea
   ];
 }
 
+/** A group's Library (#5396): artifacts of its open conversations, plus every
+ * favorite or popped artifact of its bots even when that conversation is gone.
+ * `botIds` keeps favorites, popped and bot-scoped rows to members of the group. */
+export function artifactsKeptForThreads(
+  artifacts: readonly ArtifactSummary[],
+  threadIds: ReadonlySet<string>,
+  botIds?: ReadonlySet<string>,
+): ArtifactSummary[] {
+  return artifacts.filter((artifact) => {
+    if (artifact.threadId !== undefined && threadIds.has(artifact.threadId)) return true;
+    const keepAlive = artifact.favorite || artifact.popped || artifact.threadId === undefined;
+    if (!keepAlive) return false;
+    return !botIds || botIds.has(artifact.botId);
+  });
+}
+
 /** Older shows this many rows first; "Show more" reveals the rest. */
 export const OLDER_PREVIEW = 5;
 

@@ -15186,6 +15186,10 @@ store.onChange((change) => {
       stoppedTurns.delete(change.threadId);
       turnStops.forget(change.threadId);
       routines?.forgetRoutineRequestReceiptsForThread(change.threadId);
+      // #5396: a favorite or popped artifact stays with the bot when its
+      // conversation is cleared or deleted; it is no longer tied to that thread.
+      try { artifactStore.detachThread(change.threadId); }
+      catch { console.error("[artifacts] Could not detach favorite artifacts from a deleted thread."); }
       // A deleted destination must not strand an approval in an internal
       // task. Keep each run's snapshot and expose its execution as fallback.
       for (const run of routines?.listRuns() ?? []) {

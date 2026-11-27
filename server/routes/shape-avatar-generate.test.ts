@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
-  SHAPE_AVATAR_PROMPT_MARKER,
-  generateShapeAvatarDef,
-} from "../../shared/shape-avatar-generate.ts";
-import { validateShapeAvatarDef } from "../../shared/shape-avatar-def.ts";
+  ENGINE_AVATAR_PROMPT_MARKER,
+  generateEngineAvatarDef,
+} from "../../shared/engine-avatar-generate.ts";
+import { parseEngineAvatar } from "../../shared/engine-avatar-def.ts";
 import {
   createShapeAvatarGenerateInternalRoutes,
   createShapeAvatarGenerateRoutes,
@@ -48,8 +48,8 @@ async function callPublic(
   return { status, body: payload };
 }
 
-describe("shape-avatar generate routes", () => {
-  it("falls back to presets when the engine is missing", async () => {
+describe("shape-avatar generate routes (engine format, #5450)", () => {
+  it("falls back to gallery when the engine is missing; Import accepts the def", async () => {
     const handler = createShapeAvatarGenerateRoutes({
       bot: (id) => (id === "b1" ? { id: "b1" } : undefined),
       mayChange: () => true,
@@ -58,14 +58,15 @@ describe("shape-avatar generate routes", () => {
     const result = await callPublic(handler, "/api/bots/b1/shape-avatar/generate", { direction: "coffee mug" });
     expect(result.status).toBe(200);
     expect(result.body.source).toBe("fallback");
-    expect(validateShapeAvatarDef(result.body.def).ok).toBe(true);
-    expect(result.body.def.id).toBe("cup");
+    expect(parseEngineAvatar(JSON.stringify(result.body.def)).ok).toBe(true);
+    expect(result.body.def.id).toBe("mug");
+    expect(result.body.def).not.toHaveProperty("schemaVersion");
   });
 
   it("uses the model answer when it validates (fake engine)", async () => {
-    const modelDef = generateShapeAvatarDef("pad");
+    const modelDef = generateEngineAvatarDef("cat");
     const generate = vi.fn(async (prompt: string) => {
-      expect(prompt).toContain(SHAPE_AVATAR_PROMPT_MARKER);
+      expect(prompt).toContain(ENGINE_AVATAR_PROMPT_MARKER);
       return JSON.stringify(modelDef);
     });
     const handler = createShapeAvatarGenerateRoutes({
@@ -73,10 +74,10 @@ describe("shape-avatar generate routes", () => {
       mayChange: () => true,
       generate: () => generate,
     });
-    const result = await callPublic(handler, "/api/bots/b1/shape-avatar/generate", { direction: "game controller" });
+    const result = await callPublic(handler, "/api/bots/b1/shape-avatar/generate", { direction: "a friendly cat" });
     expect(result.status).toBe(200);
     expect(result.body.source).toBe("model");
-    expect(result.body.def.id).toBe("pad");
+    expect(result.body.def.id).toBe("cat");
     expect(generate).toHaveBeenCalledTimes(1);
   });
 
@@ -90,11 +91,11 @@ describe("shape-avatar generate routes", () => {
     const result = await callPublic(handler, "/api/bots/b1/shape-avatar/generate", { direction: "friendly rocket" });
     expect(result.status).toBe(200);
     expect(result.body.source).toBe("fallback");
-    expect(result.body.def.id).toBe("ship");
+    expect(result.body.def.id).toBe("rocket");
     expect(generate).toHaveBeenCalledTimes(2);
   });
 
-  it("refuses strangers and missing bots", async () => {
+  it("refuses strangers and missing bots; the owner may generate without an admin", async () => {
     const handler = createShapeAvatarGenerateRoutes({
       bot: (id) => (id === "b1" ? { id: "b1" } : undefined),
       mayChange: () => false,
@@ -102,10 +103,16 @@ describe("shape-avatar generate routes", () => {
     });
     expect((await callPublic(handler, "/api/bots/b1/shape-avatar/generate", { direction: "mug" })).status).toBe(403);
     expect((await callPublic(handler, "/api/bots/missing/shape-avatar/generate", { direction: "mug" })).status).toBe(404);
+    const owner = createShapeAvatarGenerateRoutes({
+      bot: () => ({ id: "b1" }),
+      mayChange: () => true,
+      generate: () => null,
+    });
+    expect((await callPublic(owner, "/api/bots/b1/shape-avatar/generate", { direction: "un robot" })).status).toBe(200);
   });
 
-  it("internal route returns a definition for the capability bot", async () => {
-    const modelDef = generateShapeAvatarDef("bulb");
+  it("internal route returns an engine definition for the capability bot", async () => {
+    const modelDef = generateEngineAvatarDef("cloud");
     const internal = createShapeAvatarGenerateInternalRoutes({
       generate: () => async () => JSON.stringify(modelDef),
     });
@@ -122,10 +129,11 @@ describe("shape-avatar generate routes", () => {
       method: "POST",
       json: json as any,
       capability: { botId: "bot-x", threadId: "t1", generation: "g1" },
-      readBody: async () => ({ direction: "idea lamp" }),
+      readBody: async () => ({ direction: "a soft cloud" }),
     });
     expect(status).toBe(200);
     expect(payload.source).toBe("model");
-    expect(payload.def.id).toBe("bulb");
+    expect(payload.def.id).toBe("cloud");
+    expect(parseEngineAvatar(JSON.stringify(payload.def)).ok).toBe(true);
   });
 });

@@ -1,23 +1,28 @@
-# Générateur de formes de mascotte (retiré de l'UX, conservé dans le projet)
+# Générateur de formes de mascotte
 
-Décision de JC (2026-11-01) : le générateur de formes n'apparaît plus nulle
-part dans l'app. Le moteur, le format portable et le code de génération restent
-dans le repo pour produire une nouvelle forme plus facilement. Ce document dit
-comment tout fonctionne et comment en ajouter une.
+Le « + » du sélecteur de mascotte (desktop, onglet Formes) offre Generate et
+Import [D-20261127-005] (#5450, suite de #5369) : la personne décrit une forme,
+le modèle Auto du bot renvoie une définition open-bot-avatar, l'aperçu s'affiche
+dans le panneau, puis Garder / Réessayer / Annuler. La définition passe par
+`parseEngineAvatar` (la même vérification que l'import) avant d'être ajoutée.
+Par personne (propriétaire du bot), sans administrateur.
 
-## Ce qui a été retiré
+Le format portable plus ancien (`schemaVersion`) et le script
+`scripts/generate-shape.mjs` restent pour produire une forme hors de l'app.
 
-- Desktop et web : la carte « Objects » de l'éditeur de mascotte
+## Ce qui a été retiré de l'ancienne UX (2026-11-01), puis remplacé
+
+- Desktop et web : la carte « Objects » de l'ancien éditeur de mascotte
   (`MascotLookEditor.tsx`) avec JSON, SVG, Share link, Import JSON et Generate
   shape. L'ancien `ShapeAvatarPanel.tsx` est supprimé (voir l'historique git
-  avant le commit `feat/hide-shape-generator` si on veut recopier l'UI).
-- iOS : `ShapeAvatarEditorPanel` (presets d'objets, aperçu d'humeur, export,
-  partage, import, génération) retiré de `CharacterEditor`. Les huit objets
-  restent choisissables dans la grille de formes.
+  avant le commit `feat/hide-shape-generator`). Generate et Import revivent
+  dans le panneau « + » du sélecteur ancré (`MascotPicker` / `AddShapePanel`).
+- iOS : `ShapeAvatarEditorPanel` retiré de `CharacterEditor` (téléphone et
+  tablette : un autre lot). Les huit objets restent choisissables dans la grille.
 - Outil bot `generate_shape_avatar` : retiré du catalogue agents, de la
   permission `shapes:generate` et du groupe `extras`. Aucun bot ne l'offre.
-- Clés de locale `mascot.shape.{import,export,exportSvg,exportJson,shareLink,
-  generate,generatePlaceholder,generateHint,importError,importOk,objects}`.
+- Anciennes clés `mascot.shape.{import,export,...}` : remplacées par
+  `mascotPicker.add.*`.
 
 ## Ce qui reste (le moteur et le chemin de génération)
 
@@ -25,9 +30,11 @@ comment tout fonctionne et comment en ajouter une.
 |---|---|
 | Format portable (schéma v1, validation, compile, partage) | `shared/shape-avatar-def.ts` |
 | Presets d'objets (pad, cup, bulb, say, sprout, tin, tome, ship), SVG fixe | `shared/shape-avatar-presets.ts` |
-| Génération (mots-clés, prompt modèle, parse, repli) | `shared/shape-avatar-generate.ts` |
-| Module serveur (re-exporte la génération, définition d'outil) | `server/media/shape-avatar.ts` |
-| Route interne de génération | `/api/internal/shape-avatar/generate` |
+| Génération portable (mots-clés, prompt, parse, repli) | `shared/shape-avatar-generate.ts` |
+| Génération moteur open-bot-avatar (picker Generate) | `shared/engine-avatar-generate.ts` |
+| Module serveur (re-exporte la génération portable, définition d'outil) | `server/media/shape-avatar.ts` |
+| Route publique et interne (répond en format moteur) | `POST /api/bots/:id/shape-avatar/generate`, `/api/internal/shape-avatar/generate` |
+| Client picker | `src/lib/shape-avatar-generate-client.ts`, `MascotPicker` `AddShapePanel` |
 | Contour vivant à partir d'une définition | `shared/shape-avatar-outline.ts` |
 | Géométrie partagée (64 rayons par corps, ancres de visage, yeux, peaux) | `shared/mascot-geometry.json` |
 | Dessin desktop (moteur open-bot-avatar, #4145) | `src/components/shape-avatar.ts`, `ShapeMascot.tsx`, `shared/shape-avatars.json` |

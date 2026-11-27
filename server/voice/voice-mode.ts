@@ -103,6 +103,7 @@ import {
   type EffectiveVoiceChoice,
   type ProviderVoices,
   type VoiceProviderId,
+  type VoiceSttChoice,
   type VoiceSttProvider,
   type VoiceTtsProvider,
 } from "../../shared/voice-providers.ts";
@@ -459,6 +460,16 @@ export async function resolveVoiceKey(deps: KeyDeps, speaker: VoiceSpeaker): Pro
   return { ok: true, key: first.key, via: first.via, ...(first.payerPrincipalId ? { payerPrincipalId: first.payerPrincipalId } : {}) };
 }
 
+/** Refusal for meeting notes when no speech to text key serves: names the
+ * provider the person chose (or both under Auto). */
+function meetingSttRefusal(cause: VoiceModeRefusalCause, stt: VoiceSttChoice): string {
+  if (cause !== "no_credentials") {
+    return `Speech to text is not available for you right now (${cause}).`;
+  }
+  const named = stt === "openai" ? "an OpenAI key" : stt === "xai" ? "an xAI key" : "an xAI or OpenAI key";
+  return `Meeting notes need speech to text: add ${named} in Settings > Providers.`;
+}
+
 /** Meeting notes speech to text (#5416 point 4): same provider choice and
  * fallback as dictation (`POST /voice/transcribe`). The person's Settings >
  * Voice `stt` (and the bot's own) pick who hears first; a refused key gives
@@ -468,32 +479,50 @@ export async function resolveMeetingTranscriber(
   deps: VoiceModeDeps,
   args: { speaker: VoiceSpeaker; target: VoiceTarget },
 ): Promise<{ transcribe(audio: Uint8Array, mime: string): Promise<string> } | { error: string }> {
-  // Temporary: still the old xAI-only path. The green commit replaces this
-  // with voiceKeysFor + withVoiceKeys (same as dictation).
   try { deps.assertWithinBudget?.(); } catch (error) {
     return { error: error instanceof Error ? error.message : String(error) };
   }
-  const key = await resolveVoiceKey(deps, args.speaker);
-  if (!key.ok) {
-    return {
-      error: key.cause === "no_credentials"
-        ? "Meeting notes need speech to text: add an xAI key in Settings > Providers > Models."
-        : `Speech to text is not available for you right now (${key.cause}).`,
-    };
-  }
   const { speaker, target } = args;
+  const preference = deps.preference?.(speaker);
+  const choice = effectiveVoiceChoice(
+    preference === undefined || preference === null ? {} : cleanVoiceModeSettings(preference),
+    target.botId || undefined,
+  );
+  const adapterOf = (provider: VoiceProviderId): VoiceProviderAdapter | undefined =>
+    provider === "xai" ? deps.xai : deps[provider];
+  const { resolved, sttKeys } = await voiceKeysFor({ adapterOf, deps }, speaker, { tts: "auto", stt: choice.stt }, target.threadId || undefined);
+  const hearing = sttKeys.filter((candidate) => Boolean(adapterOf(candidateProvider(candidate))?.transcribe));
+  if (!hearing.length) {
+    return { error: meetingSttRefusal(resolved.ok ? "no_credentials" : resolved.cause, choice.stt) };
+  }
+  const who = speaker.principalId || "operator";
+  const now = deps.now ?? Date.now;
+  const refusals = new VoiceKeyRefusals({ now });
+  const scrubAll = (message: string): string => hearing.reduce((out, candidate) => scrub(out, candidate.key), message);
   return {
     transcribe: async (audio, mime) => {
-      const heard = await deps.xai.transcribe(audio, mime, key.key);
+      const { value: heard, used, fellBack } = await withVoiceKeys<{ text: string }>(
+        who,
+        hearing,
+        refusals,
+        (candidate) => onThisKey(candidate, () => adapterOf(candidateProvider(candidate))!.transcribe!(new Uint8Array(audio), mime, candidate.key)),
+        { log: deps.log ?? console.warn, what: "meeting-transcribe", scrub: scrubAll },
+      );
+      if (fellBack.length && target.threadId) {
+        const named = fellBack.map((entry) => ({ provider: VOICE_PROVIDER_LABELS[candidateProvider(entry)], failure: entry.failure }));
+        deps.notice?.(target.threadId, providerFallbackNotice("speech to text", named, VOICE_PROVIDER_LABELS[candidateProvider(used)]));
+      }
+      const provider = candidateProvider(used);
       deps.recordUsage({
         target,
         speaker,
-        via: key.via,
-        ...(key.payerPrincipalId ? { payerPrincipalId: key.payerPrincipalId } : {}),
-        model: "grok-stt",
+        via: used.via,
+        ...(used.payerPrincipalId ? { payerPrincipalId: used.payerPrincipalId } : {}),
+        model: usageModel(provider, "stt"),
         input: audio.byteLength,
+        ...(provider !== "xai" ? { provider } : {}),
       });
-      return heard.text;
+      return stripFillers(heard.text);
     },
   };
 }

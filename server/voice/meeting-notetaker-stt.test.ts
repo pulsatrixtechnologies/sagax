@@ -22,11 +22,12 @@ const WAV = (() => {
 const speaker: VoiceSpeaker = { principalId: "p-ada", sub: "sub-ada" };
 const target = { botId: "b-quasar", botName: "Quasar", threadId: "t-ada", ownerPrincipalId: "p-owner" };
 
-function deps(over: Partial<VoiceModeDeps> & {
+function deps(over: {
   xaiTranscribe?: VoiceModeDeps["xai"]["transcribe"];
   openaiTranscribe?: NonNullable<VoiceModeDeps["openai"]>["transcribe"];
   preference?: unknown;
   noXai?: boolean;
+  providerKeys?: VoiceModeDeps["providerKeys"];
 } = {}): { deps: VoiceModeDeps; usage: VoiceUsage[]; xai: { transcribe: ReturnType<typeof vi.fn> }; openai: { transcribe: ReturnType<typeof vi.fn> } } {
   const usage: VoiceUsage[] = [];
   const xai = {
@@ -46,13 +47,12 @@ function deps(over: Partial<VoiceModeDeps> & {
     resolveOwnKey: async () => ({ ok: false as const, error: "no_key" as const }),
     xai,
     openai,
-    providerKeys: (provider) => (provider === "openai"
+    providerKeys: over.providerKeys ?? ((provider) => (provider === "openai"
       ? [{ key: OPENAI_KEY, via: "speaker-key", source: "voice-key", last4: "8Qq", payerPrincipalId: "p-ada" }]
-      : []),
+      : [])),
     preference: () => over.preference,
     utterances: (text) => (text ? [text] : []),
     recordUsage: (entry) => { usage.push(entry); },
-    ...over,
   };
   return { deps: base, usage, xai, openai };
 }
@@ -91,7 +91,8 @@ describe("meeting notetaker speech to text (#5416)", () => {
     await expect(out.transcribe(WAV, "audio/wav")).resolves.toBe("heard by xAI");
     expect(xai.transcribe).toHaveBeenCalled();
     expect(openai.transcribe).not.toHaveBeenCalled();
-    expect(usage.at(-1)).toMatchObject({ model: "grok-stt", provider: "xai" });
+    expect(usage.at(-1)).toMatchObject({ model: "grok-stt" });
+    expect(usage.at(-1)?.provider).toBeUndefined();
   });
 
   it("refuses with an OpenAI name when the person chose OpenAI and has no key", async () => {

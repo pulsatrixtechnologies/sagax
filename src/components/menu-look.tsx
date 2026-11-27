@@ -102,15 +102,18 @@ export function useMenuInWindow(ref: RefObject<HTMLElement | null>, at: MenuPoin
       const viewH = window.innerHeight;
       const roomBelow = viewH - at.top - edge;
       const roomAbove = at.top - edge;
+      // Prefer the side with more room when the menu would leave the window.
+      // Always clamp afterward so a short window or an off-screen anchor still
+      // keeps every edge inside (tests and tiny viewports).
       const flipUp = height > roomBelow && roomAbove > roomBelow;
-      const top = flipUp
-        ? Math.max(edge, at.top - height)
-        : Math.max(edge, Math.min(at.top, viewH - height - edge));
+      const top = Math.max(edge, Math.min(flipUp ? at.top - height : at.top, viewH - height - edge));
       const left = at.right ? at.left - width : at.left;
       element.style.top = `${top}px`;
       element.style.left = `${Math.max(edge, Math.min(left, viewW - width - edge))}px`;
-      if (flipUp) element.setAttribute("data-menu-flipped", "");
-      else element.removeAttribute("data-menu-flipped");
+      if (typeof element.setAttribute === "function") {
+        if (flipUp) element.setAttribute("data-menu-flipped", "");
+        else element.removeAttribute("data-menu-flipped");
+      }
     };
     place();
     window.addEventListener("resize", place);

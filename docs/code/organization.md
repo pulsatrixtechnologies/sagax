@@ -74,6 +74,19 @@ resolved list lives in Plugins > Installed (maintainer, 2026-11-01). Form mirror
 `shared/org-capability-form.ts`. Tests: `server/org/org-capabilities.test.ts`,
 `server/routes/org-capabilities.test.ts`, `shared/org-capability-form.test.ts`.
 
+## Bot memory in the organization console (#4461)
+
+On a linked organization server every memory a bot later reads back is
+visible in the console's Memory section (`server/memory/console-memory-mirror.ts`,
+installed from `server/index.ts` via `installConsoleMemoryMirror`). Owner of
+truth: the console (tiers me, team, org). Local files stay the working copy
+the bot reads each turn; the mirror pushes on journaled writes and on
+`memory_update` / team-memory saves, with `bot` and `written_at` (Perspicax
+#2051), and can pull console edits and deletes back. Solo installs are
+unchanged. Inventory of stores and which are mirrored: `MEMORY_STORE_INVENTORY`
+in that module. Secrets stay filtered by the console (flagged, not refused).
+Tests: `server/memory/console-memory-mirror.test.ts`.
+
 ## Organization memory signals (2026-10-11)
 
 Perspicax keeps the organization's work log and a duplicate detector over

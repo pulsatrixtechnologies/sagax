@@ -1440,6 +1440,7 @@ import { createEventSubscriptionsInternalRoutes } from "./routes/event-subscript
 import { createPerspicaxOrgRoutes, orgDirectoryEntries } from "./perspicax/perspicax-org-routes.ts";
 import { createMemorySyncTokenRoute } from "./memory/perspicax-memory-sync-token.ts";
 import { memoryReadPath, PerspicaxMemoryNotesClient } from "./memory/perspicax-memory-notes.ts";
+import { installConsoleMemoryMirror } from "./memory/console-memory-mirror-install.ts";
 import { createMeMemoryNotesRoutes, memoryPrincipal } from "./routes/me-memory-notes.ts";
 import { createMemoryManagerRoutes } from "./routes/memory-manager.ts";
 import { ownEnvironmentSensitiveRead, ownEnvironmentTurnOrigin } from "./people/member-environment.ts";
@@ -22528,6 +22529,21 @@ const memoryNotesClient = new PerspicaxMemoryNotesClient({
   linkBearer: () => perspicaxDirectory?.linkBearer() ?? null,
 });
 
+/** #4461: every memory a bot keeps is visible in the organization console's
+ * Memory. Solo installs leave this disabled. */
+const consoleMemoryMirror = installConsoleMemoryMirror({
+  client: memoryNotesClient,
+  enabled: () => IDENTITY.kind === "perspicax" && Boolean(perspicaxDirectory?.linkBearer()),
+  ownerOf: (botId) => {
+    const bot = store.bot(botId);
+    if (!bot) return null;
+    const owner = effectiveBotOwner(bot).trim();
+    return owner || null;
+  },
+  botName: (botId) => store.bot(botId)?.name?.trim() || botId,
+  log: (line) => console.warn(line),
+});
+
 /** 2026-11-05 (visible roles, batch 5): the person's own Perspicax journal
  * rows, read with their own sign-in bearer (as the memory notes are). */
 const roleJournalClient = new PerspicaxMemoryNotesClient({
@@ -25240,7 +25256,12 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     readWorkspaceText: (botId, path, offset, plugins, personalRoot, librarySkills) =>
       readWorkspaceText(botId, path, offset, plugins as Parameters<typeof readWorkspaceText>[3], personalRoot, librarySkills),
     updateGroupMemory: (groupId, update, opts) => updateGroupMemory(groupId, update as never, opts),
-    updateMemory: (botId, update, opts) => updateMemory(botId, update as never, opts),
+    updateMemory: (botId, update, opts) => {
+      const result = updateMemory(botId, update as never, opts);
+      // #4461: tool writes skip the journal; mirror MEMORY.md when the write lands
+      if (result.ok) consoleMemoryMirror.onBotMemoryWritten(botId, "MEMORY.md");
+      return result;
+    },
     appendMemoryLog: (botId, text, opts) => appendMemoryLog(botId, text as string, opts),
     updateRules: (botId, update, opts) => updateRules(botId, update as never, opts),
     updateDoc: (botId, update, opts) => updateDoc(botId, update as never, opts),
@@ -25249,7 +25270,10 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     // #4439: the bot saves it itself, into the memory its person may write
     saveTeamMemory: (section, entry, meta) => {
       const owner = meta.botId ? effectiveBotOwner(store.bot(meta.botId) ?? {}) : undefined;
-      return teamMemory.save(teamMemoryKeyFor(section, owner), entry, meta);
+      const saved = teamMemory.save(teamMemoryKeyFor(section, owner), entry, meta);
+      // #4461: person-scoped team memory appears in the console for its owner
+      if (owner) consoleMemoryMirror.onTeamEntrySaved(owner, saved.entry);
+      return saved;
     },
     appendDecision: (row) => appendDecision(DATA_DIR, row as never),
     teamMemoryPersonScoped,
@@ -26418,6 +26442,25 @@ ROUTES.push(createMemoryManagerRoutes({
     temporary: Boolean(bot.temporary),
   })),
   botReachable: botMemoryReachable,
+  // #4461: console edits and deletes reach local team memory when the page opens
+  syncFromConsole: (auth) => {
+    if (IDENTITY.kind !== "perspicax" || auth.kind !== "session") return;
+    const who = memoryPrincipal(auth, IDENTITY.issuer);
+    if (!who) return;
+    const key = teamMemoryKeyForAuth(auth, "");
+    void consoleMemoryMirror.pullForPrincipal(who.principalId, {
+      applyTeamEdit: (entryId, body, title) => {
+        try {
+          teamMemory.update(key, entryId, { name: title, detail: body });
+        } catch {
+          /* a conflict or oversize body never blocks the Memory page */
+        }
+      },
+      applyTeamDelete: (entryId) => {
+        teamMemory.remove(key, entryId);
+      },
+    });
+  },
   teamSections: (auth) => {
     // #4460: on an organization server, each person sees their own
     // memory (their bots' entries, the ones moved out of a shared team

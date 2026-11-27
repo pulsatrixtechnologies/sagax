@@ -50,12 +50,15 @@ export interface MemoryManagerSourcesDeps {
   teamSections(auth: RequestAuth): Array<{ section: string; label: string; mayWrite: boolean; count: number; owner?: "self" | "unclaimed" }>;
   /** Whether Perspicax notes are offered for this caller. */
   perspicax(auth: RequestAuth): { available: boolean; reason?: "link" | "sign_in" | "solo" } | null;
+  /** #4461: pull console edits/deletes into local memory before listing. */
+  syncFromConsole?(auth: RequestAuth): void | Promise<void>;
 }
 
 export function createMemoryManagerRoutes(deps: MemoryManagerSourcesDeps): RouteHandler {
   return async ({ res, path, method, auth, json }) => {
     if (path !== MEMORY_MANAGER_SOURCES) return PASS;
     if (method !== "GET") return json(res, 405, { error: "method not allowed" });
+    await deps.syncFromConsole?.(auth);
 
     const sources: MemoryManagerSource[] = [];
     for (const bot of deps.bots(auth)) {

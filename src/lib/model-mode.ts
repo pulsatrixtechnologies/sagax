@@ -38,13 +38,16 @@ export function modeBlurb(mode: ModelMode): string {
  * usage limit (M-20261126-101) no model is named, for Auto too: the line
  * says none can be used now, and when the first one is back. */
 export function modeModelsLine(mode: ModelMode, resolution: ModeResolution | undefined, now = Date.now()): string | null {
-  if (resolution?.limited) {
-    const until = resolution.limited.until;
-    return until !== null && until > now ? `${t("model.cascade.none")} · ${t("limits.resets", { time: resetTime(until, now) })}` : t("model.cascade.none");
-  }
+  if (resolution?.limited) return limitedLine(resolution.limited.until, now);
   if (mode === "auto" || !resolution?.pick) return null;
   const names = resolution.team?.length ? resolution.team.map((agent) => agent.modelLabel) : [resolution.pick.modelLabel];
   return [...new Set(names)].join(", ");
+}
+
+/** Every account at its usage limit (M-20261126-101): none can be used now, and when the first one is back. The
+ * menu's tooltips and Settings > Models say it the same way. */
+export function limitedLine(until: number | null, now = Date.now()): string {
+  return until !== null && until > now ? `${t("model.cascade.none")} · ${t("limits.resets", { time: resetTime(until, now) })}` : t("model.cascade.none");
 }
 
 /** The side tooltip's line: what it does, then which model backs it. */

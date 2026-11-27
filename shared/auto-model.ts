@@ -61,4 +61,7 @@ export interface AutoModelPreview {
   backups: AutoModelEntry[];
   /** #4900: what each composer mode would run for this person now. */
   modes?: Record<ModelMode, ModeResolution>;
+  /** M-20261126-101: every account is at its usage limit, so `chain` is empty and each account is in `excluded`
+   * ("limit"); `until`: when the first is expected back, null when not known (as a mode's `limited`). */
+  limited?: { until: number | null };
 }

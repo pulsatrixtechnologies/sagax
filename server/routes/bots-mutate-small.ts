@@ -135,17 +135,18 @@ async function handleBotAutoModel(env: BotsMutateEnv): Promise<boolean> {
       const item = entry(choice); if (item) excluded.push({ ...item, reason: "refused" });
     }
     for (const engine of engines) {
-      if (limited.has(engine.instanceId) && engines.some((candidate: any) => !limited.has(candidate.instanceId))) excluded.push({ instanceId: engine.instanceId, engineLabel: engine.displayName, reason: "limit" });
+      if (limited.has(engine.instanceId)) excluded.push({ instanceId: engine.instanceId, engineLabel: engine.displayName, reason: "limit" });
     }
+    // M-20261126-101: with every account at its limit the turn still tries its list, and the preview names no model:
+    // no pick, no sentence, no order of choice (Settings > Models), each account left out for its limit, and when the
+    // first is back (`limited`; the modes say the same, modesAtLimit)
+    const allLimited = engines.length > 0 && engines.every((engine: any) => limited.has(engine.instanceId));
     const turn = env.autoPickForTurn({ bot: previewBot, threadId: bot.threadId, speaker, role: "orchestration", text: "", withModes: true });
-    const chain = (turn?.pick.chain ?? []).flatMap((choice: any) => {
+    const chain = allLimited ? [] : (turn?.pick.chain ?? []).flatMap((choice: any) => {
       const item = entry(choice);
       return item && !refused.some((skip: any) => skip.instanceId === choice.instanceId && skip.model === choice.model) ? [item] : [];
     });
-    // M-20261126-101: with every account at its limit the turn still tries its list, and the preview names no model
-    // as the next one (the modes say none can be used and when the first is back, modesAtLimit)
-    const allLimited = engines.length > 0 && engines.every((engine: any) => limited.has(engine.instanceId));
-    const usablePick = !allLimited && turn && chain.some((choice: any) => choice.instanceId === turn.pick.selection.instanceId && choice.model === turn.pick.selection.model);
+    const usablePick = turn && chain.some((choice: any) => choice.instanceId === turn.pick.selection.instanceId && choice.model === turn.pick.selection.model);
     // Recovery uses the saved selections, including custom/local endpoints
     // that the automatic candidate scorer intentionally leaves out.
     const backups = env.botRecoveryBackups(bot, env.cfg).flatMap((choice: any) => {
@@ -155,7 +156,8 @@ async function handleBotAutoModel(env: BotsMutateEnv): Promise<boolean> {
       return [{ ...choice, engineLabel: env.engineDisplayName(instance), modelLabel: option?.label || choice.model }];
     });
     env.json(env.res, 200, { auto: bot.modelSelection.auto === true, pick: usablePick ? env.autoModelRecord(turn.pick, Date.now()) : null,
-      chain, excluded, backups, explanation: usablePick ? env.explainPick(turn.pick) : "", ...(turn?.modes ? { modes: turn.modes } : {}) });
+      chain, excluded, backups, explanation: usablePick ? env.explainPick(turn.pick) : "", ...(turn?.modes ? { modes: turn.modes } : {}),
+      ...(allLimited ? { limited: { until: env.limitFailover.limitedUntil(payer, engines) } } : {}) });
     return true;
   }
   return false;

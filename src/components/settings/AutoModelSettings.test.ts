@@ -34,6 +34,24 @@ describe("the Auto dispatch preview", () => {
     const html = renderToStaticMarkup(createElement(AutoModelStatus, { status: { ...status, chain: [] } }));
     expect(html).toContain("No active model");expect(html).not.toContain("data-auto-model-chain");
   });
+  // M-20261126-101, review M1b: every account at its usage limit
+  it("names no model as Auto's choice while every account is at its limit, and says when one is back", () => {
+    const until = Date.now() + 2 * 60 * 60 * 1000;
+    const html = renderToStaticMarkup(createElement(AutoModelStatus, { status: { ...status, limited: { until }, excluded: [
+      { instanceId: "first", engineLabel: "My subscription", reason: "limit" },
+      { instanceId: "second", engineLabel: "My computer", reason: "limit" },
+    ] } }));
+    expect(html).not.toContain("data-auto-model-chain");
+    expect(html).not.toContain("Large");
+    expect(html).toContain("No model you can use right now · resets ");
+    expect(html).not.toContain("No active model");
+    expect(html.match(/Usage limit reached for this account/g)?.length).toBe(2);
+  });
+  it("says only that no model can be used when the reset is not known", () => {
+    const html = renderToStaticMarkup(createElement(AutoModelStatus, { status: { ...status, chain: [], limited: { until: null } } }));
+    expect(html).toContain("No model you can use right now");
+    expect(html).not.toContain("resets");
+  });
   it("identifies a preview still loading", () => {
     expect(renderToStaticMarkup(createElement(AutoModelStatus, { status: null }))).toContain('role="status"');
   });

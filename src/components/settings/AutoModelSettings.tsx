@@ -3,6 +3,7 @@ import { useStore } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { useAutoModelStatus } from "@/lib/auto-model-preview";
 import { autoReasonSentence } from "@/lib/auto-model";
+import { limitedLine } from "@/lib/model-mode";
 import { DescribedRow, FoldRow, PillSelect, SettingsTextRow } from "../SettingsPrimitives";
 import type { AutoModelPreview } from "../../../shared/auto-model";
 
@@ -11,12 +12,14 @@ const LIST = "flex flex-col gap-1 text-[12px] leading-4 text-ink-secondary";
 /** Rows of the "What Auto would choose now" group (one card level, #2080):
  * the order Auto would follow, folded under a count pill with the reason of
  * the pick as its grey line, then what it left out and why. Only metadata
- * produced by the same candidate list as dispatch, no paid probe. */
+ * produced by the same candidate list as dispatch, no paid probe. With every
+ * account at its usage limit (M-20261126-101) no model is Auto's choice: the
+ * row says none can be used and when the first is back, as the menu does. */
 export function AutoModelStatus({ status }: { status: AutoModelPreview | null }) {
   if (!status) return <div data-auto-model-status=""><SettingsTextRow live>{t("model.auto.chain.waiting")}</SettingsTextRow></div>;
-  const chain = status.chain ?? [];
+  const chain = status.limited ? [] : status.chain ?? [];
   const excluded = status.excluded ?? [];
-  const reason = status.pick ? autoReasonSentence(status.pick) : undefined;
+  const reason = status.limited ? limitedLine(status.limited.until) : status.pick ? autoReasonSentence(status.pick) : undefined;
   return <div data-auto-model-status="">
     {chain.length ? <FoldRow cardId="models.auto.chain" defaultOpen label={t("model.auto.chain.order")} description={reason} count={chain.length}>
       <ol data-auto-model-chain="" className={`${LIST} list-decimal pl-5`}>

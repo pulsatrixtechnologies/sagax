@@ -22,6 +22,7 @@ import { PROVIDER_KEY_FIELDS, PROVIDER_KEYS, savedKeys } from "./settings-provid
 import { engineRow, type EngineRow } from "./settings-engine-row.ts";
 import { USER_PREFERENCE_KEYS } from "./user-preferences.ts";
 import { pageProactiveChoices } from "./proactive-choices-page.ts";
+import { contextUsagePercent } from "./context-usage.ts";
 
 /** `self`: the change targets the bot that is speaking. `shared` (#1545,
  * engines of an organization server): another person's bot, or the
@@ -221,6 +222,8 @@ botField("bot.fallback", "fallback", "array", "Fallback models", "Bot editor > M
 botField("bot.harness", "harness", "string?", "Runs with: the engine that runs this bot's model (piAgent, opencodeGo, openai-compat, or its own tool's kind such as claudeAgent or codex; null for the provider's default). Only what the provider's connection allows", "Bot editor > Model > Runs with");
 // #4417: the bot's context size where its model offers more than one
 botField("bot.contextWindow", "contextWindow", "number?", "Context size in tokens (one of the sizes its model offers, such as 200000 or 1000000; null for the default)", "Bot editor > Model > Context size");
+// #5367: compact this bot's threads before the window fills (0.75 = 75%; null follows the server)
+botField("bot.compactAt", "compactAt", "number?", "Compact threads when context reaches this share of the window (0 to 1, e.g. 0.75) or this many tokens; null follows the server", "Bot editor > Model > Compact at");
 // widening the bots a bot reaches carries the screen's own acknowledgement
 function botReach(key: string, field: string, label: string, where: string, classes?: SettingSpec["classes"]): void {
   add({
@@ -580,6 +583,22 @@ add({
   key: "thread.delete", family: "thread", target: "thread", value: "boolean", label: "Delete the conversation (true)", where: "Thread menu > Delete",
   write: (ids, v) => v === true ? { method: "DELETE", path: `/api/bots/${enc(ids.botId!)}/tasks/${enc(ids.target!)}` } : "value is true.",
   classes: always("delete"),
+});
+// #5367: how full the last turn's context was, and compact this thread now.
+add({
+  key: "thread.contextUsage", family: "thread", target: "thread", value: "number?", label: "Context usage of this conversation as a percent of its window (null until a turn measured it)", where: "Thread",
+  read: (ids) => ({
+    path: `/api/bots/${enc(ids.botId!)}`, list: "bots", match: "id",
+    // Task row so a conversation with no usage yet still reads as null, not 404.
+    field: `tasks[threadId=${ids.target}]`,
+    // Wire stores usage.context as { tokens, window }; bots read the promised percent.
+    shape: (v) => contextUsagePercent((v as { usage?: { context?: { tokens?: number; window?: number } } } | null | undefined)?.usage?.context),
+  }),
+  write: () => "thread.contextUsage is read only: thread.compact folds the conversation when it is full.",
+});
+add({
+  key: "thread.compact", family: "thread", target: "thread", value: "boolean", label: "Compact this conversation now (true)", where: "Thread menu > Compact",
+  write: (ids, v) => v === true ? { method: "POST", path: `/api/bots/${enc(ids.botId!)}/tasks/${enc(ids.target!)}/compact` } : "value is true.",
 });
 // #5233: Stop, as the composer and the teammate exchange view send it (POST
 // /api/bots/:id/interrupt with the thread): false stops the turn running in

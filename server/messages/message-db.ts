@@ -1172,14 +1172,17 @@ export interface ChatFollowup {
 /** A 202/cancel/dispatch claim must reach disk before publishing its result.
  * Use the existing transcript DB (and backup path), with FULL sync for these
  * small transactions only; ordinary transcript writes keep their policy. */
-function writeFollowups(write: (connection: DatabaseSync) => void): void {
+function writeFollowups(write: (connection: DatabaseSync) => void, durable = true): void {
   const connection = db();
-  connection.exec("PRAGMA synchronous = FULL");
+  // #5343: FULL sync on a large DELETE (deleteThread) held the event loop
+  // for tens of seconds on a cold disk while /api/health missed its gate.
+  // Follow-up and receipt writes stay FULL; thread teardown uses NORMAL.
+  if (durable) connection.exec("PRAGMA synchronous = FULL");
   try {
     connection.exec("BEGIN IMMEDIATE");
     try { write(connection); connection.exec("COMMIT"); }
     catch (error) { connection.exec("ROLLBACK"); throw error; }
-  } finally { connection.exec("PRAGMA synchronous = NORMAL"); }
+  } finally { if (durable) connection.exec("PRAGMA synchronous = NORMAL"); }
 }
 
 export interface StoredCommandReceipt {
@@ -1704,6 +1707,8 @@ function newestAts(threadIds: readonly string[], where: string): Map<string, num
 
 /** One transaction; `beforeCommit` throwing keeps the thread's rows. */
 export function deleteThread(threadId: string, beforeCommit?: () => void): void {
+  // #5343: NORMAL sync so a large thread delete does not fsync the whole
+  // messages.db on the server's thread (49 s blocks failed the health gate).
   writeFollowups((connection) => {
     connection.prepare("DELETE FROM chat_followups WHERE thread_id = ?").run(threadId);
     connection.prepare("DELETE FROM messages WHERE thread_id = ?").run(threadId);
@@ -1719,7 +1724,7 @@ export function deleteThread(threadId: string, beforeCommit?: () => void): void 
     const own = keyring().threadKeyId(threadId);
     if (own) keyring().destroyKeys([own]);
     beforeCommit?.();
-  });
+  }, false);
   bindings.delete(threadId);
   for (const [rowid, entry] of pendingIndex) if (entry.threadId === threadId) pendingIndex.delete(rowid);
   checkpointSoon();

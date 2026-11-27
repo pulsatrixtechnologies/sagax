@@ -271,8 +271,10 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
       // a stored file only confidential threads point at is not there either
       const file = host.confidentialFileOf(path);
       if (file) {
-        // read now, not from the minute-long cache: a message may have just named it
-        const using = host.threadsReferencing(file);
+        // #5343: scan off the server's thread (a sync instr() over messages.db
+        // held the loop for tens of seconds on a cold disk).
+        const found = await host.threadsReferencingAsync([file]);
+        const using = found.get(file) ?? [];
         if (using.length && using.every((threadId) => confidentialIds.has(threadId))) {
           json(res, 404, { error: "no such file" });
           return null;
@@ -316,6 +318,11 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
   }
   if (scopedViewerId && !grantRoute && !host.adminAnswersPendingApproval(method, path, auth)) {
     const subject = pathSubject(path);
+    // #5343: attachment visibility used a sync messages.db scan on this path
+    // (56 s cold). Prime the cache off-thread before the sync check.
+    if (subject?.kind === "attachment" && host.privateThreads()) {
+      await host.threadsUsingAttachment.prime?.(subject.name);
+    }
     if (subject && !host.subjectSeesChannel(subject, scopedViewerId)) {
       json(res, 404, { error: notFoundFor(subject) });
       return null;

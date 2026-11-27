@@ -11,6 +11,7 @@
     { "name": "an AI client's conversation over MCP", "task": { "threadId": "agent", "createdAt": 1, "openedBy": { "botId": "agent:claude", "name": "Claude", "kind": "agent", "at": 1 } }, "origin": "ai-client", "listed": false, "background": true },
     { "name": "an AI client's conversation stays background though its prompts write as the person", "task": { "threadId": "agent2", "createdAt": 1, "personWrote": true, "openedBy": { "botId": "agent:claude", "name": "Claude", "kind": "agent", "at": 1 } }, "origin": "ai-client", "listed": false, "background": true },
     { "name": "a #291 hidden conversation", "task": { "threadId": "hidden", "createdAt": 1, "hidden": true }, "origin": "ai-client", "listed": false, "background": true },
+    { "name": "a bot's hidden investigation (#5100)", "task": { "threadId": "investigate", "createdAt": 1, "hidden": true, "openedBy": { "botId": "scout", "name": "Scout", "at": 1 } }, "origin": "bot-hidden", "listed": false, "background": true },
     { "name": "a parallel task the person started", "task": { "threadId": "par", "createdAt": 1, "parallelOf": { "threadId": "own", "messageId": "m" } }, "origin": null, "listed": true, "background": false }
   ]
 }

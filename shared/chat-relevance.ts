@@ -91,7 +91,8 @@ export function chatOrigin(task: BackgroundTaskFacts | null | undefined): ChatOr
     case "routine-results": return "routine";
     case "ai-client": return "agent";
     case "handoff":
-    case "bot-opened": return "bot";
+    case "bot-opened":
+    case "bot-hidden": return "bot";
     default: return "person";
   }
 }

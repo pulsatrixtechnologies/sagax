@@ -82,6 +82,8 @@ export interface BotsCoreStore {
   ): TaskRecord | null | undefined;
   deleteTask(botId: string, threadId: string): BotRecord | null | undefined;
   retitleTask(botId: string, threadId: string, expected: string | undefined, title: string): TaskRecord | null | undefined;
+  /** #5367: compact this conversation now (sagax_settings thread.compact). */
+  compactThread?(botId: string, threadId: string): Promise<{ ok: true } | { ok: false; status: number; error: string }>;
   reorderProjects(botId: string, projectIds: string[]): unknown[] | null | undefined;
   project(botId: string, projectId: string): unknown;
   createProject(botId: string, name: string, emoji?: string | null): unknown;

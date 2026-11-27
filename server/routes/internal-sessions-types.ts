@@ -15,6 +15,8 @@ export interface InternalSessionsBot extends RosterMember {
   tasks?: Array<{ threadId: string }>;
   memoryEnabled?: boolean;
   activity?: BotActivity;
+  /** #5366: Full access may list every person-facing thread of reachable peers. */
+  approvalMode?: string;
 }
 
 export interface InternalSessionsTask {
@@ -22,9 +24,13 @@ export interface InternalSessionsTask {
   title: string;
   activity?: string;
   unread?: boolean;
-  openedBy?: { botId?: string; at: number; delegationId?: string };
+  openedBy?: { botId?: string; kind?: string; at: number; delegationId?: string };
   createdAt: number;
   closedBy?: { botId: string; name: string; at: number };
+  hidden?: boolean;
+  routineRunId?: string;
+  routineResults?: boolean;
+  askedAt?: number;
 }
 
 export interface InternalSessionsGroup {

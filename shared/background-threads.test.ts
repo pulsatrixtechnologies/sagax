@@ -34,21 +34,22 @@ describe("background threads (shared vectors, also run by the phone)", () => {
     const results = { threadId: "res", routineResults: true as const };
     const client = { threadId: "client", openedBy: { botId: "agent:acme", name: "Acme", kind: "agent" } };
     const hidden = { threadId: "hidden", hidden: true as const };
-    const all = [own, handoff, pair, self, run, results, client, hidden];
+    const investigate = { threadId: "investigate", hidden: true as const, openedBy: { botId: "nimbus", name: "Nimbus", at: 1 } };
+    const all = [own, handoff, pair, self, run, results, client, hidden, investigate];
 
     it("off (the default) keeps them out of the list and in Show background", () => {
       expect(personThreads(all).map((task) => task.threadId)).toEqual(["own"]);
       expect(personThreads(all, undefined, { botThreads: false }).map((task) => task.threadId)).toEqual(["own"]);
-      expect(backgroundThreads(all, { botThreads: false }).map((task) => task.threadId)).toEqual(["ticket", "pair", "self", "res", "client", "hidden"]);
+      expect(backgroundThreads(all, { botThreads: false }).map((task) => task.threadId)).toEqual(["ticket", "pair", "self", "res", "client", "hidden", "investigate"]);
     });
 
     it("on lists the threads bots opened beside the person's own, in place", () => {
       expect(personThreads(all, undefined, { botThreads: true }).map((task) => task.threadId)).toEqual(["own", "ticket", "pair", "self"]);
     });
 
-    it("on never lists a routine run, a results thread or an AI client's conversation", () => {
+    it("on never lists a routine run, a results thread, an AI client's conversation or a bot's hidden investigation", () => {
       const listed = personThreads(all, undefined, { botThreads: true }).map((task) => task.threadId);
-      for (const id of ["run", "res", "client", "hidden"]) expect(listed).not.toContain(id);
+      for (const id of ["run", "res", "client", "hidden", "investigate"]) expect(listed).not.toContain(id);
     });
 
     // The background sweep archives a finished bot thread after its idle
@@ -73,7 +74,7 @@ describe("background threads (shared vectors, also run by the phone)", () => {
     });
 
     it("on, a listed thread is not repeated under Show background", () => {
-      expect(backgroundThreads(all, { botThreads: true }).map((task) => task.threadId)).toEqual(["res", "client", "hidden"]);
+      expect(backgroundThreads(all, { botThreads: true }).map((task) => task.threadId)).toEqual(["res", "client", "hidden", "investigate"]);
     });
   });
 });

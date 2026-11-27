@@ -17757,7 +17757,10 @@ const routineProblemCards = new RoutineProblemCards<Routine>({
     if (!bot || !latest) { unavailable(""); return; }
     const person = effectiveRunAs(routine);
     const words = serverApprovalWords(languageOfPerson(person));
-    const task = store.createTask(bot.id, routine.name, false, undefined, undefined, undefined, person, runTaskModelFor(bot.id, latest), true);
+    // #5100: openedBy marks this as a bot's hidden investigation, not a #291
+    // AI-client conversation, so its turns are never relayed into the chat.
+    const task = store.createTask(bot.id, routine.name, false, undefined,
+      { botId: bot.id, name: bot.name, at: Date.now() }, undefined, person, runTaskModelFor(bot.id, latest), true);
     if (!task) { unavailable(""); return; }
     const threadId = task.threadId;
     const prompt = investigationPrompt(routine, runs, words.locale, words.t("routine.problemCard.pause"),
@@ -37225,7 +37228,22 @@ ROUTES.push(createBotsCoreRoutes({
   rejectDeletedThreadSkillStages,
   threadTitleGate,
   titleRegenerations,
-  generateThreadTitle: (instance, excerpt, kind, bot) => generateThreadTitle((bot ? botTitleEngine(bot as BotRecord, instance as ProviderInstance) : instance) as never, excerpt, kind as never)
+  generateThreadTitle: (instance, excerpt, kind, bot) => generateThreadTitle((bot ? botTitleEngine(bot as BotRecord, instance as ProviderInstance) : instance) as never, excerpt, kind as never),
+  // #5367: sagax_settings thread.compact
+  compactThread: async (botId, threadId) => {
+    const bot = store.bot(botId);
+    if (!bot) return { ok: false, status: 404, error: "no such bot" };
+    const task = store.taskByThread(botId, threadId);
+    if (!task) return { ok: false, status: 404, error: "no such task" };
+    const selection = task.modelSelection ?? bot.modelSelection;
+    const instance = registry.get(selection.instanceId);
+    if (!instance) return { ok: false, status: 409, error: "this conversation has no engine to compact with" };
+    await compactConversation({
+      bot, threadId, generation: directTurnGenerationByThread.get(threadId) ?? "manual-compact",
+      instance, model: selection.model, excludedIds: new Set(), manual: true,
+    });
+    return { ok: true };
+  },
 }));
 ROUTES.push(createComputersRoutes({
   listBoxes: () => boat.listManagedBoats(cfg, managedBoatOwners()),

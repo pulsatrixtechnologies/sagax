@@ -1396,6 +1396,7 @@
   "chat.day.yesterday": "Hier",
   "chat.editMessage": "Modifier le message",
   "chat.emptyPrompt": "Envoie un message pour démarrer la conversation.",
+  "chat.emptyOk.continue": "Ce tour s'est terminé sans réponse finale après avoir commencé le travail. Dis continuer si tu veux que je reprenne.",
   "chat.error.details": "Détails",
   "chat.error.requestTooLarge": "Ce message est trop volumineux pour {model}. Commence une nouvelle conversation ou choisis un modèle qui en accepte davantage.",
   "chat.error.replyCutLength": "Réponse coupée : longueur maximale atteinte. Demande une suite.",

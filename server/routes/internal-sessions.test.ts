@@ -163,6 +163,35 @@ describe("createInternalSessionsRoutes", () => {
     expect(body.threads.some((t) => t.threadId === "t-1" && t.own)).toBe(true);
   });
 
+  // #5366: Full access lists person-facing threads on reachable peers, with ids.
+  it("GET /threads lists peer person-facing threads when the caller is Full access", async () => {
+    const peer = {
+      id: "peer-1", name: "Client", color: "#222", section: "Clients", title: "", description: "",
+      modelSelection: { model: "m1" }, activity: undefined as undefined, busy: false, threadId: "t-peer-main",
+      tasks: [{ threadId: "t-peer-ticket" }], memoryEnabled: true, approvalMode: "ask",
+    };
+    const full = { ...BOT, approvalMode: "full", peers: [peer.id] };
+    const route = createInternalSessionsRoutes(baseDeps({
+      bot: (id) => (id === full.id ? full : id === peer.id ? peer : undefined) as never,
+      bots: () => [full, peer] as never,
+      tasks: (botId) => botId === full.id
+        ? [{ threadId: "t-1", title: "Own", createdAt: 1, openedBy: { botId: full.id, at: 1 } }]
+        : botId === peer.id
+          ? [
+              { threadId: "t-peer-ticket", title: "#1 - Ticket", createdAt: 2, openedBy: { botId: peer.id, at: 2 } },
+              { threadId: "t-hidden", title: "AI", createdAt: 3, hidden: true },
+              { threadId: "t-run", title: "Run", createdAt: 4, routineRunId: "r1" },
+            ]
+          : [],
+      ownsThread: (botId, threadId) => (botId === full.id && (threadId === "t-1" || threadId === "t-main") ? { group: undefined } : null),
+    }));
+    const { sent } = await call(route, { path: "/api/internal/threads", method: "GET" });
+    expect(sent[0]!.status).toBe(200);
+    const body = sent[0]!.body as { threads: Array<{ threadId: string; title: string; own: boolean }> };
+    expect(body.threads.map((t) => t.threadId).sort()).toEqual(["t-1", "t-peer-ticket"]);
+    expect(body.threads.every((t) => Boolean(t.threadId))).toBe(true);
+  });
+
   it("POST /threads/:id/close refuses a foreign source (403)", async () => {
     const route = createInternalSessionsRoutes(baseDeps({ ownsThread: () => null }));
     const { sent } = await call(route, { path: "/api/internal/threads/t-other/close", method: "POST" });

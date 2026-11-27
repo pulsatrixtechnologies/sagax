@@ -25,6 +25,11 @@ function world() {
     attachmentUploaders: new AttachmentUploaders(dir),
     attachmentThreads: new Map(),
     threadsReferencing: (name: string) => uses.get(name) ?? [],
+    threadsReferencingAsync: async (names: readonly string[]) => {
+      const out = new Map<string, string[]>();
+      for (const name of names) out.set(name, uses.get(name) ?? []);
+      return out;
+    },
     cfg: {} as { newBotDefaults?: { profile: { avatarUrl?: string } } },
     routines: { listRoutines: () => routines },
     store: {
@@ -72,6 +77,20 @@ describe("attachmentSeenBy", () => {
     w.uses.set("a2.zip", ["t-ann", "t-room"]);
     expect(w.seen("a2.zip", "pr_ben")).toBe(true);
     expect(w.seen("a2.zip", "pr_admin")).toBe(false);
+  });
+
+  // #5343: authenticate primes the cache off-thread before subjectSeesChannel.
+  it("prime fills the cache without a sync scan on the next read", async () => {
+    const w = world();
+    w.uses.set("primed.zip", ["t-room"]);
+    let sync = 0;
+    w.host.threadsReferencing = (name: string) => {
+      sync++;
+      return w.uses.get(name) ?? [];
+    };
+    await w.host.threadsUsingAttachment.prime("primed.zip");
+    expect(w.host.threadsUsingAttachment("primed.zip")).toEqual(["t-room"]);
+    expect(sync).toBe(0);
   });
 
   it("the first uploader stays the uploader", () => {

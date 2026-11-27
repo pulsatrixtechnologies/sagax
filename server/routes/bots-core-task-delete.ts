@@ -39,6 +39,7 @@ export function createBotsCoreTaskDeleteRoutes(deps: BotsCoreRouteDeps): RouteHa
       threadTitleGate,
       titleRegenerations,
       generateThreadTitle,
+      compactThread,
     } = deps;
     const THREAD_DELETED = deps.threadDeletedMessage;
     let m: RegExpMatchArray | null = null;
@@ -78,6 +79,18 @@ export function createBotsCoreTaskDeleteRoutes(deps: BotsCoreRouteDeps): RouteHa
       settleDirectFollowup(directTurnGenerationByThread.get(m[2]));
       rejectDeletedThreadSkillStages(stagedSkillCleanups);
       return json(res, 200, { bot: projectBotTranscript(publicBot(updated), viewerForApproval(auth)) });
+    }
+    // #5367: compact this conversation now (sagax_settings thread.compact).
+    m = path.match(/^\/api\/bots\/([\w-]+)\/tasks\/([\w-]+)\/compact$/);
+    if (m && method === "POST") {
+      if (!compactThread) return json(res, 501, { error: "compaction is not available on this server" });
+      const bot = store.bot(m[1]);
+      if (!bot || !store.taskByThread(bot.id, m[2])) return json(res, 404, { error: "no such task" });
+      const notYours = cloudThreadRefusal(auth, m[2]);
+      if (notYours) return json(res, 403, { error: notYours });
+      const result = await compactThread(bot.id, m[2]);
+      if (!result.ok) return json(res, result.status, { error: result.error });
+      return json(res, 200, { compacted: true, threadId: m[2] });
     }
     // Regenerate title (#1858): name the thread again from its conversation
     // as it is now. The person asked, so the result replaces any title, but

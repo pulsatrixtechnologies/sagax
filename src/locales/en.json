@@ -2108,6 +2108,7 @@
   "chat.digestTitle": "What this turn did",
   "chat.editMessage": "Edit message",
   "chat.emptyPrompt": "Send a message to start the conversation.",
+  "chat.emptyOk.continue": "This turn ended without a final reply after it started work. Say continue if you want me to pick it up.",
   "chat.error.details": "Details",
   "chat.error.requestTooLarge": "This message is too large for {model}. Start a new chat or pick a model that accepts more.",
   "chat.error.replyCutLength": "The reply was cut: maximum length reached. Ask for a continuation.",

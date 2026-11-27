@@ -40,7 +40,7 @@ vi.mock("@/lib/i18n", async (importOriginal) => {
   };
 });
 
-const bot = { id: "melonie", name: "Melonie" } as unknown as Bot;
+const bot = { id: "pepper", name: "Pepper" } as unknown as Bot;
 const ref = <T,>(value: T) => ({ current: value });
 
 function base(over: Partial<LiveBrowserViewProps> = {}): LiveBrowserViewProps {
@@ -88,7 +88,7 @@ function base(over: Partial<LiveBrowserViewProps> = {}): LiveBrowserViewProps {
     taking: false,
     mine: false,
     pageTitle: "",
-    holder: "Melonie is using the browser",
+    holder: "Pepper is using the browser",
     pill: "pill",
     generation: ref(1),
     viewer: ref("v1"),
@@ -105,7 +105,7 @@ function base(over: Partial<LiveBrowserViewProps> = {}): LiveBrowserViewProps {
     confirm: vi.fn(async () => true),
     setError: vi.fn(),
     docked: {
-      title: "Melonie’s browser",
+      title: "Pepper’s browser",
       chrome: createElement("div", { "data-screen-panel-chrome": "" }, "chrome"),
       placeSelector: createElement("div", { "data-screen-place-select": "" }, "places"),
     },
@@ -123,13 +123,13 @@ describe("compact LiveBrowserView", () => {
     expect(html).toContain("data-screen-panel-chrome");
     expect(html).toContain("data-screen-place-select");
     expect(html).not.toContain("rounded-2xl border border-hairline/40 bg-card");
-    expect(html).not.toContain("Melonie is using the browser ·");
+    expect(html).not.toContain("Pepper is using the browser ·");
   });
 
   it("shows the empty Browse with state when connected with no frame", () => {
     const html = renderToStaticMarkup(createElement(LiveBrowserView, base()));
     expect(html).toContain("data-browser-empty");
-    expect(html).toContain("Browse with Melonie");
+    expect(html).toContain("Browse with Pepper");
   });
 
   it("puts Take control on the address row while the bot has the browser", () => {

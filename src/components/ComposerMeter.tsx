@@ -207,7 +207,9 @@ export function ComposerMeterView({ context, usage, pill = true, shape = "circle
 function labelsOf(preview: AutoModelPreview | null): Map<string, string> {
   const labels = new Map<string, string>();
   if (!preview) return labels;
-  const entries = [...preview.chain, ...preview.excluded, ...preview.backups, ...Object.values(preview.modes ?? {}).flatMap((mode) => [mode.pick, ...(mode.team ?? [])])];
+  // an older or partial answer may lack a list: none is required here
+  const modes = Object.values(preview.modes ?? {}).flatMap((mode) => [mode?.pick, ...(mode?.team ?? [])]);
+  const entries = [...(preview.chain ?? []), ...(preview.excluded ?? []), ...(preview.backups ?? []), ...modes];
   for (const entry of entries) if (entry?.instanceId && entry.engineLabel && !labels.has(entry.instanceId)) labels.set(entry.instanceId, entry.engineLabel);
   return labels;
 }

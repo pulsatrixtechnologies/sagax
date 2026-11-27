@@ -132,6 +132,12 @@ describe("the usage pill of the message bar", () => {
     expect(pillText()).toBe("wk 56%");
   });
 
+  it("an answer without its lists (an older or partial server) still draws the pill", async () => {
+    fixture.api.mockImplementation(async (path: unknown) => (typeof path === "string" && path.includes("/auto-model") ? {} : answer(path, () => ({ providers: fixture.plan }), [limit(89)])));
+    await mount();
+    expect(pillText()).toBe("wk 89%");
+  });
+
   it("M-20261126-099: says the return only when every account is blocked, in danger, and then offers the actions", async () => {
     fixture.plan = [provider({ weekly: window(100) }), second({ weekly: window(100, "2026-10-22T03:00:00Z") })];
     fixture.serves = ["claude", "work"];

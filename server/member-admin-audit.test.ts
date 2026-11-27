@@ -157,7 +157,12 @@ describe("member admin audit, section 1: bot tool calls", () => {
     expect(memberBotAdminApproval({ tool: "mcp__agents__offer_shell_terminal", workspaceRoot: "/nowhere", foreignMcpServers: ["agents"] })).toBe(false);
     expect(memberBotAdminApproval({ tool: "mcp__agents__offer_shell_terminal", workspaceRoot: "/nowhere" })).toBe(false);
   });
-  it.each(["browser", "computer", "files", "shell", "terminal"])("the %s MCP server on the shared host: an admin's", (server) => {
+  // #5229 / #5334: the built-in browser is the bot's own web surface on an
+  // organization server, not shared-host work (HOST_ITSELF_MCP_SERVERS).
+  it("the browser MCP server: the owner's card", () => {
+    expect(answerer("mcp__browser__run")).toBe("owner");
+  });
+  it.each(["computer", "files", "shell", "terminal"])("the %s MCP server on the shared host: an admin's", (server) => {
     expect(answerer(`mcp__${server}__run`)).toBe("admin");
   });
   it("an admin's own bot never has an admin card; a member's always can", () => {

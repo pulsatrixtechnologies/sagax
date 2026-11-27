@@ -305,13 +305,17 @@ describe("who transcribes a Listening session (#5377)", () => {
     expect(opened).toMatchObject({ refused: 502, body: { code: "out_of_credits", failure: "quota" } });
     const res = await upload();
     expect(res.status).toBe(502);
+    // After listen() already refused both keys, upload() reports the org key
+    // as `key` and every refusal in try order (org xAI, then personal OpenAI).
+    // #5427 / M-20261126-145 keeps that chain; the last tried entry has no
+    // provider field on the whole-utterance path.
     expect(await res.json()).toMatchObject({
       code: "out_of_credits",
       failure: "quota",
-      key: { source: "perspicax-key", last4: OPENAI_KEY.slice(-4), provider: "openai" },
+      key: { source: "org-key", last4: ORG_XAI_KEY.slice(-4) },
       tried: [
         { source: "org-key", last4: ORG_XAI_KEY.slice(-4), failure: "quota" },
-        { source: "perspicax-key", last4: OPENAI_KEY.slice(-4), provider: "openai", failure: "quota" },
+        { source: "perspicax-key", last4: OPENAI_KEY.slice(-4), failure: "quota" },
       ],
     });
   });

@@ -15962,5 +15962,12 @@
   "composer.customize.item.plus": "Déplacer le bouton plus",
   "composer.customize.item.model": "Déplacer le choix du modèle",
   "composer.customize.item.usage": "Déplacer la pastille d'utilisation",
-  "composer.customize.item.voice": "Déplacer le bouton de voix"
+  "composer.customize.item.voice": "Déplacer le bouton de voix",
+  "settings.usagePill.shape.messageBar.title": "Forme de la pastille dans la barre de message",
+  "settings.usagePill.shape.messageBar.chooseAria": "Choisir la forme de la pastille dans la barre de message",
+  "settings.usagePill.shape.accountMenu.title": "Forme de la pastille dans le menu du compte",
+  "settings.usagePill.shape.accountMenu.chooseAria": "Choisir la forme de la pastille dans le menu du compte",
+  "settings.usagePill.shape.menuBar.title": "Forme de la pastille pour la barre des menus",
+  "settings.usagePill.shape.menuBar.chooseAria": "Choisir la forme de la pastille pour la barre des menus ou la zone de notification",
+  "usageTrayDetail.empty": "Aucun compte ne rapporte encore de fenêtre d'utilisation."
 }

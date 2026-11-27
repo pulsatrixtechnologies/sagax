@@ -32,6 +32,7 @@ import { FloatingBotsHost } from "@/components/FloatingBotsHost";
 import { FloatingWindowsHost } from "@/components/floating/FloatingWindowsHost";
 import { CallEngineHost } from "@/components/CallView";
 import { RetroBootSlot, RetroChromeSlot } from "@/components/RetroChromeHost";
+import { UsageTrayDetailHost } from "@/components/UsageTrayDetail";
 import { t } from "@/lib/i18n";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { viewerBotsReadOnly, viewerCanCreateBots } from "@/lib/viewer";
@@ -111,6 +112,8 @@ export function ShellLayout(shell: ShellNavigation) {
       <MyChromeIndicator />
       {/* A bot controlling this computer's own screen: who, and Stop. */}
       <HostControlIndicator />
+      {/* Menu-bar / tray usage icon click: the pill's accounts detail (M-20261126-104). */}
+      <UsageTrayDetailHost />
       {/* The one bottom-left card at a time (only the star is left in Sagax). */}
       {/* Hibou 98 only: title bar, menus and toolbar (renders nothing otherwise) */}
       <RetroChromeSlot slot="top" onNewBot={() => setComposeOpen((open) => !open)} />

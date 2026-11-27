@@ -33,11 +33,14 @@ import {
   contextIndicator,
   parseUsagePillPlacement,
   parseUsagePillShape,
+  setUsagePillShapeFor,
+  USAGE_PILL_PLACES,
   USAGE_PILL_PLACEMENTS,
   USAGE_PILL_SHAPES,
   usagePillInBar,
   usagePillPlacement,
-  usagePillShape,
+  usagePillShapeChoice,
+  type UsagePillPlace,
   type UsagePillPlacement,
   type UsagePillShape,
 } from "@/lib/usage-pill-preferences";
@@ -210,13 +213,27 @@ function ComposerBottomSpaceRow() {
   );
 }
 
+/** One shape row for a place the pill shows (M-20261126-108). */
+function UsagePillShapeRow({ place }: { place: UsagePillPlace }) {
+  const shape = usagePillShapeChoice(place).use();
+  return (
+    <CompactRow label={t(`settings.usagePill.shape.${place}.title`)} rowId={`usagePillShape.${place}`}>
+      <PillSelect<UsagePillShape>
+        value={shape}
+        ariaLabel={t(`settings.usagePill.shape.${place}.chooseAria`)}
+        onChange={(next) => setUsagePillShapeFor(place, parseUsagePillShape(next))}
+        options={USAGE_PILL_SHAPES.map((option) => ({ value: option, label: t(`settings.usagePill.shape.${option}`) }))}
+      />
+    </CompactRow>
+  );
+}
+
 /** The usage pill of the message bar (M-20261126-106, M-20261126-108, #5406;
- * D-20261127-001): shown or not, where it sits, its shape, and the
+ * D-20261127-001): shown or not, where it sits, a shape per place, and the
  * conversation's context indicator. */
 function UsagePillRows() {
   const inBar = usagePillInBar.use() === "on";
   const placement = usagePillPlacement.use();
-  const shape = usagePillShape.use();
   const context = contextIndicator.use() === "on";
   return (
     <>
@@ -234,14 +251,7 @@ function UsagePillRows() {
           />
         </CompactRow>
       )}
-      <CompactRow label={t("settings.usagePill.shape.title")} rowId="usagePillShape">
-        <PillSelect<UsagePillShape>
-          value={shape}
-          ariaLabel={t("settings.usagePill.shape.chooseAria")}
-          onChange={(next) => usagePillShape.set(parseUsagePillShape(next))}
-          options={USAGE_PILL_SHAPES.map((option) => ({ value: option, label: t(`settings.usagePill.shape.${option}`) }))}
-        />
-      </CompactRow>
+      {USAGE_PILL_PLACES.map((place) => <UsagePillShapeRow key={place} place={place} />)}
       <SwitchLine label={t("settings.contextIndicator.title")} ariaLabel={t("settings.contextIndicator.show")} checked={context} onChange={(on) => contextIndicator.set(on ? "on" : "off")} rowId="contextIndicator" />
     </>
   );

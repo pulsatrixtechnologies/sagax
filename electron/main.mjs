@@ -4573,19 +4573,20 @@ function applyUsageTray() {
   }
   usageTray.setEnabled(on);
 }
-/** The icon's click: the window comes forward on the usage detail. */
+/** The icon's click: the window comes forward on the pill's accounts detail
+ * (M-20261126-104), never Settings > Usage. */
 function openUsageDetail() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     // no window left (closed for real): a new one, then the detail once it loaded
     openWindowForLink?.();
     const opened = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null;
-    opened?.once("did-finish-load", () => mainPage()?.send("app:open-settings", "usage"));
+    opened?.once("did-finish-load", () => mainPage()?.send("app:open-usage-detail"));
     return;
   }
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
-  mainPage()?.send("app:open-settings", "usage");
+  mainPage()?.send("app:open-usage-detail");
 }
 ipcMain.on("usage-tray:update", (event, values) => {
   // only the page the person sees speaks for the icon

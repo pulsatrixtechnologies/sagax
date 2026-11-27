@@ -52,6 +52,19 @@ ipcRenderer.on("app:open-about", () => {
   for (const listener of aboutListeners) listener();
 });
 
+// Menu-bar / tray usage icon click: open the pill's accounts detail
+// (M-20261126-104), not Settings > Usage.
+let pendingUsageDetail = false;
+const usageDetailListeners = new Set();
+ipcRenderer.on("app:open-usage-detail", () => {
+  if (!usageDetailListeners.size) {
+    pendingUsageDetail = true;
+    return;
+  }
+  pendingUsageDetail = false;
+  for (const listener of usageDetailListeners) listener();
+});
+
 // The bridge is built once, then exposed in full only to the local server's
 // UI. A remote server's page (Server menu) gets the safe subset: nothing that
 // captures this screen, touches this computer's files or logins, or runs
@@ -85,7 +98,7 @@ const REMOTE_SAFE = new Set(["platform", "windowControls", "windowFullscreen", "
 // the one file-manager call (#5018): the person asks to show one absolute
 // path, and the page learns only shown, missing, invalid or failed. Opening
 // a file, listing which paths exist, and saving a copy stay on the local page.
-const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "windowFullscreen", "onOpenAppSettings", "onOpenAbout", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts", "macApps", "screenThumbnail", "permOpenSettings", "permAll", "permAct", "revealInFolder", "usageTray"]);
+const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "windowFullscreen", "onOpenAppSettings", "onOpenAbout", "onOpenUsageDetail", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts", "macApps", "screenThumbnail", "permOpenSettings", "permAll", "permAct", "revealInFolder", "usageTray"]);
 let bundledPage = false;
 // main.mjs always answers this channel: a sendSync nobody answers would
 // block this page for good (a test harness must answer it too).
@@ -290,6 +303,16 @@ const bridge = {
       for (const listener of aboutListeners) listener();
     });
     return () => aboutListeners.delete(cb);
+  },
+  /** The usage tray icon's click: open the pill's accounts detail. */
+  onOpenUsageDetail: (cb) => {
+    usageDetailListeners.add(cb);
+    queueMicrotask(() => {
+      if (!pendingUsageDetail || !usageDetailListeners.size) return;
+      pendingUsageDetail = false;
+      for (const listener of usageDetailListeners) listener();
+    });
+    return () => usageDetailListeners.delete(cb);
   },
   /** Absolute path of a dropped File — Electron 32 removed File.path, and
    * only the preload can ask. "" when the drag carried no file on disk. */

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteContext } from "../routes/table.ts";
 import type { SessionRecord } from "../auth/sessions.ts";
+import { refusal } from "../tts/grok.ts";
 import { VOICE_KEY_REFUSAL_TTL_MS } from "./voice-keys.ts";
 import { audioMime, createVoiceModeRoutes, listenTranscriptFrame, resolveVoiceKey, resolveVoiceKeys, VOICE_MODE_RATE, type VoiceModeDeps, type VoiceSpeaker, type VoiceUsage } from "./voice-mode.ts";
 
@@ -706,6 +707,21 @@ describe("voice mode uses the key that has funds (2026-10-28)", () => {
     expect(acting.ok && acting.keys.map((key) => key.source)).toEqual(["org-account"]);
   });
 
+  // M-20261126-145: the failure now names the first cause (the person's account
+  // refused); the organization's account behind it ran dry, so the offer to go
+  // on with the paid key still comes with it
+  it("still offers the paid key when the first cause is a refusal and an account behind it is dry", async () => {
+    const policy = { aspect: "voice" as const, personalKeysEnabled: true, allowPersonalWhenActingAs: false, paidKeyConfirmed: false };
+    const { call, xai } = harness({ grokAccount: async () => ACCOUNT, orgAccount: async () => ORG_ACCOUNT, credentialPolicy: () => policy });
+    xai.synthesize.mockImplementation(async (_text, _voice, key) => {
+      throw new Error(key === ACCOUNT ? refusal(401) : CREDITS);
+    });
+    const out = await call({ method: "POST", path: "/api/bots/b-quasar/voice/speak?locale=en", body: { text: "Hello." } });
+    expect(out.status).toBe(502);
+    expect(out.body).toMatchObject({ failure: "key", key: { source: "grok-account", last4: "c4Dd" }, confirm: { to: "org-key", aspect: "voice" } });
+    expect(out.body.error).toMatch(/^No call was placed: your connected Grok account was refused\. /);
+  });
+
   it("speaks on the API key when the connected account is out of credits", async () => {
     const { call, xai } = harness({ grokAccount: async () => ACCOUNT, ownKeys: { "sub-ada": OWN_KEY } });
     xai.synthesize.mockImplementation(async (_text, _voice, key) => {
@@ -741,6 +757,96 @@ describe("voice mode uses the key that has funds (2026-10-28)", () => {
       keys: [{ source: "grok-account", last4: "c4Dd" }, { source: "server", last4: "t6Yb" }],
     });
     expect(JSON.stringify(out.body)).not.toContain(ACCOUNT);
+  });
+
+  // M-20261126-145: a saved voice the account does not know is the name, never
+  // the credential. Speech asks the same account back on its own default
+  // voice, as a call already does (#5179), and the next sentence goes there
+  // at once instead of paying a refusal per sentence.
+  it.each(["speak", "stream"] as const)("asks the connected account back on its own default voice when it does not know the saved one (%s)", async (action) => {
+    const lines: string[] = [];
+    const { call, xai } = harness({ grokAccount: async () => ACCOUNT, log: (line) => lines.push(line) });
+    const unknown = () => new Error(refusal(404, {}, { voice: true }));
+    xai.synthesize.mockImplementation(async (_text, voice, key) => {
+      if (key === ACCOUNT && voice) throw unknown();
+      return { bytes: new Uint8Array([1]), mime: "audio/mpeg" as const };
+    });
+    const pcm = () => ({ body: new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new Uint8Array([1])); controller.close(); } }), sampleRate: 24_000 });
+    xai.synthesizeStream.mockImplementation(async (_text, voice, key) => {
+      if (key === ACCOUNT && voice) throw unknown();
+      return pcm();
+    });
+    const spoken = action === "speak" ? xai.synthesize : xai.synthesizeStream;
+    const out = await call({ method: "POST", path: `/api/bots/b-quasar/voice/${action}`, body: { text: "Bonjour.", voice: "eve" } });
+    expect(out.status).toBe(200);
+    expect(spoken.mock.calls.map((args) => [args[1], args[2]])).toEqual([["eve", ACCOUNT], [undefined, ACCOUNT]]);
+    // the account served: the organization's key was never asked
+    expect(spoken.mock.calls.some((args) => args[2] === ORG_KEY)).toBe(false);
+    expect(out.headers?.["x-voice-key"]).toBe("grok-account:c4Dd");
+    expect(lines.some((line) => line.includes(`connected Grok account ···c4Dd does not know the voice "eve"`) && line.includes("its own default voice"))).toBe(true);
+    expect(lines.some((line) => line.includes("refused"))).toBe(false);
+    const again = await call({ method: "POST", path: `/api/bots/b-quasar/voice/${action}`, body: { text: "Ensuite.", voice: "eve" } });
+    expect(again.status).toBe(200);
+    expect(spoken.mock.calls.slice(2).map((args) => [args[1], args[2]])).toEqual([[undefined, ACCOUNT]]);
+    expect(leaks(lines) || JSON.stringify(lines).includes(ACCOUNT)).toBe(false);
+  });
+
+  // M-20261126-145, as an organization server logged it: the connected account
+  // was refused first, the organization's xAI and OpenAI keys were out of
+  // credits and its ElevenLabs key was refused. The person read only the last
+  // refusal ("no credits"). They now read the first real cause (the credential
+  // closest to them), then one line for the organization's keys, on every
+  // request, even when the refusal memory tried the account last.
+  it("names the first real cause, then the organization's keys in one line, whatever order the memory tried them in", async () => {
+    const OPENAI_ORG = "sk-OPENORGfake2Ab3Cd4Ef5Wa8A";
+    const ELEVEN_ORG = "el-ELEVENORGfake6Gh7Ij8Kl702e";
+    const lines: string[] = [];
+    const openai = {
+      listVoices: vi.fn(async () => []),
+      synthesize: vi.fn(async (): Promise<{ bytes: Uint8Array; mime: string }> => { throw new Error("The OpenAI account needs credits to generate speech."); }),
+    };
+    const elevenlabs = {
+      listVoices: vi.fn(async () => []),
+      synthesize: vi.fn(async (): Promise<{ bytes: Uint8Array; mime: string }> => { throw new Error("ElevenLabs rejected the key or its permissions (Voices and Text to Speech). Check the ElevenLabs key in Settings > Voice."); }),
+    };
+    const { call, xai } = harness({
+      grokAccount: async () => ACCOUNT,
+      openai, elevenlabs,
+      providerKeys: (provider) => provider === "openai"
+        ? [{ key: OPENAI_ORG, via: "org-key", source: "org-key", last4: "Wa8A" }]
+        : [{ key: ELEVEN_ORG, via: "org-key", source: "org-key", last4: "702e" }],
+      log: (line) => lines.push(line),
+    });
+    let orgHasCredits = true;
+    xai.synthesize.mockImplementation(async (_text, _voice, key) => {
+      if (key === ACCOUNT) throw new Error(refusal(404));
+      if (key === ORG_KEY && !orgHasCredits) throw new Error(CREDITS);
+      return { bytes: new Uint8Array([1]), mime: "audio/mpeg" as const };
+    });
+    // the account is refused once and remembered; the organization's xAI key serves
+    const first = await call({ method: "POST", path: "/api/bots/b-quasar/voice/speak?locale=fr-CA", body: { text: "Bonjour." } });
+    expect(first.status).toBe(200);
+    expect(first.headers?.["x-voice-key"]).toBe("org-key:t6Yb");
+    // then that key runs dry: the memory now tries it before the account
+    orgHasCredits = false;
+    const out = await call({ method: "POST", path: "/api/bots/b-quasar/voice/speak?locale=fr-CA", body: { text: "Bonjour." } });
+    expect(xai.synthesize.mock.calls.slice(2).map((args) => args[2])).toEqual([ORG_KEY, ACCOUNT]);
+    expect(out.status).toBe(502);
+    expect(out.body.error).toBe(
+      "Aucun appel : ton compte Grok connecté a été refusé. Vérifie ton compte Grok dans Réglages > Fournisseurs. Les clés xAI et OpenAI de ton organisation n'ont plus de crédits, et la clé ElevenLabs de ton organisation a été refusée.",
+    );
+    // the card and the bar are about the first cause, never the last refusal
+    expect(out.body).toMatchObject({ code: "voice_provider", failure: "key", key: { source: "grok-account", last4: "c4Dd" } });
+    expect(out.body.out_of_credits).toBeUndefined();
+    expect(out.body.tried.map((entry: { source: string; failure: string; provider?: string }) => [entry.source, entry.provider ?? "xai", entry.failure])).toEqual([
+      ["grok-account", "xai", "key"], ["org-key", "xai", "quota"], ["org-key", "openai", "quota"], ["org-key", "elevenlabs", "key"],
+    ]);
+    const english = await call({ method: "POST", path: "/api/bots/b-quasar/voice/speak?locale=en", body: { text: "Hello." } });
+    expect(english.body.error).toBe(
+      "No call was placed: your connected Grok account was refused. Check your Grok account in Settings > Providers. Your organization's xAI and OpenAI keys are out of credits, and your organization's ElevenLabs key was refused.",
+    );
+    expect(leaks(out.body) || leaks(english.body) || leaks(lines)).toBe(false);
+    for (const secret of [ACCOUNT, OPENAI_ORG, ELEVEN_ORG]) expect(JSON.stringify([out.body, english.body, lines])).not.toContain(secret.slice(4, 14));
   });
 });
 

@@ -1359,8 +1359,11 @@ Content-Type: application/json
   xAI key in Perspicax (`perspicax-key`), then the organization's Grok
   account (`org-account`, #5200) and the organization's xAI key (`org-key`)
   when they were given to them. `auth` says how a credential is presented to
-  xAI: `grok-account` (the CLI voice host and its token header, for the
-  person's account and the organization's) or `api-key` (`api.x.ai`).
+  xAI: `grok-account` (the session token on `api.x.ai` with the Grok CLI
+  token header `X-XAI-Token-Auth: xai-grok-cli`, for the person's account and
+  the organization's: the root the official Grok client sends its own voice
+  to; the chat proxy serves no voice route) or `api-key` (`api.x.ai`, Bearer
+  only).
 - No key serves that person: `200` with an empty `voice_keys` and `cause`, the
   app's own refusal cause (`no_credentials`, `server_engine_not_allowed`,
   `payer_disabled`, `perspicax_unreachable`).

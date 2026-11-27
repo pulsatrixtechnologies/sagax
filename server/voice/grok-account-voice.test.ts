@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
-  noCallReason, personGrokAccountToken, realtimeKeyRefusedCallReason, realtimeNotConfiguredCallReason, realtimeNotOnServerCallReason,
+  chainCallReason, noCallReason, personGrokAccountToken, realtimeKeyRefusedCallReason, realtimeNotConfiguredCallReason, realtimeNotOnServerCallReason,
   realtimeUnreachableCallReason, soloGrokVoiceToken, voiceNameCallReason, voiceSentenceLanguage,
 } from "./grok-account-voice.ts";
 
@@ -252,6 +252,66 @@ describe("every refusal reason the server computes is said in the person's langu
       // a network answer never claims credits
       expect(realtimeUnreachableCallReason(language)).not.toMatch(/credits|crédits/i);
     }
+  });
+});
+
+// M-20261126-145: the whole chain failed and the person read only its last
+// refusal ("no credits"). The first real cause comes first, named with its
+// credential, then one line for the credentials behind it.
+describe("the first real cause of a chain, then the others in one line", () => {
+  const ROW = (source: string, failure: string, provider?: string) => ({ source, failure, ...(provider ? { provider } : {}) });
+
+  it("the connected account first, the organization's keys of three providers behind it", () => {
+    const rows = [ROW("grok-account", "voice"), ROW("org-key", "quota"), ROW("org-key", "quota", "openai"), ROW("org-key", "key", "elevenlabs")];
+    expect(chainCallReason(rows, "fr")).toBe(
+      "Aucun appel : xAI ne connaît pas la voix choisie pour ton compte Grok connecté. Recharge la liste des voix et choisis-en une autre. Les clés xAI et OpenAI de ton organisation n'ont plus de crédits, et la clé ElevenLabs de ton organisation a été refusée.",
+    );
+    expect(chainCallReason(rows, "en")).toBe(
+      "No call was placed: xAI does not know the chosen voice for your connected Grok account. Refresh the voice list and choose a voice again. Your organization's xAI and OpenAI keys are out of credits, and your organization's ElevenLabs key was refused.",
+    );
+  });
+
+  it("names the cause of the first credential whatever it is, and the provider of each key", () => {
+    expect(chainCallReason([ROW("grok-account", "down"), ROW("org-key", "quota")], "fr")).toBe(
+      "Aucun appel : xAI ne répond pas pour ton compte Grok connecté. Réessaie dans un moment. La clé xAI de ton organisation n'a plus de crédits.",
+    );
+    expect(chainCallReason([ROW("grok-account", "busy"), ROW("org-key", "key")], "en")).toBe(
+      "No call was placed: xAI is rate-limiting your connected Grok account right now. Try again in a moment. Your organization's xAI key was refused.",
+    );
+    expect(chainCallReason([ROW("grok-account", "quota"), ROW("org-key", "down", "openai")], "fr")).toBe(
+      "Aucun appel : ton compte Grok connecté n'a plus de crédits. Ajoute du crédit au compte Grok connecté, puis rappelle. La clé OpenAI de ton organisation n'a pas répondu.",
+    );
+    expect(chainCallReason([ROW("voice-key", "voice"), ROW("org-account", "key"), ROW("org-key", "key")], "fr")).toBe(
+      "Aucun appel : xAI ne connaît pas la voix choisie pour ta clé vocale. Recharge la liste des voix et choisis-en une autre. Le compte Grok de ton organisation et la clé xAI de ton organisation ont été refusés.",
+    );
+    expect(chainCallReason([ROW("org-key", "key", "openai"), ROW("org-key", "quota", "elevenlabs")], "en")).toBe(
+      "No call was placed: your organization's OpenAI key was refused. Ask an administrator of your organization. Your organization's ElevenLabs key is out of credits.",
+    );
+  });
+
+  // the likeliest case once the account reaches the right host: it is refused,
+  // and the organization's xAI key behind it is dry. The sentence of #4567
+  // read "refusé, et la clé API xAI non plus", as if both were refused.
+  it("the connected account refused and the organization's xAI key dry: each with its own state", () => {
+    expect(chainCallReason([ROW("grok-account", "key"), ROW("org-key", "quota")], "fr")).toBe(
+      "Aucun appel : ton compte Grok connecté a été refusé. Vérifie ton compte Grok dans Réglages > Fournisseurs. La clé xAI de ton organisation n'a plus de crédits.",
+    );
+    expect(chainCallReason([ROW("grok-account", "quota"), ROW("voice-key", "key")], "en")).toBe(
+      "No call was placed: your connected Grok account is out of credits. Add credits on the connected Grok account, then call back. Your voice key was refused.",
+    );
+  });
+
+  it("leaves a single refusal, and a chain of xAI credits and keys only, to the sentences that already say them", () => {
+    expect(chainCallReason([ROW("grok-account", "voice")], "fr")).toBeNull();
+    expect(chainCallReason([ROW("grok-account", "quota"), ROW("org-key", "quota")], "fr")).toBeNull();
+    expect(chainCallReason([ROW("voice-key", "key"), ROW("org-key", "quota")], "en")).toBeNull();
+    expect(chainCallReason([], "en")).toBeNull();
+  });
+
+  it("never reads credits as the voice or a network, nor an English menu in French", () => {
+    const french = chainCallReason([ROW("grok-account", "key"), ROW("org-key", "quota", "openai")], "fr")!;
+    expect(french).toBe("Aucun appel : ton compte Grok connecté a été refusé. Vérifie ton compte Grok dans Réglages > Fournisseurs. La clé OpenAI de ton organisation n'a plus de crédits.");
+    expect(french).not.toMatch(/\b(Settings|Providers)\b|ne connaît pas|ne répond pas/);
   });
 });
 

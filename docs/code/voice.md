@@ -240,6 +240,28 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   (`via: "org-key"`) and it shows no last four. For what names no person,
   the link route answers it with `{"org_account": true}`, and its state
   alone with `{"org_account": "test"}` (`docs/org-admin-api.md`).
+- A connected Grok account (`grok-account`, `org-account`) speaks on
+  `api.x.ai` with its session token and the Grok CLI token header
+  (`withVoiceAuth` in `server/tts/grok.ts`), the root the official Grok
+  client sends its own voice to (its `voice.api_base` inherits
+  `[endpoints].xai_api_base_url`). The chat proxy
+  (`cli-chat-proxy.grok.com`) serves no voice route: its 404 was read as an
+  unknown voice (#5424, #5179). Tests point `SAGAX_GROK_ACCOUNT_VOICE_API`
+  and `SAGAX_GROK_ACCOUNT_REALTIME_URL` at a loopback fake.
+- A 404 is an unknown voice only when the request named one, or xAI's body
+  says so; a voice list, a transcription and a realtime handshake (the voice
+  goes in `session.update`) name none, so their 404 is `key` (the
+  credential is not served there, the next one may be). A saved voice a
+  credential does not know is asked back on its own default voice, for
+  speech (`speakOnKnownVoice`, the speech socket) as for a call, and the next
+  sentences go there at once (`VoiceKeyRefusals.voiceUnknown`).
+- A chain where no credential served names its first real cause: `tried`
+  is put back in the person's order (`inPersonOrder`; the refusal memory may
+  have tried their account last), and when its refusals are not all xAI
+  credits or keys, `chainCallReason` leads with the closest credential's own
+  cause, then says the others in one line; the body's `key` and `failure`
+  are that first cause, so the bar and the phone name it, never only the
+  last refusal (#5424).
 - A refused realtime handshake keeps xAI's reason (`openRealtimeSocket` in
   `server/tts/grok.ts`): 402 is `quota`, 401, 403 and xAI's 400 are `key`,
   only a failure of xAI is `down`. A key refused for itself is remembered,

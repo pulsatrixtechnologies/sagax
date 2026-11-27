@@ -1,11 +1,15 @@
 // The page's pill tabs and the search behind the magnifier (#2271, split
 // from BotProfilePage for #1383).
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { Search } from "lucide-react";
 
 import { t } from "@/lib/i18n";
+import type { LocaleKey } from "@/locales";
 import { cn } from "@/lib/cn";
 import { PillTabs } from "@/components/PillTabs";
+import { UiMovable, useUiCustomize } from "@/components/ui-customize";
+import { useUiLayout } from "@/lib/ui-layout/preference";
+import { botProfileTabOrder, profileTabComponentId, profileTabFromComponentId } from "@/lib/ui-layout/bot-page-order";
 import { personaPagesMatching } from "@/lib/persona-search";
 import { applySettingsSearch, clearSettingsSearch, settingsQuery } from "@/lib/settings-search";
 import type { BotProfileTab, PersonaCategory } from "@/lib/persona-sections";
@@ -136,27 +140,57 @@ export function BotProfileTabBar({ tabs, tab, onTab, search, attention }: {
   attention?: ReadonlySet<BotProfileTab>;
 }) {
   const { searchRef, searching, query, q, results, matching, changeQuery, openSearch, closeSearch, onSearchKey } = search;
+  const uiCustomize = useUiCustomize();
+  const storedLayout = useUiLayout();
+  const botZone = uiCustomize.active ? uiCustomize.draft.zones.botPage : storedLayout.zones.botPage;
+  const offered = new Set(tabs);
+  const visibleTabs = botProfileTabOrder(botZone)
+    .map((id) => profileTabFromComponentId(id))
+    .filter((id): id is BotProfileTab => id !== null && offered.has(id as BotProfileTab)) as BotProfileTab[];
+  // Fall back to the offered list when the zone order has none left visible.
+  const shownTabs = visibleTabs.length > 0 ? visibleTabs : [...tabs];
+  const activeTab = shownTabs.includes(tab) ? tab : shownTabs[0] ?? tab;
+
+  useEffect(() => {
+    if (activeTab !== tab && shownTabs.includes(activeTab)) onTab(activeTab);
+  }, [activeTab, tab, shownTabs, onTab]);
+
+  const wrapTab = uiCustomize.active
+    ? (id: BotProfileTab, node: ReactNode) => (
+        <UiMovable
+          zoneId="botPage"
+          id={profileTabComponentId(id)}
+          label={t(`ui.customize.item.tab.${id}` as LocaleKey)}
+        >
+          {node}
+        </UiMovable>
+      )
+    : undefined;
+
   return (
     <>
       <div className="mt-4 flex items-start gap-1 px-1">
-        <PillTabs
-          tabs={tabs}
-          tab={tab}
-          onTab={onTab}
-          idPrefix="bot-profile"
-          ariaLabel={t("botProfile.tabsAria")}
-          data-bot-profile-tabs=""
-          className="flex-1"
-          label={(id) => t(TAB_LABEL[id])}
-          tabAttributes={(id) => ({ "data-bot-profile-tab": id, "data-bot-profile-tab-match": q && matching.has(id) ? "" : undefined })}
-          tabClassName={(id) => q && !matching.has(id) && "opacity-40"}
-          after={(id) => attention?.has(id) && (
-            <>
-              <span data-bot-profile-tab-dot="" aria-hidden="true" className="relative size-1.5 shrink-0 rounded-full bg-warning" />
-              <span className="sr-only">{t("botTasks.waiting")}</span>
-            </>
-          )}
-        />
+        {shownTabs.length > 0 ? (
+          <PillTabs
+            tabs={shownTabs}
+            tab={activeTab}
+            onTab={onTab}
+            idPrefix="bot-profile"
+            ariaLabel={t("botProfile.tabsAria")}
+            data-bot-profile-tabs=""
+            className="flex-1"
+            label={(id) => t(TAB_LABEL[id])}
+            wrapTab={wrapTab}
+            tabAttributes={(id) => ({ "data-bot-profile-tab": id, "data-bot-profile-tab-match": q && matching.has(id) ? "" : undefined })}
+            tabClassName={(id) => q && !matching.has(id) && "opacity-40"}
+            after={(id) => attention?.has(id) && (
+              <>
+                <span data-bot-profile-tab-dot="" aria-hidden="true" className="relative size-1.5 shrink-0 rounded-full bg-warning" />
+                <span className="sr-only">{t("botTasks.waiting")}</span>
+              </>
+            )}
+          />
+        ) : <div className="flex-1" />}
         <button
           type="button"
           data-bot-profile-search-toggle=""

@@ -9,7 +9,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { TabIndicator, TabIndicatorGroup } from "@/components/TabIndicator";
 
-export function PillTabs<T extends string>({ tabs, tab, onTab, ariaLabel, idPrefix, label, after, tabAttributes, tabClassName, className, variant = "pill", ...rest }: {
+export function PillTabs<T extends string>({ tabs, tab, onTab, ariaLabel, idPrefix, label, after, tabAttributes, tabClassName, wrapTab, className, variant = "pill", ...rest }: {
   /** "line": the detail pages' tabs, underlined with a count, on a hairline */
   variant?: "pill" | "line";
   tabs: readonly T[];
@@ -24,6 +24,8 @@ export function PillTabs<T extends string>({ tabs, tab, onTab, ariaLabel, idPref
   /** The page's own data attributes on each tab. */
   tabAttributes?: (tab: T) => Record<`data-${string}`, string | undefined>;
   tabClassName?: (tab: T) => string | false | undefined;
+  /** Wrap each tab button (customize mode grip). */
+  wrapTab?: (id: T, node: ReactNode) => ReactNode;
   className?: string;
 } & Record<`data-${string}`, string>) {
   return (
@@ -43,31 +45,37 @@ export function PillTabs<T extends string>({ tabs, tab, onTab, ariaLabel, idPref
       className={cn("flex min-w-0 flex-wrap items-center", variant === "line" ? "gap-5 border-b border-hairline-weak" : "gap-0.5", className)}
     >
       <TabIndicatorGroup>
-        {tabs.map((id) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            {...tabAttributes?.(id)}
-            id={`${idPrefix}-tab-${id}`}
-            aria-controls={`${idPrefix}-panel-${id}`}
-            aria-selected={tab === id}
-            tabIndex={tab === id ? 0 : -1}
-            onClick={() => onTab(id)}
-            className={cn(
-              variant === "line"
-                ? "relative -mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-0.5 py-2 text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-                : "relative inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-              variant === "line" && (tab === id ? "border-ink" : "border-transparent"),
-              tab === id ? "text-ink" : "text-ink-secondary hover:text-ink",
-              tabClassName?.(id),
-            )}
-          >
-            {tab === id && variant === "pill" && <TabIndicator />}
-            <span className="relative">{label(id)}</span>
-            {after?.(id)}
-          </button>
-        ))}
+        {tabs.map((id) => {
+          const button = (
+            <button
+              type="button"
+              role="tab"
+              {...tabAttributes?.(id)}
+              id={`${idPrefix}-tab-${id}`}
+              aria-controls={`${idPrefix}-panel-${id}`}
+              aria-selected={tab === id}
+              tabIndex={tab === id ? 0 : -1}
+              onClick={() => onTab(id)}
+              className={cn(
+                variant === "line"
+                  ? "relative -mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-0.5 py-2 text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+                  : "relative inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+                variant === "line" && (tab === id ? "border-ink" : "border-transparent"),
+                tab === id ? "text-ink" : "text-ink-secondary hover:text-ink",
+                tabClassName?.(id),
+              )}
+            >
+              {tab === id && variant === "pill" && <TabIndicator />}
+              <span className="relative">{label(id)}</span>
+              {after?.(id)}
+            </button>
+          );
+          return (
+            <span key={id} className="inline-flex">
+              {wrapTab ? wrapTab(id, button) : button}
+            </span>
+          );
+        })}
       </TabIndicatorGroup>
     </div>
   );

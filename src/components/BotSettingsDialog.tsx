@@ -10,7 +10,7 @@
 // window directly (SandboxDesktopModal); every other link to the bot's
 // computer (the store's computerOpen) lands here and opens that same window
 // (#4208: the old computer side panel is gone).
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { BOT_PANEL_BOUNDS, DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
 import { Settings, X } from "lucide-react";
 
@@ -41,6 +41,7 @@ import { PackageProvenance } from "./bot-settings/PackageProvenance";
 import { BotProfileAvatarCard } from "./BotProfileAvatarCard";
 import { useCaptionChrome, useMacInsetChrome } from "./DesktopCapabilities";
 import { t } from "@/lib/i18n";
+import type { LocaleKey } from "@/locales";
 import { setCodingPanelHost } from "@/lib/coding-panel-host";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import { viewerBotsReadOnly } from "@/lib/viewer";
@@ -48,6 +49,9 @@ import { useBotSectionAvailability, useBotSectionContent } from "./bot-settings/
 import { botsReadOnlyText } from "@/lib/permissions";
 import { RemoteSessionsSection } from "./remote-session/RemoteSessionsSection";
 import { PanelPageHostProvider } from "./bot-settings/PanelPage";
+import { UiMovable, useUiCustomize } from "@/components/ui-customize";
+import { useUiLayout } from "@/lib/ui-layout/preference";
+import { botPanelTabOrder, panelTabComponentId, panelTabFromComponentId } from "@/lib/ui-layout/bot-page-order";
 
 /** #2149: the panel body's scroll per bot and tab, put back when the header
  * pill reopens the panel it closed. */
@@ -117,8 +121,16 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   const stepThreadId = state.codingChat?.step?.orchestratorId === bot.id ? state.codingChat.threadId : undefined;
   // One activity fetch for both tabs: Activity's agent rows, Coding's code work.
   const codingPanel = useBotCodingPanel(bot);
-  const panelTabs = visiblePanelTabs({ advanced, computerOff, coding: codingChatKey !== null || stepThreadId !== undefined || codingPanel.hasCodeWork });
-  const tab: PanelTab = panelTabs.includes(pickedTab) ? pickedTab : "activity";
+  const uiCustomize = useUiCustomize();
+  const storedLayout = useUiLayout();
+  const botZone = uiCustomize.active ? uiCustomize.draft.zones.botPage : storedLayout.zones.botPage;
+  const offeredPanelTabs = visiblePanelTabs({ advanced, computerOff, coding: codingChatKey !== null || stepThreadId !== undefined || codingPanel.hasCodeWork });
+  const offeredSet = new Set(offeredPanelTabs);
+  const orderedPanel = botPanelTabOrder(botZone)
+    .map((id) => panelTabFromComponentId(id))
+    .filter((id): id is PanelTab => id !== null && offeredSet.has(id as PanelTab)) as PanelTab[];
+  const panelTabs = orderedPanel.length > 0 ? orderedPanel : [...offeredPanelTabs];
+  const tab: PanelTab = panelTabs.includes(pickedTab) ? pickedTab : (panelTabs[0] ?? "activity");
   // Opening a coding chat brings its tab forward, where its session is.
   useEffect(() => {
     if (codingChatKey !== null) dispatch({ type: "pickBotPanelTab", botId: bot.id, tab: "coding" });
@@ -221,6 +233,19 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
     };
   }, [dispatch]);
 
+  const wrapPanelTab = (id: PanelTab, node: ReactNode): ReactNode => {
+    if (!uiCustomize.active) return node;
+    return (
+      <UiMovable
+        zoneId="botPage"
+        id={panelTabComponentId(id)}
+        label={t(`ui.customize.item.panel.${id}` as LocaleKey)}
+      >
+        {node}
+      </UiMovable>
+    );
+  };
+
   const tabList = (inBar: boolean) => (
     <div
       role="tablist"
@@ -229,7 +254,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
       onKeyDown={(event) => {
         // Arrow keys move between tabs, as in any tab list.
         const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-        if (!step) return;
+        if (!step || panelTabs.length === 0) return;
         event.preventDefault();
         const next = panelTabs[(panelTabs.indexOf(tab) + step + panelTabs.length) % panelTabs.length]!;
         chooseTab(next);
@@ -239,22 +264,25 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
     >
       <TabIndicatorGroup>
       {panelTabs.map((id) => (
-        <button
-          key={id}
-          type="button"
-          role="tab"
-          data-panel-tab={id}
-          aria-selected={tab === id}
-          tabIndex={tab === id ? 0 : -1}
-          onClick={() => chooseTab(id)}
-          className={cn(
-            "relative rounded-full px-3 py-[3px] text-[14px] font-normal leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-            tab === id ? "text-ink" : "text-ink-secondary hover:text-ink",
-          )}
-        >
-          {tab === id && <TabIndicator className="bg-raised" />}
-          <span className="relative">{t(`botPanel.tab.${id}`)}</span>
-        </button>
+        <span key={id} className="inline-flex">
+          {wrapPanelTab(id, (
+            <button
+              type="button"
+              role="tab"
+              data-panel-tab={id}
+              aria-selected={tab === id}
+              tabIndex={tab === id ? 0 : -1}
+              onClick={() => chooseTab(id)}
+              className={cn(
+                "relative rounded-full px-3 py-[3px] text-[14px] font-normal leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+                tab === id ? "text-ink" : "text-ink-secondary hover:text-ink",
+              )}
+            >
+              {tab === id && <TabIndicator className="bg-raised" />}
+              <span className="relative">{t(`botPanel.tab.${id}`)}</span>
+            </button>
+          ))}
+        </span>
       ))}
       </TabIndicatorGroup>
     </div>

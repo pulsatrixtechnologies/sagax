@@ -73,6 +73,14 @@ describe("artifact's own window: Full screen (#1495, #2043)", () => {
     expect(frame?.contains(button) ?? false).toBe(false);
   });
 
+  it("offers Dock to side in the window chrome", async () => {
+    await mount();
+    const dock = document.querySelector<HTMLButtonElement>("[data-artifact-dock-side]");
+    const chrome = document.querySelector("[data-artifact-window-chrome]");
+    expect(dock).not.toBeNull();
+    expect(chrome!.contains(dock)).toBe(true);
+  });
+
   it("asks the OS for full screen during the click (user gesture) (#2043)", async () => {
     await mount();
     let duringClick = false;

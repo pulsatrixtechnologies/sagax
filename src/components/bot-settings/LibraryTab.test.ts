@@ -88,12 +88,12 @@ describe("Library tab", () => {
     expect(html).toContain('role="menuitem"');
   });
 
-  it("an artifact's row pins through the same control and its menu has one Open, no Pop out, and delete", () => {
+  it("an artifact's row pins through the same control and its menu has Open on the side, Open in a window, no Pop out, and delete", () => {
     const html = render([], list([artifact("art_0000001", "CPU", false)]), { openMenus: true });
     expect(html).toContain('data-library-pin="off"');
-    expect(html.match(/>Open</g)).toHaveLength(1);
+    expect(html).toContain("Open on the side");
+    expect(html).toContain("Open in a window");
     expect(html).not.toContain("Pop out");
-    expect(html).not.toContain("in its own window");
     expect(html).not.toContain("Dock back");
     expect(html).not.toContain("Close window");
     expect(html).toContain("Delete");

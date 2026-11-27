@@ -179,6 +179,7 @@ export function reduceUiSurfaces(
         inspectorOpen: false,
         activityOpen: false,
         personPanelId: null,
+        artifactPanel: null,
         botWizard: null,
         activeView: "chat",
         appSettingsOpen: false,
@@ -236,6 +237,6 @@ export function reduceUiSurfaces(
 
 /** The right panel's state, kept while the bot's profile page covers it. */
 export function profilePanelSnapshot(state: AppState): ProfilePanelSnapshot {
-  const { settingsOpen, panelOwner, computerOpen, inspectorOpen, activityOpen, personPanelId } = state;
-  return { settingsOpen, panelOwner, computerOpen, inspectorOpen, activityOpen, personPanelId };
+  const { settingsOpen, panelOwner, computerOpen, inspectorOpen, activityOpen, personPanelId, artifactPanel } = state;
+  return { settingsOpen, panelOwner, computerOpen, inspectorOpen, activityOpen, personPanelId, artifactPanel };
 }

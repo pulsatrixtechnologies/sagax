@@ -139,21 +139,34 @@ artifact opens in one way only, its own window; a window inside Sagax is
 useless. The floating panel, Pop out, the open dialog, the drag out of the app
 and `contain` are gone (the generic manager stays for the terminal).
 
+## Side panel and own window (2026-11-27)
+
+- Primary open (Library row click, palette, Outputs, `OPEN_ARTIFACT_EVENT`)
+  opens the artifact **beside the chat** in the shared right docked panel
+  (`ArtifactSidePanel`, same `useDockedPanelWidth` / `app-docked-panel` shell
+  as settings and person). Mutually exclusive with settings, computer, person,
+  inspector and activity (`artifactPanel` on the store).
+- The Library menu keeps both: "Open on the side" and "Open in a window".
+- The side panel offers Detach (system window, `popped: true`, panel closes),
+  Agrandir (existing in-app fullscreen layer) and Close.
+- A detached window offers Dock to side / Rattacher: `popped: false`, closes
+  the Electron window, signals the main window (`BroadcastChannel` /
+  `localStorage`) to open the side panel.
+
 ## An artifact's own window (2026-10-28)
 
-- Open (the Library row, its menu, the palette) opens the artifact in its
-  system window in the desktop app (`openArtifactInOwnWindow`,
-  `electron/artifact-window.mjs`): one window per artifact, opening it again
-  brings it forward, its place is kept per artifact and it can sit on another
-  screen. The bot's `bounds` give its first size.
-- In a browser (no `window.ogb.artifactWindow`) Open opens
+- "Open in a window" opens the artifact in its system window in the desktop
+  app (`openArtifactInOwnWindow`, `electron/artifact-window.mjs`): one window
+  per artifact, opening it again brings it forward, its place is kept per
+  artifact and it can sit on another screen. The bot's `bounds` give its
+  first size.
+- In a browser (no `window.ogb.artifactWindow`) that path opens
   `/artifact-window#bot=<botId>&artifact=<id>` in a new tab
-  (`window.open`, `noopener`). Never a panel inside the app.
-- `popped` on the server is "open in its window": Open sets it, closing the
-  window (or Close window in the Library menu or in the window) clears it,
-  the bot may set it. `reconcileArtifactWindows` reopens the windows of
-  popped artifacts at start with `focus: false` and closes those docked or
-  deleted.
+  (`window.open`, `noopener`).
+- `popped` on the server is "open in its window": opening the window sets it,
+  closing the window (or Close window / Dock to side) clears it, the bot may
+  set it. `reconcileArtifactWindows` reopens the windows of popped artifacts
+  at start with `focus: false` and closes those docked or deleted.
 - Migration: floating panels of kind `artifact` restored from
   `omb.floatingWindows.v1` are dropped with their places, and
   `omb.artifactOwnWindows.v1` is erased (`migrateLegacyArtifactPanels`); the

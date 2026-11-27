@@ -1,19 +1,20 @@
 // The Library tab's artifacts: the widgets this bot saved for the person
 // (docs/superpowers/specs/2026-10-16-artifacts-design.md). The person opens
-// one (in its own system window, or a browser tab where there is no desktop
-// app; never a panel inside Sagax), closes that window, pins or unpins it (the
-// server's favorite flag), and deletes it; everything else (what it shows,
-// its source, how often it refreshes) is the bot's, so the empty state tells
-// them to ask the bot.
+// one beside the chat (docked panel) or in its own system window (or a
+// browser tab where there is no desktop app), closes that window, pins or
+// unpins it (the server's favorite flag), and deletes it; everything else
+// (what it shows, its source, how often it refreshes) is the bot's, so the
+// empty state tells them to ask the bot.
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { relativeTime } from "@/lib/memory";
+import { openArtifact, openArtifactWindow } from "@/lib/artifact-events";
 import { deleteArtifact, refreshArtifact, setArtifactFlags, type ArtifactList } from "@/lib/artifacts";
 import { ConfirmDialog } from "../ConfirmDialog";
-import { canOpenArtifactInOwnWindow, dockArtifactWindow, openArtifactInOwnWindow } from "./artifact-windows";
+import { dockArtifactWindow } from "./artifact-windows";
 import type { ArtifactSummary } from "../../../shared/artifacts";
 
 /** "30 s", "5 min", "2 h", "1 d". */
@@ -53,9 +54,10 @@ const STATUS_TONE = { muted: "text-ink-secondary", warning: "text-warning", dang
 
 /** What the person can do to an artifact from a row. */
 export interface ArtifactActions {
-  /** In its own system window (desktop app), else a new browser tab. One
-   * window per artifact: opening it again brings that window forward. */
+  /** Beside the chat in the shared docked panel (primary click). */
   open(artifact: ArtifactSummary): void;
+  /** In its own system window (desktop app), else a new browser tab. */
+  openWindow(artifact: ArtifactSummary): void;
   /** Close its system window: the artifact is docked (desktop app). */
   closeWindow(artifact: ArtifactSummary): void;
   toggleFavorite(artifact: ArtifactSummary): void;
@@ -89,14 +91,11 @@ export function useArtifactActions(list: ArtifactList, onError: (text: string) =
   return {
     refreshing,
     open: (artifact) => {
-      const desktop = canOpenArtifactInOwnWindow();
-      const wasPopped = artifact.popped;
-      if (desktop) list.patch(artifact.id, { popped: true });
-      void openArtifactInOwnWindow(artifact).then((opened) => {
-        if (opened) return;
-        if (desktop) list.patch(artifact.id, { popped: wasPopped });
-        onError(t("artifacts.error"));
-      });
+      openArtifact({ botId: artifact.botId, artifactId: artifact.id, title: artifact.title });
+    },
+    openWindow: (artifact) => {
+      if (!artifact.popped) list.patch(artifact.id, { popped: true });
+      openArtifactWindow({ botId: artifact.botId, artifactId: artifact.id, title: artifact.title });
     },
     closeWindow: (artifact) => {
       list.patch(artifact.id, { popped: false });

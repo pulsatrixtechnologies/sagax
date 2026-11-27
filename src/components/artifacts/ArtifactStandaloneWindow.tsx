@@ -1,18 +1,19 @@
-// An artifact in a window of its own (#1140; the only way an artifact opens
-// since 2026-10-28): the page behind `/artifact-window#bot=<id>&artifact=<id>`,
-// drawn by the desktop app in a separate BrowserWindow
-// (electron/artifact-window.mjs) that can sit outside the app's frame, beside
-// the work or on another monitor, or opened in a browser tab where there is no
-// desktop app. It shows the widget, its status, Refresh now, Full screen and
-// Close window, and has its own store, like any other tab of the app. Closing
-// the window docks the artifact; Close window does the same.
+// An artifact in a window of its own (#1140): the page behind
+// `/artifact-window#bot=<id>&artifact=<id>`, drawn by the desktop app in a
+// separate BrowserWindow (electron/artifact-window.mjs) that can sit outside
+// the app's frame, beside the work or on another monitor, or opened in a
+// browser tab where there is no desktop app. It shows the widget, its status,
+// Refresh now, Dock to side, Full screen and Close window, and has its own
+// store, like any other tab of the app. Closing the window docks the artifact;
+// Dock to side docks it and asks the main window to open the side panel.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { LoaderCircle, Maximize2, Minimize2, RefreshCw, X } from "lucide-react";
+import { Columns2, LoaderCircle, Maximize2, Minimize2, RefreshCw, X } from "lucide-react";
 
 import { StoreProvider, useStore } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { effectiveLanguage, useLanguageChoice } from "@/lib/language-preference";
 import { setLocale, t } from "@/lib/i18n";
+import { signalArtifactReattach } from "@/lib/artifact-events";
 import { refreshArtifact, useArtifact, useArtifactWatch } from "@/lib/artifacts";
 import { useOsFullscreen } from "@/hooks/use-os-fullscreen";
 import { readPageWindowFitBridge, startPageWindowFit } from "@/lib/page-window-fit";
@@ -53,6 +54,25 @@ export function ArtifactWindowBody({ data }: { data: ArtifactWindowData }) {
             }}
           >
             <RefreshCw size={13} aria-hidden="true" className={cn(refreshing && "animate-spin motion-reduce:animate-none")} />
+          </button>
+        )}
+        {artifact && (
+          <button
+            type="button"
+            className={TOOL}
+            data-artifact-dock-side
+            aria-label={t("artifacts.dockSide")}
+            title={t("artifacts.dockSide")}
+            onClick={() => {
+              signalArtifactReattach({
+                botId: data.botId,
+                artifactId: data.artifactId,
+                title: artifact.title,
+              });
+              void dockArtifactWindow({ id: data.artifactId, botId: data.botId }).catch(() => {}).finally(() => window.close());
+            }}
+          >
+            <Columns2 size={13} aria-hidden="true" />
           </button>
         )}
         {artifact && (

@@ -1320,6 +1320,9 @@ export interface AppState {
   /** The person whose details fill the right panel (principal id), or null.
    * Shares the right slot with bot settings, the computer and app settings. */
   personPanelId: string | null;
+  /** Artifact open in the shared right docked panel (beside the chat), or null.
+   * Mutually exclusive with settings, computer, person, inspector and activity. */
+  artifactPanel: { botId: string; artifactId: string; title: string } | null;
   /** True while Capabilities (Connect apps) is open as its centred modal
    * (activeView "apps"). Kept in sync with activeView for callers that
    * still read pluginsOpen. */
@@ -1864,6 +1867,8 @@ export type Action =
   | { type: "openCodingChat"; target: import("../../lib/coding-chat").CodingChatTarget }
   | { type: "closeCodingChat" }
   | { type: "openPersonPanel"; personId: string | null }
+  /** Open an artifact in the shared right docked panel, or null to close it. */
+  | { type: "openArtifactPanel"; panel: AppState["artifactPanel"] }
   /** Open a bot's panel on Details with one Coding activity item shown
    * (`run:<routineRunId>` or `thread:<threadId>`), e.g. from the owner's
    * notification of a routine run refused in another person's thread. */
@@ -2554,7 +2559,7 @@ export function closeBotCatalog(): Action {
 /** What the Computer section's screen window shows (#4208). */
 export type ComputerWindowView = "screen" | "browser" | "teach";
 
-export type ProfilePanelSnapshot = Pick<AppState, "settingsOpen" | "panelOwner" | "computerOpen" | "inspectorOpen" | "activityOpen" | "personPanelId">;
+export type ProfilePanelSnapshot = Pick<AppState, "settingsOpen" | "panelOwner" | "computerOpen" | "inspectorOpen" | "activityOpen" | "personPanelId" | "artifactPanel">;
 
 export type PanelOwner =
   | { leafId: string; botId: string; groupId?: undefined }
@@ -2610,6 +2615,7 @@ export const initialState: AppState = {
   settingsOpen: false,
   panelOwner: null,
   personPanelId: null,
+  artifactPanel: null,
   pluginsOpen: false,
   pluginsSurface: "apps",
   pluginsBotId: null,

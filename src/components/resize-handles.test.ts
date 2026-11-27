@@ -66,7 +66,7 @@ describe("resize handles", () => {
       expect(shared).toContain("hidden lg:block");
     });
 
-    it.each(["BotSettingsDialog.tsx", "PersonPanel.tsx", "GroupPanel.tsx"])("%s uses the shared hook and handle, with no copy of its own", (file) => {
+    it.each(["BotSettingsDialog.tsx", "PersonPanel.tsx", "GroupPanel.tsx", "artifacts/ArtifactSidePanel.tsx"])("%s uses the shared hook and handle, with no copy of its own", (file) => {
       const source = read(file);
       expect(source).toMatch(/useDockedPanelWidth\((BOT_PANEL_BOUNDS)?\)/);
       expect(source).toContain("<DockedPanelResizeHandle");
@@ -80,7 +80,7 @@ describe("resize handles", () => {
     it("opens the bot panel at 308 px like the reference app, other panels unchanged (#2141)", () => {
       expect(shared).toMatch(/BOT_PANEL_BOUNDS[^}]*key: BOT_PANEL_WIDTH_KEY,\s*min: 308,[^}]*fallback: 308/);
       expect(read("BotSettingsDialog.tsx")).toContain("useDockedPanelWidth(BOT_PANEL_BOUNDS)");
-      for (const file of ["PersonPanel.tsx", "GroupPanel.tsx"]) expect(read(file)).toContain("useDockedPanelWidth()");
+      for (const file of ["PersonPanel.tsx", "GroupPanel.tsx", "artifacts/ArtifactSidePanel.tsx"]) expect(read(file)).toContain("useDockedPanelWidth()");
     });
   });
 });

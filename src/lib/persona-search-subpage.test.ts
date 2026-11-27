@@ -10,7 +10,8 @@ const find = (query: string) => personaPagesMatching(PERSONA_CATEGORIES, query, 
 
 describe("search lands on the option's sub-page (#2623)", () => {
   it("opens When it acts alone for its options", () => {
-    for (const query of ["proactif", "proactive", "brouillons", "email drafts", "mèmes", "meme", "cible de publication", "background brief", "destinataires"]) {
+    // #5445: "background brief" left actsAlone for General > Notifications
+    for (const query of ["proactif", "proactive", "brouillons", "email drafts", "mèmes", "meme", "cible de publication", "destinataires"]) {
       const first = find(query)[0]!;
       expect(["permissions", "access"]).toContain(first);
       expect(personaSubPageForQuery(first, query)).toBe("actsAlone");
@@ -51,6 +52,14 @@ describe("search names the switches General holds in place (#3398)", () => {
       expect(find(query), `${query} reaches the page of the switch`).toContain("permissions");
     }
     for (const query of ["voix", "speak", "effort", "", "  "]) expect(settingsSwitchForQuery(query), query).toBeNull();
+  });
+  it("finds the daily brief on Notifications, not When it acts alone (#5445)", () => {
+    for (const query of ["background brief", "brief", "brief du jour", "daily brief", "résumé de fond", "resume de fond"]) {
+      expect(settingsSwitchForQuery(query), query).toBe("dailyBrief");
+      expect(find(query)[0], `${query} matches a page`).toBeDefined();
+      // no longer an actsAlone part hit
+      expect(personaSubPageForQuery("access", query)).not.toBe("actsAlone");
+    }
   });
   it("leaves a short, generic or page query to the pages", () => {
     for (const query of ["a", "m", "r", "me", "ion", "rate", "create", "créer", "creer", "routines", "routine", "avertir"]) {

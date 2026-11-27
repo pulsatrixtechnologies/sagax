@@ -1095,6 +1095,9 @@ describe("bot profile page: General cards in place (#3398)", () => {
     for (const [query, label, group] of [
       ["notifications", t("botPanel.voice.notifyHelp"), "bot-profile-notifications"],
       ["alerts", t("botPanel.voice.notifyHelp"), "bot-profile-notifications"],
+      // #5445: brief search lands on Notifications, not When it acts alone
+      ["background brief", t("brief.daily"), "bot-profile-notifications"],
+      ["brief", t("brief.daily"), "bot-profile-notifications"],
       ["collaborators", t("botPanel.routines.collaboratorsCreate"), "bot-profile-group-settings"],
     ] as const) {
       await home("knowledge");

@@ -573,12 +573,17 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     );
   };
 
-  // Search: collaborators stay on Settings; notify me is on Notifications (#5445).
-  const switchShown: Record<BotProfileSettingsSwitch, boolean> = { notifyMe: notifyShown, collaboratorsCreateRoutines: collaboratorsSwitch !== null };
+  // Search: collaborators stay on Settings; notify me and daily brief are
+  // on Notifications (#5445). Brief is always offered (the card mounts it).
+  const switchShown: Record<BotProfileSettingsSwitch, boolean> = {
+    notifyMe: notifyShown,
+    dailyBrief: true,
+    collaboratorsCreateRoutines: collaboratorsSwitch !== null,
+  };
   function settingsSwitchSelector(query: string): string | null {
     const id = settingsSwitchForQuery(query, pages.map(sectionLabel));
     if (!id || !switchShown[id]) return null;
-    return id === "notifyMe" ? NOTIFICATIONS_CARD_SELECTOR : SETTINGS_CARD_SELECTOR;
+    return id === "notifyMe" || id === "dailyBrief" ? NOTIFICATIONS_CARD_SELECTOR : SETTINGS_CARD_SELECTOR;
   }
 
   const pages = useMemo(

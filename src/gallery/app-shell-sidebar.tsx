@@ -212,7 +212,9 @@ const shapeMaterial = ["fluffy", "glass"].includes(params.get("material") ?? "")
 if (params.get("seats")) setAliveSeats(Number(params.get("seats")));
 // ?calm=1: no bot of the shapes team is at work (every mascot at rest), to tell the cost of the idle life from a state's
 const calm = params.get("calm") === "1";
-const shaped = (entry: Bot, i: number): Bot => ({ ...entry, ...(calm ? { busy: false, unread: false } : {}), color: SHAPE_COLORS[i % SHAPE_COLORS.length]!, mascotLook: { character: "shape", shape: shapeMaterial && i === 0 ? "cat" : MASCOT_SHAPES[i % MASCOT_SHAPES.length], ...(shapeMaterial ? { material: shapeMaterial } : {}), ...(i % 5 === 2 ? { skins: { shape: SHAPE_SKIN_CYCLE[Math.floor(i / 5) % SHAPE_SKIN_CYCLE.length] } } : {}) } } as Bot);
+// ?motion=full|reduced: every bot of the shapes team with that Motion setting (the picker's gear), to see who takes a seat
+const shapeMotion = ["full", "reduced"].includes(params.get("motion") ?? "") ? params.get("motion") : null;
+const shaped = (entry: Bot, i: number): Bot => ({ ...entry, ...(calm ? { busy: false, unread: false } : {}), color: SHAPE_COLORS[i % SHAPE_COLORS.length]!, mascotLook: { character: "shape", shape: shapeMaterial && i === 0 ? "cat" : MASCOT_SHAPES[i % MASCOT_SHAPES.length], ...(shapeMaterial ? { material: shapeMaterial } : {}), ...(shapeMotion ? { motion: shapeMotion } : {}), ...(i % 5 === 2 ? { skins: { shape: SHAPE_SKIN_CYCLE[Math.floor(i / 5) % SHAPE_SKIN_CYCLE.length] } } : {}) } } as Bot);
 const shapeTeam: Bot[] = shapeCount
   ? [
     ...team.map(shaped),

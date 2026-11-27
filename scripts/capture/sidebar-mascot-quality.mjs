@@ -15,19 +15,29 @@
  * - motion: whether a mascot's drawing keeps changing over two seconds;
  * - cost: with thirty bots, the WebGL contexts made, the canvases, the
  *   mascots alive, the frames a second, and the processor time of the page
- *   and of the GPU process over five seconds, in a window of the usual
- *   height and in one tall enough to show the thirty bots at once; there,
- *   also with other numbers of seats (--seats, how many small mascots live
- *   at once, src/components/shape-alive.ts), the measure that chose the
- *   page's number.
+ *   and of the GPU process over five seconds, in windows of the usual
+ *   heights (--heights, 860 and 1000 px) and in one tall enough to show the
+ *   thirty bots at once; there, also with other numbers of seats (--seats,
+ *   how many small mascots live at once, src/components/shape-alive.ts), in
+ *   both skins, the measure that chose the page's number;
+ * - who lives: over six seconds, a look every 250 ms at the sidebar's
+ *   mascots on screen (an IntersectionObserver with no margin, as the seats use) and
+ *   the ones alive: the most on screen, the most alive, the share of the
+ *   looks each mascot on screen was alive (the least of them, and the
+ *   pinned tile's).
+ *
+ * Every page is taken with the account menu closed, as it is in the app
+ * once a bot is opened: the gallery's shell opens it above the name (the
+ * default, Settings > Appearance), which hides the bottom of the bot list.
  *
  * Usage: node scripts/capture/sidebar-mascot-quality.mjs [--out DIR] [--port N]
  *          [--prefix before|after] [--only shots|measure] [--bots N]
- *          [--seats 6,12,18,31] [--materials flat,fluffy,glass]
+ *          [--seats 8,12,20,31] [--heights 860,1000] [--skins light,dark]
+ *          [--materials flat,fluffy,glass]
  */
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { cpus, loadavg, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -43,8 +53,9 @@ const only = arg("--only", "");
 const bots = arg("--bots", "30");
 // the cost is measured twice: in a window as tall as the app's usual one, and in one tall enough to show every row
 const TALL = Number(arg("--tall", "2400"));
+const HEIGHTS = arg("--heights", "860,1000").split(",").filter(Boolean).map(Number);
 const seatCounts = arg("--seats", "").split(",").filter(Boolean).map(Number);
-const skins = [{ id: "pulsatrix-light", label: "light" }, { id: "pulsatrix", label: "dark" }];
+const skins = [{ id: "pulsatrix-light", label: "light" }, { id: "pulsatrix", label: "dark" }].filter((skin) => arg("--skins", "light,dark").split(",").includes(skin.label));
 const MATERIALS = arg("--materials", "flat,fluffy,glass").split(",");
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
@@ -89,6 +100,81 @@ async function drawn(page) {
   });
   await sleep(1200);
 }
+
+/** The account menu closed, as in the app once a bot is opened (Escape puts the docked menu away, #4854). */
+async function closeMenu(page) {
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => document.querySelector("[data-sidebar-account-pill][data-menu-opened]") === null, null, { timeout: 10_000 });
+  // the bot list takes the room: the rows under it come on screen and ask for their seats
+  await sleep(600);
+}
+
+/**
+ * Who lives, over `ms`: a look every 250 ms at the mascots on screen (an
+ * IntersectionObserver with no margin, as the seats use: the sidebar's
+ * scroll box clips) and at the ones alive.
+ */
+const whoLives = (ms) => new Promise((done) => {
+  const seen = new Map();
+  const io = new IntersectionObserver((entries) => { for (const entry of entries) seen.set(entry.target, entry.isIntersecting); });
+  const watched = new Set();
+  const watch = () => {
+    // the sidebar's (the chat header's pill is no small mascot that lives)
+    for (const el of document.querySelectorAll("[data-sidebar-mascot] .shape-mascot")) if (!watched.has(el)) { watched.add(el); io.observe(el); }
+  };
+  watch();
+  const tile = document.querySelector("button:has([data-sidebar-tile-labels]) .shape-mascot");
+  const looks = new Map();
+  let count = 0;
+  let mostOnScreen = 0;
+  let mostAlive = 0;
+  let aliveOffScreen = 0;
+  let everyOneAlive = 0;
+  const look = () => {
+    watch();
+    count += 1;
+    let onScreen = 0;
+    let alive = 0;
+    let onScreenAlive = 0;
+    for (const el of watched) {
+      const on = seen.get(el) === true && el.isConnected;
+      const lives = el.isConnected && el.hasAttribute("data-shape-alive");
+      if (lives) alive += 1;
+      if (lives && !on) aliveOffScreen += 1;
+      if (!on) continue;
+      onScreen += 1;
+      if (lives) onScreenAlive += 1;
+      const entry = looks.get(el) ?? [0, 0];
+      entry[0] += 1;
+      if (lives) entry[1] += 1;
+      looks.set(el, entry);
+    }
+    mostOnScreen = Math.max(mostOnScreen, onScreen);
+    mostAlive = Math.max(mostAlive, alive);
+    if (onScreen > 0 && onScreenAlive === onScreen) everyOneAlive += 1;
+  };
+  let timer = 0;
+  setTimeout(() => {
+    look();
+    timer = setInterval(look, 250);
+  }, 300);
+  setTimeout(() => {
+    clearInterval(timer);
+    io.disconnect();
+    const share = ([on, lives]) => Math.round((lives / on) * 1000) / 10;
+    const shares = [...looks.values()].map(share);
+    done({
+      looks: count,
+      mostOnScreen,
+      mostAlive,
+      aliveOffScreenLooks: aliveOffScreen,
+      // the looks where every mascot on screen was alive
+      everyOneAlivePct: Math.round((everyOneAlive / Math.max(1, count)) * 1000) / 10,
+      leastAlivePct: shares.length ? Math.min(...shares) : null,
+      tileAlivePct: tile && looks.has(tile) ? share(looks.get(tile)) : null,
+    });
+  }, ms + 300);
+});
 
 /** Counts the contexts the page makes, before any script of the page runs. */
 const countContexts = () => {
@@ -191,6 +277,7 @@ async function shots(browser, report) {
         page.on("pageerror", (error) => console.error(`${material}: page error:`, error.message));
         await page.goto(shell(material, skin.id), { waitUntil: "load" });
         await drawn(page);
+        await closeMenu(page);
         const name = (part) => join(outDir, `${prefix}-${material}-${part}-${skin.label}.png`);
         await page.screenshot({ path: name("sidebar"), clip: { x: 0, y: 0, width: 300, height: 620 }, animations: "disabled" });
         console.log("shot", name("sidebar"));
@@ -212,10 +299,10 @@ async function cost(browser, report) {
   const system = await browser.newBrowserCDPSession();
   const processes = async () => Object.fromEntries((await system.send("SystemInfo.getProcessInfo")).processInfo.map((p) => [`${p.type}:${p.id}`, p.cpuTime]));
   // both skins: a light skin lays a drop shadow under every mascot (--mascot-filter), which the compositor draws again on every frame a canvas near it changes
-  const cases = MATERIALS.flatMap((name) => [
-    ...skins.flatMap((skin) => [[name, skin, 860, null], [name, skin, TALL, null]]),
-    ...seatCounts.map((seats) => [name, skins[1], TALL, seats]),
-  ]);
+  const cases = MATERIALS.flatMap((name) => skins.flatMap((skin) => [
+    ...[...HEIGHTS, TALL].map((height) => [name, skin, height, null]),
+    ...seatCounts.map((seats) => [name, skin, TALL, seats]),
+  ]));
   for (const [material, skin, height, seats] of cases) {
     const label = `${material}-${skin.label}-${height}${seats === null ? "" : `-seats${seats}`}`;
     const runs = [];
@@ -228,6 +315,7 @@ async function cost(browser, report) {
       await cdp.send("Performance.enable");
       await page.goto(shell(material, skin.id, seats === null ? {} : { seats: String(seats) }), { waitUntil: "load" });
       await drawn(page);
+      await closeMenu(page);
       await sleep(3000);
       const metrics = async () => Object.fromEntries((await cdp.send("Performance.getMetrics")).metrics.map((m) => [m.name, m.value]));
       const [m0, p0] = [await metrics(), await processes()];
@@ -249,6 +337,8 @@ async function cost(browser, report) {
       }));
       const [m1, p1] = [await metrics(), await processes()];
       const seconds = m1.Timestamp - m0.Timestamp;
+      // who lives, once per case (the first run)
+      const lives = run === 0 ? await page.evaluate(whoLives, 6000) : null;
       // every process whose time moved during the window, by type (the page's renderer, the GPU process)
       const cpu = {};
       for (const [key, time] of Object.entries(p1)) {
@@ -276,6 +366,7 @@ async function cost(browser, report) {
       }));
       runs.push({
         ...page1,
+        lives,
         ...frames,
         mainThreadPct: Math.round(((m1.TaskDuration - m0.TaskDuration) / seconds) * 1000) / 10,
         scriptPct: Math.round(((m1.ScriptDuration - m0.ScriptDuration) / seconds) * 1000) / 10,
@@ -290,8 +381,10 @@ async function cost(browser, report) {
       bots: Number(bots),
       skin: skin.label,
       windowHeight: height,
+      seats: seats ?? "page",
       inWindow: runs[0].onScreen,
       alive: runs[0].alive,
+      lives: runs[0].lives,
       mascots: runs[0].mascots,
       rows: runs[0].rows,
       canvases: runs[0].canvases,
@@ -306,6 +399,8 @@ async function cost(browser, report) {
       rendererCpuPct: median("rendererCpuPct"),
       gpuCpuPct: median("gpuCpuPct"),
       heapMb: median("heapMb"),
+      // what else the machine was doing: its load over the last minute, for its cores
+      machineLoad: `${Math.round(loadavg()[0])} on ${cpus().length} cores`,
     };
     console.log(label, JSON.stringify(report.cost[label]));
   }

@@ -540,7 +540,10 @@ export function ShapeMascot({
   useEffect(() => () => window.clearTimeout(timer.current), []);
   // alive at any size (the sidebar, #5404): while on screen and holding one of the page's seats (shape-alive.ts)
   const root = useRef<HTMLSpanElement>(null);
-  const seated = useAliveSeat(root, alive && !reduced, pose.state !== "idle");
+  // the engine holds a body in a material still under the device's reduced motion, whatever the bot's Motion
+  // says: it would not move, so it takes no seat
+  const engineStill = material !== null && systemReduced;
+  const seated = useAliveSeat(root, alive && !reduced && !engineStill, pose.state !== "idle");
   const seen = useRef(0);
   useEffect(() => {
     if (!shapeMove || shapeMove.key === seen.current || reduced) return;

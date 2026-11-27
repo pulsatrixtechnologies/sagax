@@ -1,9 +1,9 @@
 // The seats of the small mascots that live (#5404): who lives when a
-// sidebar shows more mascots than the page can redraw thirty times a second.
+// sidebar shows more mascots than the page gives seats.
 import { describe, expect, it } from "vitest";
 import { ALIVE_SEATS, ALIVE_TURN_SEATS, seatedNow, type AliveSeat } from "./shape-alive";
 
-const seat = (extra: Partial<AliveSeat> = {}): AliveSeat => ({ visible: true, busy: false, seated: false, since: 0, last: 0, ...extra });
+const seat = (extra: Partial<AliveSeat> = {}): AliveSeat => ({ visible: true, busy: false, keep: false, seated: false, since: 0, last: 0, ...extra });
 
 /** Applies what seatedNow decided, as the page does, at a given time. */
 function apply(all: AliveSeat[], seats: number, rotate: boolean, at: number) {
@@ -18,6 +18,18 @@ function apply(all: AliveSeat[], seats: number, rotate: boolean, at: number) {
 }
 
 describe("the seats of the small mascots that live", () => {
+  it("has seats for every mascot a window of the usual height shows, the account menu closed, so it never takes a turn there", () => {
+    // 860 to 1000 px tall, the menu closed: 10 to 12 mascots on screen in comfortable rows, 12 to 15 in compact
+    // ones, the pinned tile with them (docs/mascots.md, "The seats")
+    expect(ALIVE_SEATS).toBeGreaterThanOrEqual(16);
+    const all = [seat({ keep: true }), ...Array.from({ length: 14 }, () => seat())];
+    apply(all, ALIVE_SEATS, false, 1);
+    for (let turn = 2; turn < 30; turn += 1) {
+      apply(all, ALIVE_SEATS, true, turn);
+      expect(all.every((entry) => entry.seated), `turn ${turn}`).toBe(true);
+    }
+  });
+
   it("lets every mascot on screen live while there are seats for all of them", () => {
     const all = Array.from({ length: ALIVE_SEATS }, () => seat());
     expect(seatedNow(all, ALIVE_SEATS, false).size).toBe(ALIVE_SEATS);
@@ -32,6 +44,8 @@ describe("the seats of the small mascots that live", () => {
     expect([...seatedNow([on, off], 4, false)]).toEqual([on]);
     const left = seat({ visible: false, seated: true, since: 1 });
     expect(seatedNow([left], 4, false).size).toBe(0);
+    // a pinned tile off screen (a closed drawer) has none either
+    expect(seatedNow([seat({ visible: false, keep: true, seated: true, since: 1 })], 4, false).size).toBe(0);
   });
 
   it("never seats more mascots than there are seats", () => {
@@ -59,6 +73,26 @@ describe("the seats of the small mascots that live", () => {
       apply(all, 3, true, turn);
       expect(all[0]!.seated, `turn ${turn}`).toBe(true);
     }
+  });
+
+  it("keeps the pinned tile's seat: it sits first, takes no turn, and no bot at work takes it", () => {
+    // it arrives last, every seat taken by mascots at rest: it takes the one that lived longest
+    const rest = Array.from({ length: 3 }, (_, i) => seat({ seated: true, since: i + 1 }));
+    const tile = seat({ keep: true });
+    const sitting = seatedNow([...rest, tile], 3, false);
+    expect(sitting.has(tile)).toBe(true);
+    expect(sitting.has(rest[0]!)).toBe(false);
+    // thirty on screen, a few at work: the tile lives at every turn
+    const all = [seat({ keep: true }), ...Array.from({ length: 29 }, (_, i) => seat({ busy: i % 7 === 3 }))];
+    apply(all, ALIVE_SEATS, false, 1);
+    for (let turn = 2; turn < 60; turn += 1) {
+      apply(all, ALIVE_SEATS, true, turn);
+      expect(all[0]!.seated, `turn ${turn}`).toBe(true);
+      expect(all.filter((entry) => entry.seated)).toHaveLength(ALIVE_SEATS);
+    }
+    // more bots at work than seats: they never stand the tile up
+    const crowd = [seat({ keep: true, seated: true, since: 1 }), ...Array.from({ length: 4 }, () => seat({ busy: true }))];
+    expect(seatedNow(crowd, 2, false).has(crowd[0]!)).toBe(true);
   });
 
   it("makes the mascots at rest take turns: a few seats change hands on a turn, and every mascot lives in the end", () => {

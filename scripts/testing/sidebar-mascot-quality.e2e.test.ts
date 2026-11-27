@@ -7,8 +7,11 @@
 //     transform the engine could not see: 104 pixels over 166.
 //   - motion: a mascot's drawing changes while one watches; under reduced
 //     motion it does not.
-//   - cost: however many bots are on screen, no more mascots live at once
-//     than the page has seats (shape-alive.ts), and the others wait as stills.
+//   - seats (shape-alive.ts): in a window of the usual height (860 and
+//     1000 px), the account menu closed as it is once a bot is opened, every
+//     mascot on screen lives at every look; in one tall enough to show the
+//     thirty, no more live than the page has seats, the pinned tile at every
+//     turn; none lives off screen, nor in a closed drawer.
 //
 // Needs a Chromium for Playwright: its own download, or SAGAX_CAPTURE_CHROME
 // (a chrome-headless-shell or Chrome binary). Without one it is skipped with
@@ -61,19 +64,51 @@ suite("the sidebar's shape mascots are sharp and alive", () => {
   let url = "";
   let webgl2 = false;
 
-  async function open(options: { height?: number; reducedMotion?: "reduce" | "no-preference" } = {}): Promise<{ context: BrowserContext; page: Page }> {
-    const context = await browser!.newContext({ viewport: { width: 1280, height: options.height ?? 860 }, deviceScaleFactor: 2, reducedMotion: options.reducedMotion ?? "no-preference" });
+  async function open(options: { width?: number; height?: number; reducedMotion?: "reduce" | "no-preference"; painted?: boolean } = {}): Promise<{ context: BrowserContext; page: Page }> {
+    const context = await browser!.newContext({ viewport: { width: options.width ?? 1280, height: options.height ?? 860 }, deviceScaleFactor: 2, reducedMotion: options.reducedMotion ?? "no-preference" });
     context.setDefaultTimeout(120_000);
     const page = await context.newPage();
     await page.goto(url, { waitUntil: "load" });
     await page.waitForSelector(`${TILE} .shape-mascot`);
-    if (webgl2) {
+    if (webgl2 && options.painted !== false) {
       // every mascot on screen painted by the engine
       await page.waitForFunction(([tile, row]) => [tile, row].every((selector) => (document.querySelector<HTMLCanvasElement>(`${selector} .shape-mascot canvas`)?.width ?? 0) > 1), [TILE, ROW] as const);
     }
+    // the account menu closed, as in the app once a bot is opened: the gallery's shell opens it above the
+    // name (the default), over the bottom of the bot list; Escape puts it away (#4854)
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => document.querySelector("[data-sidebar-account-pill][data-menu-opened]") === null);
     await page.waitForTimeout(800);
     return { context, page };
   }
+
+  /**
+   * Over `ms`, a look every 250 ms at the sidebar's mascots on screen (an
+   * IntersectionObserver with no margin, as the seats use: the scroll box
+   * clips) and the ones alive.
+   */
+  const looks = (ms: number) => new Promise<{ looks: number; onScreen: number; alive: number; missing: number; offScreenAlive: number; tileDown: number }>((done) => {
+    const all = [...document.querySelectorAll<HTMLElement>("[data-sidebar-mascot] .shape-mascot")];
+    const seen = new Map<Element, boolean>();
+    const io = new IntersectionObserver((entries) => { for (const entry of entries) seen.set(entry.target, entry.isIntersecting); });
+    for (const el of all) io.observe(el);
+    const tile = document.querySelector("button:has([data-sidebar-tile-labels]) .shape-mascot");
+    const result = { looks: 0, onScreen: 0, alive: 0, missing: 0, offScreenAlive: 0, tileDown: 0 };
+    let timer = 0;
+    setTimeout(() => {
+      timer = window.setInterval(() => {
+        result.looks += 1;
+        const on = all.filter((el) => seen.get(el) === true);
+        const alive = all.filter((el) => el.hasAttribute("data-shape-alive"));
+        result.onScreen = Math.max(result.onScreen, on.length);
+        result.alive = Math.max(result.alive, alive.length);
+        result.missing += on.filter((el) => !el.hasAttribute("data-shape-alive")).length;
+        result.offScreenAlive += alive.filter((el) => seen.get(el) !== true).length;
+        if (tile && seen.get(tile) && !tile.hasAttribute("data-shape-alive")) result.tileDown += 1;
+      }, 250);
+    }, 300);
+    setTimeout(() => { clearInterval(timer); io.disconnect(); done(result); }, ms + 300);
+  });
 
   /**
    * How many different drawings a mascot shows over two seconds, looked at
@@ -142,7 +177,7 @@ suite("the sidebar's shape mascots are sharp and alive", () => {
     } finally {
       await context.close();
     }
-  });
+  }, 180_000);
 
   it("moves the tile's and a row's mascot, and holds them still under reduced motion", async () => {
     if (!webgl2) return;
@@ -162,24 +197,43 @@ suite("the sidebar's shape mascots are sharp and alive", () => {
     } finally {
       await reduced.context.close();
     }
-  });
+  }, 180_000);
 
-  it("keeps no more mascots alive than the page has seats, however many are on screen, and none off screen", async () => {
+  it("keeps every mascot on screen alive in a window of the usual height, the account menu closed: no turn to take", async () => {
+    for (const height of [860, 1000]) {
+      const usual = await open({ height });
+      try {
+        const seen = await usual.page.evaluate(looks, 4000);
+        // the pinned tile and nine rows at 860 px, eleven at 1000 px (the gallery's thirty bots)
+        expect(seen.onScreen, `${height}px`).toBeGreaterThanOrEqual(height === 860 ? 9 : 11);
+        expect(seen.onScreen, `${height}px: under the seats`).toBeLessThanOrEqual(ALIVE_SEATS);
+        expect(seen.missing, `${height}px: a mascot on screen still`).toBe(0);
+        expect(seen.offScreenAlive, `${height}px: a mascot off screen alive`).toBe(0);
+        expect(seen.tileDown, `${height}px: the pinned tile still`).toBe(0);
+      } finally {
+        await usual.context.close();
+      }
+    }
+  }, 180_000);
+
+  it("keeps no more mascots alive than the page has seats in a tall window, the pinned tile at every turn, and none off screen", async () => {
     // a window tall enough to show the thirty bots at once
     const tall = await open({ height: 2400 });
     try {
       const count = () => tall.page.evaluate(() => ({
-        onScreen: [...document.querySelectorAll(".shape-mascot")].filter((el) => el.getBoundingClientRect().top < window.innerHeight).length,
+        onScreen: [...document.querySelectorAll("[data-sidebar-mascot] .shape-mascot")].filter((el) => el.getBoundingClientRect().top < window.innerHeight).length,
         alive: document.querySelectorAll(".shape-mascot[data-shape-alive]").length,
       }));
       const first = await count();
       expect(first.onScreen).toBeGreaterThan(ALIVE_SEATS);
       expect(first.alive).toBe(ALIVE_SEATS);
-      // the mascots at rest take turns: after a while, others are alive
+      // the mascots at rest take turns: after a while, others are alive; never the pinned tile's turn
       const who = () => tall.page.evaluate(() => [...document.querySelectorAll(".shape-mascot")].map((el, i) => (el.hasAttribute("data-shape-alive") ? i : -1)).filter((i) => i >= 0).join(","));
       const before = await who();
-      await tall.page.waitForTimeout(4500);
+      const seen = await tall.page.evaluate(looks, 4500);
       expect(await who()).not.toBe(before);
+      expect(seen.tileDown, "the pinned tile still").toBe(0);
+      expect(seen.alive).toBe(ALIVE_SEATS);
       expect((await count()).alive).toBe(ALIVE_SEATS);
     } finally {
       await tall.context.close();
@@ -196,5 +250,14 @@ suite("the sidebar's shape mascots are sharp and alive", () => {
     } finally {
       await usual.context.close();
     }
-  });
+    // a closed drawer (under 640 px) slides the sidebar off the left edge: no mascot of it lives, its loop stops
+    const narrow = await open({ width: 500, painted: false });
+    try {
+      const tile = await narrow.page.evaluate((selector) => document.querySelector(`${selector} .shape-mascot`)!.getBoundingClientRect().right, TILE);
+      expect(tile).toBeLessThan(0);
+      expect(await narrow.page.locator(".shape-mascot[data-shape-alive]").count()).toBe(0);
+    } finally {
+      await narrow.context.close();
+    }
+  }, 180_000);
 });

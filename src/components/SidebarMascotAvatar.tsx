@@ -7,6 +7,7 @@ import { pickSidebarReaction, type SidebarMascotReactionKind } from "@/lib/sideb
 import { attachSidebarMascotRoot, registerSidebarMascot, refreshSidebarMascotReducedMotion } from "@/lib/sidebar-mascot/loop";
 import { useReducedMotion, type FxMoveRequest } from "./skin-fx/skin-fx";
 import { BotAvatar, type BotAvatarProps, type MausAvatarHandle } from "./Avatar";
+import { AliveSeatAskContext, type AliveSeatAsk } from "./shape-alive";
 
 /** The Shapes move a tap plays on a shape in a row (ShapeMascot plays it at any size, then rests on its still). */
 const SHAPE_REACT: Readonly<Record<SidebarMascotReactionKind, ShapeMove>> = {
@@ -34,8 +35,8 @@ export function SidebarMascotProvider({ rootRef, children }: { rootRef: React.Re
   return children;
 }
 
-export function SidebarMascotAvatar(props: BotAvatarProps & { botId: string }) {
-  const { botId, ...avatarProps } = props;
+export function SidebarMascotAvatar(props: BotAvatarProps & { botId: string; seat?: AliveSeatAsk }) {
+  const { botId, seat, ...avatarProps } = props;
   const wrap = useRef<HTMLSpanElement>(null);
   const box = useRef<HTMLSpanElement>(null);
   const mascotRef = useRef<MausAvatarHandle>(null);
@@ -102,14 +103,17 @@ export function SidebarMascotAvatar(props: BotAvatarProps & { botId: string }) {
       onClick={react}
     >
       <span ref={box} className="inline-flex">
-        <BotAvatar
-          {...avatarProps}
-          fillBox
-          sidebarAlive={alive}
-          shapeAlive
-          mascotRef={mascotRef}
-          characterMove={tapMove ?? avatarProps.characterMove}
-        />
+        {/* a pinned tile keeps its seat, the faces of a group's stack share one (shape-alive.ts) */}
+        <AliveSeatAskContext.Provider value={seat ?? null}>
+          <BotAvatar
+            {...avatarProps}
+            fillBox
+            sidebarAlive={alive}
+            shapeAlive
+            mascotRef={mascotRef}
+            characterMove={tapMove ?? avatarProps.characterMove}
+          />
+        </AliveSeatAskContext.Provider>
       </span>
     </span>
   );

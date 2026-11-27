@@ -525,49 +525,111 @@ canvas loop). It is still under reduced motion (the bot's Motion setting of
 the picker's gear, else the device's), and a tap still plays its move.
 
 **The seats** (`shape-alive.ts`). A live mascot is redrawn thirty times a
-second, and a sidebar may show dozens: a page gives out `ALIVE_SEATS` seats.
-Only a mascot on screen (or within 100 px of it) asks for one; off screen it
-is the still image. While there are seats for every mascot on screen, all
-of them live all the time. Past that, a bot that is doing something sits
-first, and the mascots at rest take turns: every `ALIVE_TURN_MS`, the one
-that waited longest takes the seat of the one that lived longest, which
+second, and a sidebar may show dozens: a page gives out `ALIVE_SEATS`
+seats, twenty. Only a mascot on screen asks for one, with no margin: off
+screen (under the scroll box's fold, or in the closed drawer, slid off the
+left edge under 640 px) it is the still image and its loop stops. A window
+of the usual height, the account menu closed as it is once a bot is opened,
+shows 10 mascots at 860 px and 12 at 1000 px in comfortable rows, 12 and 15
+in compact ones (the pinned tile and the rows): under the seats, so every
+one of them lives all the time and nobody takes a turn; so does a window up
+to 1440 px tall in comfortable rows (20 on screen), 1250 px in compact
+ones. The pinned tile sits first and never takes turns (`PINNED_TILE_SEAT`,
+`keep`): it lives whenever it is on screen. The faces of a group's stack
+share one seat (`share`). Past twenty on screen, a bot that is doing
+something sits next, and the mascots at rest take turns: every `ALIVE_TURN_MS` (1.5 s), the one that
+waited longest takes the seat of the one at rest that lived longest, which
 rests as its still (one seat at a time: a body in a material builds its
-mesh when it sits, and several at once made a frame of 70 ms). A material makes no context
-per mascot: the engine paints every Fluffy body through one shared WebGL2
-context, and every Glass body through another. The number of seats comes
-from the measure of `scripts/capture/sidebar-mascot-quality.mjs`
-(`--seats`), which also takes the captures (the tile, a row and the chat
-pill enlarged four times, pixel for pixel) and reads each canvas' pixels
-against the pixels it is shown over.
+mesh when it sits, and several at once made a frame of 70 ms). The turns
+stop while the window is hidden. A body in a material under the device's
+reduced motion takes no seat, even with the bot's Motion on Full: the
+engine holds it still (`engineStill` in `ShapeMascot.tsx`; #5389 tells the
+engine the bot's own choice). A material makes no context per mascot: the
+engine paints every Fluffy body through one shared WebGL2 context, and
+every Glass body through another. The number of seats comes from the
+measure of `scripts/capture/sidebar-mascot-quality.mjs` (`--seats`), which
+also takes the captures (the tile, a row and the chat pill enlarged four
+times, pixel for pixel) and reads each canvas' pixels against the pixels it
+is shown over.
+
+In a row the drawing stops 1 px short of the name (a `clip-path` on
+`[data-sidebar-row-avatar]`, as wide as the gap to the name less 1 px: 9 px
+comfortable, 7 px compact; none in the rail, which has no name). Alive,
+`done`'s ribbons swing wider than the body and reached 2 px over the first
+letters (`working`'s came within 1 px of them); the engine's drawing is not
+changed, and nothing else of a row's drawing reaches that far.
 
 What it costs, thirty bots, headless Chrome at a device pixel ratio of 2,
-one core = 100% (2026-11-26, the usual window: the tile and six rows
-alive; before: every mascot a still, the page 3 to 5%, the GPU process 1
-to 6%):
+Apple M3 Max, one core = 100%, median of 3 runs, the account menu closed
+(2026-11-26; before #5404, every mascot a still: the page 3 to 5%, the GPU
+process 1 to 6%). The machine was busy with other work (a load average of
+14 to 79 over one minute, on 16 cores), so a few points either way are
+noise: with 12 alive, flat in a light skin read 25.9% against 31.4% with 8,
+and a second run of the light materials with 16 alive (load 278 to 339)
+read 27 frames a second for Fluffy and 30 for Glass, against 25 and 36
+below.
 
-| Finish | Skin | Page (renderer) | GPU process | Frames a second |
-|---|---|---|---|---|
-| Flat | dark | 18% | 6% | 60 |
-| Flat | light | 19% | 18% | 60 |
-| Fluffy | dark | 9% | 12% | 60 |
-| Fluffy | light | 8% | 30% | 60 |
-| Glass | dark | 7% | 11% | 60 |
-| Glass | light | 7% | 29% | 60 |
+Windows of the usual height, the account menu closed, comfortable rows
+(taken with 16 seats; twenty change nothing there, never more than 12 are
+on screen):
 
-With the thirty bots on screen at once (a window 2400 px tall), eight alive:
-the same figures within a few points and 60 frames a second, but for a
-material in a light skin, which falls to 30 frames a second (GPU process
-about 70%). The cause is the light skins' drop shadow under every mascot
-(`--mascot-filter`, `styles.css`): a body in a material is a canvas, a layer
-of its own, so its shadow is drawn by the compositor, and one canvas that
-changes makes the compositor draw again the shadow of every canvas near it,
-down the whole column (a single live mascot is enough; stills that are
-images, the flat ones, are not concerned). Open as #5414.
+| Finish | Skin | Window | On screen | Alive at every look | Page (renderer) | GPU process | Frames a second |
+|---|---|---|---|---|---|---|---|
+| Flat | dark | 860 px | 10 | 100% of the looks | 22.3% | 7.6% | 60 |
+| Flat | dark | 1000 px | 12 | 100% of the looks | 24.3% | 8.5% | 60 |
+| Flat | light | 860 px | 10 | 100% of the looks | 31.7% | 31.2% | 60 |
+| Flat | light | 1000 px | 12 | 100% of the looks | 39.7% | 37.6% | 60 |
+| Fluffy | dark | 860 px | 10 | 100% of the looks | 9.2% | 17.2% | 60 |
+| Fluffy | dark | 1000 px | 12 | 100% of the looks | 9.6% | 17.4% | 60 |
+| Fluffy | light | 860 px | 10 | 100% of the looks | 10.2% | 38.5% | 60 |
+| Fluffy | light | 1000 px | 12 | 100% of the looks | 10.4% | 49.6% | 60 |
+| Glass | dark | 860 px | 10 | 100% of the looks | 8% | 13.9% | 60 |
+| Glass | dark | 1000 px | 12 | 100% of the looks | 8.6% | 16.3% | 60 |
+| Glass | light | 860 px | 10 | 100% of the looks | 9.9% | 45.2% | 60 |
+| Glass | light | 1000 px | 12 | 100% of the looks | 10.8% | 55.6% | 60 |
+
+A window 2400 px tall, the thirty bots on screen, by number alive (frames
+a second, page, GPU process):
+
+| Alive | Flat dark | Flat light | Fluffy dark | Fluffy light | Glass dark | Glass light |
+|---|---|---|---|---|---|---|
+| 8 | 60 · 24.2% · 9.6% | 60 · 31.4% · 28.9% | 60 · 12.4% · 14.8% | 34 · 11% · 80.4% | 60 · 9.3% · 15% | 29 · 7.8% · 87.2% |
+| 12 | 60 · 30.9% · 12% | 60 · 25.9% · 29.8% | 60 · 12.3% · 18.7% | 30 · 12.1% · 77% | 60 · 11% · 20.9% | 28 · 8.2% · 87% |
+| 16 | 60 · 35.4% · 10.5% | 60 · 43.7% · 47.8% | 60 · 11.9% · 20.7% | 25 · 8.6% · 73.5% | 60 · 8.1% · 18.2% | 36 · 8.7% · 86.8% |
+| 20 (the page's) | 60 · 43.1% · 15.5% | 60 · 49% · 48.5% | 60 · 11.9% · 27.9% | 23 · 8.3% · 68.3% | 60 · 12.3% · 28.9% | 27 · 9.1% · 86% |
+| 24 | 60 · 54.5% · 17% | 60 · 50.9% · 55% | 60 · 12.4% · 32.4% | 21 · 9.8% · 67.3% | 60 · 12.8% · 33.8% | 27 · 8.9% · 82.9% |
+| 30 (all) | 60 · 57.2% · 16.4% | 60 · 58.2% · 63.2% | 60 · 11.1% · 39.9% | 18 · 8.9% · 65.7% | 60 · 12.2% · 40.5% | 26 · 9.1% · 84.1% |
+
+Why twenty, and the turns past it (an agent's choice, not an owner's
+decision):
+
+- Every window of the usual height lives whole, in both densities, with
+  room: the most on screen there is 15 (compact rows, 1000 px). With 16
+  seats a compact window of 1100 px already took turns; twenty cover a
+  window 1440 px tall in comfortable rows.
+- Past twenty on screen the turns hold the cost where it is with twenty.
+  With the thirty alive instead: flat holds 60 frames a second but the page
+  takes 57.2% of a core in a dark skin and 58.2% in a light one (43.1% and
+  49% with twenty); Fluffy and Glass hold 60 in a dark skin, the GPU
+  process at 39.9% and 40.5% (27.9% and 28.9% with twenty): there the turns
+  save GPU time, not frames.
+- No number of seats keeps a material in a light skin at 60 frames a
+  second with the thirty on screen: one alive holds 60 (GPU process 25.8%
+  Fluffy, 27.7% Glass, the second run), eight already fall to 34 and 29, twenty to 23 and
+  27, thirty to 18 and 26. Every live canvas makes the compositor draw
+  again the drop shadow of the canvases near it (`--mascot-filter`,
+  `styles.css`; flat stills are images, not concerned). Open as #5414,
+  whose ways out change a look or how a still is drawn: the owner's call.
+  In a window of the usual height the light skins hold 60 (the first
+  table).
 
 Covered by
 `scripts/testing/sidebar-mascot-quality.e2e.test.ts` (a real browser at a
-device pixel ratio of 2: sharpness, motion, reduced motion, the seats),
-`shape-alive.test.ts` and `SidebarMascotAvatar.fill.test.ts`.
+device pixel ratio of 2: sharpness, motion, reduced motion, the seats in
+windows of the usual height with the account menu closed, in a tall one and
+in a closed drawer), `shape-alive.test.ts`, `shape-alive.dom.test.ts` (a
+shared seat, no margin, no turn while hidden) and
+`SidebarMascotAvatar.fill.test.ts`.
 
 ### The mascot picker (#5369)
 

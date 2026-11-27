@@ -395,7 +395,7 @@ async function governVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, threadId: s
   return { ok: true, keys, ...(confirm ? { confirm } : {}) };
 }
 
-/** A connected Grok account speaks through the CLI voice host. Every other
+/** A connected Grok account speaks on the xAI API root. Every other
  * source stays an API key on api.x.ai. */
 function onThisKey<T>(candidate: { source: string }, run: () => T): T {
   return withVoiceAuth(voiceKeyAuth(candidate), run);

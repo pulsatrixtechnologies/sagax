@@ -66,7 +66,7 @@ export function keyLast4(key: string): string | null {
 }
 
 /** How a credential is presented to xAI: a connected Grok account, the
- * person's or the organization's, speaks through the CLI voice host with its
+ * person's or the organization's, speaks on the xAI API root with its
  * token header, every other source is an API key on api.x.ai
  * (server/tts/grok.ts withVoiceAuth). One rule for the app's own voice and
  * for the keys a phone line is given (server/org/org-link-routes.ts). */
@@ -369,12 +369,11 @@ export function providerFailureBody(message: string, keys?: VoiceProviderKeys, p
   };
 }
 
-/** A chain where no credential served, as the page gets it: when its
- * refusals are not all xAI credits or keys, the first real cause (the
- * credential closest to the person, `tried` in their order) leads the
+/** A chain where no credential served, as the page gets it: with two or
+ * more credentials the first real cause (closest to the person) leads the
  * sentence, the key and the kind, and the others follow in one line
- * (chainCallReason, M-20261126-145); otherwise the sentences of #4567 and
- * the last refusal, as before. */
+ * (chainCallReason, M-20261126-145); a single account refusal keeps the
+ * sentence of #4567 (noCallReason). */
 export function chainFailureBody(message: string, used: VoiceKeyCandidate, tried: VoiceKeyRefusal[], words: NoCallLanguage) {
   const chain = chainCallReason(tried, words);
   const keys = { key: voiceKeyRef(used), tried };

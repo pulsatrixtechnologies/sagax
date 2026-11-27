@@ -22,14 +22,14 @@ const LOOPBACK_HTTP = /^https?:\/\/127\.0\.0\.1:\d{1,5}(?:\/|$)/;
 const LOOPBACK_WS = /^wss?:\/\/127\.0\.0\.1:\d{1,5}(?:\/|$)/;
 
 /** `api-key`: api.x.ai, Bearer only. `grok-account`: the person's connected
- * Grok account, on the CLI voice host, with the CLI token header. */
+ * Grok account, on the xAI API root, with the Grok CLI token header. */
 export type VoiceAuthKind = "api-key" | "grok-account";
 
 const voiceAuth = new AsyncLocalStorage<VoiceAuthKind>();
 
 /** Run `fn` as an API key or as the connected Grok account. The sockets and
  * fetches it starts keep that choice. The token itself stays the argument
- * the caller already passes; this only picks the host and the header. */
+ * the caller already passes; this only picks the xAI API root and the header. */
 export function withVoiceAuth<T>(kind: VoiceAuthKind, fn: () => T): T {
   return voiceAuth.run(kind, fn);
 }

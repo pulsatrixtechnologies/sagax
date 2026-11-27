@@ -228,10 +228,11 @@ window the person's usage report shows used up with no extra usage left
   app already had (`model.cascade.none`, `limits.resets`).
   The preview's own `pick` and its sentence are empty then too
   (`server/routes/bots-mutate-small.ts`), so Auto's chip names no model either.
-  Its `chain` is empty, each account is in `excluded` with `limit`, and
-  `limited: { until }` says when the first is back: Settings > Models, "What
-  Auto would choose now", shows no order of choice, only that line
-  (`limitedLine`, the tooltip's), and lists each account under "Left out".
+  The route takes that verdict from the turn's answer (`modes.auto.limited`,
+  never a second test): its `chain` is empty and each account is in
+  `excluded` with `limit`. Settings > Models, "What Auto would choose now",
+  shows no order of choice, only the tooltip's line read from
+  `modes.auto.limited` (`limitedLine`), and lists each account under "Left out".
 - A report at 100 % is read again by the server, with no app asking: while a
   payer has a live entry from the report (`spentPlans`), that payer's limit
   clock (`LimitResetClock`, the timer that already reads usage every 5 minutes

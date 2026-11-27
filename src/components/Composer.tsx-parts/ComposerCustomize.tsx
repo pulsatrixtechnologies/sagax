@@ -14,6 +14,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { GripVertical } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "../menu-look";
@@ -31,6 +32,8 @@ import { usagePillPlacement, type UsagePillPlacement } from "@/lib/usage-pill-pr
 
 export type ComposerCustomizeApi = {
   customizing: boolean;
+  /** Item currently being dragged, or null. */
+  dragging: ComposerBarItem | null;
   begin: () => void;
   end: () => void;
   reset: () => void;
@@ -46,14 +49,20 @@ export type ComposerCustomizeApi = {
     onDragOver: (event: DragEvent) => void;
     onDrop: (event: DragEvent) => void;
     "data-composer-drop": string;
+    "data-composer-drop-active"?: "1";
   };
 };
 
 export function useComposerCustomize(): ComposerCustomizeApi {
   const [customizing, setCustomizing] = useState(false);
+  const [dragging, setDragging] = useState<ComposerBarItem | null>(null);
   const dragId = useRef<ComposerBarItem | null>(null);
 
-  const end = useCallback(() => setCustomizing(false), []);
+  const end = useCallback(() => {
+    dragId.current = null;
+    setDragging(null);
+    setCustomizing(false);
+  }, []);
   const begin = useCallback(() => setCustomizing(true), []);
   const reset = useCallback(() => {
     setComposerBarLayout(resetComposerBarLayout());
@@ -67,6 +76,8 @@ export function useComposerCustomize(): ComposerCustomizeApi {
       if (key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
+      dragId.current = null;
+      setDragging(null);
       setCustomizing(false);
     };
     window.addEventListener("keydown", onKey, true);
@@ -103,6 +114,7 @@ export function useComposerCustomize(): ComposerCustomizeApi {
     onDragStart: (event: DragEvent) => {
       if (!customizing) return;
       dragId.current = id;
+      setDragging(id);
       event.dataTransfer.setData("text/sagax-composer-item", id);
       event.dataTransfer.effectAllowed = "move";
     },
@@ -116,6 +128,7 @@ export function useComposerCustomize(): ComposerCustomizeApi {
       event.preventDefault();
       const from = (event.dataTransfer.getData("text/sagax-composer-item") as ComposerBarItem) || dragId.current;
       dragId.current = null;
+      setDragging(null);
       if (!from || from === id) return;
       const layout = getComposerBarLayout();
       const toIndex = layout.order.indexOf(id);
@@ -128,7 +141,10 @@ export function useComposerCustomize(): ComposerCustomizeApi {
       setComposerBarLayout(next);
       if (from === "usage") usagePillPlacement.set("inBar");
     },
-    onDragEnd: () => { dragId.current = null; },
+    onDragEnd: () => {
+      dragId.current = null;
+      setDragging(null);
+    },
   }), [customizing]);
 
   const dropZoneProps = useCallback((placement: Exclude<UsagePillPlacement, "inBar">) => ({
@@ -141,14 +157,16 @@ export function useComposerCustomize(): ComposerCustomizeApi {
       if (!customizing) return;
       const from = event.dataTransfer.getData("text/sagax-composer-item") || dragId.current;
       dragId.current = null;
+      setDragging(null);
       if (from !== "usage") return;
       event.preventDefault();
       usagePillPlacement.set(placement);
     },
     "data-composer-drop": placement,
-  }), [customizing]);
+    ...(dragging === "usage" ? { "data-composer-drop-active": "1" as const } : {}),
+  }), [customizing, dragging]);
 
-  return { customizing, begin, end, reset, onItemKeyDown, dragProps, dropZoneProps };
+  return { customizing, dragging, begin, end, reset, onItemKeyDown, dragProps, dropZoneProps };
 }
 
 /** Right-click menu on the composer box: Customize. */
@@ -222,14 +240,21 @@ export function ComposerCustomizeChrome({
   onReset,
   onDone,
   children,
+  jiggleFrame = false,
 }: {
   customizing: boolean;
   onReset: () => void;
   onDone: () => void;
   children: ReactNode;
+  /** Freeze mid-jiggle for headless still captures. */
+  jiggleFrame?: boolean;
 }) {
   return (
-    <div data-composer-customize={customizing ? "1" : undefined} className="relative">
+    <div
+      data-composer-customize={customizing ? "1" : undefined}
+      data-composer-jiggle-frame={customizing && jiggleFrame ? "1" : undefined}
+      className="relative"
+    >
       {customizing && (
         <div
           data-composer-customize-toolbar=""
@@ -258,7 +283,7 @@ export function ComposerCustomizeChrome({
   );
 }
 
-/** Wraps a movable control while customizing (jiggle + drag + keyboard). */
+/** Wraps a movable control while customizing (jiggle + drag handle + keyboard). */
 export function ComposerMovable({
   id,
   customizing,
@@ -273,20 +298,28 @@ export function ComposerMovable({
   children: ReactNode;
 }) {
   if (!customizing) return <span className={className}>{children}</span>;
+  const grabbed = api.dragging === id;
   return (
     <span
       data-composer-movable={id}
       tabIndex={0}
       role="button"
-      aria-grabbed="false"
+      aria-grabbed={grabbed ? "true" : "false"}
       aria-label={t(`composer.customize.item.${id}`)}
       className={cn(
-        "composer-movable inline-flex cursor-grab rounded-full outline-none ring-offset-1 focus-visible:ring-2 focus-visible:ring-accent",
+        "composer-movable inline-flex items-center rounded-full outline-none ring-offset-1 focus-visible:ring-2 focus-visible:ring-accent",
         className,
       )}
       onKeyDown={(event) => api.onItemKeyDown(id, event)}
       {...api.dragProps(id)}
     >
+      <GripVertical
+        size={12}
+        strokeWidth={2}
+        aria-hidden="true"
+        data-composer-movable-handle=""
+        className="composer-movable-handle shrink-0"
+      />
       {children}
     </span>
   );

@@ -35,6 +35,7 @@ import {
   SCREEN_PROBLEM_SHORT,
   computerCardView,
   localScreenProblem,
+  ownComputerScreenTakeover,
   ownScreenCapture,
   useCloudAsleep,
   useScreenPermission,
@@ -484,16 +485,22 @@ export function ComputerCard({ bot, onPatch, readOnly = false, windowRequest = n
       {windowShown && windowKind !== "screen" && (
         <BrowserWindow bot={bot} teach={windowKind === "teach"} signIn={windowRequest?.signIn} onClose={closeWindow} />
       )}
-      {windowShown && windowKind === "screen" && (
-        <SandboxDesktopModal
-          title={caption}
-          state="running"
-          onClose={closeWindow}
-          screen={liveIsLocal
-            ? (control) => <LocalLiveScreen desktopId={desktopId} control={control} />
-            : undefined}
-        />
-      )}
+      {windowShown && windowKind === "screen" && (() => {
+        // #5355: This computer in the desktop app must not nest its own
+        // screen (endless mirror) or offer Take control.
+        const ownComputer = ownComputerScreenTakeover({ liveIsLocal, inApp: appCapture });
+        return (
+          <SandboxDesktopModal
+            title={caption}
+            state="running"
+            onClose={closeWindow}
+            ownComputer={ownComputer}
+            screen={!ownComputer && liveIsLocal
+              ? (control) => <LocalLiveScreen desktopId={desktopId} control={control} />
+              : undefined}
+          />
+        );
+      })()}
     </section>
   );
 }

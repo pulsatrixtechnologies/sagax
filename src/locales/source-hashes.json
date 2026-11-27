@@ -1803,7 +1803,8 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da"
     },
     "es": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -3589,7 +3590,8 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da"
     },
     "fr": {
       "model.specialAccess": "a7f5116bb6f723bcabbb5a215a5906f0d0366259367b3294406a0a21ce5f84fb",
@@ -19532,7 +19534,8 @@
       "model.simple.reasoning": "d8211e24e83d1600a1b0cfe2f7baa68e4d4eb71131a0b2b1b2050cba111ea481",
       "composer.meter.usageAria": "11768aacf8ae06dafa5461733f686dd7771397af06240438875fdd7a51713e80",
       "model.mode.reasoning.imposed": "8982f4bcdaf4cbd2bdc80000312b1777bb3882033808a61f5c3f9043ab76a198",
-      "chat.emptyOk.continue": "2e936fdbf2370b338aa012dff34e8063b42511f58a122d18e4a9b1a482b8b4e5"
+      "chat.emptyOk.continue": "2e936fdbf2370b338aa012dff34e8063b42511f58a122d18e4a9b1a482b8b4e5",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -21308,7 +21311,8 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da"
     },
     "ja": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -24894,7 +24898,8 @@
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
       "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
-      "model.simple.reasoning": "d8211e24e83d1600a1b0cfe2f7baa68e4d4eb71131a0b2b1b2050cba111ea481"
+      "model.simple.reasoning": "d8211e24e83d1600a1b0cfe2f7baa68e4d4eb71131a0b2b1b2050cba111ea481",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da"
     },
     "pt-br": {
       "achievements.panel.all": "e2adb0c3b5f28a7c9d5bdac240382201b39376dd11671aedc93e8a73b6468f19",
@@ -27454,7 +27459,8 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da"
     },
     "uk": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -29714,7 +29720,8 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da"
     },
     "zh": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -32232,7 +32239,8 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da"
     },
     "zh-tw": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -35702,7 +35710,8 @@
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
       "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
-      "model.simple.reasoning": "d8211e24e83d1600a1b0cfe2f7baa68e4d4eb71131a0b2b1b2050cba111ea481"
+      "model.simple.reasoning": "d8211e24e83d1600a1b0cfe2f7baa68e4d4eb71131a0b2b1b2050cba111ea481",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da"
     }
   }
 }

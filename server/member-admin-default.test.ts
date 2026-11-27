@@ -107,6 +107,8 @@ describe("what still waits for an organization admin: a real step out of the per
     expect(memberBotAdminReason(inOwnPlace("mcp__shell__run"))).toBe("host-shell");
     expect(memberBotAdminReason(inOwnPlace("WebFetch"))).toBe("host-engine-tool");
     expect(memberBotAdminReason(inOwnPlace("mcp__computer__click"))).toBe("host-engine-tool");
+    // #5229, #5334: built-in browser stays the member bot's own web surface.
+    expect(memberBotAdminReason(inOwnPlace("mcp__browser__agent_browser_open"))).toBeNull();
     expect(memberBotAdminReason(inOwnPlace("Read", { paths: ["/etc/passwd"] }))).toBe("outside-own-folders");
   });
   it("a place, a server or an account that is not the person's", () => {

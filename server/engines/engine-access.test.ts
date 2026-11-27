@@ -286,7 +286,8 @@ describe("the admin gate on a member's bot", () => {
   it("still sends to an admin what goes beyond the owner's rights", () => {
     // a host-level built-in server, a shell, a fetch from the host
     expect(ownerGate("mcp__computer__click")).toBe(true);
-    expect(ownerGate("mcp__browser__navigate")).toBe(true);
+    // #5229, #5334: the built-in browser is the member's own web surface
+    expect(ownerGate("mcp__browser__navigate")).toBe(false);
     expect(ownerGate("agents__vm_exec")).toBe(true);
     expect(ownerGate("Bash", { command: "ls", cwd: root })).toBe(true);
     expect(ownerGate("WebFetch")).toBe(true);

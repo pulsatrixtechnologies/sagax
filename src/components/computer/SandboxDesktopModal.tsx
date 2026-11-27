@@ -6,7 +6,9 @@
 // back to the panel (no red close dot, 2026-11-02). The live screen fills
 // the window edge to edge; while it is not ready it shows DesktopStarting.
 // One segmented control under it, bottom center, chooses Watching (the bot
-// drives) or Take control / You have control (you drive). No Play / Pause / Stop here: the computer's
+// drives) or Take control / You have control (you drive). Hidden when the
+// bot already works on this viewer's own computer (#5355): a notice instead
+// of a nested mirror. No Play / Pause / Stop here: the computer's
 // lifecycle runs on its own and lives in the bot's settings (JC 2026-11-02).
 // Closing releases control: the control
 // view's WebSocket ends, so the server lets the bots' clicks through again
@@ -31,7 +33,7 @@ import { t } from "@/lib/i18n";
 import { takeoverKey } from "@/lib/sandbox-desktop";
 import { SandboxDesktopView } from "../SandboxDesktopView";
 
-export function SandboxDesktopModal({ title, state, onClose, onConnected, screen: content, kind = "sandbox" }: {
+export function SandboxDesktopModal({ title, state, onClose, onConnected, screen: content, kind = "sandbox", ownComputer = false }: {
   /** "<Bot>'s screen": the environment the bot works in. */
   title: string;
   state: ScreenState;
@@ -42,8 +44,11 @@ export function SandboxDesktopModal({ title, state, onClose, onConnected, screen
    * environment's VNC desktop by default). */
   screen?: (control: boolean) => ReactNode;
   kind?: "sandbox" | "browser";
+  /** #5355: the bot already works on this viewer's own Mac or PC. No Take
+   * control segments and no nested screen capture (endless mirror). */
+  ownComputer?: boolean;
 }) {
-  const [control, setControl] = useState(true);
+  const [control, setControl] = useState(!ownComputer);
   const panel = useRef<HTMLDivElement>(null);
   const screen = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
@@ -98,16 +103,22 @@ export function SandboxDesktopModal({ title, state, onClose, onConnected, screen
       <div
         ref={screen}
         data-takeover-screen=""
+        data-own-computer={ownComputer ? "" : undefined}
         className={cn(
           "relative min-h-0 flex-1 overflow-hidden",
           kind === "browser" ? "flex flex-col bg-[#1c1c1e]" : "bg-black",
         )}
       >
-        {content ? content(control) : <SandboxDesktopView embedded dark control={control} onConnected={onConnected} />}
+        {ownComputer ? (
+          <div role="status" data-own-computer-notice="" className="absolute inset-0 flex items-center justify-center px-8 text-center">
+            <p className="max-w-sm text-[13px] leading-5 text-white/80">{t("sandboxDesktop.ownComputerNotice")}</p>
+          </div>
+        ) : content ? content(control) : <SandboxDesktopView embedded dark control={control} onConnected={onConnected} />}
       </div>
 
-      {/* Watching | Take control, bottom center. */}
-      {kind !== "browser" && (
+      {/* Watching | Take control, bottom center. Never on the viewer's own
+          computer (#5355) or the browser window (its bar owns that). */}
+      {kind !== "browser" && !ownComputer && (
         <div className="flex shrink-0 items-center justify-center py-3">
           <div
             role="radiogroup"

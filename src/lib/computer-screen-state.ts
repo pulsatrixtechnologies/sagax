@@ -11,6 +11,18 @@ import { api } from "@/state/store/api";
 import { isReadyBoatState } from "@/lib/local-computer";
 import type { LocaleKey } from "@/locales";
 
+/** #5355: the bot's live screen is this viewer's own Mac or PC (This
+ * computer through the desktop app). Take control would nest that screen
+ * inside itself; hide it and show a notice instead of a remote mirror. */
+export function ownComputerScreenTakeover(input: {
+  /** The bot works on This computer (activeComputer source local). */
+  liveIsLocal: boolean;
+  /** This page can capture the screen (desktop app). */
+  inApp: boolean;
+}): boolean {
+  return input.liveIsLocal && input.inApp;
+}
+
 /** This computer's picture from the desktop app, as a data: URL, or null
  * when the page has no capture at all (a web browser). The local page gets
  * the full frame (screenFrame); the app's page served by the organization

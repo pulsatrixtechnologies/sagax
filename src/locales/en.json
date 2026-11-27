@@ -6481,6 +6481,7 @@
   "sandboxDesktop.show": "Show the desktop",
   "sandboxDesktop.stopped": "The desktop stopped (your server environment went idle). Show it again to restart it.",
   "sandboxDesktop.takeControl": "Take control",
+  "sandboxDesktop.ownComputerNotice": "The bot is already working on this computer. There is nothing to mirror here.",
   "sandboxDesktop.title": "Desktop of your server environment",
   "sandboxDesktop.unavailable": "The desktop is not available right now. Try again in a moment.",
   "sandboxDesktop.controlMode": "Who drives the computer",

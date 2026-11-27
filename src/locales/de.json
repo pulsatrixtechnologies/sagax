@@ -1800,5 +1800,6 @@
   "listening.back": "Zurück zum Zuhören",
   "listening.couldNotStart": "Zuhören konnte nicht starten: {error}",
   "listening.computerDenied": "Der Computerton braucht die Systemberechtigung für Bildschirm- und Systemaudioaufnahme.",
-  "listening.openSettings": "Einstellungen öffnen"
+  "listening.openSettings": "Einstellungen öffnen",
+  "sandboxDesktop.ownComputerNotice": "The bot is already working on this computer. There is nothing to mirror here."
 }

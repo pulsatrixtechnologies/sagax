@@ -1,7 +1,16 @@
 // The Computer card's look follows the real state.
 import { describe, expect, it } from "vitest";
 
-import { cloudStatusAsleep, computerCardView, localScreenProblem } from "./computer-screen-state";
+import { cloudStatusAsleep, computerCardView, localScreenProblem, ownComputerScreenTakeover } from "./computer-screen-state";
+
+describe("ownComputerScreenTakeover (#5355)", () => {
+  it("is only This computer in the desktop app: hide Take control, no nested mirror", () => {
+    expect(ownComputerScreenTakeover({ liveIsLocal: true, inApp: true })).toBe(true);
+    expect(ownComputerScreenTakeover({ liveIsLocal: true, inApp: false })).toBe(false);
+    expect(ownComputerScreenTakeover({ liveIsLocal: false, inApp: true })).toBe(false);
+    expect(ownComputerScreenTakeover({ liveIsLocal: false, inApp: false })).toBe(false);
+  });
+});
 
 describe("localScreenProblem", () => {
   it("names each reason a screen has no picture", () => {

@@ -358,8 +358,10 @@ export type MemberAdminReason = typeof MEMBER_ADMIN_REASONS[number];
 export const HOST_RUN_REASONS: ReadonlySet<MemberAdminReason> = new Set(["host-shell", "host-engine-tool", "outside-own-folders"]);
 
 /** Host-level built-in servers that drive the shared host itself (its
- * desktop, browser, files, shell). */
-const HOST_ITSELF_MCP_SERVERS: ReadonlySet<string> = new Set(["computer", "browser", "shell", "files", "terminal"]);
+ * desktop, files, shell). The built-in browser (`browser`) is the bot's own
+ * web surface on an organization server (#5229, #5334): not shared-host work
+ * that EXEC_USE_BOT_COMPUTER would redirect away from. */
+const HOST_ITSELF_MCP_SERVERS: ReadonlySet<string> = new Set(["computer", "shell", "files", "terminal"]);
 
 /** M-20261119-006: Sagax's own servers of a person's place: their cloud
  * computer (sagax-environment), their own computer (sagax-desktop) and the

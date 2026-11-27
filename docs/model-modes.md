@@ -130,11 +130,16 @@ the mode imposes. A model that takes no level has no row. The row never reads
 "Auto".
 
 Under Auto, the person's choice always holds (owner, D-20261126-017). Any
-Effort level she clicks, even the "Recommended" one, is sent and used every
-turn, even under Auto: the selection keeps it, and the server runs every Auto
-turn at that level, whatever model and engine Auto takes for the turn (a turn
-Auto hands to Heavy included), wherever that engine takes the level
-(`server/index-leaves/autoPickForTurn.ts`). Until she clicks one, the Effort
+Effort level she clicks, even the "Recommended" one, is sent and the selection
+keeps it. The server runs each of her own turns under Auto at that level,
+whatever model and engine Auto takes for the turn (a continuation, and the
+lead of a turn Auto hands to Heavy, included), wherever that engine takes the
+level (`server/index-leaves/autoPickForTurn.ts`). Work handed out (a routine
+or another automation, a peer bot's question or hop, a goal run's step, a room
+hand-off) does not keep it: such work takes the level only when it runs on the
+bot's own engine (`server/models/model-auto.ts`).
+Heavy's experts do not keep it either: they run at their own level
+(`server/index-leaves/runHeavyTeam.ts`). Until she clicks one, the Effort
 row shows no value and no level is checked: Auto decides turn by turn.
 Clicking the checked level again hands it back to Auto. The levels listed are
 the model's alone: no "Auto" and no "Default" row (the shared rule keeps

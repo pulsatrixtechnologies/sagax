@@ -9,17 +9,58 @@
 // another keeps going the way the first one went so it never covers the menu. The
 // first level of a path picks the side for the whole path: the left when the
 // right cannot hold every level that may open from it and the left has more
-// room.
+// room. A level of a fixed width (Effort's, Custom's) that holds on neither
+// side narrows to the wider side's room. Under a menu that sits on the message
+// box a level never runs lower than the menu; a menu opened elsewhere (from
+// the + menu of a narrow window) leaves its levels their natural height.
 import { useEffect, useLayoutEffect, useRef, type KeyboardEventHandler, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/cn";
 import { POPOVER_LAYER } from "./AnchoredPopover";
 import { MENU_BOX } from "./menu-look";
-import { SUBMENU_WINDOW_TOP, submenuPlace } from "./SidebarPopoverMenu";
+import { SUBMENU_SIDE_OFFSET, SUBMENU_WINDOW_MARGIN, SUBMENU_WINDOW_TOP, submenuPlace, type SubmenuPlace } from "./SidebarPopoverMenu";
 
 /** The level's own padding above its first row: the row lines up with the one that opened it. */
 const LEVEL_PAD = 4;
+/** A level of a fixed width narrows to fit beside the menu, never under this (the narrowest a level of rows takes). */
+const LEVEL_MIN_WIDTH = 180;
+/** How far above the message box the menu's bottom may stop and still sit on it (the chip's gap and the box's padding). */
+const ON_BOX_GAP = 16;
+
+type Box = Pick<DOMRect, "left" | "right" | "top" | "bottom" | "height">;
+
+/** The menu sits on the message box (opened from the chip inside it): its bottom falls on a box it is over. */
+export function menuSitsOnBox(menu: Box, boxes: readonly Box[]): boolean {
+  return boxes.some((box) => box.height > 0 && menu.left < box.right && menu.right > box.left
+    && menu.bottom >= box.top - ON_BOX_GAP && menu.bottom <= box.bottom);
+}
+
+/** A fixed width that holds on neither side of the menu takes the wider side's room (not under
+ * LEVEL_MIN_WIDTH): the level opens beside the menu, on the side where it fits, instead of over its edge. */
+export function levelWidth(width: number, menu: Pick<Box, "left" | "right">, viewportWidth: number): number {
+  const right = viewportWidth - SUBMENU_WINDOW_MARGIN - (menu.right + SUBMENU_SIDE_OFFSET);
+  const left = menu.left - SUBMENU_SIDE_OFFSET - SUBMENU_WINDOW_MARGIN;
+  const room = Math.floor(Math.max(right, left));
+  return width <= room || room < LEVEL_MIN_WIDTH ? width : room;
+}
+
+/** Where a level goes: the menu family's submenu spot. Under a menu that sits on the message box (`floor`
+ * is the menu's bottom) the level never runs lower than the menu, so the box, the voice button and the meter
+ * stay in view; anywhere else (the menu opened from the + menu of a narrow window) it keeps the window's room. */
+export function levelPlace(
+  row: { left: number; right: number; top: number },
+  size: { width: number; height: number },
+  viewport: { width: number; height: number },
+  prefer: "left" | "right" | undefined,
+  floor?: number,
+): SubmenuPlace {
+  const next = submenuPlace(row, size, viewport, prefer);
+  if (floor === undefined) return next;
+  const height = Math.min(size.height, next.maxHeight);
+  const top = Math.round(Math.max(SUBMENU_WINDOW_TOP, Math.min(next.top, floor - height)));
+  return { left: next.left, top, maxHeight: Math.max(0, Math.min(next.maxHeight, floor - top)) };
+}
 
 export interface ModeMenuLevelProps {
   /** Which level this is (`reasoning`, `providers`, `accounts`, `models`). */
@@ -52,24 +93,23 @@ export function ModeMenuLevel({ level, anchor, label, room = 0, width, focus, on
       const box = (row.closest<HTMLElement>("[data-model-menu]") ?? row).getBoundingClientRect();
       const rowTop = row.getBoundingClientRect().top;
       node.style.maxHeight = "";
+      if (width) node.style.width = `${levelWidth(width, box, window.innerWidth)}px`;
       const from = row.closest<HTMLElement>("[data-mode-level]");
       const right = window.innerWidth - box.right;
       const left = from ? from.dataset.side === "left" : right < room && box.left > right;
-      const next = submenuPlace(
+      // the menu over the message box keeps its levels above what sits under it; elsewhere a level takes its natural height
+      const menu = document.querySelector<HTMLElement>("[data-model-menu]:not([data-mode-level])")?.getBoundingClientRect();
+      const boxes = [...document.querySelectorAll<HTMLElement>("[data-composer-box]")].map((element) => element.getBoundingClientRect());
+      const next = levelPlace(
         { left: box.left, right: box.right, top: rowTop - LEVEL_PAD },
         { width: node.offsetWidth, height: node.offsetHeight },
         { width: window.innerWidth, height: window.innerHeight },
         left ? "left" : from ? "right" : undefined,
+        menu && menuSitsOnBox(menu, boxes) ? menu.bottom : undefined,
       );
-      // a level never runs lower than the menu it belongs to: what sits under the menu (the message
-      // box, the voice button, the meter) stays in view; a level taller than the room above scrolls
-      const menu = document.querySelector<HTMLElement>("[data-model-menu]:not([data-mode-level])");
-      const floor = menu ? menu.getBoundingClientRect().bottom : window.innerHeight;
-      const height = Math.min(node.offsetHeight, next.maxHeight);
-      const top = Math.round(Math.max(SUBMENU_WINDOW_TOP, Math.min(next.top, floor - height)));
       node.style.left = `${next.left}px`;
-      node.style.top = `${top}px`;
-      node.style.maxHeight = `${Math.max(0, Math.min(next.maxHeight, floor - top))}px`;
+      node.style.top = `${next.top}px`;
+      node.style.maxHeight = `${next.maxHeight}px`;
       node.dataset.side = next.left < box.left ? "left" : "right";
     };
     place();

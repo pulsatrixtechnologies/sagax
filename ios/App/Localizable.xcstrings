@@ -67182,10 +67182,16 @@
     },
     "Reasoning effort": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effort"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Effort de raisonnement"
+            "value": "Effort"
           }
         },
         "pt-BR": {

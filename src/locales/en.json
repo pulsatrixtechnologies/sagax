@@ -4496,7 +4496,7 @@
   "model.settings.aria": "Settings of this model",
   "model.fastTag": "Fast",
   "model.effort": "Effort",
-  "model.effort.aria": "Reasoning effort",
+  "model.effort.aria": "Effort",
   "model.effort.balanced": "Balanced",
   "model.effort.deep": "Deep",
   "model.effort.deeper": "Deeper",

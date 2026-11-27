@@ -3542,7 +3542,7 @@
   "model.settings.aria": "Réglages de ce modèle",
   "model.fastTag": "Rapide",
   "model.effort": "Effort",
-  "model.effort.aria": "Effort de raisonnement",
+  "model.effort.aria": "Effort",
   "model.effort.defaultTitle": "N'envoyer aucun niveau d'effort et laisser le fournisseur décider",
   "model.effort.defaultWith": "Par défaut ({level})",
   "model.effort.levelTitle": "Demander un effort {level}",

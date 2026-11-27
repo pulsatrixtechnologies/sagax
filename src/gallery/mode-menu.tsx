@@ -158,7 +158,7 @@ function Gallery() {
             modes={{ current: current === "pinned" ? null : current, resolutions, onPick: () => undefined, pinnedLabel, ...(current === "pinned" ? { pinnedTitle } : {}) }}
           />
         </div>}
-        <div data-tour="composer" className={COMPOSER_PILL}>
+        <div data-tour="composer" data-composer-box="" className={COMPOSER_PILL}>
           <div className="flex items-end gap-1">
             <ComposerPlusMenu items={[
               { id: "attach", label: t("composer.plus.attach"), icon: ATTACH_ICON, onSelect: () => {} },

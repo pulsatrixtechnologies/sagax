@@ -84,7 +84,7 @@ describe("Grok voice", () => {
     await expect(listVoices(config)).rejects.toThrow("invalid voice list");
   });
 
-  it("sends a connected Grok account through the account voice host, and an API key stays on api.x.ai", async () => {
+  it("sends a connected Grok account to the fake subscription host with the CLI token header, and an API key without it", async () => {
     vi.stubEnv("SAGAX_GROK_ACCOUNT_VOICE_API", process.env.SAGAX_XAI_TTS_API!);
     const grok = await import("./grok.ts");
     await grok.withVoiceAuth("grok-account", () => grok.listVoices("fixture-grok-account-token"));
@@ -94,10 +94,35 @@ describe("Grok voice", () => {
       tokenAuth: "xai-grok-cli",
     });
     await grok.withVoiceAuth("grok-account", () => {
-      expect(grok.realtimeSocketUrl("wss://api.x.ai/v1/realtime?model=grok")).toBe("wss://cli-chat-proxy.grok.com/v1/realtime?model=grok");
       expect(grok.realtimeSocketUrl("ws://127.0.0.1:9/v1/realtime")).toBe("ws://127.0.0.1:9/v1/realtime");
     });
     expect(grok.realtimeSocketUrl("wss://api.x.ai/v1/realtime")).toBe("wss://api.x.ai/v1/realtime");
+    vi.stubEnv("SAGAX_GROK_ACCOUNT_VOICE_API", "");
+  });
+
+  // M-20261126-145: the subscription voice was sent to cli-chat-proxy.grok.com,
+  // whose /tts, /tts/voices and /realtime answer 404. The official Grok CLI
+  // never calls them: its only voice (dictation) goes to `voice.api_base`, which
+  // inherits `[endpoints].xai_api_base_url` (https://api.x.ai/v1), with the
+  // session token. No real host is reached here: fetch is stubbed.
+  it("a connected Grok account speaks on the xAI API root the official Grok client uses, never on the chat proxy", async () => {
+    vi.stubEnv("SAGAX_GROK_ACCOUNT_VOICE_API", "");
+    const grok = await import("./grok.ts");
+    const asked: Array<{ url: string; tokenAuth: string | null }> = [];
+    vi.stubGlobal("fetch", async (url: string | URL, init?: RequestInit) => {
+      asked.push({ url: String(url), tokenAuth: new Headers(init?.headers).get("x-xai-token-auth") });
+      return new Response(JSON.stringify(voices), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    try {
+      await grok.withVoiceAuth("grok-account", () => grok.listVoices("fixture-grok-account-token"));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(asked).toEqual([{ url: "https://api.x.ai/v1/tts/voices", tokenAuth: "xai-grok-cli" }]);
+    await grok.withVoiceAuth("grok-account", () => {
+      expect(grok.realtimeSocketUrl("wss://api.x.ai/v1/realtime?model=grok")).toBe("wss://api.x.ai/v1/realtime?model=grok");
+    });
+    expect(JSON.stringify(asked)).not.toContain("cli-chat-proxy");
   });
 
   it("preserves Polish text, requests MP3 with language detection and honors the bot voice", async () => {
@@ -275,6 +300,51 @@ describe("xAI refusals say why (checked live 2026-10-28: an invalid key is a 400
     errorBody = { error: "fixture-voice-key echoed" };
     const echoed = await grok.transcribe(new Uint8Array([1, 2]), "audio/wav", "fixture-voice-key").then(() => new Error("no refusal"), (caught: Error) => caught);
     expect(echoed.message).not.toContain("fixture-voice-key");
+  });
+
+  // M-20261126-145 (and #5179, the same misreading): a voice list names no
+  // voice, and a realtime handshake carries none (the voice goes in
+  // session.update once the socket is open). Their 404 is the address: the
+  // credential is not served there, never "xAI could not find that voice".
+  it("a 404 is the voice only when the request named one; otherwise it is the address", async () => {
+    const grok = await import("./grok.ts");
+    status = 404;
+    errorBody = { code: "Not Found", error: "Not Found" };
+    const caught = (promise: Promise<unknown>) => promise.then(() => new Error("no refusal"), (error: Error) => error);
+    const listed = await caught(grok.listVoices("fixture-voice-key"));
+    const heard = await caught(grok.transcribe(new Uint8Array([82, 73, 70, 70]), "audio/wav", "fixture-voice-key"));
+    const unnamed = await caught(grok.synthesize("Hi", undefined, "fixture-voice-key"));
+    const unnamedStream = await caught(grok.synthesizeStream("Hi", undefined, "fixture-voice-key"));
+    for (const error of [listed, heard, unnamed, unnamedStream]) {
+      expect(error.message).not.toContain("could not find that voice");
+      expect(grok.grokVoiceFailure(error.message)).toBe("key");
+    }
+    // a request that named a voice: that voice (the caller asks the default next)
+    expect(grok.grokVoiceFailure((await caught(grok.synthesize("Hi", "eve", "fixture-voice-key"))).message)).toBe("voice");
+    expect(grok.grokVoiceFailure((await caught(grok.synthesizeStream("Hi", "eve", "fixture-voice-key"))).message)).toBe("voice");
+    // xAI's own words naming a voice stay the voice
+    expect(grok.grokVoiceFailure(grok.refusal(404, { error: "Voice zed not found" }))).toBe("voice");
+    expect(grok.grokVoiceFailure(grok.refusal(404, {}))).toBe("key");
+    expect(grok.grokVoiceFailure(grok.refusal(404, {}, { voice: true }))).toBe("voice");
+
+    const socketError = (open: (handlers: { onError(message: string): void; onClose(): void }) => void) => new Promise<string>((resolve) => {
+      let said = "";
+      open({ onError: (message) => { said ||= message; }, onClose: () => resolve(said) });
+    });
+    const listen = await socketError((h) => grok.openTranscriptionStream("fixture-voice-key", {}, { onTranscript() {}, ...h }));
+    const speechNamed = await socketError((h) => grok.openSpeechStream("fixture-voice-key", { voice: "eve" }, { onAudio() {}, onDone() {}, onCleared() {}, ...h }));
+    const speechUnnamed = await socketError((h) => grok.openSpeechStream("fixture-voice-key", {}, { onAudio() {}, onDone() {}, onCleared() {}, ...h }));
+    expect(grok.grokVoiceFailure(listen)).toBe("key");
+    expect(grok.grokVoiceFailure(speechNamed)).toBe("voice");
+    expect(grok.grokVoiceFailure(speechUnnamed)).toBe("key");
+
+    const realtimeUrl = `${process.env.SAGAX_XAI_TTS_API!.replace(/^http/, "ws")}/realtime`;
+    const realtime = await new Promise<string>((resolve) => {
+      const socket = grok.openRealtimeSocket("fixture-voice-key", realtimeUrl);
+      socket.onerror = (event) => resolve(String((event as { message?: unknown }).message ?? ""));
+    });
+    expect(realtime).not.toContain("could not find that voice");
+    expect(grok.grokVoiceFailure(realtime)).toBe("key");
   });
 
   it("a refused socket handshake reads the body too (the real ws library)", async () => {

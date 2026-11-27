@@ -155,4 +155,18 @@ describe("which key the voice runs on (2026-10-28)", () => {
     expect(parseVoiceKeyHeader("server:")).toEqual({ source: "server", last4: null });
     expect(parseVoiceKeyHeader("nope:abcd")).toBeUndefined();
   });
+
+  // M-20261126-145: the server names the connected Grok account as the first
+  // cause; the page dropped that source, so the bar fell back on the last key.
+  it("keeps the connected Grok account the server names, in the key and in every key tried", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => failing(502, {
+      error: "Aucun appel : ton compte Grok connecté a été refusé.", code: "voice_provider", failure: "key",
+      key: { source: "grok-account", last4: "c4Dd" },
+      tried: [{ source: "grok-account", last4: "c4Dd", failure: "key" }, { source: "org-key", last4: "t6Yb", failure: "quota" }],
+    })));
+    const error = await transcribeVoiceMode("b-1", new Blob([new Uint8Array(4)]), "fr").catch((e: unknown) => e) as VoiceProviderError;
+    expect(error.key).toEqual({ source: "grok-account", last4: "c4Dd" });
+    expect(error.tried?.[0]).toEqual({ source: "grok-account", last4: "c4Dd", failure: "key" });
+    expect(parseVoiceKeyHeader("grok-account:c4Dd")).toEqual({ source: "grok-account", last4: "c4Dd" });
+  });
 });

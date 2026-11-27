@@ -176,8 +176,8 @@ struct AutomationsWeekView: View {
                     .font(desktop ? theme.font(12, .medium) : Theme.font(9.5))
                     .foregroundStyle(desktop ? theme.inkSecondary : Theme.textTertiary)
                     .frame(width: gutter, alignment: .center)
-                    // the cell's py-3: its line at the top, beside the day names
-                    .padding(.top, desktop ? 12 : 0)
+                    // desktop day-gutter head: py-3 (12 top and bottom)
+                    .padding(.vertical, desktop ? 12 : 0)
                     .frame(maxHeight: .infinity, alignment: desktop ? .top : .center)
                     .overlay(alignment: .bottom) { Rectangle().fill(Theme.hairline.opacity(desktop ? 0.4 : 1)).frame(height: 0.5) }
                     .overlay(alignment: .trailing) { Rectangle().fill(Theme.hairline.opacity(desktop ? 0.4 : 1)).frame(width: 0.5) }

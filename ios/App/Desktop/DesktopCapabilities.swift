@@ -39,8 +39,9 @@ struct DesktopCapabilitiesModal: View {
     }
 
     var body: some View {
-        // PluginsPanel: CATEGORY_MODAL.frame is bg-app, then PLUGINS.frame is bg-inset.
-        DesktopModalFrame(width: 900, background: \.inset, close: close) {
+        // PluginsPanel: CATEGORY_MODAL.frame is bg-app, then PLUGINS.frame is bg-inset
+        // (ConnectAppsPage sets capabilitiesDesktop inset on its body).
+        DesktopModalFrame(width: 900, background: \.app, close: close) {
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 0) {
                     DesktopText(Text("Connect Apps"), size: 17, weight: .semibold, line: 24, tracking: -0.136)
@@ -157,8 +158,13 @@ struct DesktopCapabilitiesModal: View {
     static let parityOpensOnBot = false
 
     #if DEBUG
-    /// The desktop's plugins-mcp reference is Capabilities on Installed.
-    static var parityTab: ConnectAppsTab? { ParityLaunch.current?.iPadScreen == .pluginsMcp ? .installed : nil }
+    /// Capabilities and plugins-mcp open Installed, as the desktop references.
+    static var parityTab: ConnectAppsTab? {
+        switch ParityLaunch.current?.iPadScreen {
+        case .capabilities?, .pluginsMcp?: .installed
+        default: nil
+        }
+    }
     #else
     static let parityTab: ConnectAppsTab? = nil
     #endif

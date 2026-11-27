@@ -294,7 +294,7 @@ enum IPadParityScreen: String, CaseIterable {
         // I2: the sidebar's densities, threads, hover and menus
         case .mainCompact, .mainCollapsed, .mainThreads, .sidebarRowHover, .sidebarBotMenu,
              .sidebarBotContextMenu, .sidebarSectionMenu, .sidebarProfileMenu, .sidebarNewMenu, .newGroup: true
-        default: isDesktopChat || opensBotPanel || isDesktopSettings || parityPage != nil || self == .keyboardShortcuts || self == .aboutDialog || self == .releaseNotesDialog
+        default: isDesktopChat || opensBotPanel || isDesktopSettings || parityPage != nil || opensPersonaEditor || self == .keyboardShortcuts || self == .aboutDialog || self == .releaseNotesDialog
             || self == .sidebarSelect || self == .computerWindow || self == .coding || self == .botEdit || self == .newBot || self == .noticeThreadGone || self == .groupPanel
             || self == .onboardingWelcome || self == .onboardingTour
         }
@@ -318,7 +318,9 @@ enum IPadParityScreen: String, CaseIterable {
 
     /// The persona editor is open on this surface (`panel-more` and its
     /// sections keep their ids from when it was the More tab).
-    var opensPersonaEditor: Bool { self == .panelMore || self == .botEdit || panelSection != nil }
+    var opensPersonaEditor: Bool {
+        self == .panelMore || self == .botEdit || panelSection != nil || personaParityPage != nil
+    }
 
     /// The persona editor section open on a `panel-more-<section>` surface
     /// (the section's id in kebab case: `panel-more-works-on` is worksOn).
@@ -328,6 +330,30 @@ enum IPadParityScreen: String, CaseIterable {
         let id = String(rawValue.dropFirst("panel-more-".count))
         return DesktopPanelSection.allCases.first { section in
             section.rawValue.replacingOccurrences(of: "([A-Z])", with: "-$1", options: .regularExpression).lowercased() == id
+        }
+    }
+
+    /// `persona-*` / `org-persona-*` surfaces (Edit bot pages in the main column).
+    var personaParityPage: DesktopPersonaPage? {
+        let raw = rawValue
+        let id: String
+        if raw.hasPrefix("org-persona-") { id = String(raw.dropFirst("org-persona-".count)) }
+        else if raw.hasPrefix("persona-") { id = String(raw.dropFirst("persona-".count)) }
+        else { return nil }
+        switch id {
+        case "overview": return .overview
+        case "appearance": return .appearance
+        case "soul": return .soul
+        case "rules": return .rules
+        case "skills": return .skills
+        case "memory", "files": return .files
+        case "access": return .access
+        case "model": return .model
+        case "permissions": return .permissions
+        case "voice": return .voice
+        case "history": return .history
+        case "usage": return .usage
+        default: return nil
         }
     }
 }

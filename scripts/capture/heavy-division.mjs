@@ -7,8 +7,11 @@
  * validated mock-up is stepped on the same clock and each sheet shows it
  * above the app. --measure prints what several live rows cost (frame times,
  * script, style and layout, paint) instead of capturing. Synthetic data
- * only. Real Chrome headless, DPR 2, never a window.
- * Usage: node scripts/capture/heavy-division.mjs [--out DIR] [--port N] [--mockup FILE] [--counts 2,5,8] [--shape cat] [--measure]
+ * only. Real Chrome headless, DPR 2, never a window. --look adds the
+ * gallery's look parameters (def=own, material=glass, mascotSkin=gold,
+ * fail=2, shape=owl...) to every page, and --tag names the sheets after it.
+ * Usage: node scripts/capture/heavy-division.mjs [--out DIR] [--port N] [--mockup FILE] [--counts 2,5,8] [--shape cat]
+ *   [--look "material=glass"] [--tag glass] [--skins dark,light] [--measure]
  */
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
@@ -26,7 +29,10 @@ const mockup = arg("--mockup", "");
 const counts = arg("--counts", "2,5,8").split(",").map(Number);
 const shape = arg("--shape", "cat");
 const measure = process.argv.includes("--measure");
-const skins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }];
+const look = arg("--look", "");
+const tag = arg("--tag", shape === "cat" ? "" : shape);
+const extra = look ? `&${look}` : "";
+const skins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }].filter(({ label }) => arg("--skins", "dark,light").split(",").includes(label));
 const ZOOM = 5;
 const FRAMES = 10;
 /** One round of division at the mock-up's speed, and the pile closing up after the last. */
@@ -66,9 +72,9 @@ async function appFrames(browser, skin, n) {
   // a clock only the script moves: both pages are read at the same instants
   await page.clock.install({ time: 0 });
   await page.clock.pauseAt(1000);
-  await page.goto(`${base}?lang=en&skin=${skin}&case=division&shape=${shape}&n=${n}&zoom=${ZOOM}`, { waitUntil: "load" });
+  await page.goto(`${base}?lang=en&skin=${skin}&case=division&shape=${shape}&n=${n}&zoom=${ZOOM}${extra}`, { waitUntil: "load" });
   for (let step = 0; step < 400 && !(await page.$("[data-gallery-planned]")); step += 1) await page.clock.runFor(25);
-  await page.waitForSelector("[data-gallery-planned] [data-heavy-division]");
+  await page.waitForSelector(shape === "owl" ? "[data-gallery-planned] [data-heavy-avatars]" : "[data-gallery-planned] [data-heavy-division]");
   const frames = [];
   let at = 0;
   for (const time of frameTimes(n)) {
@@ -77,7 +83,8 @@ async function appFrames(browser, skin, n) {
     const box = await page.locator("[data-heavy-open]").boundingBox();
     frames.push(await page.screenshot({ clip: { x: Math.max(0, box.x - 12), y: box.y - 10, width: 1100, height: box.height + 20 } }));
   }
-  const cells = await page.getAttribute("[data-heavy-division]", "data-heavy-cells");
+  // a character divides into nothing: its pile of owls is the row
+  const cells = shape === "owl" ? String(await page.locator("[data-heavy-owl]").count()) : await page.getAttribute("[data-heavy-division]", "data-heavy-cells");
   if (Number(cells) !== n) throw new Error(`${n} experts (${skin}): the row ends with ${cells} cells`);
   await page.close();
   return frames;
@@ -115,9 +122,11 @@ async function restRow(browser, skin, n) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 520 }, deviceScaleFactor: 2 });
   // the dev server sometimes drops the shape's still on a first load: one more load then
   for (let attempt = 0; ; attempt += 1) {
-    await page.goto(`${base}?lang=en&skin=${skin}&case=done&shape=${shape}&n=${n}`, { waitUntil: "networkidle" });
+    await page.goto(`${base}?lang=en&skin=${skin}&case=done&shape=${shape}&n=${n}${extra}`, { waitUntil: "networkidle" });
     try {
-      await page.waitForSelector("[data-heavy-division][data-heavy-cells]", { timeout: 10_000 });
+      await page.waitForSelector(shape === "owl" ? "[data-heavy-owl]" : "[data-heavy-division][data-heavy-cells]", { timeout: 10_000 });
+      // a material's stills come in a few frames after the cells
+      if (look.includes("material=")) await page.waitForSelector("[data-heavy-cell] image", { timeout: 10_000 });
       break;
     } catch (error) {
       if (attempt) throw error;
@@ -142,9 +151,9 @@ async function sheet(browser, { n, label, times, app, mock, rest }) {
     h1 { font-size: 16px; margin: 0 0 12px; } h2 { font-size: 12px; margin: 0; width: 60px; flex: none; }
     section { display: flex; gap: 12px; align-items: center; padding: 6px 0; border-top: 1px solid ${dark ? "#2a2a2a" : "#ddd"}; }
     figure { margin: 0; display: flex; flex-direction: column; gap: 2px; } figcaption { font-size: 11px; opacity: .7; } img { display: block; }
-  </style><h1>Heavy division, ${n} experts, ${label}: the row at ${ZOOM}x${mock ? ", the mock-up beside the app" : ""}</h1>${rows}
+  </style><h1>Heavy division, ${n} experts, ${label}${tag ? `, ${tag}` : ""}: the row at ${ZOOM}x${mock ? ", the mock-up beside the app" : ""}</h1>${rows}
   <section><h2>Real size</h2><figure><figcaption>App, the run over</figcaption><img src="${dataUrl(rest)}" style="width:620px"></figure></section>`);
-  const file = join(outDir, `heavy-division-${n}-${label}.png`);
+  const file = join(outDir, `heavy-division-${tag ? `${tag}-` : ""}${n}-${label}.png`);
   await page.screenshot({ path: file, fullPage: true });
   await page.close();
   return file;

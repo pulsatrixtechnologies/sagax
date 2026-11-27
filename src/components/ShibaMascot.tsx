@@ -13,7 +13,7 @@
 import "./shiba-mascot.css";
 import "./skin-fx/skin-fx.css";
 import { memo, useEffect, useId, useMemo, useRef, useState, type ReactNode, type Ref, type RefObject } from "react";
-import { MAUS_COLORS } from "@/lib/mascot";
+import { MAUS_COLORS, mascotHex } from "@/lib/mascot";
 import { cn } from "@/lib/cn";
 import { SHIBA_SKIN_TIER, type ShibaSkin } from "../../shared/mascot-look";
 import {
@@ -82,8 +82,6 @@ export interface ShibaMascotProps {
   label?: string | null;
   className?: string;
 }
-
-export const hexOf = (color: string) => (MAUS_COLORS as Record<string, string>)[color] ?? (/^#[0-9a-fA-F]{6}$/.test(color) ? color : MAUS_COLORS.orange);
 
 /** Ops as SVG elements with a palette; `uid` keeps clip ids apart. */
 export function OpsSvg({ ops, palette, uid }: { ops: readonly ShibaOp[]; palette: ShibaPalette; uid: string }) {
@@ -253,7 +251,7 @@ const sameDiscrete = (a: Discrete | null, b: Discrete | null) => a === b || (!!a
 
 export function ShibaMascot({ skin = "plain", color, size = 44, mood = "idle", expression, animated = true, detail, move, moveBody = false, activity = null, rig: alwaysRig = false, onBark, label = null, className }: ShibaMascotProps) {
   const known = shibaSkinId(skin);
-  const hex = hexOf(color);
+  const hex = mascotHex(color, MAUS_COLORS.orange);
   const reduced = useReducedMotion();
   const full = fxDetail(size, animated, detail) === "full";
   const live = full && !reduced;

@@ -5,8 +5,10 @@
  * Synthetic data, demo accounts only. Not shipped in the app.
  * ?skin=<id>&lang=<code>&case=division|propose|critique|merged|done|panel|refused|refused-panel&auto=risky
  * &shape=<shape id, or owl for a character>&color=<bot colour>&n=<experts, 2 to 8>
+ * &def=own (the bot's shape is its own drawing: a copy of the cup under an id of its own, read at run time)
+ * &material=fluffy|glass&mascotSkin=<a shape skin>&fail=<the expert that fails mid-run>
  * &zoom=<magnify the row>&rows=<that many rows, for the cost measure>&motion=reduced
- * case=division is a live run: the leader picks its team, then `n` experts appear. */
+ * case=division is a live run: the leader picks its team, then `n` experts appear (and `fail` fails 3 s later). */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -21,6 +23,7 @@ import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { openThoughts } from "../lib/thoughts-panel";
 import type { Message } from "../state/store";
 import type { HeavyAgentLine, HeavyTeamLine } from "../../shared/heavy-team";
+import { OBJECT_SHAPE_BY_ID } from "../../shared/shape-avatar-presets";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -34,11 +37,20 @@ const experts = Math.max(1, Number(params.get("n")) || 4);
 const zoom = Number(params.get("zoom")) || 1;
 const rowCount = Math.max(1, Number(params.get("rows")) || 1);
 if (params.get("motion") === "reduced") document.documentElement.dataset.reducedMotion = "true";
-/** The conversation's bot: a shape in its colour, or the owl (a character, which divides into nothing). */
+const failing = Number(params.get("fail")) || 0;
+/** The conversation's bot: a shape in its colour (its own drawing, a material, a skin), or the owl (a character, which divides into nothing). */
 const BOT = {
   name: "Nimbus",
   color: params.get("color") ?? "grey",
-  ...(shape === "owl" ? {} : { mascotLook: { character: "shape", shape } }),
+  ...(shape === "owl" ? {} : {
+    mascotLook: {
+      character: "shape",
+      shape,
+      ...(params.get("def") === "own" ? { avatarDef: { ...OBJECT_SHAPE_BY_ID.cup, id: "my-own-mascot", name: "My own mascot" } } : {}),
+      ...(params.get("material") ? { material: params.get("material") } : {}),
+      ...(params.get("mascotSkin") ? { skins: { shape: params.get("mascotSkin") } } : {}),
+    },
+  }),
 } as BotAvatarProps["bot"];
 
 // a fixed clock: "14s" reads 14s however long the capture takes
@@ -70,8 +82,10 @@ const CRITIQUES = [
   "Fine, if the VPN names stay the same.",
 ];
 
-const expert = (index: number, over: Partial<HeavyAgentLine>): HeavyAgentLine => ({
+const expert = (index: number, over: Partial<HeavyAgentLine>, failed = true): HeavyAgentLine => ({
   n: index + 1, persona: SEATS[index]![0], engineLabel: SEATS[index]![1], modelLabel: SEATS[index]![2], status: "working", messages: [], ...over,
+  // the expert asked to fail did, mid-run, after one message
+  ...(failed && index + 1 === failing && (over.status ?? "working") === "working" ? { status: "failed" as const, speaking: false, live: undefined, messages: [PROPOSALS[index % 4]!] } : {}),
 });
 
 function lineFor(): HeavyTeamLine {
@@ -134,14 +148,14 @@ function lineFor(): HeavyTeamLine {
   };
 }
 
-/** A live run for case=division: the leader picks its team, then the experts appear and propose. */
-function liveLine(planned: boolean): HeavyTeamLine {
+/** A live run for case=division: the leader picks its team, then the experts appear and propose (and one fails, when asked). */
+function liveLine(planned: boolean, failed = false): HeavyTeamLine {
   const leader = { engineLabel: "OpenAI", modelLabel: "GPT-6 Astra" };
   if (!planned) return { phase: "planning", startedAt: START, updatedAt: START, maxRounds: 5, rounds: [], agents: [], leader: { ...leader, steps: [] } };
   return {
     phase: "agents", startedAt: START, updatedAt: START + 14_000, maxRounds: 5,
     rounds: [{ n: 1, kind: "propose", startedAt: START + 2_000 }],
-    agents: SEATS.map((_, index) => expert(index, {})),
+    agents: SEATS.map((_, index) => expert(index, {}, failed)),
     leader: { ...leader, steps: [{ kind: "planned", at: START + 2_000 }, { kind: "sent", at: START + 2_000 }, { kind: "processing", at: START + 2_000 }] },
   };
 }
@@ -160,11 +174,16 @@ const botBubble = (text: string) => (
 /** A live run: the team arrives a moment after the row (a capture reads data-gallery-planned to time its frames). */
 function LiveRow({ id }: { id: string }) {
   const [planned, setPlanned] = useState(false);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     const timer = setTimeout(() => setPlanned(true), 900);
-    return () => clearTimeout(timer);
+    const failure = failing ? setTimeout(() => setFailed(true), 900 + 3_000) : 0;
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(failure);
+    };
   }, []);
-  const message = messageOf(liveLine(planned), id);
+  const message = messageOf(liveLine(planned, failed), id);
   return <div data-gallery-planned={planned ? "" : undefined}><StatusActivityRow message={message} transcript={[message]} busy /></div>;
 }
 

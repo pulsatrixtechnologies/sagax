@@ -23,8 +23,8 @@ const outDir = resolve(arg("--out", join(root, "docs", "screenshots", "heavy-tea
 const port = Number(arg("--port", "5389"));
 const skins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }];
 const shots = [
-  { name: "heavy-propose-auto", query: "case=propose&auto=risky", header: "Experts thinking · round 1 of 5 · 14s" },
-  { name: "heavy-critique", query: "case=critique", header: "Experts thinking · round 3 of 5 · 14s" },
+  { name: "heavy-propose-auto", query: "case=propose&auto=risky", header: "Experts proposing · round 1 of 5 · 14s" },
+  { name: "heavy-critique", query: "case=critique", header: "Experts critiquing · round 3 of 5 · 14s" },
   { name: "heavy-leader-writing", query: "case=merged", header: "Thought for 14s" },
   { name: "heavy-done-decided", query: "case=done", header: "Thought for 26s" },
   { name: "heavy-panel-decided", query: "case=panel", header: "Thought for 26s", panel: true, open: [2] },

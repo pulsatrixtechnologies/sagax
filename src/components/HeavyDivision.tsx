@@ -1,32 +1,41 @@
 // The cell division of a Heavy run, drawn in the chat's row (owner
 // 2026-11-26, M-20261126-116, M-20261126-119 to M-20261126-122): the bot's
 // own mascot, at the row's small avatar size, divides in place into one cell
-// per expert. Each cell keeps the bot's shape (its open-bot-avatar body, the
-// one every other avatar of the bot draws); only the colour changes, and the
-// experts end as the row's tight pile, each cut out of its neighbour by a
-// ring of the page's colour.
+// per expert. Each cell is the bot's shape for the whole division (its
+// open-bot-avatar body, the one every other avatar of the bot draws); only
+// the colour changes, and the experts end as the row's tight pile, each cut
+// out of its neighbour by a ring of the page's colour.
 //
-// One SVG per row, no canvas: the bodies still in the bot's colour sit under
-// a "goo" filter (a blur, then a threshold on its alpha), so two daughters
-// are one membrane until they let go. The motion is src/lib/heavy-division.ts;
-// this file draws its cells and runs its clock, which stops when the row
-// leaves the screen, when the page is hidden and once nothing moves any more.
-// A run that is over, or read back from history, is drawn finished and never
-// replayed; under reduced motion every step lands at once.
+// One SVG per row, no canvas of its own: the bodies still in the bot's colour
+// sit under a "goo" filter (a blur, then a threshold on its alpha), so the
+// bot's own silhouette stretches, pinches and lets go as one membrane. A
+// bot in a material (Fluffy, Glass) wears it in its cells: one still per
+// colour, painted once by the engine on the context the material already
+// shares across the page (shape-material-still.ts). Where the page cannot
+// paint it, the cells are flat with the mock-up's simple volume. The motion
+// is src/lib/heavy-division.ts; this file draws its cells and runs its
+// clock, which stops when the row leaves the screen, when the page is hidden
+// and once nothing moves any more. A run that is over, read back from
+// history, or past its first round when the row first shows is drawn
+// finished and never replayed; under reduced motion every step lands at once.
 import { useEffect, useId, useLayoutEffect, useMemo, useRef } from "react";
-import type { Matrix } from "open-bot-avatar";
+import type { AvatarDefinition, AvatarMood, AvatarState, Matrix } from "open-bot-avatar";
+import type { CanvasMaterial } from "open-bot-avatar/dom";
 
 import { t } from "@/lib/i18n";
 import { AGENT_COLORS } from "@/lib/heavy-team";
 import { HeavyDivisionSim, type DivisionCell } from "@/lib/heavy-division";
-import { MAUS_COLORS } from "@/lib/mascot";
-import { prefersReducedMotion } from "@/lib/motion";
+import { mascotHex } from "@/lib/mascot";
 import { botAvatarProfile } from "../../shared/bot-avatar";
-import { completeMascotLook, engineLookOf, SHAPE_DEPTH, type MascotShape, type ShapeMotion } from "../../shared/mascot-look";
+import { completeMascotLook, engineLookOf, type MascotAvatarDef, type MascotShape, type ShapeMotion } from "../../shared/mascot-look";
 import type { BotAvatarProps } from "./Avatar";
-import { bakedShapeFor, enginePose, eyeMarkup, lookDefinition, moodFrame, runtimeStill, stateStill, type StillFrame } from "./shape-avatar";
+import { eyeMarkup, lookDefinition, moodFrame, runtimeStill, stateStill, type StillFrame } from "./shape-avatar";
+import { shapeLook } from "./shape-look";
+import { useShapeMaterial } from "./shape-material";
+import { materialStill, type MaterialStill } from "./shape-material-still";
 import { shapeSkinPaint, skinFace } from "./ShapeMascot";
 import { useBakedStill } from "./shape-stills";
+import { useReducedMotionPreference } from "./TabIndicator";
 
 type DivisionBot = BotAvatarProps["bot"];
 
@@ -38,19 +47,25 @@ const RING = 2;
 const GOO = 0.21;
 /** While nothing divides the cells only breathe: redrawn at 30 frames a second, as the small live avatars are. */
 const IDLE_FRAME_MS = 1000 / 30 - 4;
+/** An expert that failed mid-run is dimmed, as the orbit dimmed it. */
+const FAILED_OPACITY = 0.45;
 
-const hexOf = (color: string) => ((MAUS_COLORS as Record<string, string>)[color] ?? (HEX.test(color) ? color : MAUS_COLORS.green)).toLowerCase();
 const matrixAttr = (m: Matrix) => `matrix(${m.join(" ")})`;
 const f2 = (n: number) => String(Math.round(n * 100) / 100);
 
 /** What a division is drawn from: the bot's body and eyes at rest, its colour and its eyes' ink. */
 export interface DivisionArt {
   shape: MascotShape;
+  /** The body's still: the same object while the look does not change, so the drawing is built once per look. */
   frame: StillFrame;
   color: string;
   ink: string;
   /** The person's motion setting for this mascot (the picker's gear). */
   motion: ShapeMotion;
+  /** The look's material when the page paints it: the cells wear its stills. */
+  material: { definition: AvatarDefinition; finish: CanvasMaterial; depth: number | undefined; state: AvatarState; mood: AvatarMood } | null;
+  /** The look asks for a material the page cannot paint (or has not yet): flat cells with a simple volume. */
+  shaded: boolean;
 }
 
 /** The bot's shape when its mascot is one (a character, or a picture of its own, divides into nothing: the row keeps its pile of avatars). */
@@ -62,45 +77,55 @@ export function divisionShape(bot: DivisionBot | null | undefined): MascotShape 
   return look.character === "shape" ? look.shape : null;
 }
 
+/** A person's own drawing, read once per content: the look is parsed again on every draw of the row, the body must not be. */
+const OWN_DEFINITIONS = new Map<string, AvatarDefinition>();
+const OWN_DEFINITIONS_MAX = 64;
+function definitionOf(shape: MascotShape, avatarDef: MascotAvatarDef | undefined): AvatarDefinition {
+  if (!avatarDef) return lookDefinition(shape);
+  const key = `${shape}|${JSON.stringify(avatarDef)}`;
+  let definition = OWN_DEFINITIONS.get(key);
+  if (!definition) {
+    if (OWN_DEFINITIONS.size >= OWN_DEFINITIONS_MAX) OWN_DEFINITIONS.delete(OWN_DEFINITIONS.keys().next().value!);
+    OWN_DEFINITIONS.set(key, (definition = lookDefinition(shape, avatarDef)));
+  }
+  return definition;
+}
+
 /**
  * The bot's mascot as the division draws it: undefined for a bot whose
  * mascot is no shape, null while a shape's still loads. The body, its
- * colour and its eyes are read exactly where ShapeMascot reads them (the
- * shape's baked still, the skin's paint, the look's settings); a skin's
- * layers and a material's finish are not carried into the cells.
+ * colour, its eyes and its material follow ShapeMascot's own rules
+ * (shape-look.ts); a skin's layers are not carried into the cells.
  */
 export function useDivisionArt(bot: DivisionBot | null | undefined): DivisionArt | null | undefined {
   const shape = divisionShape(bot);
-  const look = completeMascotLook(bot?.mascotLook);
+  const full = completeMascotLook(bot?.mascotLook);
   const settings = engineLookOf(bot?.mascotLook);
-  const skin = look.skins.shape;
-  const definition = shape ? lookDefinition(shape, look.avatarDef) : null;
-  const chosenDepth = settings.depth === null || settings.depth === SHAPE_DEPTH.natural ? undefined : Math.min(SHAPE_DEPTH.max, Math.max(SHAPE_DEPTH.min, settings.depth));
-  const depth = skin === "outline" && settings.material === "flat" ? 0 : chosenDepth;
-  const bakedId = shape && depth === undefined ? bakedShapeFor(shape, look.avatarDef) : null;
-  const baked = useBakedStill(bakedId);
-  const color = hexOf(settings.bodyColor ?? bot?.color ?? "green");
+  const finish = useShapeMaterial(settings.material);
+  const look = shapeLook({ shape: shape ?? "circle", skin: full.skins.shape, color: settings.bodyColor ?? bot?.color ?? "green", engineLook: settings, avatarDef: full.avatarDef, material: finish !== null });
+  const definition = shape ? definitionOf(look.shape, full.avatarDef) : null;
+  const baked = useBakedStill(shape ? look.bakedId : null);
+  const { depth, pose } = look;
+  const frame = useMemo(() => {
+    if (!definition) return null;
+    const still = look.bakedId ? baked : runtimeStill(definition, depth);
+    return pose.motion ? (still ? moodFrame(still, pose.motion) : null) : stateStill(definition, pose.state, pose.mood, depth);
+  }, [definition, look.bakedId, baked, depth, pose.motion, pose.state, pose.mood]);
+  const material = useMemo(
+    () => (finish && definition ? { definition, finish, depth: look.chosenDepth, state: pose.state, mood: pose.mood } : null),
+    [finish, definition, look.chosenDepth, pose.state, pose.mood],
+  );
+  const shaded = settings.material !== "flat";
   return useMemo(() => {
-    if (!shape || !definition) return undefined;
-    const still = bakedId ? baked : runtimeStill(definition, depth);
-    const pose = enginePose("idle", "idle", settings.mood);
-    const frame = pose.motion ? (still ? moodFrame(still, pose.motion) : null) : stateStill(definition, pose.state, pose.mood, depth);
+    if (!shape) return undefined;
     if (!frame) return null;
-    const paint = shapeSkinPaint(skin, color);
-    const flat = settings.material === "flat";
-    return {
-      shape,
-      frame,
-      color: (flat && HEX.test(paint.fill) ? paint.fill : color).toLowerCase(),
-      ink: (settings.eyeColor && HEX.test(settings.eyeColor) ? settings.eyeColor : flat && HEX.test(paint.eyes) ? paint.eyes : "#151515").toLowerCase(),
-      motion: settings.motion,
-    };
-  }, [shape, definition, bakedId, baked, depth, settings.mood, settings.material, settings.eyeColor, settings.motion, skin, color]);
+    return { shape: look.shape, frame, color: look.body, ink: look.ink, motion: settings.motion, material, shaded };
+  }, [shape, look.shape, frame, look.body, look.ink, settings.motion, material, shaded]);
 }
 
 /** An expert's colour and the ink of its eyes: the pile's plumages, in the order of the experts. */
 export function expertPaint(index: number): { color: string; ink: string } {
-  const color = hexOf(AGENT_COLORS[index % AGENT_COLORS.length]!);
+  const color = mascotHex(AGENT_COLORS[index % AGENT_COLORS.length]!).toLowerCase();
   const eyes = shapeSkinPaint("plain", color).eyes;
   return { color, ink: HEX.test(eyes) ? eyes.toLowerCase() : "#151515" };
 }
@@ -109,14 +134,18 @@ export function expertPaint(index: number): { color: string; ink: string } {
 const played = new Set<string>();
 
 interface CellNodes {
-  /** The cell in the bot's colour, under the membrane's filter: its body, and the round cell it swells into while it divides. */
-  body: SVGGElement;
-  shape: SVGUseElement;
-  round: SVGCircleElement;
+  /** The cell in the bot's colour, under the membrane's filter: the bot's own body, which stretches and pinches with its sister. */
+  body: SVGUseElement;
+  /** The bot in its material, over its flat body while nothing divides. */
+  own: SVGImageElement | null;
   group: SVGGElement;
   solid: SVGGElement;
   fill: SVGUseElement;
+  /** The expert in its material. */
+  picture: SVGImageElement | null;
+  shade: SVGUseElement;
   eyes: SVGUseElement;
+  /** What the cell was last painted as: its expert (-1 the bot), and the stills it wears. */
   expert: number;
 }
 
@@ -133,6 +162,14 @@ function boxOf(node: SVGGraphicsElement | null, fallback: Box): Box {
   return fallback;
 }
 
+const placeImage = (image: SVGImageElement, still: MaterialStill) => {
+  image.setAttribute("href", still.href);
+  image.setAttribute("x", f2(still.x));
+  image.setAttribute("y", f2(still.y));
+  image.setAttribute("width", f2(still.size));
+  image.setAttribute("height", f2(still.size));
+};
+
 export interface HeavyDivisionProps {
   art: DivisionArt;
   /** How many experts the run has now; none while the leader still picks its team. */
@@ -141,18 +178,41 @@ export interface HeavyDivisionProps {
   running: boolean;
   /** The run's own id (its message): a division plays once per run. */
   runId: string;
+  /** The run was past its first round when the row first showed (a reload, a row scrolled to): it starts as the pile. */
+  settled?: boolean;
+  /** The experts that failed mid-run, by their place in the pile: their cells are dimmed. */
+  failed?: readonly boolean[];
   size?: number;
 }
 
-export function HeavyDivision({ art, count, running, runId, size = 22 }: HeavyDivisionProps) {
+interface Live {
+  sim: HeavyDivisionSim;
+  running: boolean;
+  /** The body's measured box: the material's stills are painted at the size the cells draw it. */
+  span: number;
+  kick: () => void;
+  /** Paint every cell again (a colour, a still or a failure changed), without starting the division over. */
+  repaint: () => void;
+}
+
+export function HeavyDivision({ art, count, running, runId, settled = false, failed, size = 22 }: HeavyDivisionProps) {
   const uid = `division-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const svg = useRef<SVGSVGElement>(null);
   const goo = useRef<SVGGElement>(null);
   const blur = useRef<SVGFEGaussianBlurElement>(null);
+  const ownLayer = useRef<SVGGElement>(null);
   const cellsLayer = useRef<SVGGElement>(null);
   const measureBody = useRef<SVGUseElement>(null);
   const measureEyes = useRef<SVGUseElement>(null);
-  const live = useRef<{ sim: HeavyDivisionSim; nodes: Map<number, CellNodes>; kick: () => void; running: boolean } | null>(null);
+  const live = useRef<Live | null>(null);
+  // the reduced motion of the device and of the app's switch, followed while the run goes; the mascot's own setting wins
+  const systemReduced = useReducedMotionPreference();
+  const reduced = art.motion === "reduced" || (art.motion === "system" && systemReduced);
+  // what the cells are painted with: read on every draw, so a change repaints them and never restarts the division
+  const failedKey = (failed ?? []).map((value) => (value ? "1" : "0")).join("");
+  const stills = useRef<{ own: MaterialStill | null; experts: Array<MaterialStill | null> } | null>(null);
+  const paint = useRef({ art, failed: failedKey });
+  paint.current = { art, failed: failedKey };
 
   // the bot's body and its eyes, each once in the defs: every cell is a <use> of them
   const defs = useMemo(() => {
@@ -173,26 +233,32 @@ export function HeavyDivision({ art, count, running, runId, size = 22 }: HeavyDi
     );
   }, [art.frame, uid]);
 
+  // the drawing is built once per body (its shape, its own drawing, its depth and mood) and per run; the count, the
+  // run's state, the colours, the stills and reduced motion are followed below without starting it over
   useLayoutEffect(() => {
     const root = svg.current;
     const gooLayer = goo.current;
+    const pictures = ownLayer.current;
     const layer = cellsLayer.current;
-    if (!root || !gooLayer || !layer) return;
-    const reduced = art.motion === "reduced" || (art.motion === "system" && prefersReducedMotion());
-    // a run that is over, one this window already showed, or reduced motion: the finished pile at once
-    const finished = !running || reduced || played.has(runId);
+    if (!root || !gooLayer || !pictures || !layer) return;
+    // a run that is over, one this window already showed, one past its first round, or reduced motion: the finished pile at once
+    const finished = !running || reduced || settled || played.has(runId);
     const sim = new HeavyDivisionSim({ size, reduced, rest: finished ? count : 0 });
     const body = boxOf(measureBody.current, { cx: 50, cy: 50, span: 84 });
     const eyes = boxOf(measureEyes.current, { cx: body.cx, cy: body.cy, span: 1 });
     const scale = size / body.span;
     const ring = f2((2 * RING) / scale);
     const nodes = new Map<number, CellNodes>();
-    const state = { sim, nodes, kick: () => {}, running };
+    const state: Live = { sim, running, span: body.span, kick: () => {}, repaint: () => {} };
     live.current = state;
-    const use = (href: string, parent: Element): SVGUseElement => {
-      const node = document.createElementNS(SVG, "use");
-      node.setAttribute("href", `#${uid}-${href}`);
+    const element = <K extends keyof SVGElementTagNameMap>(name: K, parent: Element): SVGElementTagNameMap[K] => {
+      const node = document.createElementNS(SVG, name) as SVGElementTagNameMap[K];
       parent.append(node);
+      return node;
+    };
+    const use = (href: string, parent: Element): SVGUseElement => {
+      const node = element("use", parent);
+      node.setAttribute("href", `#${uid}-${href}`);
       return node;
     };
     const nodesOf = (cell: DivisionCell): CellNodes => {
@@ -200,21 +266,23 @@ export function HeavyDivision({ art, count, running, runId, size = 22 }: HeavyDi
       if (!made) {
         const group = document.createElementNS(SVG, "g");
         group.setAttribute("data-heavy-cell", "");
-        const solid = document.createElementNS(SVG, "g");
-        group.append(solid);
+        const solid = element("g", group);
         const edge = use("edge", solid);
         edge.setAttribute("fill", "var(--color-app)");
         edge.setAttribute("stroke", "var(--color-app)");
         edge.setAttribute("stroke-width", ring);
         edge.setAttribute("stroke-linejoin", "round");
         const fill = use("body", solid);
+        const shade = use("edge", group);
+        shade.setAttribute("fill", `url(#${uid}-shade)`);
+        shade.setAttribute("data-heavy-shade", "");
         const face = use("eyes", group);
-        const membrane = document.createElementNS(SVG, "g");
+        face.setAttribute("data-heavy-eyes", "");
+        // the membrane: the bot's own silhouette, blurred then cut at a threshold with its sisters
+        const membrane = document.createElementNS(SVG, "use");
+        membrane.setAttribute("href", `#${uid}-body`);
         membrane.setAttribute("data-heavy-membrane", "");
-        gooLayer.append(membrane);
-        const round = document.createElementNS(SVG, "circle");
-        membrane.append(round);
-        made = { body: membrane, shape: use("body", membrane), round, group, solid, fill, eyes: face, expert: -2 };
+        made = { body: membrane, own: null, group, solid, fill, picture: null, shade, eyes: face, expert: -2 };
         nodes.set(cell.id, made);
       }
       return made;
@@ -222,6 +290,7 @@ export function HeavyDivision({ art, count, running, runId, size = 22 }: HeavyDi
     let width = "";
     let order = "";
     let blurred = -1;
+    let painted = "";
     const draw = (seconds: number) => {
       const alive = state.running && !sim.reduced;
       const cells = sim.ordered();
@@ -232,6 +301,7 @@ export function HeavyDivision({ art, count, running, runId, size = 22 }: HeavyDi
         for (const [id, made] of nodes) {
           if (cells.some((cell) => cell.id === id)) continue;
           made.body.remove();
+          made.own?.remove();
           made.group.remove();
           nodes.delete(id);
         }
@@ -239,8 +309,17 @@ export function HeavyDivision({ art, count, running, runId, size = 22 }: HeavyDi
           const made = nodesOf(cell);
           layer.append(made.group);
           gooLayer.append(made.body);
+          if (made.own) pictures.append(made.own);
         }
         root.setAttribute("data-heavy-cells", String(cells.length));
+      }
+      const { art: look, failed: dim } = paint.current;
+      const worn = stills.current;
+      // a colour, a still or a failure changed: every cell is painted again
+      const paintKey = `${look.color}|${look.ink}|${look.shaded}|${dim}|${worn ? worn.experts.length : -1}|${worn?.own ? 1 : 0}`;
+      if (paintKey !== painted) {
+        painted = paintKey;
+        for (const made of nodes.values()) made.expert = -2;
       }
       for (const cell of cells) {
         const made = nodes.get(cell.id)!;
@@ -248,27 +327,61 @@ export function HeavyDivision({ art, count, running, runId, size = 22 }: HeavyDi
         const y = size / 2 + (alive ? Math.sin(seconds * 1.3 + cell.phase) * 0.35 * sim.geometry.unit : 0);
         const k = (scale * r) / sim.geometry.radius;
         const at = `translate(${f2(cell.x)} ${f2(y)}) scale(${Math.round(k * 10000) / 10000}) translate(${f2(-body.cx)} ${f2(-body.cy)})`;
-        made.shape.setAttribute("transform", at);
-        made.body.setAttribute("opacity", f2(1 - cell.tint));
-        // a dividing cell is a round one that keeps the bot's features (its ears, its points): two of them pinch as one membrane
-        made.round.setAttribute("cx", f2(cell.x));
-        made.round.setAttribute("cy", f2(y));
-        made.round.setAttribute("r", f2(r * sim.melt));
-        made.solid.setAttribute("transform", at);
-        made.solid.setAttribute("opacity", f2(cell.tint));
         if (made.expert !== cell.expert) {
           made.expert = cell.expert;
-          const paint = cell.expert >= 0 ? expertPaint(cell.expert) : { color: art.color, ink: art.ink };
-          made.fill.setAttribute("fill", paint.color);
-          made.eyes.style.color = paint.ink;
+          const colours = cell.expert >= 0 ? expertPaint(cell.expert) : { color: look.color, ink: look.ink };
+          made.fill.setAttribute("fill", colours.color);
+          made.eyes.style.color = colours.ink;
           if (cell.expert >= 0) made.group.setAttribute("data-heavy-expert", String(cell.expert + 1));
           else made.group.removeAttribute("data-heavy-expert");
+          const gone = cell.expert >= 0 && dim[cell.expert] === "1";
+          if (gone) made.group.setAttribute("data-heavy-failed", "");
+          else made.group.removeAttribute("data-heavy-failed");
+          made.fill.setAttribute("opacity", gone ? String(FAILED_OPACITY) : "1");
+          // the material's stills: the expert's in its cell, the bot's over its own body while nothing divides
+          const picture = cell.expert >= 0 ? worn?.experts[cell.expert % AGENT_COLORS.length] ?? null : null;
+          if (picture) {
+            made.picture ??= element("image", made.solid);
+            placeImage(made.picture, picture);
+            made.picture.setAttribute("opacity", gone ? String(FAILED_OPACITY) : "1");
+            made.picture.removeAttribute("display");
+            made.fill.setAttribute("display", "none");
+          } else {
+            made.picture?.setAttribute("display", "none");
+            made.fill.removeAttribute("display");
+          }
+          if (worn?.own) {
+            if (!made.own) {
+              made.own = element("image", pictures);
+              made.own.setAttribute("data-heavy-own", "");
+            }
+            placeImage(made.own, worn.own);
+          } else {
+            made.own?.remove();
+            made.own = null;
+          }
         }
-        // the eyes close toward their own middle as they go, and blink now and then while the cell lives
+        const lost = cell.expert >= 0 && dim[cell.expert] === "1" ? FAILED_OPACITY : 1;
+        const pictured = made.picture !== null && made.picture.getAttribute("display") !== "none";
+        // how much of the cell a material still covers: the expert's as it takes its colour, the bot's while nothing divides
+        const own = made.own ? (1 - sim.melt) * (1 - cell.tint) : 0;
+        const cover = Math.min(1, (pictured ? cell.tint : 0) + own);
+        made.body.setAttribute("transform", at);
+        made.body.setAttribute("opacity", f2((1 - cell.tint) * (1 - own)));
+        if (made.own) {
+          made.own.setAttribute("transform", at);
+          made.own.setAttribute("opacity", f2(own));
+        }
+        made.solid.setAttribute("transform", at);
+        made.solid.setAttribute("opacity", f2(cell.tint));
+        // the mock-up's volume on a flat cell that stands for a material: on while the cell has its eyes or its colour
+        made.shade.setAttribute("transform", at);
+        made.shade.setAttribute("opacity", f2(look.shaded ? Math.max(cell.tint, cell.face * 0.9) * (1 - cover) * lost : 0));
+        // the eyes close toward their own middle as they go, and blink now and then while the cell lives; a still has its own
         const blink = alive && Math.sin(seconds * 0.9 + cell.phase * 3) > 0.985 ? 0.15 : 1;
         const open = Math.max(0, cell.face);
         made.eyes.setAttribute("transform", `${at} translate(${f2(eyes.cx)} ${f2(eyes.cy)}) scale(${f2(open)} ${f2(open * blink)}) translate(${f2(-eyes.cx)} ${f2(-eyes.cy)})`);
-        made.eyes.setAttribute("opacity", f2(open));
+        made.eyes.setAttribute("opacity", f2(open * (1 - cover) * lost));
       }
       if (sim.untinted) gooLayer.removeAttribute("display");
       else gooLayer.setAttribute("display", "none");
@@ -327,6 +440,7 @@ export function HeavyDivision({ art, count, running, runId, size = 22 }: HeavyDi
       if (sim.reduced || !sim.busy) draw(performance.now() / 1000);
       kick();
     };
+    state.repaint = () => draw(performance.now() / 1000);
     if (!finished) sim.setCount(count);
     draw(performance.now() / 1000);
     kick();
@@ -347,25 +461,61 @@ export function HeavyDivision({ art, count, running, runId, size = 22 }: HeavyDi
       document.removeEventListener("visibilitychange", seen);
       for (const made of nodes.values()) {
         made.body.remove();
+        made.own?.remove();
         made.group.remove();
       }
       live.current = null;
     };
-    // the count and the run's state are followed below, without starting the drawing over
+    // the count, the run's state and the look's colours are followed below, without starting the drawing over
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [art, runId, size, uid]);
+  }, [art.frame, runId, size, uid]);
 
   useEffect(() => {
     const state = live.current;
     if (!state) return;
     state.running = running;
+    if (state.sim.reduced !== reduced) {
+      state.sim.reduced = reduced;
+      // turned on mid-run: whatever was moving lands where it was going
+      if (reduced) state.sim.advance(0);
+    }
     state.sim.setCount(count);
     state.kick();
-  }, [count, running, runId]);
+  }, [count, running, runId, reduced]);
+
+  useEffect(() => {
+    live.current?.repaint();
+  }, [art.color, art.ink, art.shaded, failedKey]);
+
+  // the material's stills, the bot's and one per expert of the run, painted once per look and kept
+  const material = art.material;
+  const experts = Math.min(count, AGENT_COLORS.length);
+  useEffect(() => {
+    if (!material) {
+      if (stills.current) {
+        stills.current = null;
+        live.current?.repaint();
+      }
+      return;
+    }
+    let alive = true;
+    const px = Math.ceil((100 * size) / (live.current?.span ?? 84));
+    const wanted = [{ color: art.color, ink: art.ink }, ...Array.from({ length: experts }, (_, index) => expertPaint(index))];
+    void Promise.all(wanted.map((colours) => materialStill({ definition: material.definition, material: material.finish, color: colours.color, ink: colours.ink, depth: material.depth, state: material.state, mood: material.mood, px })))
+      .then(([own, ...painted]) => {
+        if (!alive) return;
+        stills.current = { own: own ?? null, experts: painted };
+        live.current?.repaint();
+      });
+    return () => {
+      alive = false;
+    };
+  }, [material, art.color, art.ink, experts, size]);
 
   // the width and the view box follow the cells: the drawing writes them, so the text stays against the pile
   return (
-    <svg ref={svg} data-heavy-division="rest" data-heavy-avatars="" data-shape={art.shape} role="img" aria-label={count > 0 ? t("heavy.avatars", { count }) : undefined} aria-hidden={count > 0 ? undefined : true}
+    <svg ref={svg} data-heavy-division="rest" data-heavy-avatars="" data-shape={art.shape} data-heavy-material={material ? material.finish.id : undefined}
+      role="img" aria-label={count > 0 ? t("heavy.avatars", { count }) : undefined} aria-hidden={count > 0 ? undefined : true}
       className="block shrink-0 overflow-visible" height={size}>
       <defs>
         {/* the membrane: a blur, then a threshold on its alpha, under the cells themselves */}
@@ -374,11 +524,18 @@ export function HeavyDivision({ art, count, running, runId, size = 22 }: HeavyDi
           <feColorMatrix in="b" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -10" result="g" />
           <feMerge><feMergeNode in="g" /><feMergeNode in="SourceGraphic" /></feMerge>
         </filter>
+        {/* the mock-up's volume, for a flat cell that stands for a material */}
+        <radialGradient id={`${uid}-shade`} cx="34%" cy="26%" r="82%">
+          <stop offset="0" stopColor="#fff" stopOpacity="0.5" />
+          <stop offset="0.5" stopColor="#fff" stopOpacity="0.05" />
+          <stop offset="1" stopColor="#000" stopOpacity="0.25" />
+        </radialGradient>
       </defs>
       <defs dangerouslySetInnerHTML={{ __html: defs }} />
       <use ref={measureBody} href={`#${uid}-body`} visibility="hidden" />
       <use ref={measureEyes} href={`#${uid}-eyes`} visibility="hidden" />
       <g ref={goo} fill={art.color} />
+      <g ref={ownLayer} />
       <g ref={cellsLayer} />
     </svg>
   );

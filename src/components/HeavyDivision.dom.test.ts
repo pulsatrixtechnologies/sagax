@@ -11,6 +11,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { setLocale } from "@/lib/i18n";
 import type { Message } from "@/state/store";
 import type { HeavyTeamLine } from "../../shared/heavy-team";
+import { OBJECT_SHAPE_BY_ID } from "../../shared/shape-avatar-presets";
 import { divisionShape, expertPaint } from "./HeavyDivision";
 import { HeavyLeaderContext, HeavyTeamRow } from "./HeavyTeamRow";
 import { bakedStill, loadAllBakedStills } from "./shape-stills";
@@ -109,12 +110,78 @@ describe("the division in the chat's row", () => {
     const own = bakedStill(shape as Parameters<typeof bakedStill>[0])!.paths.map(([, d]) => d);
     expect(drawn.length).toBeGreaterThan(0);
     expect(drawn.every((d) => own.includes(d!))).toBe(true);
-    // and each of the five cells is that one body, drawn again
+    // and each of the five cells is that one body, drawn again: its ring, its body, its volume (off for a flat body) and its eyes
     for (const cell of cells()) {
       const uses = [...cell.querySelectorAll("use")].map((use) => use.getAttribute("href"));
-      expect(uses).toEqual([`#${body.id.replace(/-body$/, "-edge")}`, `#${body.id}`, `#${body.id.replace(/-body$/, "-eyes")}`]);
+      expect(uses).toEqual([`#${body.id.replace(/-body$/, "-edge")}`, `#${body.id}`, `#${body.id.replace(/-body$/, "-edge")}`, `#${body.id.replace(/-body$/, "-eyes")}`]);
+      expect(cell.querySelector("[data-heavy-shade]")!.getAttribute("opacity")).toBe("0");
     }
     expect(cells()).toHaveLength(5);
+  });
+
+  it.each(["cat", "star", "ghost"])("divides as the bot's own silhouette (%s): the membrane is its body, never a disc", async (shape) => {
+    await row(shapeBot(shape), team(0), true, `goo-${shape}`);
+    await row(shapeBot(shape), team(2), true, `goo-${shape}`);
+    const svg = $("[data-heavy-division]")!;
+    const body = svg.querySelector("defs [id$='-body']")!;
+    // half way through the division: the two cells are one membrane, blurred then cut at a threshold
+    pump(1.2);
+    expect(svg.dataset.heavyDivision).toBe("dividing");
+    expect($("[data-heavy-division] > g")!.getAttribute("filter")).toMatch(/goo/);
+    const membranes = [...svg.querySelectorAll("[data-heavy-membrane]")];
+    expect(membranes).toHaveLength(2);
+    for (const membrane of membranes) expect(membrane.getAttribute("href")).toBe(`#${body.id}`);
+    expect(svg.querySelectorAll("circle, ellipse")).toHaveLength(0);
+    pump(30);
+    expect(cells()).toHaveLength(2);
+  });
+
+  it("a bot in a material the page cannot paint divides into flat cells with the mock-up's simple volume", async () => {
+    await row(shapeBot("cat", { material: "fluffy" }), done(3), false, "fluffy");
+    expect(cells()).toHaveLength(3);
+    for (const cell of cells()) expect(Number(cell.querySelector("[data-heavy-shade]")!.getAttribute("opacity"))).toBe(1);
+    expect($("[data-heavy-division] defs radialGradient")).not.toBeNull();
+  });
+
+  it("an expert that fails mid-run stays marked: its cell is dimmed, and its line in the preview says so", async () => {
+    const working = team(3);
+    await row(shapeBot("cat"), team(0), true, "fails");
+    await row(shapeBot("cat"), working, true, "fails");
+    pump(30);
+    const failedLine = team(3, { agents: working.agents.map((agent) => (agent.n === 2 ? { ...agent, status: "failed" as const, messages: ["My plan."] } : agent)) });
+    await row(shapeBot("cat"), failedLine, true, "fails");
+    expect(cells().map((cell) => cell.hasAttribute("data-heavy-failed"))).toEqual([false, true, false]);
+    expect(cells()[1]!.querySelector("use:not([stroke])")!.getAttribute("opacity")).toBe("0.45");
+    expect(cells()[0]!.querySelector("use:not([stroke])")!.getAttribute("opacity")).toBe("1");
+    expect($("[data-heavy-agent='2']")!.textContent).toBe("Expert 2 · Persona 2Did not finish · My plan.");
+    // the division goes on: nothing started over
+    expect(cells()).toHaveLength(3);
+  });
+
+  it("a row that first shows once the experts are past their first round starts as the pile, never replays its division", async () => {
+    const leader = team(4, { phase: "leader", rounds: [{ n: 1, kind: "propose", startedAt: T0, endedAt: T0 + 5_000 }] });
+    await row(shapeBot("cat"), leader, true, "late-leader");
+    expect(cells()).toHaveLength(4);
+    expect($("[data-heavy-division]")!.dataset.heavyDivision).toBe("live");
+    const second = team(4, { rounds: [{ n: 1, kind: "propose", startedAt: T0, endedAt: T0 + 5_000 }, { n: 2, kind: "critique", startedAt: T0 + 5_000 }] });
+    await row(shapeBot("cat"), second, true, "late-round");
+    expect(cells()).toHaveLength(4);
+    expect($("[data-heavy-division]")!.dataset.heavyDivision).toBe("live");
+  });
+
+  it("reduced motion turned on mid-run is followed: the division lands at once", async () => {
+    await row(shapeBot("cat"), team(0), true, "switch");
+    await row(shapeBot("cat"), team(8), true, "switch");
+    pump(1);
+    expect($("[data-heavy-division]")!.dataset.heavyDivision).toBe("dividing");
+    await act(async () => {
+      document.documentElement.dataset.reducedMotion = "true";
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(cells()).toHaveLength(8);
+    expect($("[data-heavy-division]")!.dataset.heavyDivision).toBe("rest");
+    pump(1);
+    expect(frames).toHaveLength(0);
   });
 
   it("the bot's own colour is the cell that divides", async () => {
@@ -132,6 +199,22 @@ describe("the division in the chat's row", () => {
     expect($("[data-heavy-division] > g")!.getAttribute("display")).toBe("none");
     expect($("[data-heavy-division] > g")!.hasAttribute("filter")).toBe(false);
     expect($("[data-heavy-header]")!.textContent).toBe("Thought for 8s");
+  });
+
+  it("a bot whose shape is its own drawing keeps its cells when the row draws again mid-division", async () => {
+    // a fresh copy of the look on every draw, as the chat's bot is parsed again on every patch of the run
+    const own = () => shapeBot("cup", { avatarDef: structuredClone({ ...OBJECT_SHAPE_BY_ID.cup, id: "my-own-mascot" }) });
+    await row(own(), team(0), true, "own");
+    await row(own(), team(8), true, "own");
+    pump(3);
+    const before = cells().length;
+    expect(before).toBeGreaterThan(1);
+    // the row's clock ticks every second and the server patches the run: the same line, drawn again
+    await row(own(), team(8), true, "own");
+    expect(cells()).toHaveLength(before);
+    pump(30);
+    expect(cells()).toHaveLength(8);
+    expect($("[data-heavy-division]")!.dataset.heavyDivision).toBe("live");
   });
 
   it("a division already shown is not played again when its row comes back", async () => {
@@ -186,5 +269,14 @@ describe("the division in the chat's row", () => {
     await row({ color: "blue" } as Bot, team(3), true);
     expect($("[data-heavy-division]")).toBeNull();
     expect(host.querySelectorAll("[data-heavy-avatars] > span")).toHaveLength(3);
+  });
+
+  it("a bot whose mascot is a character shows itself while its leader picks the team, as the orbit's centre did", async () => {
+    await row({ name: "Nimbus", color: "blue" } as Bot, team(0), true, "owl-planning");
+    expect($("[data-heavy-leader-avatar] [data-owl]")).not.toBeNull();
+    expect($("[data-heavy-leader-avatar]")!.nextElementSibling).toBe($("[data-heavy-header]"));
+    await row({ name: "Nimbus", color: "blue" } as Bot, team(3), true, "owl-planning");
+    expect($("[data-heavy-leader-avatar]")).toBeNull();
+    expect(host.querySelectorAll("[data-heavy-owl]")).toHaveLength(3);
   });
 });

@@ -10,11 +10,13 @@ import {
 
 export { heavyIsRunning, heavyThoughtMs };
 
-/** The experts' colours, one each (the palette's vivid colours): eight, the most the row's division draws apart (M-20261126-120). */
-export const AGENT_COLORS = ["blue", "green", "orange", "purple", "pink", "teal", "yellow", "coral"] as const;
+/** The experts' colours, one each: eight, the most the row's division draws apart (M-20261126-120), in the mock-up's order (its seventh is lime). */
+export const AGENT_COLORS = ["blue", "green", "orange", "purple", "pink", "teal", "lime", "coral"] as const;
 
-/** The row's header: the leader picking the team, then "Experts thinking ·
- * round 2 of 5 · 6s" while they work, "Thought for 8s" after. */
+/** The row's header: the leader picking the team, then "Experts proposing ·
+ * round 1 of 5 · 6s" or "Experts critiquing · round 2 of 5 · 9s" while a
+ * round runs (what the orbit's lines said, D-20261126-022), "Thought for 8s"
+ * after. */
 export function heavyHeader(line: HeavyTeamLine, busy: boolean, now: number): string {
   const elapsed = formatElapsed(heavyThoughtMs(line, now, heavyIsRunning(line, busy)));
   const working = line.phase === "planning" || line.phase === "agents";
@@ -22,7 +24,10 @@ export function heavyHeader(line: HeavyTeamLine, busy: boolean, now: number): st
   if (line.phase === "stopped" || (working && !busy)) return t("heavy.stopped", { elapsed });
   if (line.phase === "planning") return t("heavy.planning", { elapsed });
   if (line.phase === "agents") {
-    const round = heavyCurrentRound(line) ?? line.rounds.at(-1);
+    const current = heavyCurrentRound(line);
+    if (current) return t(current.kind === "critique" ? "heavy.runningCritique" : "heavy.runningPropose", { round: current.n, max: line.maxRounds, elapsed });
+    // between two rounds: the one that just ended
+    const round = line.rounds.at(-1);
     return round ? t("heavy.runningRound", { round: round.n, max: line.maxRounds, elapsed }) : t("heavy.running", { elapsed });
   }
   return t("heavy.thought", { elapsed });
@@ -101,6 +106,13 @@ export function agentPreview(agent: HeavyAgentLine): string {
   if (text) return text;
   if (agent.status === "failed" && agent.error) return agent.error;
   return agent.status === "working" ? t("heavy.agent.working") : agent.status === "failed" ? t("heavy.agent.failed") : agent.status === "stopped" ? t("heavy.agent.stopped") : t("heavy.agent.nothing");
+}
+
+/** What an expert that failed mid-run shows in the live preview: that it failed, then the last it wrote (or why). */
+export function failedPreview(agent: HeavyAgentLine): string {
+  const status = agentStatusText(agent);
+  const said = (agent.live ?? agent.messages.at(-1) ?? agent.error ?? "").replace(/\s+/g, " ").trim();
+  return said ? t("heavy.agent.failedPreview", { status, said }) : status;
 }
 
 export function agentStatusText(agent: HeavyAgentLine): string {

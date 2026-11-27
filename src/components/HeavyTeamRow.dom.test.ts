@@ -14,7 +14,7 @@ import type { Message } from "@/state/store";
 import type { HeavyTeamLine } from "../../shared/heavy-team";
 
 vi.mock("./Avatar", () => ({
-  MausAvatar: (props: { color: string; state?: string }) => ({ $$typeof: Symbol.for("react.transitional.element"), type: "span", key: null, ref: null, props: { "data-owl": props.color, "data-owl-state": props.state }, _owner: null, _store: {} }),
+  MausAvatar: (props: { color: string; state?: string; animated?: boolean }) => ({ $$typeof: Symbol.for("react.transitional.element"), type: "span", key: null, ref: null, props: { "data-owl": props.color, "data-owl-state": props.state, "data-owl-animated": String(props.animated) }, _owner: null, _store: {} }),
 }));
 
 const { HeavyTeamRow } = await import("./HeavyTeamRow");
@@ -72,9 +72,29 @@ describe("a Heavy run while the experts work", () => {
     expect($("[data-heavy-avatars]")!.nextElementSibling).toBe($("[data-heavy-header]"));
   });
 
-  it("says Experts thinking with the round and the seconds, and a live preview of the exchange", () => {
+  it("keeps the pile alive while they work, the one speaking at work, as the orbit drew them; still once the run is over", () => {
+    render(createElement(HeavyTeamRow, { message: message(line()), busy: true }));
+    expect($$("[data-owl]").map((owl) => [owl.dataset.owlState, owl.dataset.owlAnimated])).toEqual([["thinking", "true"], ["idle", "true"], ["idle", "true"]]);
+    render(createElement(HeavyTeamRow, { message: message(line({ phase: "done", thoughtEndedAt: T0 + 6_000 })), busy: false }));
+    expect($$("[data-owl]").map((owl) => [owl.dataset.owlState, owl.dataset.owlAnimated])).toEqual([["idle", "false"], ["idle", "false"], ["idle", "false"]]);
+  });
+
+  it("dims an expert that failed mid-run, in the pile and in the preview", () => {
+    const failed = line({ agents: line().agents.map((agent) => (agent.n === 2 ? { ...agent, status: "failed" as const } : agent)) });
+    render(createElement(HeavyTeamRow, { message: message(failed), busy: true }));
+    expect($$("[data-heavy-owl]").map((owl) => owl.hasAttribute("data-heavy-failed"))).toEqual([false, true, false]);
+    expect(($("[data-heavy-owl='2'] > span") as HTMLElement).style.opacity).toBe("0.45");
+    expect($("[data-heavy-agent='2']")!.textContent).toBe("Expert 2 · SecurityDid not finish · The rollback plan is the real risk.");
+  });
+
+  it("while the leader picks the team the row shows the bot itself, as the orbit's centre did", () => {
+    render(createElement(HeavyTeamRow, { message: message(line({ phase: "planning", agents: [], rounds: [] })), busy: true }));
+    expect($("[data-heavy-leader-avatar] [data-owl]")).not.toBeNull();
+  });
+
+  it("says what the experts do in the round, the round and the seconds, and a live preview of the exchange", () => {
     render(createElement(HeavyTeamRow, { message: message(critique()), busy: true }));
-    expect($("[data-heavy-header]")!.textContent).toBe("Experts thinking · round 2 of 5 · 6s");
+    expect($("[data-heavy-header]")!.textContent).toBe("Experts critiquing · round 2 of 5 · 6s");
     expect($$("[data-heavy-agent]").map((row) => row.textContent)).toEqual([
       "Expert 1 · SkepticWeighing the cutover window against the backup",
       "Expert 2 · SecurityThe rollback plan is the real risk.",
@@ -91,7 +111,12 @@ describe("a Heavy run while the experts work", () => {
   it("counts on, a second at a time", () => {
     render(createElement(HeavyTeamRow, { message: message(line()), busy: true }));
     act(() => { vi.advanceTimersByTime(3_000); });
-    expect($("[data-heavy-header]")!.textContent).toBe("Experts thinking · round 1 of 5 · 9s");
+    expect($("[data-heavy-header]")!.textContent).toBe("Experts proposing · round 1 of 5 · 9s");
+  });
+
+  it("between two rounds says they think, with the round that just ended", () => {
+    render(createElement(HeavyTeamRow, { message: message(line({ rounds: [{ n: 1, kind: "propose", startedAt: T0 + 1_000, endedAt: T0 + 5_000 }] })), busy: true }));
+    expect($("[data-heavy-header]")!.textContent).toBe("Experts thinking · round 1 of 5 · 6s");
   });
 
   it("a run nobody patches any more, in a chat that no longer works, reads as stopped", () => {

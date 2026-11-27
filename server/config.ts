@@ -2,6 +2,7 @@
 //   { "xai": {"key":"xai-…"}, "box": {"token":"…"},
 //     "instances": { "<instanceId>": {"driver":"grok", …} } }
 import { DEFAULT_MAX_PARALLEL_PER_PERSON, MAX_PARALLEL_PER_PERSON } from "../shared/parallel-tasks.ts";
+import { MODE_MAX_EXPERTS } from "../shared/mode-models.ts";
 import { readFileSync, mkdirSync, existsSync, renameSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +12,7 @@ import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../shar
 import { stripOpenAiEndpointSuffix } from "../shared/openai-compat-url.ts";
 
 import { writeFileAtomic } from "./atomic.ts";
+import { ensureOwnerOnlyAcl } from "./owner-only-acl.ts";
 import { settledFileCache, settledFileStamp } from "./settled-file.ts";
 import { applyStoredEngineEnv } from "./engines/engine-api-keys.ts";
 import { migrateConfigPlaintextKeys, readOnboardingEngineKey } from "./engines/onboarding-engine-key.ts";
@@ -529,6 +531,11 @@ const appConfigSchema = z.object({
     /** 2026-10-08, the console's Settings: the engine instances bots may be
      * switched to from the console. Absent means every engine. */
     allowedEngines: z.array(z.string().max(80)).max(100).optional(),
+    /** 2026-11-25: catalog engines the organization hid from its list and
+     * from everyone's model menus (Perspicax, Model providers), for new
+     * choices only: a bot already on one keeps it (D-20261126-018).
+     * `allowedEngines` is not changed. */
+    hiddenEngines: z.array(z.string().max(80)).max(100).optional(),
     /** 2026-10-30: a member may run an engine outside `allowedEngines` on
      * their own subscription or key (the #1098 exception, now the admin's
      * choice). Absent or false: an engine off the list is off for everyone,
@@ -671,7 +678,7 @@ const appConfigSchema = z.object({
   modeModels: z.object({
     fast: z.object({ instanceId: z.string().min(1).max(200), model: z.string().min(1).max(200), effort: z.enum(["none", "low", "medium", "high", "xhigh", "max", "ultracode"]).optional() }).optional(),
     expert: z.object({ instanceId: z.string().min(1).max(200), model: z.string().min(1).max(200), effort: z.enum(["none", "low", "medium", "high", "xhigh", "max", "ultracode"]).optional() }).optional(),
-    heavy: z.array(z.object({ instanceId: z.string().min(1).max(200), model: z.string().min(1).max(200) })).max(5).optional(),
+    heavy: z.array(z.object({ instanceId: z.string().min(1).max(200), model: z.string().min(1).max(200) })).max(MODE_MAX_EXPERTS).optional(),
   }).optional(),
   /** Historical config section name "box" (the persisted config.json key); the
    * provider is Boat now and the key is kept for compatibility. */
@@ -870,6 +877,8 @@ export interface AppConfig extends HelperConfig {
     pluginMarketplaces?: { mode: "any" } | { mode: "list"; allow: string[] };
     githubClientId?: string;
     allowedEngines?: string[];
+    /** 2026-11-25: catalog engines hidden from the organization. */
+    hiddenEngines?: string[];
     /** 2026-10-30: own subscriptions and keys run engines outside the list. */
     ownAccountsOutsideList?: boolean;
     /** #5180: personal API keys. Absent means on. */
@@ -1475,7 +1484,12 @@ export function ensureDirs() {
       /* cross-device or busy — fall through to a fresh dir */
     }
   }
-  for (const dir of [DATA_DIR, EVENTS_DIR, NATIVE_DIR]) mkdirSync(dir, { recursive: true });
+  for (const dir of [DATA_DIR, EVENTS_DIR, NATIVE_DIR]) {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    // #5258: on Windows, mode bits are meaningless; lock each data folder to
+    // the owner, SYSTEM and Administrators with inheritance from the parent off.
+    ensureOwnerOnlyAcl(dir, { directory: true });
+  }
   migrateLegacyFeatureFlags();
   migrateLegacyNewBotEffort();
   migrateGrokVoiceKey();

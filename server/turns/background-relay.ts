@@ -54,6 +54,9 @@ export function relayViaOf<B extends RelayBot>(deps: Pick<BackgroundRelayDeps<B>
   if (!task || task.confidential || task.parallelOf) return undefined;
   const origin = backgroundOrigin({ ...task, personWrote: task.askedAt !== undefined && task.openedBy?.kind !== "agent" ? true : undefined });
   if (!origin) return undefined;
+  // #5100: a bot's hidden investigation stays in its task; only its card
+  // reaches the chat, never a relayed copy of its turns.
+  if (origin === "bot-hidden") return undefined;
   if (origin === "routine-run" || origin === "routine-results") {
     const run = deps.run(threadId);
     return run?.proactive || run?.webhookId ? "proactive" : "routine";

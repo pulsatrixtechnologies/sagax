@@ -1,20 +1,24 @@
-// The composer's mode menu (#4900, #5088; owner 2026-11-23, M-20261123-040,
-// M-20261123-045): the rows of shared/mode-menu.ts, the same in the Perspicax
-// console, at the top of the one model menu (ModelPanel.tsx): Auto, Fast,
-// Expert, Heavy (Build left the desktop's menu on 2026-11-25, M-20261125-073),
-// the person's favorite models under "Favorites" (M-20261125-074), a hairline, Reasoning (the level in use, opening the
+// The composer's mode menu (#4900, #5088; owner 2026-11-26, M-20261126-104,
+// M-20261126-103): 280 px wide, at the top of the one model menu
+// (ModelPanel.tsx): Auto, Fast, Expert, Heavy, then Custom (the model the
+// person picks by hand: its row names it, whole, and opens the model list
+// beside the menu), a hairline, then Effort (the level in use, opening the
 // levels of the model in use; greyed with the imposed level under a mode that
-// sets its own), a hairline, All models (opening provider, account, model).
+// sets its own; no level beside it under Auto until the person clicks one,
+// D-20261126-017). No "All models" row and no footer: Manage models sits at
+// the foot of the list Custom opens. The mockup gives "about 240 px"; the menu
+// is 280 px so a model's name reads whole beside "Custom" (an agent's choice).
 // A hovered or focused mode opens a small tooltip beside the menu: what the
 // mode does, then which model backs it ("Quick responses · Grok 4.7"). The
 // models are not the person's to pick here: Sagax maps each mode to the best
-// ones they can use (server/models/model-mode.ts). A model the person pinned in
-// All models checks that row, which names it. Reasoning and All models open
+// ones they can use (server/models/model-mode.ts). Custom and Effort open
 // their level beside the menu (#5338, D-20261125-012), on a click, a rest of
 // the pointer or the right arrow; the row says so while its level is open.
-import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+// The modes and their order are shared/mode-menu.ts (the same as the Perspicax
+// console's); the Custom and Effort rows are the desktop's own.
+import { useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { Brain, Check, ChevronRight, Layers, Sparkles, Zap, type LucideIcon } from "lucide-react";
+import { Brain, Check, ChevronRight, Gauge, Layers, SlidersHorizontal, Sparkles, Zap, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -26,8 +30,8 @@ import { POPOVER_LAYER } from "./AnchoredPopover";
 
 const TIP_GAP = 6;
 const TIP_WIDTH = 340;
-// the panel's own row slots (ModelPanel.tsx ROW_SIDE_SLOT, ROW_ICON_SLOT), kept in step by its test
-const SIDE_SLOT = "flex w-5 shrink-0 items-center justify-center";
+// the panel's own icon slot (ModelPanel.tsx ROW_ICON_SLOT), kept in step by its test: the row's one icon
+// (the check of the mode in use, the chevron of Custom and Effort) falls on the same centre on every row
 const ICON_SLOT = "flex size-7 shrink-0 items-center justify-center";
 
 /** A focus the keyboard made (the tooltip follows it). One a click made, or the menu's own
@@ -37,6 +41,30 @@ function keyboardFocus(element: HTMLElement): boolean {
 }
 
 export const MODE_GLYPHS: Record<ModelMode, LucideIcon> = { auto: Sparkles, fast: Zap, expert: Brain, heavy: Layers };
+/** Custom's icon (an agent's choice, the mockup's sliders) and Effort's. */
+export const CUSTOM_GLYPH: LucideIcon = SlidersHorizontal;
+export const EFFORT_GLYPH: LucideIcon = Gauge;
+/** The menu's width (M-20261126-104: about 240 px; 280 so Custom's row names its model whole). */
+export const MODE_MENU_WIDTH = 280;
+/** The hairline between the groups of the menu and of its levels. */
+export const MENU_SEPARATOR = "mx-2 my-1 border-t border-popover-hairline";
+/** A name longer than this may be cut in the middle (its start and its end stay). */
+const MIDDLE_CUT_FROM = 14;
+const MIDDLE_CUT_TAIL = 7;
+
+/** A name that never loses its end: whole while it fits, else cut in the
+ * middle ("Claude Sonnet 5 (1M co…ontext)"), the whole name in the row's
+ * tooltip. The text read by a screen reader or a test is the whole name. */
+export function MiddleCut({ text, className, ...rest }: { text: string; className?: string } & Record<`data-${string}`, string>) {
+  const cut = text.length > MIDDLE_CUT_FROM ? text.length - MIDDLE_CUT_TAIL : text.length;
+  return (
+    <span {...rest} className={cn("flex min-w-0 justify-end whitespace-pre", className)}>
+      {/* whitespace-pre on both halves: the space at the cut is drawn */}
+      <span className="min-w-0 overflow-hidden text-ellipsis">{text.slice(0, cut)}</span>
+      {cut < text.length && <span className="shrink-0">{text.slice(cut)}</span>}
+    </span>
+  );
+}
 
 export interface ModeMenuProps {
   /** The mode in use; null while a model the person pinned in All models runs. */
@@ -45,22 +73,22 @@ export interface ModeMenuProps {
   resolutions?: Record<ModelMode, ModeResolution>;
   disabled?: boolean;
   onPick: (mode: ModelMode) => void;
-  /** Reasoning: the row's state (shared/mode-menu.ts reasoningRow), how a
+  /** Effort: the row's state (shared/mode-menu.ts reasoningRow), how a
    * level reads, and what opens its levels. Absent: no row. `open`: its
    * levels are on screen beside the menu; `onRest`: the pointer came on the row. */
-  reasoning?: { row: ReasoningRow; label: (level: string | undefined) => string; onOpen: () => void; open?: boolean; onRest?: (event: PointerEvent) => void };
-  /** All models: opens the cascade. `label` is the pinned model while it runs. */
-  allModels?: { label?: string; onOpen: () => void; open?: boolean; onRest?: (event: PointerEvent) => void };
+  effort?: { row: ReasoningRow; label: (level: string | undefined) => string; onOpen: () => void; open?: boolean; onRest?: (event: PointerEvent) => void };
+  /** Custom: opens the model list. `label` is the model picked by hand (the
+   * one a turn off the modes runs), `title` its whole name (provider,
+   * account); `open`: the list is on screen. */
+  custom?: { label?: string; title?: string; onOpen: () => void; open?: boolean; onRest?: (event: PointerEvent) => void };
   /** The pointer came on a mode: what is open beside the menu closes. */
   onModeRest?: (event: PointerEvent) => void;
-  /** M-20261125-074: the person's favorite models, drawn by the panel, under
-   * the modes and before Reasoning, after a hairline. Absent: nothing. */
-  favorites?: ReactNode;
 }
 
-export function ModeMenu({ current, resolutions, disabled = false, onPick, reasoning, allModels, onModeRest, favorites }: ModeMenuProps) {
+export function ModeMenu({ current, resolutions, disabled = false, onPick, effort, custom, onModeRest }: ModeMenuProps) {
   const modes = offeredModes(resolutions);
-  const rows = menuRows({ offered: modes, reasoning: Boolean(reasoning?.row.shown), all: Boolean(allModels) });
+  // the modes and their order are the shared definition's; Custom and Effort follow them here
+  const rows = menuRows({ offered: modes, reasoning: false, all: false });
   const [tipFor, setTipFor] = useState<ModelMode | null>(null);
   const [tipAt, setTipAt] = useState<{ side: "right" | "left"; x: number; top: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -95,88 +123,82 @@ export function ModeMenu({ current, resolutions, disabled = false, onPick, reaso
       <Glyph size={15} strokeWidth={1.75} />
     </span>
   );
-  const separator = (key: string) => <div key={key} role="separator" data-mode-separator="" className="mx-2 my-1 border-t border-popover-hairline" />;
   const pinned = current === null;
+  // the value at a row's right takes all the room its name leaves
+  const value = "min-w-0 flex-1 text-right text-[12px] text-popover-ink-secondary";
   return (
     <div ref={rootRef} data-mode-menu="" className="contents">
-      {rows.map((row, index) => {
-        if (row.kind === "separator") return separator(`separator-${index}`);
-        if (row.kind === "reasoning" && reasoning) {
-          const { row: state } = reasoning;
-          return (
-            <div key="reasoning" className={cn(rowShape, reasoning.open && "bg-popover-hover")}>
-              <button type="button" aria-haspopup="menu" aria-expanded={Boolean(reasoning.open)} disabled={disabled || state.disabled}
-                data-mode-row="reasoning" data-model-panel-row="mode:reasoning" data-mode-reasoning-imposed={state.disabled ? "" : undefined}
-                title={state.disabled ? t("model.mode.reasoning.imposed") : undefined}
-                tabIndex={-1}
-                onMouseDown={(event) => event.preventDefault()}
-                onPointerEnter={reasoning.onRest}
-                onKeyDown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); reasoning.onOpen(); } }}
-                onClick={() => reasoning.onOpen()}
-                className={buttonShape}>
-                <span className="min-w-0 flex-1 truncate">{t("model.reasoning")}</span>
-                <span data-mode-reasoning-value="" className="max-w-[55%] shrink-0 truncate pl-1 text-right text-[12px] text-popover-ink-secondary">{reasoning.label(state.value)}</span>
-                <span aria-hidden="true" className={SIDE_SLOT} />
-                <span aria-hidden="true" className={ICON_SLOT}><ChevronRight size={14} className="text-popover-ink-secondary" /></span>
-              </button>
-            </div>
-          );
-        }
-        if (row.kind === "all" && allModels) {
-          return (
-            <div key="all" className={cn(rowShape, allModels.open && "bg-popover-hover")}>
-              <button type="button" role="radio" aria-checked={pinned} aria-haspopup="menu" aria-expanded={Boolean(allModels.open)} disabled={disabled}
-                data-mode-row="all" data-model-panel-row="mode:all" data-mode-current={pinned ? "" : undefined}
-                aria-label={pinned && allModels.label ? `${t("model.auto.rail")}. ${allModels.label}` : t("model.auto.rail")}
-                tabIndex={pinned ? 0 : -1}
-                onMouseDown={(event) => event.preventDefault()}
-                onPointerEnter={allModels.onRest}
-                onKeyDown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); allModels.onOpen(); } }}
-                onClick={() => allModels.onOpen()}
-                className={buttonShape}>
-                <span className="min-w-0 flex-1 truncate">{t("model.auto.rail")}</span>
-                {pinned && allModels.label && (
-                  <span data-mode-pinned-model="" className="max-w-[55%] shrink-0 truncate pl-1 text-right text-[12px] text-popover-ink-secondary">{allModels.label}</span>
-                )}
-                <span aria-hidden="true" className={SIDE_SLOT}>{pinned && <Check size={14} className="text-popover-accent" />}</span>
-                <span aria-hidden="true" className={ICON_SLOT}><ChevronRight size={14} className="text-popover-ink-secondary" /></span>
-              </button>
-            </div>
-          );
-        }
+      {rows.map((row) => {
         // the shared rows may name a mode Sagax retired (Build, D-20261126-005): never drawn
         if (row.kind !== "mode" || !isModelMode(row.id)) return null;
         const mode = row.id;
-        const Glyph = MODE_GLYPHS[mode];
         const on = current === mode;
-        const lastMode = rows[index + 1]?.kind !== "mode";
         return (
-          <Fragment key={mode}>
-          <div>
-            <div className={rowShape}>
-              <button type="button" role="radio" aria-checked={on} disabled={disabled}
-                data-mode-row={mode} data-model-panel-row={`mode:${mode}`} data-mode-current={on ? "" : undefined}
-                aria-describedby={tipFor === mode ? tipId : undefined}
-                aria-label={`${modeName(mode)}. ${modeTooltip(mode, resolutions?.[mode])}`}
-                tabIndex={on || (current === null && !allModels && mode === modes[0]) ? 0 : -1}
-                onMouseDown={(event) => event.preventDefault()}
-                onPointerEnter={(event) => { setTipFor(mode); onModeRest?.(event); }}
-                onPointerLeave={() => setTipFor((open) => (open === mode ? null : open))}
-                onFocus={(event) => { if (keyboardFocus(event.currentTarget)) setTipFor(mode); }}
-                onBlur={() => setTipFor((open) => (open === mode ? null : open))}
-                onClick={() => onPick(mode)}
-                className={buttonShape}>
-                {glyph(Glyph, on)}
-                <span className="min-w-0 flex-1 truncate">{modeName(mode)}</span>
-                <span aria-hidden="true" className={SIDE_SLOT} />
-                <span aria-hidden="true" className={ICON_SLOT}>{on && <Check size={14} className="text-popover-accent" />}</span>
-              </button>
-            </div>
+          <div key={mode} className={rowShape}>
+            <button type="button" role="radio" aria-checked={on} disabled={disabled}
+              data-mode-row={mode} data-model-panel-row={`mode:${mode}`} data-mode-current={on ? "" : undefined}
+              aria-describedby={tipFor === mode ? tipId : undefined}
+              aria-label={`${modeName(mode)}. ${modeTooltip(mode, resolutions?.[mode])}`}
+              tabIndex={on || (current === null && !custom && mode === modes[0]) ? 0 : -1}
+              onMouseDown={(event) => event.preventDefault()}
+              onPointerEnter={(event) => { setTipFor(mode); onModeRest?.(event); }}
+              onPointerLeave={() => setTipFor((open) => (open === mode ? null : open))}
+              onFocus={(event) => { if (keyboardFocus(event.currentTarget)) setTipFor(mode); }}
+              onBlur={() => setTipFor((open) => (open === mode ? null : open))}
+              onClick={() => onPick(mode)}
+              className={buttonShape}>
+              {glyph(MODE_GLYPHS[mode], on)}
+              <span className="min-w-0 flex-1 truncate">{modeName(mode)}</span>
+              <span aria-hidden="true" className={ICON_SLOT}>{on && <Check size={14} className="text-popover-accent" />}</span>
+            </button>
           </div>
-          {lastMode && favorites ? <>{separator("separator-favorites")}{favorites}</> : null}
-          </Fragment>
         );
       })}
+      {custom && (
+        // the row keeps the hook `all` (the cascade it opens was "All models"; the e2e suites read it)
+        <div className={cn(rowShape, custom.open && "bg-popover-hover")}>
+          <button type="button" role="radio" aria-checked={pinned} aria-haspopup="menu" aria-expanded={Boolean(custom.open)} disabled={disabled}
+            data-mode-row="all" data-model-panel-row="mode:all" data-mode-current={pinned ? "" : undefined}
+            aria-label={custom.label ? `${t("model.mode.custom.name")}. ${custom.label}` : t("model.mode.custom.name")}
+            title={custom.title ?? custom.label ?? undefined}
+            tabIndex={pinned ? 0 : -1}
+            onMouseDown={(event) => event.preventDefault()}
+            onPointerEnter={custom.onRest}
+            onKeyDown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); custom.onOpen(); } }}
+            onClick={() => custom.onOpen()}
+            className={buttonShape}>
+            {glyph(CUSTOM_GLYPH, pinned)}
+            <span className="shrink-0">{t("model.mode.custom.name")}</span>
+            {/* the model's name keeps every pixel "Custom" leaves; the check and the chevron follow it, never over it */}
+            {custom.label ? <MiddleCut data-mode-pinned-model="" text={custom.label} className={value} /> : <span className="min-w-0 flex-1" />}
+            {pinned && <Check size={14} aria-hidden="true" data-mode-custom-check="" className="shrink-0 text-popover-accent" />}
+            <span aria-hidden="true" className={ICON_SLOT}><ChevronRight size={14} className="text-popover-ink-secondary" /></span>
+          </button>
+        </div>
+      )}
+      {effort?.row.shown && (
+        <>
+          <div role="separator" data-mode-separator="" className={MENU_SEPARATOR} />
+          {/* the row keeps the hook `reasoning` (its state is shared/mode-menu.ts reasoningRow) */}
+          <div className={cn(rowShape, effort.open && "bg-popover-hover")}>
+            <button type="button" aria-haspopup="menu" aria-expanded={Boolean(effort.open)} disabled={effort.row.disabled}
+              data-mode-row="reasoning" data-model-panel-row="mode:reasoning" data-mode-reasoning-imposed={effort.row.disabled ? "" : undefined}
+              title={effort.row.disabled ? t("model.mode.effort.imposed") : undefined}
+              tabIndex={-1}
+              onMouseDown={(event) => event.preventDefault()}
+              onPointerEnter={effort.onRest}
+              onKeyDown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); event.stopPropagation(); effort.onOpen(); } }}
+              onClick={() => effort.onOpen()}
+              className={buttonShape}>
+              {glyph(EFFORT_GLYPH, false)}
+              <span className="shrink-0">{t("model.effort")}</span>
+              {/* D-20261126-017: no level beside Effort while Auto decides (the label is empty) */}
+              {effort.label(effort.row.value) ? <span data-mode-reasoning-value="" className={cn(value, "truncate")}>{effort.label(effort.row.value)}</span> : <span className="min-w-0 flex-1" />}
+              <span aria-hidden="true" className={ICON_SLOT}><ChevronRight size={14} className="text-popover-ink-secondary" /></span>
+            </button>
+          </div>
+        </>
+      )}
       {tipFor && tipAt && typeof document !== "undefined" && createPortal(
         <div id={tipId} role="tooltip" data-mode-tooltip={tipFor}
           style={{ ...(tipAt.side === "right" ? { left: tipAt.x } : { right: tipAt.x }), top: tipAt.top, maxWidth: TIP_WIDTH }}

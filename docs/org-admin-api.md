@@ -961,6 +961,90 @@ Answers `{ok, latencyMs, reason, label}`, for example
 
 Each test has 10 s. Audited `connections.test`.
 
+## Engines (2026-11-25, #5351)
+
+The organization-wide engines the console adds to and removes from. Never
+a person's own account or server.
+
+| Method and path | Role | What |
+|---|---|---|
+| `GET engines` | admin | the organization's engines, each saying what it is |
+| `POST engines/{id}/remove` | admin | remove an added account |
+| `POST engines/{id}/key` | admin | set the organization's key of a key engine, `{ "key" }` |
+| `POST engines/{id}/key/remove` | admin | clear that key |
+| `POST engines/{id}/hide` | admin | hide a catalog engine from the organization |
+| `POST engines/{id}/restore` | admin | put a hidden engine back |
+
+### `GET engines`
+
+`{ "engines": [{ "id", "name", "kind", "installed", "auth", "orgKey", "source", "removable", "takesKey", "hidden", "hideable" }] }`
+
+- `source`: `catalog` is an engine this server always carries (the
+  subscription engines and the key engines); `added` is an account added
+  beside a provider's first one (`claude-<uuid>`, `chatgpt-<uuid>`,
+  `antigravity-<uuid>`, a named Claude account).
+- `removable`: `POST engines/{id}/remove` takes it (an added account).
+- `takesKey`: the engine has one place for the organization's key in the
+  server's configuration. `orgKey` says a key serves it, never the key.
+- `hideable`: `POST engines/{id}/hide` takes it (a catalog engine).
+  `hidden`: the organization hid it. A hidden engine is still listed here,
+  so the console can offer it back.
+- The ids are those of `GET capabilities` `engines`, less the voice and
+  image rows.
+- A workspace whose provider settings are managed for it refuses removals
+  and keys (below): its rows say `removable: false` and `takesKey: false`,
+  so the console offers neither.
+
+An engine that is not here (an unknown id, or an account another admin
+already removed) answers `404 engine_not_found` on every write below, never
+the generic `not_found`, which a console reads as a route this server does
+not have yet.
+
+### `POST engines/{id}/remove`
+
+Removes an added account as `DELETE /api/instances/:id` does: its bots move
+first. Answers `{ "ok": true, "moved"?, "noEngine"?, "engines" }`. A catalog
+engine is `400 catalog_engine` (it is hidden instead). Audited
+`engines.remove`.
+
+### `POST engines/{id}/key`, `POST engines/{id}/key/remove`
+
+The key is one line, 8 to 400 characters. Saved where the Settings screen
+saves it, then the providers reload. Answers `{ "configured", "engines" }`;
+the key is never answered, logged or written in the audit row. An engine
+with no organization key is `400 engine_takes_no_key`; a key of another
+shape is `400 bad_request`. Audited
+`engines.key.set` and `engines.key.remove`.
+
+A workspace whose provider settings are managed for it answers
+`403 forbidden` to these three writes. `409 conflict`: the provider
+settings are already being updated; try again.
+
+### `POST engines/{id}/hide`, `POST engines/{id}/restore` (2026-11-25)
+
+A catalog engine is never deleted: hiding it takes it out of the
+organization's list and out of everyone's model menus, and restoring it puts
+it back as it was. Stored as `organization.hiddenEngines`; `allowedEngines`
+and `disabledModels` are not changed, so what was allowed and the models
+that were on come back with it.
+
+Hidden is for new choices only (D-20261126-018). The app reads the list in
+its config (`hiddenEngines`) and leaves the engine out of every menu, New
+bot, backups and Settings; a model on it is refused when picked by name for
+a bot or conversation that is not on it; a new bot, a copy of a bot and a
+bot moved off `allowedEngines` never start on it; Auto, `run_with_engine`, a
+limit failover and a startup recovery never pick it for a bot whose own
+engine it is not (a backup on it is skipped for the next one). A bot or
+conversation already on it keeps its engine and model, runs its turns there
+and still shows it as its model in use in its own menu; a conversation of
+that bot that went to a backup can go back to it. Neither `hide` nor
+`restore` moves a bot: nothing to count, nothing to put back.
+
+Answers `{ "ok": true, "hidden", "engines" }`; hiding a hidden engine or
+restoring a shown one changes nothing. An added account is
+`400 added_engine` (it is removed instead). Audited `engines.hide` and
+`engines.restore`.
+
 ## Usage and cost
 
 `GET usage` (above) carries the settled `engine`, `model` and
@@ -1359,8 +1443,11 @@ Content-Type: application/json
   xAI key in Perspicax (`perspicax-key`), then the organization's Grok
   account (`org-account`, #5200) and the organization's xAI key (`org-key`)
   when they were given to them. `auth` says how a credential is presented to
-  xAI: `grok-account` (the CLI voice host and its token header, for the
-  person's account and the organization's) or `api-key` (`api.x.ai`).
+  xAI: `grok-account` (the session token on `api.x.ai` with the Grok CLI
+  token header `X-XAI-Token-Auth: xai-grok-cli`, for the person's account and
+  the organization's: the root the official Grok client sends its own voice
+  to; the chat proxy serves no voice route) or `api-key` (`api.x.ai`, Bearer
+  only).
 - No key serves that person: `200` with an empty `voice_keys` and `cause`, the
   app's own refusal cause (`no_credentials`, `server_engine_not_allowed`,
   `payer_disabled`, `perspicax_unreachable`).

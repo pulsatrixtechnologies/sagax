@@ -73,8 +73,8 @@
 //   - 200 `{provider: "xai", voice_keys: [{source, auth, key}]}`, in the
 //     order to try them: `source` as the app names it (`grok-account`,
 //     `voice-key`, `perspicax-key`, `org-account`, `org-key`, `server`),
-//     `auth` how it is presented to xAI (`grok-account`: the CLI voice host
-//     and its token header, for the person's account and the
+//     `auth` how it is presented to xAI (`grok-account`: the xAI API root
+//     and its CLI token header, for the person's account and the
 //     organization's; `api-key`: api.x.ai);
 //   - no key serves that person: 200 with an empty `voice_keys` and `cause`,
 //     the app's own refusal cause (`no_credentials`,

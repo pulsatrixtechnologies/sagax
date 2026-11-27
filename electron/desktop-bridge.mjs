@@ -108,7 +108,9 @@ const failure = message => ({ ...text(message), isError: true });
  * #3565: on macOS each bot command runs under sandbox-exec, which denies the
  * app's own data folders (the local server's bots, their memory, the
  * provider keys), whatever the command spells; the text check below refuses
- * them when the command names them. */
+ * them when the command names them. #5375: a command that sends Apple Events
+ * (osascript and friends) skips that profile so Sagax's Automation grant in
+ * System Settings covers it; app data stays refused by the text check. */
 const TMP_SCOPE = /^[a-f0-9]{16}$/;
 const TMP_SCOPED_ACTIONS = new Set(["run_command", "read_file", "write_file", "list_files", "search_files", "vm_run_command"]);
 const BOT_TMP_FOLDER = "sagax-bots";
@@ -186,12 +188,20 @@ export async function botTmpDir(root, scope, { key = BOT_TMP_KEY } = {}) {
 
 const sbplString = value => `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 
+/** #5375: a command that talks to another Mac app through Apple Events. */
+export function commandNeedsAppleEvents(command) {
+  return typeof command === "string" && /\b(osascript|osacompile)\b/i.test(command);
+}
+
 /** macOS: the command under sandbox-exec, every path of the app's own data
- * folders (`hidden`) denied. */
+ * folders (`hidden`) denied. process-info and sysctl stay allowed so `ps`
+ * and friends work under the same profile (#5375). */
 export function sandboxedCommandArgv(command, { hidden = [], shell, sandboxExec = SANDBOX_EXEC }) {
   const profile = [
     "(version 1)",
     "(allow default)",
+    "(allow process-info*)",
+    "(allow sysctl-read)",
     ...hidden.map(dir => `(deny file-read* file-write* (subpath ${sbplString(dir)}))`),
   ].join("");
   return [sandboxExec, "-p", profile, shell, "-lc", command];
@@ -394,6 +404,22 @@ export function bridgeOperationError(error) {
   return { ...text(String(error?.message || "Computer action failed")), isError: true };
 }
 
+/** #5375: when Apple Events or process listing still fail, name the System
+ * Settings pane instead of a bare -10004 / "operation not permitted". */
+export function annotateAppleEventsFailure(result) {
+  if (!result?.isError) return result;
+  const body = Array.isArray(result.content)
+    ? result.content.map((part) => (typeof part?.text === "string" ? part.text : "")).join("\n")
+    : "";
+  const appleEvents = /-10004|privilege violation/i.test(body);
+  const processList = /operation not permitted:\s*ps\b/i.test(body);
+  if (!appleEvents && !processList) return result;
+  const hint = appleEvents
+    ? "Apple Events were refused (-10004). In System Settings > Privacy & Security > Automation, enable Sagax for the target app (and for System Events when the script uses it), then try again."
+    : "Listing processes was refused. In System Settings > Privacy & Security, grant Sagax Full Disk Access (or Automation for the tool that needs it), then try again.";
+  return { ...result, content: [...(result.content ?? []), { type: "text", text: hint }] };
+}
+
 const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** The app's own data folder a command line names, or null (#2773). In solo
@@ -444,12 +470,14 @@ export async function executeBridgeOperation(operation, deps, signal) {
       if (operation.cwd) await assertOutsideProtected(protectedRoots, cwd);
       const env = { ...commandEnvironment(), ...operation.env, ...(ownTmp ? { TMPDIR: ownTmp, TMP: ownTmp, TEMP: ownTmp } : {}) };
       // macOS: the operating system itself keeps the bot out of the app's own
-      // data (#3565).
-      const argv = ownTmp
+      // data (#3565). #5375: Apple Events skip sandbox-exec so Sagax's
+      // Automation grant applies; the text check above still refuses app data.
+      const appleEvents = commandNeedsAppleEvents(operation.command);
+      const argv = ownTmp && !appleEvents
         ? await confinedCommandArgv(operation.command, { platform, appDataPaths: deps.appDataPaths, sandboxExec: deps.sandboxExec === undefined ? SANDBOX_EXEC : deps.sandboxExec })
         : undefined;
       if (argv && !operation.command.trim()) throw new Error("Give a command");
-      return runCommand(operation.command, { cwd, timeoutSeconds: operation.timeout_seconds ?? 120, signal, env, ...(argv ? { argv } : {}) });
+      return runCommand(operation.command, { cwd, timeoutSeconds: operation.timeout_seconds ?? 120, signal, env, ...(argv ? { argv } : {}) }).then(annotateAppleEventsFailure);
     }
     case "read_file": {
       const target = localPath(operation.path, home);

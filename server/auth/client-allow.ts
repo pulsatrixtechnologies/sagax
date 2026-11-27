@@ -165,6 +165,8 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   // reads: fleet, transcripts, search (no secrets in any of these)
   { methods: ["GET"], path: /^\/api\/bots$/ },
   { methods: ["GET"], path: /^\/api\/team-map$/ },
+  // Team board (#3409): the person's own kanban of their coding teams
+  { methods: ["GET"], path: /^\/api\/team-board$/ },
   // The engines catalogue the model picker and the chat header read. A
   // non-admin session gets clientInstanceView(): engine names, models,
   // capabilities and availability, never the host's CLI paths, install
@@ -593,6 +595,9 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   // same rights as changing a routine of that bot, so a member arranges
   // their own bot's folders without an admin (2026-10-28)
   { methods: ["POST"], path: /^\/api\/routines\/folders$/ },
+  // Routine outcomes (#4098): group routines under a named result; the
+  // handler applies the same right as changing the bot's routines
+  { methods: ["POST"], path: /^\/api\/routines\/outcomes$/ },
   // Several routines of one bot on, off or deleted at once (server/routine-bulk.ts,
   // 2026-10-29): each one with the same rights as its own PATCH or DELETE
   { methods: ["POST"], path: /^\/api\/routines\/bulk$/ },

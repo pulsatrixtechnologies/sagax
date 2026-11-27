@@ -281,7 +281,7 @@ describe("organization admin usage (slice 7)", () => {
     const all = aggregateOrgUsage(rows, () => true).rows;
     // every key the Perspicax console reads is still there (sagax-usage.tsx)
     const totals = Object.fromEntries(Object.keys(all[0]!.access).map((via) => [via, all.reduce((n, r) => n + r.access[via as keyof typeof r.access], 0)]));
-    expect(totals).toEqual({ subscription: 1, "owner-key": 0, "speaker-key": 1, "org-key": 1, server: 0, unknown: 1 });
+    expect(totals).toEqual({ subscription: 1, "owner-key": 0, "speaker-key": 1, "org-key": 1, "org-account": 0, server: 0, unknown: 1 });
     expect(all.map((r) => [r.payerPrincipalId, r.access["org-key"], r.access.unknown])).toEqual([[P1, 0, 0], [null, 1, 0], [null, 0, 1]]);
   });
 

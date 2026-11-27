@@ -1,10 +1,10 @@
 // Heavy mode (#4901, rebuilt by #5089, owner 2026-11-19, M-20261119-077,
-// D-20261119-084, D-20261119-085): a team of experts, the Grok way. The bot
-// (the leader) starts 2 to 5 copies of itself, the number and each one's
-// persona chosen for the task; the experts are read-only (the server holds
-// them there, server/heavy-team.ts); round 1 each proposes, then they
-// critique each other round after round until they agree, at most
-// HEAVY_MAX_ROUNDS; without agreement the leader decides and shows what is
+// D-20261119-084, D-20261119-085, D-20261126-023): a team of experts, the
+// Grok way. The bot (the leader) starts 2 to 8 copies of itself, the fewest
+// that suffice, each one's persona chosen for the task; the experts are
+// read-only (the server holds them there, server/heavy-team.ts); round 1
+// each proposes, then they critique each other round after round until they
+// agree, at most HEAVY_MAX_ROUNDS; without agreement the leader decides and shows what is
 // still disputed beside the plan. The bot then runs the plan once, with its
 // usual writes and cards.
 //
@@ -19,9 +19,13 @@
 /** The row's tool name, for a client that does not draw the team. */
 export const HEAVY_TEAM_TOOL_NAME = "Team of Experts";
 
-/** D-20261119-084: the leader starts 2 to 5 experts, the number it chooses. */
+/** D-20261119-084, D-20261126-023: the leader starts 2 to 8 experts, the
+ * fewest that suffice for the request. The one ceiling: the seats
+ * (shared/model-mode.ts HEAVY_MAX_AGENTS), the person's own Heavy experts
+ * (shared/mode-models.ts MODE_MAX_EXPERTS) and a solo server's stored modes
+ * read it. */
 export const HEAVY_MIN_EXPERTS = 2;
-export const HEAVY_MAX_EXPERTS = 5;
+export const HEAVY_MAX_EXPERTS = 8;
 /** D-20261119-085: proposals, then critiques until agreement, 5 rounds at most. */
 export const HEAVY_MAX_ROUNDS = 5;
 

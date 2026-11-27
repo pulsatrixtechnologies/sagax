@@ -55,7 +55,7 @@ export async function admitBotPatch(env: BotsMutateEnv, state: BotPatchState): P
   const sharedSettings = env.ownerSettingsForbidden(env.auth, env.store.bot(m[1]), {
     // #4329 lot 5: what runs the bot is part of its model
     // #4417: and so is its context size
-    model: Object.prototype.hasOwnProperty.call(body, "modelSelection") || Object.prototype.hasOwnProperty.call(body, "harness") || Object.prototype.hasOwnProperty.call(body, "contextWindow"),
+    model: Object.prototype.hasOwnProperty.call(body, "modelSelection") || Object.prototype.hasOwnProperty.call(body, "harness") || Object.prototype.hasOwnProperty.call(body, "contextWindow") || Object.prototype.hasOwnProperty.call(body, "compactAt"),
     notifications: Object.prototype.hasOwnProperty.call(body, "notifications")
   });
   if (sharedSettings) {

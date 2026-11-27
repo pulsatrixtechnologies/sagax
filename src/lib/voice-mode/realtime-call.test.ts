@@ -133,7 +133,7 @@ describe("realtime call drop reasons", () => {
   });
 
   it("a credits refusal reaches the person as credits, never as the voice or the network", () => {
-    const words = "Aucun appel : le compte Grok connecté n'a plus de crédit, et la clé API xAI non plus.";
+    const words = "Aucun appel : ton compte Grok connecté n'a plus de crédits. Ajoute du crédit au compte Grok connecté, puis rappelle. La clé xAI de ton organisation n'a plus de crédits.";
     const { notes, frame } = call();
     frame({ type: "refused", code: "realtime_key_refused", error: words });
     expect(notes).toEqual([{ text: words, code: "realtime_key_refused" }]);

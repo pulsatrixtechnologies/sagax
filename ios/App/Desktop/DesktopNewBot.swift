@@ -200,7 +200,8 @@ struct DesktopNewBotModal: View {
                 .foregroundStyle(canCreate || busy ? theme.accentInk : theme.ink)
                 .frame(maxWidth: 384)
                 .padding(.vertical, 10)
-                // disabled: the desktop's 40 % button reads as a grey bar
+                // disabled: PrimaryButton's opacity-40 over the panel reads as this grey bar
+                // (desktop DOM: bg rgb(44,44,44)), not a translucent accent fill
                 .background(canCreate || busy ? theme.accent : theme.ink.opacity(0.16), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .contentShape(Rectangle())
             }

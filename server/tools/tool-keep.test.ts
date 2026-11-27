@@ -1,6 +1,7 @@
 // #4527 lot B: the rule that leaves a bot's unused tools out of its next
 // conversations, and its small store per bot and person.
-import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { isOwnerOnlyProtected } from "../owner-only-acl.ts";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -201,7 +202,7 @@ describe("sessions and the store", () => {
     expect(files).toHaveLength(2);
     for (const file of files) {
       const path = join(toolKeepDir(), dirs[0]!, file);
-      if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600); // Windows has no POSIX modes
+      expect(isOwnerOnlyProtected(path)).toBe(true);
       const text = readFileSync(path, "utf8");
       // never a person, a bot or a conversation id in clear
       for (const name of ["alice", "bob", "bot-1", "t-1", "t-2"]) expect(text).not.toContain(name);

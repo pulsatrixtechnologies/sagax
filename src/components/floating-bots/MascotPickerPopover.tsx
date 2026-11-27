@@ -3,7 +3,8 @@
 // that points at the mascot. No window, no backdrop and no preview: the
 // mascot above it is the preview. Escape or a press outside closes it; a
 // press in one of its own small panels (the skins, the gear, the "+", drawn
-// through a portal) is a press inside it.
+// through a portal) is a press inside it, and so is a press on the Reset view
+// button beside a turned mascot (#5384): it is the mascot's own control.
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import { AnchoredPopover } from "@/components/AnchoredPopover";
 import { MENU_BOX } from "@/components/menu-look";
@@ -26,7 +27,7 @@ export interface MascotPickerPopoverProps extends MascotPickerProps {
 export function MascotPickerPopover({ anchorRef, onClose, onUseMascot, ...picker }: MascotPickerPopoverProps) {
   const panel = useRef<HTMLElement>(null);
   const caret = useRef<HTMLSpanElement>(null);
-  // inside: the mascot, the panel, and the panel's own small panels
+  // inside: the mascot, its Reset view button (in the stage's wrapper, beside the button), the panel, and the panel's own small panels
   const root = useMemo(() => ({
     get current() {
       return {
@@ -34,6 +35,7 @@ export function MascotPickerPopover({ anchorRef, onClose, onUseMascot, ...picker
           const node = target as Node | null;
           if (!node) return false;
           if (anchorRef.current?.contains(node) || panel.current?.contains(node)) return true;
+          if (anchorRef.current?.closest("[data-mascot-turn]")?.contains(node)) return true;
           const element = (node as Element).closest ? (node as Element) : node.parentElement;
           return Boolean(element?.closest("[data-mascot-picker-layer]"));
         },

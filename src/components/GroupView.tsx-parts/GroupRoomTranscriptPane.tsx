@@ -220,7 +220,7 @@ export function GroupRoomTranscriptPane({
         <JumpToLatestPill room onClick={jumpToLatest} bottom={composerDockHeight + 16} scrollRef={scrollRef} />
       )}
 
-      <div ref={composerDockRef} data-composer-dock="" className="absolute inset-x-0 bottom-0 z-[2]">
+      <div ref={composerDockRef} data-composer-dock="" className="absolute inset-x-0 bottom-0 z-[3]">
       <ChatEdgeFade edge="bottom" />
       {/* JC 2026-11-06: the working line sits just above the composer, on the
           message column, whatever the scroll (as in ChatView). */}

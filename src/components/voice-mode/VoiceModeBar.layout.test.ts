@@ -228,7 +228,8 @@ describe("where the bar lives", () => {
     ].join("\n");
     // Only a confidential thread's classification band (#683, a marking at
     // the very top of the conversation) may come before the pill.
-    expect(chat).toMatch(/<div className="chat-banners[^"]*">\s*(?:\{confidential && <ConfidentialBanner position="top"[^>]*\/>\}\s*)?\{\/\*[\s\S]*?\*\/\}\s*<VoiceCallDock bot=\{bot\} \/>/);
+    // #5359: banner pad may be style/data attrs after className; confidential optional.
+    expect(chat).toMatch(/<div className="chat-banners[^"]*"[^>]*>\s*(?:\{confidential && <ConfidentialBanner position="top"[^>]*\/>\}\s*)?\{\/\*[\s\S]*?\*\/\}\s*<VoiceCallDock bot=\{bot\} \/>/);
     const view = readFileSync(new URL("../CallView.tsx", import.meta.url), "utf8");
     const overlay = view.slice(view.indexOf("export function CallOverlay"), view.indexOf("export function VoiceCallDock"));
     expect(overlay).not.toContain("<LiveCall");

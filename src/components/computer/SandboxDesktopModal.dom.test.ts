@@ -58,6 +58,20 @@ describe("SandboxDesktopModal calm window", () => {
     expect(takeover.textContent).toContain("You have control");
   });
 
+  it("#5355: This computer hides Take control and shows a notice, never a nested mirror", () => {
+    mount({
+      ownComputer: true,
+      screen: () => createElement("img", { "data-fake-mirror": "" }),
+    });
+    const takeover = document.querySelector("[data-sandbox-takeover]")!;
+    expect(takeover.querySelector("[data-takeover-segments]")).toBeNull();
+    expect(takeover.textContent).not.toContain("Take control");
+    expect(takeover.textContent).not.toContain("You have control");
+    expect(takeover.textContent).not.toContain("Watching");
+    expect(document.querySelector("[data-fake-mirror]")).toBeNull();
+    expect(document.querySelector("[data-own-computer-notice]")!.textContent).toMatch(/already working on this computer/i);
+  });
+
   it("shows no Play / Pause / Stop and no full screen button", () => {
     mount();
     expect(document.querySelector("[data-takeover-power]")).toBeNull();

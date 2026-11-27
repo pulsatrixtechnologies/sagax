@@ -111,6 +111,7 @@ import { BotProfileInsetStrip, BotProfileTopBar } from "./BotProfilePage.tsx-par
 import { AppearanceRow, GROUP_LABEL, SUBPAGE_META, SubPageModal, SubPageRow } from "./BotProfilePage.tsx-parts/subpages";
 import { BotPageModal } from "./BotPageModal";
 import { MascotPickerPopover } from "../floating-bots/MascotPickerPopover";
+import { generateBotShapeAvatar } from "@/lib/shape-avatar-generate-client";
 import { appearanceRowValue, useBotRowValues } from "./BotProfilePage.tsx-parts/rowValues";
 import { SETTINGS_SWITCH_SEARCH_WORDS, personaSubPageForQuery, settingsSwitchForQuery, type BotProfileSettingsSwitch } from "@/lib/persona-search";
 import { BotUsageBreakdownSection } from "../bot-settings/BotUsageBreakdown";
@@ -795,6 +796,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
           onPatch={derived.patch}
           onClose={() => setAppearanceOpen(false)}
           onUseMascot={wearsPicture ? () => derived.patch({ avatarCrop: "mascot" }) : undefined}
+          onGenerate={(direction) => generateBotShapeAvatar(bot.id, direction)}
         />
       )}
       {(knowledgeModal === "skills" || knowledgeModal === "command") && shown("skills") && (

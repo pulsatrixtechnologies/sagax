@@ -141,6 +141,8 @@ export interface BotsCoreRouteDeps {
   githubCredentialsFor(actor: string | null | undefined): readonly GithubCredential[];
   orgAvatarImageConfig(principalId: string | null): Promise<{ imageGen?: { provider?: string; key?: string; customApiKey?: string; customModel?: string; customUrl?: string }; xai?: { key?: string }; xaiAccount?: string; credentials?: unknown; refusalText?: unknown; language?: unknown; chain?: unknown } | null>;
   requesterPrincipal(auth: RequestAuth): string | null;
+  /** #5223: the asking person's language for an image refusal. */
+  personLanguage?(principalId: string | null): "fr" | "en";
   takeTemporaryCreateToken(token: unknown, auth: RequestAuth): TemporaryAgent | null;
   botCreationAllowed(auth: RequestAuth): boolean;
   personBotsReadOnly(principalId: string | undefined | null): boolean;
@@ -247,4 +249,6 @@ export interface BotsCoreRouteDeps {
   titleRegenerations: Set<string>;
   /** `bot`: the title signs in as that bot's turn does (#3519). */
   generateThreadTitle(instance: ProviderInstance, excerpt: string, kind: string, bot?: BotRecord): Promise<string | null | undefined>;
+  /** #5367: compact this conversation now (sagax_settings thread.compact). */
+  compactThread?(botId: string, threadId: string): Promise<{ ok: true } | { ok: false; status: number; error: string }>;
 }

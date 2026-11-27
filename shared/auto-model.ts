@@ -27,7 +27,7 @@ export type AutoTier = "top" | "coding" | "fast" | "long" | "vision";
 export type AutoReason = "strongest-own" | "strongest-other" | "tier-fallback" | "base" | "fast" | "mode";
 
 /** How the payer pays on the picked engine (server AccessVia). */
-export type AutoPayerVia = "subscription" | "owner-key" | "speaker-key" | "server" | "org-key";
+export type AutoPayerVia = "subscription" | "owner-key" | "speaker-key" | "server" | "org-key" | "org-account";
 
 /** The last pick on a thread (WireTask.autoModel), and the preview the
  * model chip shows before a thread has one. */
@@ -59,6 +59,10 @@ export interface AutoModelPreview {
   excluded: AutoModelExcluded[];
   /** Actual configured startup recovery for a pinned model. */
   backups: AutoModelEntry[];
+  /** #5406: the engine instances that may run a turn of this conversation
+   * when a usage limit moves it (the takeover's own pool, holds not read).
+   * Absent from an older server. */
+  serves?: string[];
   /** #4900: what each composer mode would run for this person now. */
   modes?: Record<ModelMode, ModeResolution>;
 }

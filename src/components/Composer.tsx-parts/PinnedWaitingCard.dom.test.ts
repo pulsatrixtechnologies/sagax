@@ -388,6 +388,31 @@ describe("the pinned card skips every kind (#3471)", () => {
     expect(dispatched).toContainEqual({ type: "skipCard", threadId: "main", requestId: "req-a1", tool: true });
   });
 
+  // #5357: a member cannot skip an admin-approval; X only hides the pin.
+  // The request keeps waiting for an admin and stays in the conversation.
+  it("hides an admin-approval pin without skipping or denying (#5357)", async () => {
+    const message = {
+      id: "admin-1", role: "bot", kind: "options", at: 1, text: "",
+      card: {
+        requestId: "admin:src1", tool: "Bash", title: "Approval needed", subtitle: "attach file",
+        toolInput: JSON.stringify({ path: "/tmp/a.json" }), options: ["Allow", "Deny"],
+        requestType: "permission", adminApproval: true, adminReason: "host-tool",
+      },
+    } as unknown as Message;
+    const pending: Pending = { message, requestId: "admin:src1", tool: "Bash", detail: "attach file" };
+    await render([pending], []);
+    expect(card()?.getAttribute("data-pinned-waiting")).toBe("open");
+    expect(skipButton()?.getAttribute("aria-label")).toBe("Close");
+    await act(async () => { skipButton()!.click(); });
+    expect(card()).toBeNull();
+    expect(dispatched.some((action) => (action as { type?: string }).type === "skipCard")).toBe(false);
+    expect(dispatched.some((action) => (action as { type?: string }).type === "decideRequest")).toBe(false);
+    expect(calls().some(([url]) => String(url).includes("/respond"))).toBe(false);
+    // a later read of the same waiting list keeps it hidden (stillListed)
+    await render([pending], []);
+    expect(card()).toBeNull();
+  });
+
   it("skips a question in words a routine run left, through the card's skip", async () => {
     const routine = { id: "rq", at: 5, role: "bot", kind: "text", text: "Orla has a question for you", from: { botId: "orla", name: "Orla" },
       attention: { kind: "question", botId: "orla", botName: "Orla", threadId: "run-1", sourceMessageId: "src", routineName: "Morning check", items: [{ text: "Close the ticket?" }] } } as unknown as Message;

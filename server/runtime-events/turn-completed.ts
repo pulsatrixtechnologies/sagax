@@ -2,6 +2,7 @@
 /** handleTurnCompleted (#1388). Pure move from server/index.ts bus.subscribe. */
 import { INCIDENTS_THREAD_TITLE } from "../peers/incidents.ts";
 import { isShuttingDown } from "../process/http-shutdown.ts";
+import { emptyOkAfterAnnouncement, emptyOkAfterWork } from "../empty-ok-after-work.ts";
 import { isEngineEmptyFailure } from "../peers/incidents.ts";
 import { withBotNotify } from "../../shared/notification.ts";
 import { retireSafetyHolds } from "../safety/safety-review.ts";
@@ -10,6 +11,7 @@ import { resendOnSignedOutBackup } from "../engines/signed-out-carry-on.ts";
 import { routineReportsByStreak, routineRunRowInEveryChat } from "../../shared/routine-repeat.ts";
 import { wakeTopicOf } from "../routines/routine-run-card.ts";
 import { heavyUsage } from "../heavy-team.ts";
+import { personLanguageCode, personWord } from "../people/person-words.ts";
 /** Whether a finished routine run rings "done": a completed result the
  * routine posts, never a quiet one, never one whose items for the person
  * rang "needs you" from its card. #3695, #3990: any other run of a routine
@@ -190,14 +192,29 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
       if (limitTaken) host.limitTakeovers?.note(event.threadId, completedTurnId);
       // reasoning_only / empty model on a chat turn: one automatic resend of
       // the same user message before an incident (server/empty-response-retry.ts).
-      const emptyDetail = failureCause ?? event.stopReason;
-      const emptyRetried = host.shouldEmptyResponseRetry({
+      // #5360: an ok turn that already ran tools or announced work, then
+      // settled with no final text, is the same empty shape for the person.
+      const emptyShape = {
         ok: event.ok,
+        stopped,
+        reply,
+        silent: host.silentReplyThreads?.has(event.threadId) === true,
+        turnId: completedTurnId,
+        rows: host.store.messagesFor(event.threadId),
+      };
+      const emptyAfterWork = emptyOkAfterWork(emptyShape);
+      const emptyAfterAnnounce = emptyOkAfterAnnouncement(emptyShape);
+      if (emptyAfterWork || emptyAfterAnnounce) {
+        console.warn(`[empty-turn] ${event.threadId}: settled ok with no final reply after ${emptyAfterWork ? "tools" : "an announcement"} (#5360)`);
+      }
+      const emptyDetail = failureCause ?? event.stopReason ?? (emptyAfterWork ? "empty_turn" : undefined);
+      const emptyRetried = host.shouldEmptyResponseRetry({
+        ok: emptyAfterWork ? false : event.ok,
         stopped,
         limitTaken,
         alreadyReported: lazyClaimAlreadyReported || computerParked,
         isRoutine: Boolean(host.routines?.runForThread(event.threadId) || routineRun),
-        empty: isEngineEmptyFailure(emptyDetail),
+        empty: emptyAfterWork || isEngineEmptyFailure(emptyDetail),
         detail: emptyDetail,
         take: () => host.emptyResponseRetry.take(event.threadId),
       });
@@ -207,10 +224,18 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
         if (messageId && !request?.stopped && request?.origin?.kind === "user") {
           host.resendUserMessage(bot.id, event.threadId, messageId, host.turnSpeakers.get(event.threadId), "empty-response-retry");
         }
-      } else if (event.ok) {
+      } else if (event.ok && !emptyAfterWork) {
         host.emptyResponseRetry.clear(event.threadId);
         host.signInRefusalResent.delete(event.threadId);
         host.signedOutBackupResent.delete(event.threadId);
+      }
+      if (((emptyAfterWork && !emptyRetried) || emptyAfterAnnounce) && bot && !routineRun && !host.routines?.runForThread(event.threadId)) {
+        const language = personLanguageCode(host.languageOfPerson?.(host.effectiveBotOwner?.(bot) ?? host.recordedBotOwner?.(bot)));
+        host.store.appendMessage(event.threadId, {
+          role: "bot", kind: "text",
+          text: personWord(language, "chat.emptyOk.continue"),
+          turnId: completedTurnId,
+        });
       }
       // #2057: a sign-in refusal held for its renew reports when it settles.
       const signInHeld = host.signInRefusalHeld.delete(event.threadId);

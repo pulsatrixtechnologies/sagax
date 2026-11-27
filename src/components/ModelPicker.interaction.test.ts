@@ -661,6 +661,32 @@ describe("the composer's model menu (2026-10-12)", () => {
     const opened = open(bot("claude", "claude-opus-5-5"), composer);
     expect(lists(opened)[0]!.props.sections.map((section) => section.key)).toEqual(["top", "anthropic", "openai"]);
   });
+
+  it("D-20261126-018: a provider the organization hid stays in the menu of a bot already on it, as its model in use, and in no other bot's", () => {
+    fixture.org = { org: { name: "Example", identity: { kind: "perspicax", issuer: "https://px.example.test" } }, link: { state: "ok" }, viewerRole: "member", settings: {} };
+    const facts = (instanceId: string) => ({ instanceId, driver: "x", displayName: instanceId, installed: true,
+      subscription: { supported: true, signedIn: true }, myKey: false, orgKey: false, myTurns: "subscription" });
+    fixture.myEngines = [facts("claude"), facts("codex")];
+    fixture.instances = [signedIn(), codex];
+    fixture.config = { allowedEngines: null, hiddenEngines: ["claude"] };
+    // the bot on the hidden provider: its model is still there, checked
+    const onIt = open(bot("claude", "claude-opus-5-5"), composer);
+    expect(listed(onIt)).toEqual(expect.arrayContaining(["anthropic", "openai"]));
+    expect(row(onIt, "claude-opus-5-5")?.props).toMatchObject({ kind: "model", modelId: "claude-opus-5-5" });
+    // another bot cannot choose it while it is hidden
+    fixture.values = [];
+    fixture.own = 0;
+    const other = open(bot("codex", "gpt-5.6"), composer);
+    expect(listed(other)).not.toContain("anthropic");
+    expect(row(other, "claude-opus-5-5")).toBeUndefined();
+    expect(row(other, "gpt-5.6")?.props).toMatchObject({ kind: "model", modelId: "gpt-5.6" });
+    // a conversation of a bot on the hidden provider that went to a backup can go back to it
+    fixture.values = [];
+    fixture.own = 0;
+    fixture.bots = [bot("claude", "claude-opus-5-5")];
+    const onBackup = open(bot("codex", "gpt-5.6"), composer);
+    expect(row(onBackup, "claude-opus-5-5")?.props).toMatchObject({ kind: "model", modelId: "claude-opus-5-5" });
+  });
 });
 
 describe("the models window (windowOnly, #2963)", () => {
@@ -980,7 +1006,7 @@ describe("the composer's mode menu (#4900, #5088)", () => {
     expect(opened.html).toContain("data-model-menu");
     const menu = (await modeMenu(opened))!;
     expect(menu.props.current).toBe("auto");
-    // the stars, the reasoning, the footer and its count of models off stay on the same panel
+    // the stars, the effort and Manage models stay on the same panel
     expect(menu.panel.favorites).toBeDefined();
     expect(menu.panel.manage?.onManage).toBeTypeOf("function");
     expect(menu.panel.sections.some((section) => section.rows.some((candidate) => candidate.modelId === "claude-opus-5-5"))).toBe(true);
@@ -1015,11 +1041,92 @@ describe("the composer's mode menu (#4900, #5088)", () => {
     }));
   });
 
-  it("a pinned model checks All models, the row that names it", async () => {
+  it("a model picked by hand checks Custom, the row that names it; its tooltip says the provider too", async () => {
     fixture.instances = [signedIn(), codex];
     const menu = (await modeMenu(open(bot("claude", "claude-opus-5-5"), composerModes)))!;
     expect(menu.props.current).toBeNull();
-    expect(menu.props.pinnedLabel).toMatch(/Opus 5\.5/);
+    expect(menu.props.pinnedLabel).toBe("Opus 5.5");
+    expect(menu.props.pinnedTitle).toMatch(/Claude · Opus 5\.5/);
+  });
+
+  it("M-20261126-104: under a mode Custom still names the model picked by hand (the one the selection keeps)", async () => {
+    fixture.instances = [signedIn(), codex];
+    const menu = (await modeMenu(open(onAuto("expert"), composerModes)))!;
+    expect(menu.props.current).toBe("expert");
+    expect(menu.props.pinnedLabel).toBe("Opus 5.5");
+    expect(menu.props.pinnedTitle).toBeUndefined();
+  });
+
+  it("M-20261126-104: the chip leads with the icon of its mode, or Custom's for a model picked by hand; no other chip takes one", () => {
+    fixture.instances = [signedIn(), codex];
+    const glyph = (html: string) => html.match(/<svg[^>]*class="([^"]*)"[^>]*data-composer-model-glyph|<svg[^>]*data-composer-model-glyph[^>]*class="([^"]*)"/)?.slice(1).find(Boolean) ?? "";
+    expect(glyph(render(onAuto(), composerModes).html)).toContain("lucide-sparkles");
+    expect(glyph(render(onAuto("expert"), composerModes).html)).toContain("lucide-brain");
+    expect(glyph(render(bot("claude", "claude-opus-5-5"), composerModes).html)).toContain("lucide-sliders-horizontal");
+    expect(render(onAuto(), { inComposer: true, modes: false }).html).not.toContain("data-composer-model-glyph");
+    expect(render(onAuto(), { contained: true }).html).not.toContain("data-composer-model-glyph");
+  });
+
+  it("M-20261126-104: the chat bar's menu is 280 px wide (about 240 in the mockup, wider so Custom names its model whole); the model menu of the other places keeps its width", () => {
+    fixture.instances = [signedIn(), codex];
+    expect(menu(open(onAuto(), composerModes).html)).toMatch(/^data-model-menu[^>]*style="[^"]*width:280px/);
+    fixture.values = [];
+    expect(menu(open(onAuto(), { inComposer: true, modes: false }).html)).toMatch(/^data-model-menu[^>]*style="[^"]*width:360px/);
+  });
+
+  // D-20261126-017: what the menu's Effort level SENDS under Auto (the panel's onPick is the picker's setEffort;
+  // which click calls it with which level is ModelPanel.cascade.dom.test.ts; what a turn then runs is
+  // server/index-leaves/autoPickForTurn.mode.test.ts)
+  describe("D-20261126-017: under Auto the Effort level the person clicked is written with the selection", () => {
+    const levels = () => ({ ...signedIn(), capabilities: { withholdsHostTools: true, effortLevels: ["low", "medium", "high"] } }) as InstanceInfo;
+    const sent = () => (vi.mocked(fixture.dispatch).mock.calls.at(-1)![0] as { selection: Record<string, unknown> }).selection;
+
+    it("nothing clicked: the menu is handed no level and nothing is written", async () => {
+      fixture.instances = [levels(), codex];
+      const shown = (await modeMenu(open(onAuto(), composerModes)))!;
+      expect(shown.props.current).toBe("auto");
+      expect(shown.panel.effort!.value).toBeUndefined();
+      expect(fixture.dispatch).not.toHaveBeenCalled();
+    });
+
+    it.each(["low", "medium", "high"] as const)("a level clicked is sent as itself and Auto stays on: %s", async (level) => {
+      fixture.instances = [levels(), codex];
+      const shown = (await modeMenu(open(onAuto(), composerModes)))!;
+      shown.panel.effort!.onPick(level);
+      expect(sent()).toEqual({ instanceId: "claude", model: "claude-opus-5-5", auto: true, effort: level });
+      // the stored level is the one the menu checks the next time it opens
+      fixture.values = [];
+      const again = (await modeMenu(open({ ...onAuto(), modelSelection: { ...onAuto().modelSelection, effort: level } }, composerModes)))!;
+      expect(again.panel.effort!.value).toBe(level);
+    });
+
+    it("the checked level clicked again: no level is sent any more, Auto decides again", async () => {
+      fixture.instances = [levels(), codex];
+      const chosen = { ...onAuto(), modelSelection: { ...onAuto().modelSelection, effort: "high" as const } };
+      const shown = (await modeMenu(open(chosen, composerModes)))!;
+      shown.panel.effort!.onPick(undefined);
+      expect(sent().auto).toBe(true);
+      expect(sent().effort).toBeUndefined();
+    });
+  });
+
+  it("M-20261126-104: one Effort everywhere: while the bot works the chat bar opens its mode menu, locked but for the effort, never a window of its own", async () => {
+    const levels = { ...signedIn(), capabilities: { withholdsHostTools: true, effortLevels: ["low", "high"] } } as InstanceInfo;
+    fixture.instances = [levels, codex];
+    const working = { ...bot("claude", "claude-opus-5-5"), busy: true };
+    const opened = open(working, composerModes);
+    expect(opened.html).not.toContain("data-model-busy");
+    const shown = (await modeMenu(opened))!;
+    expect(shown.panel.disabled).toBe(true);
+    expect(opened.html).toMatch(/<button[^>]*disabled=""[^>]*data-mode-row="fast"/);
+    expect(opened.html).not.toMatch(/<button[^>]*disabled=""[^>]*data-mode-row="reasoning"/);
+    shown.panel.effort!.onPick("high");
+    expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ type: "setModel", selection: expect.objectContaining({ model: "claude-opus-5-5", effort: "high" }) }));
+    // the other places keep their short menu, which says Effort too
+    fixture.values = [];
+    const short = open(working, { inComposer: true, modes: false }).html;
+    expect(short).toContain("data-model-busy");
+    expect(short).toMatch(/data-model-busy.*<span[^>]*>Effort<\/span>/);
   });
 
   it("hands the menu what each mode runs for this person, from the server's preview", async () => {

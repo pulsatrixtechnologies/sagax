@@ -51,7 +51,14 @@ export function createImageInternalRoutes(deps: ImageInternalDeps): InternalRout
     const language = deps.language?.(capability);
     if (!owner) return json(res, 403, { error: imageWord(language, "noOwner") });
     const candidates = await deps.credentials(capability);
-    if (!Array.isArray(candidates)) return json(res, 403, { error: deps.refusalText(candidates.refused), code: candidates.refused });
+    if (!Array.isArray(candidates)) {
+      // #5223: payer_disabled is said in the person's language; other causes
+      // still reuse the voice's own words until those catalogs land.
+      const error = candidates.refused === "payer_disabled"
+        ? imageWord(language, "payerDisabled")
+        : deps.refusalText(candidates.refused);
+      return json(res, 403, { error, code: candidates.refused });
+    }
     if (!candidates.length) return json(res, 409, { error: imageWord(language, "noProvider"), code: "no_provider" });
     const now = deps.now ?? Date.now;
     const started = now();

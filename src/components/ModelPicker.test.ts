@@ -94,7 +94,8 @@ describe("EffortRow", () => {
         selection: { instanceId: "codex", model: "gpt-5.6", effort: value || undefined } });
     }
     const markup = renderToStaticMarkup(createElement(EffortRow, { bot: bot(), compact: true }));
-    expect(markup).toContain('aria-label="Reasoning effort"');
+    // M-20261126-104: Effort is the one name, for a screen reader too
+    expect(markup).toContain('aria-label="Effort"');
     expect(markup).not.toContain("<button");
     expect([...markup.matchAll(/<option[^>]*>([^<]+)</g)].map((match) => match[1])).toEqual(["Default", "None", "Low", "High"]);
   });

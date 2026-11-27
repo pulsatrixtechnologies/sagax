@@ -62,6 +62,16 @@ export type MausColor = MascotColorName;
 
 export const MAUS_COLORS: Readonly<Record<MausColor, string>> = MASCOT_COLOR_HEX;
 
+/** Whether a colour is a #rrggbb value (the only form a mascot's paint takes as it is). */
+export function isHexColor(color: string | null | undefined): color is string {
+  return typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color);
+}
+
+/** A bot colour's value: a colour name, or any #rrggbb as it is; anything else reads as `fallback`. */
+export function mascotHex(color: string, fallback: string = MAUS_COLORS.green): string {
+  return (MAUS_COLORS as Record<string, string>)[color] ?? (isHexColor(color) ? color : fallback);
+}
+
 /**
  * A bot colour used as text or a tint on the app's own surfaces. Black has no
  * light of its own and would vanish on a dark theme, so it reads as a cool

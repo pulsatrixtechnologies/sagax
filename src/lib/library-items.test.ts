@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { ThreadFile } from "./chat-files";
-import { groupLibraryItems, libraryItems } from "./library-items";
+import { artifactsKeptForThreads, groupLibraryItems, libraryItems } from "./library-items";
 import type { ArtifactSummary } from "../../shared/artifacts";
 
 const now = Date.parse("2026-10-26T12:00:00Z");
@@ -9,8 +9,8 @@ const DAY = 24 * 3_600_000;
 const file = (id: string, name: string, daysAgo: number, pinned = false): ThreadFile => ({
   id, messageId: "m", source: "written", path: name, name, at: now - daysAgo * DAY, size: 10, available: true, ...(pinned ? { pinned } : {}),
 });
-const artifact = (id: string, title: string, daysAgo: number, favorite = false): ArtifactSummary => ({
-  id, botId: "b", title, favorite, popped: false, createdAt: now - 30 * DAY, updatedAt: now - daysAgo * DAY, rev: 1, refresh: { state: "idle", failures: 0 },
+const artifact = (id: string, title: string, daysAgo: number, favorite = false, over: Partial<ArtifactSummary> = {}): ArtifactSummary => ({
+  id, botId: "b", title, favorite, popped: false, createdAt: now - 30 * DAY, updatedAt: now - daysAgo * DAY, rev: 1, refresh: { state: "idle", failures: 0 }, ...over,
 });
 
 describe("library grouping", () => {
@@ -52,6 +52,31 @@ describe("library grouping", () => {
   it("the seven day edge belongs to older", () => {
     const groups = groupLibraryItems(libraryItems([file("a".repeat(24), "edge.md", 7), file("b".repeat(24), "inside.md", 6.99)], []), now);
     expect(groups.periods.map((period) => [period.id, period.items.length])).toEqual([["thisWeek", 1], ["older", 1]]);
+  });
+});
+
+describe("artifactsKeptForThreads (#5396)", () => {
+  it("keeps favorite and popped artifacts after their conversation is gone", () => {
+    const kept = artifactsKeptForThreads([
+      artifact("art_fav0001", "Pinned", 1, true, { threadId: "gone" }),
+      artifact("art_pop0001", "Window", 1, false, { threadId: "gone", popped: true }),
+      artifact("art_ord0001", "Ordinary", 1, false, { threadId: "gone" }),
+      artifact("art_live001", "Live", 1, false, { threadId: "open" }),
+      artifact("art_bot0001", "Bot scoped", 1, true),
+    ], new Set(["open"]));
+    expect(kept.map((item) => item.id)).toEqual(["art_fav0001", "art_pop0001", "art_live001", "art_bot0001"]);
+  });
+
+  it("for a group library, keeps favorites and popped only for the group's bots", () => {
+    const kept = artifactsKeptForThreads([
+      artifact("art_in00001", "In group", 1, true, { botId: "member", threadId: "gone" }),
+      artifact("art_out0001", "Other bot", 1, true, { botId: "outsider", threadId: "gone" }),
+      artifact("art_popout1", "Other popped", 1, false, { botId: "outsider", threadId: "gone", popped: true }),
+      artifact("art_liveout", "Other live thread", 1, false, { botId: "outsider", threadId: "open" }),
+      artifact("art_botscope", "Bot scoped outsider", 1, true, { botId: "outsider" }),
+      artifact("art_membot1", "Member scoped", 1, false, { botId: "member" }),
+    ], new Set(["open"]), new Set(["member"]));
+    expect(kept.map((item) => item.id)).toEqual(["art_in00001", "art_liveout", "art_membot1"]);
   });
 });
 

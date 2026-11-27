@@ -27,6 +27,9 @@ function configForPerson<T extends Parameters<typeof configForViewer>[0]>(status
   if (host.IDENTITY.kind === "perspicax" && person && shown && typeof shown === "object" && Array.isArray((shown as { allowedEngines?: unknown }).allowedEngines)) {
     shown = { ...shown, allowedEngines: host.orgAllowedEngines()?.filter((id: string) => host.personalProviderInstances.visible(id, person)) ?? null };
   }
+  if (host.IDENTITY.kind === "perspicax" && person && shown && typeof shown === "object" && Array.isArray((shown as { hiddenEngines?: unknown }).hiddenEngines)) {
+    shown = { ...shown, hiddenEngines: host.orgHiddenEnginesFor(person) };
+  }
   const owner = host.personSettingsOwner(viewer?.principalId);
   if (!owner) return shown;
   const own = host.personSettings.get(owner);

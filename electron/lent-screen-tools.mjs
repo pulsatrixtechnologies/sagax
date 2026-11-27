@@ -1,5 +1,5 @@
 // What a lent screen accepts, argument by argument. Derived from the local
-// computer-control driver's own input schemas (cua-driver 0.45.4 `describe`),
+// computer-control driver's own input schemas (cua-driver 0.61.3 `describe`),
 // keeping only arguments that observe or operate what is on screen. Anything
 // that names a local path, a command line, a port or a system prompt is not
 // lent: `screenshot_out_file` and `debug_image_out` write a file anywhere
@@ -56,8 +56,6 @@ export const LENT_SCREEN_ARGUMENTS = Object.freeze({
   zoom: { pid: INTEGER, window_id: INTEGER, x1: NUMBER, y1: NUMBER, x2: NUMBER, y2: NUMBER },
   start_session: { session: ID, capture_scope: oneOf("auto", "window", "desktop") },
   end_session: { session: ID },
-  get_session_state: { session: ID },
-  escalate_session: { session: ID, reason: oneOf("ax_tree_pixel_mismatch", "background_delivery_failed", "foreground_ineffective", "no_window_target", "other"), detail: LABEL },
   get_agent_cursor_state: { session: ID },
   set_agent_cursor_enabled: { session: ID, enabled: BOOLEAN },
   set_agent_cursor_motion: {

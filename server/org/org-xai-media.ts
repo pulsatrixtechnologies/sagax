@@ -13,6 +13,7 @@
 
 import { IMAGE_SERVER_ENGINE } from "../../shared/image-generation.ts";
 import { VOICE_SERVER_ENGINE } from "../../shared/voice-mode.ts";
+import { imageWord, type ImageLanguage } from "../media/image-words.ts";
 
 export type OrgXaiMedia = "voice" | "image";
 
@@ -47,14 +48,15 @@ export function orgXaiKeyAllowed(media: OrgXaiMedia, input: OrgXaiMediaInput): b
   return input.allowed(judged, ORG_XAI_MEDIA_ENGINE[media]);
 }
 
-const REFUSAL: Record<OrgXaiMedia, string> = {
-  voice: "Your organization has not given you its xAI voice (read aloud and voice notes). Ask an admin to give it to you in Perspicax.",
-  image: "Your organization has not given you image and video generation on its xAI key. Ask an admin to give it to you in Perspicax.",
-};
+const VOICE_REFUSAL =
+  "Your organization has not given you its xAI voice (read aloud and voice notes). Ask an admin to give it to you in Perspicax.";
 
-/** The 403 body of a refused use. Never names or hints at the key. */
-export function orgXaiRefusal(media: OrgXaiMedia): { error: string; cause: typeof SERVER_ENGINE_NOT_ALLOWED } {
-  return { error: REFUSAL[media], cause: SERVER_ENGINE_NOT_ALLOWED };
+/** The 403 body of a refused use. Never names or hints at the key. Image
+ * words are the person's language (#5223); voice stays English until its
+ * own catalog keys land. */
+export function orgXaiRefusal(media: OrgXaiMedia, language?: ImageLanguage): { error: string; cause: typeof SERVER_ENGINE_NOT_ALLOWED } {
+  const error = media === "image" ? imageWord(language, "orgXaiNotGiven") : VOICE_REFUSAL;
+  return { error, cause: SERVER_ENGINE_NOT_ALLOWED };
 }
 
 /** The refusal a bot sees when its voice note would run on the

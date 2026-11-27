@@ -8,10 +8,11 @@
 // that cannot run now (its engine gone, the model turned off or refused) is
 // kept and the mode runs what it resolves by itself until it comes back.
 // Auto has no setting: it reads each request.
+import { HEAVY_MAX_EXPERTS } from "./heavy-team.ts";
 import { isEffortLevel, type EffortLevel } from "./model-selection.ts";
 
-/** Heavy: at most this many experts (shared/model-mode.ts, HEAVY_MAX_AGENTS). */
-export const MODE_MAX_EXPERTS = 5;
+/** Heavy: at most this many experts, the team's own ceiling (D-20261126-023: 8). */
+export const MODE_MAX_EXPERTS = HEAVY_MAX_EXPERTS;
 const MAX_ID = 200;
 
 export interface ModeModelChoice {

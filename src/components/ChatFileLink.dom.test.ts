@@ -8,7 +8,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setLocale } from "@/lib/i18n";
-import { matchThreadFile, looksLikeFileName, resetThreadFileLinks } from "@/lib/thread-file-links";
+import { matchThreadFile, looksLikeAbsoluteLocalPath, looksLikeFileName, resetAbsoluteLocalPaths, resetThreadFileLinks } from "@/lib/thread-file-links";
 import type { ThreadFile } from "@/lib/chat-files";
 import { ChatMarkdown } from "./ChatMarkdown";
 
@@ -28,6 +28,7 @@ let revealInFolder: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   setLocale("fr");
   resetThreadFileLinks();
+  resetAbsoluteLocalPaths();
   files = [written()];
   vi.stubGlobal("fetch", vi.fn(async (input: string) => {
     if (String(input).startsWith(`/api/threads/${THREAD}/files`)) {
@@ -41,7 +42,12 @@ beforeEach(() => {
     platform: "darwin",
     openLocalFile,
     revealInFolder,
-    localFilesExist: vi.fn(async (paths: string[]) => paths.map((path) => (path.startsWith("~/Desktop/pelican") ? "/Users/jc/Desktop/pelican-a-velo.html" : null))),
+    localFilesExist: vi.fn(async (paths: string[]) => paths.map((path) => {
+      if (path.startsWith("~/Desktop/pelican")) return "/Users/jc/Desktop/pelican-a-velo.html";
+      if (path.includes("Acme Corp")) return path;
+      if (path === "/Users/jc/missing-file.drawio") return null;
+      return null;
+    })),
   };
 });
 
@@ -137,5 +143,58 @@ describe("matching a name to the thread's files", () => {
     expect(looksLikeFileName("useState")).toBe(false);
     expect(looksLikeFileName("npm run build")).toBe(false);
     expect(looksLikeFileName("https://example.com/a.html")).toBe(false);
+  });
+
+  it("treats an absolute local path with spaces as a file path (#5393)", () => {
+    const spaced = "/Users/ada/Documents/acme/Onboarding/Acme Corp inc/pages/AcmeCorp_Backups.drawio";
+    expect(looksLikeAbsoluteLocalPath(spaced)).toBe(true);
+    expect(looksLikeFileName(spaced)).toBe(true);
+    expect(looksLikeFileName("Acme Corp inc")).toBe(false);
+  });
+
+  it("rejects API-style absolute paths without a home or drive prefix", () => {
+    expect(looksLikeAbsoluteLocalPath("/api/bots")).toBe(false);
+    expect(looksLikeAbsoluteLocalPath("/tmp/report.pdf")).toBe(true);
+    expect(looksLikeAbsoluteLocalPath("~/Desktop/note.md")).toBe(true);
+  });
+});
+
+describe("absolute local paths in inline code (#5393)", () => {
+  const spaced = "/Users/ada/Documents/acme/Onboarding/Acme Corp inc/pages/AcmeCorp_Backups.drawio";
+
+  it("links an absolute path with spaces even when the thread never listed it", async () => {
+    const host = await render(`Le fichier \`${spaced}\` est prêt.`);
+    const link = host.querySelector<HTMLButtonElement>("[data-file-link]");
+    expect(link?.textContent).toContain("AcmeCorp_Backups.drawio");
+    expect(host.querySelector("code")).toBeNull();
+    await act(async () => link!.click());
+    expect(openLocalFile).toHaveBeenCalledWith(spaced);
+  });
+
+  it("offers Show in Finder on right click for that path", async () => {
+    const host = await render(`\`${spaced}\``);
+    const link = host.querySelector<HTMLButtonElement>("[data-file-link]")!;
+    await act(async () => { link.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 20, clientY: 20 })); });
+    const items = [...document.querySelectorAll('[data-file-link-menu] [role="menuitem"]')].map((item) => item.textContent);
+    expect(items).toEqual(["Ouvrir", "Afficher dans le Finder", "Copier le chemin"]);
+    await act(async () => (document.querySelectorAll<HTMLButtonElement>('[data-file-link-menu] [role="menuitem"]')[1]!).click());
+    expect(revealInFolder).toHaveBeenCalledWith(spaced);
+  });
+
+  it("reports a missing absolute path on click", async () => {
+    revealInFolder = vi.fn(async () => "missing");
+    openLocalFile = vi.fn(async () => "missing");
+    (window as unknown as { ogb: { openLocalFile: typeof openLocalFile; revealInFolder: typeof revealInFolder; localFilesExist: unknown; platform: string } }).ogb.openLocalFile = openLocalFile;
+    (window as unknown as { ogb: { revealInFolder: typeof revealInFolder } }).ogb.revealInFolder = revealInFolder;
+    const host = await render("`/Users/jc/missing-file.drawio`");
+    await act(async () => host.querySelector<HTMLButtonElement>("[data-file-link]")!.click());
+    expect(openLocalFile).toHaveBeenCalledWith("/Users/jc/missing-file.drawio");
+    expect(host.querySelector("[role='status']")?.textContent).toBe("Ce fichier n'est plus là.");
+  });
+
+  it("opens a Markdown link whose target encodes spaces (#5393)", async () => {
+    const host = await render("[Sauvegardes](/Users/ada/Documents/acme/Onboarding/Acme%20Corp%20inc/pages/AcmeCorp_Backups.drawio)");
+    // Absolute Markdown destinations use the #5018 reveal control.
+    expect(host.textContent).toMatch(/Finder|folder|Sauvegardes/i);
   });
 });

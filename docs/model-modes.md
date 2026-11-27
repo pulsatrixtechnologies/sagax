@@ -1,4 +1,4 @@
-# Composer modes: Auto, Fast, Expert, Heavy, Reasoning, All models (#4900, #5088)
+# Composer modes: Auto, Fast, Expert, Heavy, Custom, Effort (#4900, #5088, #5408)
 
 ## The chat bar of the desktop app (owner 2026-11-25, #5372)
 
@@ -14,36 +14,81 @@ dropped, the model kept), and an app that still sends `mode: "build"` gets
 Auto without an error (`RETIRED_MODEL_MODE`, `shared/model-mode.ts`).
 
 ```
-( + )  Message <bot>                                   ( mic v )
-  [ Expert · High ^ ]                          [ o 42%  |  o 89% ]
+( + )  Message <bot>                 [ * Expert · High ^ ]  ( mic v )
+                                               [ o 42%  |  o 89% ]
 ```
 
-- The message box holds the +, the field and one voice button. Under it, a
-  quiet row in small text: the model chip at the left, the context and usage
-  meter at the right (`Composer.tsx-parts/ComposerUnderRow.tsx`).
-- The chip reads the mode then the reasoning level ("Expert · High"), or the
-  model the person pinned. Its menu: Auto, Fast, Expert, Heavy; then
-  "Favorites" (the starred models); then Reasoning; then All models (the
-  cascade); then Manage models. A star in All models adds or removes a
-  favorite (`src/lib/model-favorites.ts`).
+- The message box holds the +, the field, the model chip and one voice
+  button, the chip just before the voice button (owner 2026-11-26,
+  M-20261126-104, #5408; `Composer.tsx-parts/ComposerActionBar.tsx`). Under
+  the box, a quiet row in small text keeps the context and usage meter, at
+  the right (`Composer.tsx-parts/ComposerUnderRow.tsx`).
+- The chip reads the icon of the mode, the mode, then the effort ("Expert ·
+  High"), or the model the person picked by hand (Custom's icon). Its menu,
+  280 px wide (M-20261126-104, M-20261126-103): Auto, Fast, Expert,
+  Heavy, Custom, then Effort; no "All models" row, no footer. See "The mode
+  menu" below. A star on a model adds or removes a favorite
+  (`src/lib/model-favorites.ts`).
 - Build is no row of the chat bar, and no mode at all (D-20261126-005, above).
   `shared/mode-menu.ts` is unchanged and still names it (the console's copy is
   byte-identical); Sagax's own list is `MODEL_MODES` (`shared/model-mode.ts`),
   which the desktop draws as `CHAT_BAR_MODES` (`src/lib/model-mode.ts`).
-- The meter (`src/components/ComposerMeter.tsx`, rules
-  `src/lib/composer-meter.ts`) replaces the limit dot in the chat bar: two
-  halves, each a ring and its percentage. Left: the share of the model's
-  window this conversation uses. Right: the most advanced limit (5-hour
-  session or week) of the account that serves the bot; only this half takes
-  the dot's warning and danger colours, by the dot's own thresholds. A half
-  with no data is absent. In a narrow box the figures fold and the rings
-  stay. A click opens a detail: the tokens of the total and Compact now; or
-  the account's row (the row of Settings > Usage limits, `AccountLimits` in
-  `PlanUsage.tsx`: provider and address, both windows side by side, its star
-  once), then Continue or Switch engine and See usage. The figures are read
-  when a detail opens and every minute while it is open. The account menu's
-  Usage draws the same row, one per account. The conversation's header shows
-  no token figure any more.
+- The usage pill (`src/components/ComposerMeter.tsx`; the pill itself
+  `src/components/UsagePill.tsx`, reusable outside the chat bar; rules
+  `src/lib/usage-pill.ts`, the context measure `src/lib/composer-meter.ts`)
+  replaces the limit dot in the chat bar (M-20261126-095, M-20261126-096,
+  M-20261126-099, #5406): a small shape of three measures and a named
+  percentage always in sight, narrow window or not. The week and the short
+  session are a sum of every account that can serve the bot, never the
+  serving account alone. The pill renders no verdict of its own (#5421): who
+  can serve is the usage-limit takeover's pool (`serves` of GET
+  `/api/bots/<id>/auto-model`, `limitServingPool` in
+  `server/usage/limit-failover.ts`; with `SAGAX_LIMIT_FAILOVER=0` a model
+  chosen by hand is served by its own engine alone, Auto keeps its pool),
+  whether an account refuses work is the limit report's `blocked` (GET
+  `/api/limit-resets`: a full window that Claude's Extra Usage still serves
+  is not blocked, a refusal's hold is), and the windows come from the plan
+  report; an older server names no pool and the serving provider's accounts
+  answer. The pool is read when the chat bar mounts and again when the detail
+  opens, the last answer kept on screen meanwhile and when a read fails
+  (`useAutoModelStatus`'s `open`); until a first answer, nothing is called
+  blocked. Each window's sum is the mean of the accounts that have it; a
+  blocked account counts as full in every window it has; an account with no
+  5-hour limit (Codex) is out of that window's sum; an engine with no window
+  (a local model, a key) is in no sum. The plan's size is not weighed: the
+  plan report names none. The third measure is the share of the model's
+  window the conversation uses. The text names the fuller of the windows a
+  free account still has ("wk 44%", "5h 20%"), adds "back <day> <hour>" only
+  when every account is blocked, and names the free engine when it is the
+  only room left ("wk 100% · Ollama free"). A sum under 100 never rounds to
+  100. A measure is quiet, warning from 75%, danger only when every account
+  is blocked. `usagePill` is the pure function a place outside the chat bar
+  reads (the three values and the text); `accountsUsage` sums every
+  signed-in account for a place that names no bot (the account menu's Usage
+  row, the menu bar). A click opens the detail
+  (`src/components/UsageAccountsDetail.tsx`): one row per account, the
+  session and the week as columns, the return time once and only for a limit
+  that is hit, the serving account marked, the free accounts first, three
+  rows then a fold, the accounts at their limit folded below, a fixed height
+  with a header that stays in sight; then the context's tokens with Compact
+  now; "Try again now" while the serving engine is held; the other limit
+  actions (Continue, Switch engine, See usage) only when everything is
+  blocked. The figures are read when the detail opens and every minute while
+  it is open. The account menu's Usage draws the same detail for every
+  signed-in account, and its row says the same sum unless an account is
+  starred. Settings > Appearance > Conversation holds the person's choices
+  (`src/lib/usage-pill-preferences.ts`): the pill in the message bar
+  (`sagax.usagePillInBar.v1`, on), its shape (`sagax.usagePillShape.v1`: bars,
+  circles, battery, dots, text; circles) and the context indicator
+  (`sagax.contextIndicator.v1`, on). No action is lost: with the pill off the
+  context keeps its own ring and the pill itself comes back while the serving
+  engine is held (its "Try again now"; the bar never shows the limit dot
+  again, M-20261125-070); with the context indicator off the detail keeps
+  Compact now, and with both off the ring comes back at 80%. The account
+  menu's Usage row names the window of the sum ("wk 44%").
+  With no plan window for the engine the pill draws from the engine's own
+  limit once it is near, with its line. The conversation's header shows no
+  token figure any more.
 - The voice button (`src/components/ComposerVoiceButton.tsx`,
   `src/lib/composer-voice.ts`): the mic for dictation or the waves for the
   voice conversation; a click does the mode the person used last
@@ -66,6 +111,7 @@ Auto without an error (`RETIRED_MODEL_MODE`, `shared/model-mode.ts`).
   setting.
 
 Tests: `src/components/ComposerMeter.dom.test.ts`, `src/lib/composer-meter.test.ts`,
+`src/lib/usage-pill.test.ts`, `src/lib/usage-pill-preferences.test.ts`,
 `src/components/ComposerVoiceButton.dom.test.ts`, `src/lib/composer-voice.test.ts`,
 `src/components/settings/ModesSettings.dom.test.ts`,
 `server/models/model-mode.person.test.ts`, `server/routes/model-switches.test.ts`,
@@ -74,25 +120,27 @@ Tests: `src/components/ComposerMeter.dom.test.ts`, `src/lib/composer-meter.test.
 
 ## The mode menu
 
-The chat bar's model button opens the mode menu. Since the owner's decision of
-2026-11-23 (M-20261123-040, M-20261123-045, M-20261123-047) it is the same
-menu, row for row, in the Sagax app and in the Perspicax console:
+The chat bar's model button opens the mode menu. On the desktop (owner
+2026-11-26, M-20261126-104, M-20261126-103, #5408) it is 280 px wide (the
+mockup says "about 240 px"; 280 is an agent's choice so a model's name reads
+whole on Custom's row):
 
 ```
 Auto / Fast / Expert / Heavy
+Custom           <model>  ›   (favorites, providers › account › model, Manage models)
 ──────────
-Reasoning        <level>  ›   (the levels of the model in use)
-──────────
-All models                ›   (provider › account › model)
+Effort           <level>  ›   (the levels of the model in use)
 ```
 
-The rows and their rules are one definition, `shared/mode-menu.ts`, which
-imports nothing; the console keeps a byte-identical copy
-(`console/src/lib/mode-menu.ts`) pinned by its hash, and each side runs the
-same cases.
+The modes and their order are one definition shared with the Perspicax
+console, `shared/mode-menu.ts`, which imports nothing; the console keeps a
+byte-identical copy (`console/src/lib/mode-menu.ts`) pinned by its hash, and
+each side runs the same cases. The file is unchanged: the console, the iPhone
+and the iPad keep its rows (Reasoning, All models) until their own lots; the
+Custom and Effort rows are the desktop's (`src/components/ModeMenu.tsx`).
 
-The button reads the mode's name ("Expert ⌄"), or the model the person pinned
-in All models. A hovered or focused mode opens a small tooltip beside the
+The button reads the mode's name ("Expert ⌄"), or the model the person picked
+by hand. A hovered or focused mode opens a small tooltip beside the
 menu: what the mode does, then which model backs it ("Quick responses · Grok
 4.7", "Thinks hard · Grok 4.7", "Team of Experts · GPT-6 Astra, Claude Opus
 5.5"). Auto never names a model: it reads each request.
@@ -100,10 +148,10 @@ menu: what the mode does, then which model backs it ("Quick responses · Grok
 Sagax maps every mode, on every turn, to the best models the person can use:
 their connected providers and accounts, and their local models.
 
-**Reasoning** and **All models** open cascading submenus (owner 2026-11-25,
+**Custom** and **Effort** open cascading submenus (owner 2026-11-25,
 M-20261125-035, D-20261125-011, D-20261125-012, #5338): the menu stays on
 screen and each level opens beside the row that opened it, so the whole path
-reads at once (menu, providers, accounts, models). Nothing replaces the menu
+reads at once (menu, list, accounts, models). Nothing replaces the menu
 and there is no back row. A click, a rest of the pointer or the right arrow
 opens a level; Escape or the left arrow closes the deepest one and the focus
 returns to the row that opened it. The first level picks the side for the
@@ -112,33 +160,70 @@ room) and the next levels keep going that way; in a window too narrow for
 the path a level stops at the window's margin, over a part of the one before
 it. One shell draws a level (`src/components/ModeMenuLevel.tsx`), placed by
 the menu family's submenu positioner (`submenuPlace`). On iPhone and iPad the
-same path is the system's nested menus (see `ios/App/Features/Chat`).
+path is the system's nested menus (see `ios/App/Features/Chat`).
 
-**Reasoning** is a row that shows the level in use and opens, beside the menu, the
-levels the model in use takes (`modelEffortLevels`, so they follow the model).
-Under a mode that sets its own level (Fast, Expert, Heavy) the row is greyed
-and shows the level the mode imposes. A model that takes no level has no row.
-Under Auto, the row reads Auto until the person chooses a level. Choosing Auto again lets each turn use its mode's level.
+**Effort** is the one name everywhere: it replaces "Reasoning" in the menu, in
+the model panel's other places and in the short menu a working bot opens
+elsewhere. Its row shows the level in use and opens, beside the menu, one
+explaining sentence and the levels the model in use takes
+(`modelEffortLevels`, so they follow the model), "Recommended" beside the
+model's own level, an info mark on Max (and on Ultracode). Under a mode that
+sets its own level (Fast, Expert, Heavy) the row is greyed and shows the level
+the mode imposes. A model that takes no level has no row. The row never reads
+"Auto".
 
-**All models** is the person's own model. Its row names the pinned model while
-it runs and opens a cascade of three levels, each beside the one before: the
-provider, then the account, then the model. A provider with a single account
-goes straight to its models. Only what can run a turn now is listed: an
-account signed out or not responding, a model turned off and a provider left
-with nothing are absent, and no state is written in the menu. "Local" is a
-provider: the models of this computer and of the local servers, each server
-(or the person who shares it) where an account would be. A model two accounts
-offer is listed under each, and the copy under an account the menu does not
-lead with forces that account (as the Account line does). The starred
-favorites lead the provider level and the star still adds or removes one,
-synced across the person's devices. Nothing else of the panel is lost (one
-component, `src/components/ModelPanel.tsx` with `modes`): the Account and Runs
-with lines and "Manage models" stay in the footer. Auto's "Optimize for" is no
-row of the mode menu (owner, D-20261124-002: the menu has the console's rows
-only); it is set where it already was, under Auto in the Manage models window
-and in a bot's Model cell (Settings, Providers, Models and context size). The menu no longer counts the models turned off: turning one back on
-is done in Manage models. The other places the model menu opens (the bot's
-Model row, the wizard, team settings) keep the panel's own short view.
+Under Auto, the person's choice always holds (owner, D-20261126-017). Any
+Effort level she clicks, even the "Recommended" one, is sent and the selection
+keeps it. The server runs each of her own turns under Auto at that level,
+whatever model and engine Auto takes for the turn (a continuation, and the
+lead of a turn Auto hands to Heavy, included), wherever that engine takes the
+level (`server/index-leaves/autoPickForTurn.ts`). Work handed out (a routine
+or another automation, a peer bot's question or hop, a goal run's step, a room
+hand-off) does not keep it: such work takes the level only when it runs on the
+bot's own engine (`server/models/model-auto.ts`).
+Heavy's experts do not keep it either: they run at their own level
+(`server/index-leaves/runHeavyTeam.ts`). Until she clicks one, the Effort
+row shows no value and no level is checked: Auto decides turn by turn.
+Clicking the checked level again hands it back to Auto. The levels listed are
+the model's alone: no "Auto" and no "Default" row (the shared rule keeps
+"Auto" for the console).
+
+Off the modes (a model picked by hand, Custom), with no level chosen the row
+shows the model's own level, and picking that level sends none. Fast, Expert
+and Heavy set their own level every turn. While the bot works the chat bar still opens this menu, its modes
+and models locked and its Effort row open: a level chosen mid-turn applies
+from the next turn. There is no Effort window of its own in the chat bar.
+
+**Custom** is the person's own model. Its row names the model picked by hand
+(the one the selection keeps under a mode too), is checked while that model
+runs, and opens the model list. No name is cut short: the model's name takes
+all the room "Custom" leaves, the check and the chevron after it; a name
+longer than that is cut in its middle, its start and its end kept, the whole
+name in the tooltip. The list is as wide as the menu, each option with an
+icon before it: a thread's "Use <bot>'s model" row first (its sentence whole,
+the model it means on a line under it), the starred favorites under
+"Favorites" (an outline star; one click runs the model; one that cannot run
+now is absent; a favorite that names its account says it on a line of its
+own under its name), then "All models", a cascade of three levels,
+each beside the one before: the provider (its mark), then the account, then
+the model. A provider with a single account goes straight to its models. Only
+what can run a turn now is listed: an account signed out or not responding, a
+model turned off and a provider left with nothing are absent, and no state is
+written in the menu. "Local" is a provider: the models of this computer and of
+the local servers, each server (or the person who shares it) where an account
+would be. A model two accounts offer is listed under each, and the copy under
+an account the menu does not lead with forces that account (as the Account
+line does). The star of a model still adds or removes a favorite, synced
+across the person's devices. "Manage models" (a gear) is the foot of this
+list. The menu has no footer: the lines that exist only for a model picked by
+hand (Account, Runs with, Fast, Context size) sit over Manage models, in the
+same list (one component, `src/components/ModelPanel.tsx` with `modes`).
+Auto's "Optimize for" is no row of the mode menu (owner, D-20261124-002); it
+is set where it already was, under Auto in the Manage models window and in a
+bot's Model cell (Settings, Providers, Models and context size). The menu no
+longer counts the models turned off: turning one back on is done in Manage
+models. The other places the model menu opens (the bot's Model row, the
+wizard, team settings) keep the panel's own short view, footer included.
 
 ## The rules (server/models/model-mode.ts)
 
@@ -155,9 +240,9 @@ providers against each other.
 - **Fast**: the person's own fast model when they set one, else the quickest good
   model (the cheapest of the fast tier). Effort low.
 - **Expert**: the strongest model of the strongest provider. Effort high.
-- **Heavy**: Expert's model leads. The team is the best model of each provider
-  (at most five, strongest first). With one provider, `HEAVY_SINGLE_PROVIDER_AGENTS`
-  agents on its strongest model.
+- **Heavy**: Expert's model leads. The team's seats are each account's best
+  model, strongest first, then each one's second (at most eight,
+  `HEAVY_MAX_EXPERTS`); with fewer seats than experts they share them.
 - A mode with no usable model is not shown. A mode with nothing to run falls back
   on Auto.
 
@@ -197,10 +282,64 @@ model and favorites above the runnable providers. `ComposerModesTests` covers
 a selection still on Build reading as Auto, mode availability and the cascade
 (#5245, #5398).
 The Heavy row (`HeavyTeamRowView.swift`, the state
-`HeavyTeamLine.swift`) draws the server's Heavy run (#5089) like the
-desktop's (#5090); the engine stays on the server. Tests:
+`HeavyTeamLine.swift`) draws the server's Heavy run (#5089) with the orbit
+of #5090 (the desktop's row now divides the bot's mascot instead, see "The
+division" below); the engine stays on the server. Tests:
 `ComposerModesTests.swift`; capture: `-mascotGallery heavy` in the
 simulator (`HeavyTeamGallery.swift`).
+
+## A model at its limit is never a mode's pick (#5403)
+
+Owner's request M-20261126-101. One list feeds the turn's pick and the
+menu's preview (`autoPickForTurn`, so `GET /api/bots/:id/auto-model` and its
+`modes` say what the turn would run). An account is out of that list while it
+cannot serve the person: signed out, no key, engine off or not responding
+(`autoEnginesFor`), a refusal Sagax saw, and an account whose 5-hour or weekly
+window the person's usage report shows used up with no extra usage left
+(`limitFailover.autoExcluded(payer, engines, "report")`, the verdict of
+`spentPlanUntil` that the quick pick already read; no second one).
+
+- Each account on its own: a model several accounts serve stays while one of
+  them has room, and the person's account strategy picks among those.
+- Auto, Fast and Expert take the next available model. Heavy seats only
+  available models: with fewer left the team is smaller.
+- A model the person set for a mode (Settings > Modes) is skipped the same
+  way for the turn; the setting is kept and runs again once the limit resets.
+- With every account at its limit the turn's pick keeps its list, as before:
+  the turn's refusal says when the limit resets. The menu's preview then names
+  no model (`modesAtLimit`: every mode's `pick` is null, with
+  `limited: { until }`, the first account expected back,
+  `limitFailover.limitedUntil`). The modes stay in the menu and each tooltip
+  reads "No model you can use right now · resets 3:40 PM", from the texts the
+  app already had (`model.cascade.none`, `limits.resets`).
+  The preview's own `pick` and its sentence are empty then too
+  (`server/routes/bots-mutate-small.ts`), so Auto's chip names no model either.
+  The route takes that verdict from the turn's answer (`modes.auto.limited`,
+  never a second test): its `chain` is empty and each account is in
+  `excluded` with `limit`. Settings > Models, "What Auto would choose now",
+  shows no order of choice, only the tooltip's line read from
+  `modes.auto.limited` (`limitedLine`), and lists each account under "Left out".
+- A report at 100 % is read again by the server, with no app asking: while a
+  payer has a live entry from the report (`spentPlans`), that payer's limit
+  clock (`LimitResetClock`, the timer that already reads usage every 5 minutes
+  while a refusal holds an engine) reads usage too, and the reading is noted
+  by the same `notePlanLimits` as an app's (`server/usage/plan-report-watch.ts`).
+  An early reset or extra usage bought since brings the account back within
+  about 5 minutes on an iPhone alone, in a routine or an unattended bot;
+  before, only a desktop app asking for the report did (every 10 minutes).
+- Every turn Sagax starts takes its model here, so all of this holds for a
+  routine's run (role `worker`, `routineReadinessBot` and the routine's
+  `startTurn`), a bot talking to another bot and every started turn
+  (`server/turns/start-turn-prepare-validate.ts`), a group room
+  (`server/turns/group-member-turn-prepare.ts`) and workers. A continued
+  conversation leaves its earlier pick while that account is flagged.
+- The desktop reads the preview again each time the menu opens
+  (`useAutoModelStatus`, `open`), the last answer staying on screen meanwhile.
+
+Tests: `server/index-leaves/autoPickForTurn.limit.test.ts`,
+`server/usage/limit-failover-host.test.ts`, `server/routes/bots-mutate.test.ts`,
+`src/lib/auto-model-preview.dom.test.ts`, `server/usage/plan-report-watch.test.ts`,
+`src/lib/model-mode.chatbar.test.ts`, `src/components/settings/AutoModelSettings.test.ts`.
 
 ## Heavy: a team of read-only experts (#5089)
 
@@ -210,14 +349,22 @@ Heavy works the Grok way. One engine, in the Sagax server, for every client
 called from `startTurn` before the leader's prompt is built.
 
 - **The team.** The bot is the leader (the turn itself, on Expert's pick). A
-  short hidden ask lets it choose how many experts the task needs, 2 to 5, and
-  a persona for each (a skeptic, security, cost, the user's advocate, or what
-  the task calls for). A reply that does not read gives three default personas.
+  short hidden ask lets it choose how many experts the task needs, 2 to 8
+  (D-20261126-023, `HEAVY_MAX_EXPERTS`): the fewest that suffice, 2 for a
+  simple question, more only for a big, risky or many-part request; and a
+  persona for each (a skeptic, security, cost, the user's advocate, or what
+  the task calls for). Its count is held between 2 and 8 (9 reads as 8, 1 as
+  2 with a default persona beside it); a reply that does not read gives three
+  default personas. The seats, the person's Heavy experts in Settings > Modes
+  and a solo server's stored modes keep up to 8 too. The experts of a round
+  speak at once: a round lasts as long as its slowest expert (4 minutes at
+  most), whatever the team's size; a team of 8 makes 8 calls per round and
+  each critique reads the 7 others.
 - **Seats.** `heavySeats` (server/models/model-mode.ts) lists the person's own
   accounts, each one's strongest model, then each one's second strongest;
   `assignSeats` gives the experts different accounts first, then different
   models of the same provider. An account at its usage limit is already out
-  (#5031); only this person's accounts are offered.
+  (#5031, #5403); only this person's accounts are offered.
 - **Read-only, held by the server.** Each expert is a hidden thread of the same
   bot, confined before its first turn (`store.confineHeavyExpert`): the
   conversation's tool scope of #4993 keeps only reviewed reads of Sagax's own
@@ -244,18 +391,76 @@ called from `startTurn` before the leader's prompt is built.
 - **The row.** One activity row of the conversation (`shared/heavy-team.ts`)
   keeps the whole run: the experts, their personas and seats, every round,
   who speaks, each verdict, the outcome and the disagreements.
-- **The animation** (#5090, `src/components/HeavyOrbit.tsx`, drawn by
-  `HeavyTeamRow.tsx`): while the team works the experts' avatars turn around
-  the bot's; the one speaking pulses; during a critique round lines link every
-  two experts still in it; on agreement they merge into the bot while it
-  writes. Transform and opacity only, at rest under reduced motion. Beside it:
-  "Experts thinking · round 2 of 5 · 6s" and a live line per expert ("Expert
-  1 · Skeptic"). After: "Thought for 8s · agreed in round 2" (or "no agreement
-  after 5 rounds, the leader decided"), which opens the Thoughts panel (#4924):
-  the leader's steps, the disputed points, each expert's persona, seat and
-  one message per round. Auto's choice of Heavy reads in one line above.
-  Tests: `src/components/HeavyTeamRow.dom.test.ts`; captures:
-  `scripts/capture/heavy-team.mjs`.
+- **The division** (owner 2026-11-26, M-20261126-116, M-20261126-119 to
+  M-20261126-122; `src/components/HeavyDivision.tsx`, the motion
+  `src/lib/heavy-division.ts`, drawn by `HeavyTeamRow.tsx`). Desktop only.
+  The row's small avatars (22 px) are the run itself: while the leader picks
+  its team the row shows the bot's own mascot; when the team is known the
+  mascot divides in place into one cell per expert. A cell loses its eyes;
+  the bot's own silhouette elongates, pinches in the middle and lets go
+  (one membrane until it breaks: a blur then a threshold on its alpha, on
+  the silhouette itself, in SVG); each daughter gets its eyes back, takes
+  its expert's colour, and the experts close up into the pile, each cut out
+  of its neighbour by a ring of the page's colour. Any number the run
+  announces is drawn (the colours are eight, `AGENT_COLORS`, the seventh
+  lime as in the mock-up); several cells divide at once when many are
+  needed (1, 2, 4, 8). One speed, the mock-up's (`DIVISION_SPEED`). The
+  drawing is as wide as its cells, so the header stays against the pile.
+  - The cell is the bot's own shape for the whole division: its
+    open-bot-avatar body (the baked still every other avatar of the bot
+    draws, or its own drawing read once per content), its colour, its eyes
+    where the bot has them; every expert keeps the shape and only the colour
+    changes. The look's rules are ShapeMascot's own (`shape-look.ts`, held
+    to ShapeMascot by `shape-look.test.ts`).
+  - A Fluffy or Glass bot wears its material in its cells: the bot's still
+    while nothing divides, each expert's once it has its colour, painted
+    once per look and colour by the engine on the WebGL2 context the
+    material already shares across the page (`shape-material-still.ts`), so
+    no context is added per row. While the cells divide the membrane is flat
+    in the bot's colour with the mock-up's simple volume, and where the page
+    cannot paint the material (no WebGL2) the cells stay flat with that
+    volume. A Flat bot's cells are flat, as its avatars are. A skin's layers
+    (gold, neon...) are not carried into the cells: the bot's own cell takes
+    the skin's fill and eyes, the experts their colour.
+  - An expert that fails mid-run stays marked: its cell (or its owl) is
+    dimmed, as the orbit dimmed it, and its line in the preview reads "Did
+    not finish · ..." in the tertiary ink.
+  - A bot whose mascot is a character (the owl, Shiba...) or its own picture
+    divides too (D-20261126-037): while its leader picks the team the row
+    shows the bot itself, then a round in the bot's colour divides, and once
+    the pile has closed up each cell becomes the bot's own character again
+    (its look in the expert's colour; a picture as it is), stacked as the
+    pile is, the round fading out over them. The pile is alive while the run
+    goes (the one speaking at work, as the orbit drew them) and still after;
+    a run read back from history is that pile at once.
+  - A run that is over, or read back from history, is drawn finished and
+    never replayed; so is a row that first shows once the experts are past
+    their first round or the leader writes; a division shown to its end is
+    not played again when its row comes back. Under reduced motion (the
+    device's, the app's, the mascot's own Motion setting, followed while the
+    run goes) every step lands at once.
+  - The clock stops when the row leaves the screen, when the window is
+    hidden and once nothing moves (a finished row asks for no frame and has
+    no filter). While the run goes the cells breathe at 30 frames a second.
+    Measured by `scripts/capture/heavy-division.mjs --measure`.
+  - It replaces the orbit of #5090 on the desktop (D-20261126-022): the
+    phone keeps its own until its lot. Who speaks still reads in the live
+    line per expert, and the round's kind in the header.
+  Beside it: "Experts proposing · round 1 of 5 · 6s" or "Experts critiquing
+  · round 2 of 5 · 9s" ("Experts thinking" between two rounds) and a live
+  line per expert ("Expert 1 · Skeptic"). After: "Thought for 8s · agreed in
+  round 2" (or "no agreement after 5 rounds, the leader decided"), which
+  opens the Thoughts panel (#4924): the leader's steps, the disputed points,
+  each expert's persona, seat and one message per round. Auto's choice of
+  Heavy reads in one line above.
+  Tests: `src/lib/heavy-division.test.ts`,
+  `src/components/HeavyDivision.dom.test.ts`,
+  `src/components/HeavyDivision.material.dom.test.ts`,
+  `src/components/shape-look.test.ts`,
+  `src/components/HeavyTeamRow.dom.test.ts`; captures:
+  `scripts/capture/heavy-division.mjs` (frame by frame, beside the mock-up
+  with `--mockup`; `--look` for an own drawing, a material, a failure, a
+  character, a picture; `--shape owl`), `scripts/capture/heavy-team.mjs`.
 
 Tests: `server/heavy-team.test.ts` (an expert's write is refused by the server;
 the leader stops at 5 rounds at most; agreement stops early; the plan, the

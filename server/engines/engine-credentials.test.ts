@@ -626,4 +626,22 @@ describe("resolveGovernedEngineAccess (#5180)", () => {
     const account = input({ signedIn: [`${OWNER}/claudeAgent`], keys: ["SUB-OWNER/anthropic"], policy: { ...policy, personalKeysEnabled: false } });
     expect(resolveGovernedEngineAccess(account).plan).toMatchObject({ ok: true, via: "subscription" });
   });
+
+  // #5200: the organization's Grok account serves Grok engines after the
+  // person's forms and before the organization's key.
+  it("serves the organization's Grok account on a Grok engine before the org key (#5200)", () => {
+    const org = { orgAccountAvailable: true, orgAccountPrincipalId: OWNER } as const;
+    const bobGrok = input({ instance: GROK, speaker: bob, keyBacked: true, ...org, policy });
+    expect(resolveEngineAccess(bobGrok)).toMatchObject({ ok: true, via: "org-account", payer: "organization" });
+    expect(resolveGovernedEngineAccess(bobGrok).plan).toMatchObject({ ok: true, via: "org-account" });
+    expect(resolveGovernedEngineAccess(bobGrok).decision).toMatchObject({ ok: true, form: "org-account" });
+    // a personal Grok sign-in still wins
+    const own = input({ instance: GROK, speaker: bob, signedIn: [`${BOB}/grokAgent`], keyBacked: true, ...org });
+    expect(resolveEngineAccess(own)).toMatchObject({ ok: true, via: "subscription", payer: "speaker", payerPrincipalId: BOB });
+    // Claude never takes a Grok org account
+    expect(resolveEngineAccess(input({ keyBacked: true, ...org }))).toMatchObject({ ok: true, via: "org-key" });
+    // not given the engine: refused, never the org key either when only the account is present
+    const notGiven = input({ instance: GROK, speaker: bob, ...org, serverEngineAllowed: () => false, keyBacked: false });
+    expect(resolveEngineAccess(notGiven)).toMatchObject({ ok: false, cause: "no_credentials" });
+  });
 });

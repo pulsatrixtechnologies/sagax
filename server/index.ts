@@ -526,6 +526,7 @@ import { USAGE_LIMIT } from "./drivers/retry.ts";
 import { recoveryCapabilityError } from "./automatic-recovery.ts";
 import { createCacheKeepWarm, type KeepWarmStatus, type KeepWarmTarget } from "./cache-keepwarm.ts";
 import { createLimitResetHost, SERVER_LIMIT_SCOPE } from "./usage/limit-reset-host.ts";
+import { createPlanReportWatch } from "./usage/plan-report-watch.ts";
 import { engineLabel } from "./usage/limit-resets.ts";
 import { billsEachUse, LimitFailoverStore } from "./usage/limit-failover.ts";
 import { createLimitFailoverHost, limitBackupRefusedText } from "./usage/limit-failover-host.ts";
@@ -1261,6 +1262,7 @@ import { PageDataApprovals } from "./pages/page-data-approvals.ts";
 import { pageActVerdict } from "./pages/page-act-verdict.ts";
 import { PageLinkApprovals } from "./pages/page-link-approvals.ts";
 import { createTeamBoardSource } from "./pages/sources/team-board.ts";
+import { createTeamBoardRoutes } from "./routes/team-board.ts";
 import { TEAM_BOARD_ENTRIES_PER_BOT, TEAM_BOARD_WORK_WINDOW_MS, waitingCardOf } from "./team-board/board.ts";
 import { createGithubBoardReader, ghGraphqlVia, ghRestVia } from "./team-board/github-board.ts";
 import { createBotCodeBranchRoutes } from "./routes/bot-code-branches.ts";
@@ -1301,6 +1303,7 @@ import { historyWriterOf } from "./history-writer.ts";
 import { createRoutineAwayRoutes } from "./routes/routine-away.ts";
 import { createRoutineAlwaysChoicesRoutes } from "./routes/routine-always-choices.ts";
 import { createRoutineFolderRoutes } from "./routes/routine-folders.ts";
+import { createRoutineOutcomeRoutes } from "./routes/routine-outcomes.ts";
 import { createRoutineBulkRoutes } from "./routes/routine-bulk.ts";
 import { createMeetingRoutes } from "./routes/meetings.ts";
 import { approvalTypeOf } from "./approvals/approval-type.ts";
@@ -1437,6 +1440,7 @@ import { createEventSubscriptionsInternalRoutes } from "./routes/event-subscript
 import { createPerspicaxOrgRoutes, orgDirectoryEntries } from "./perspicax/perspicax-org-routes.ts";
 import { createMemorySyncTokenRoute } from "./memory/perspicax-memory-sync-token.ts";
 import { memoryReadPath, PerspicaxMemoryNotesClient } from "./memory/perspicax-memory-notes.ts";
+import { installConsoleMemoryMirror } from "./memory/console-memory-mirror-install.ts";
 import { createMeMemoryNotesRoutes, memoryPrincipal } from "./routes/me-memory-notes.ts";
 import { createMemoryManagerRoutes } from "./routes/memory-manager.ts";
 import { ownEnvironmentSensitiveRead, ownEnvironmentTurnOrigin } from "./people/member-environment.ts";
@@ -1459,6 +1463,7 @@ import { routineScheduleLabel } from "./org/org-admin-schedule.ts";
 import { routinesRoutes, type RoutinesDeps } from "./org/org-admin-routines.ts";
 import { routineRunsRoutes, type RoutineRunsDeps } from "./org/org-admin-runs.ts";
 import { opsRoutes, type ConnectionsView, type OpsDeps } from "./org/org-admin-ops.ts";
+import { enginesRoutes, orgEngineRow, type EnginesDeps } from "./org/org-admin-engines.ts";
 import { createOrgImportRoute } from "./org/org-import-routes.ts";
 import { sandboxdKeySource } from "./sandbox/sandboxd-auth.ts";
 import { sandboxBackendFor, sandboxRouteFromEnv } from "./sandbox/sandbox-route.ts";
@@ -1570,7 +1575,7 @@ import { createPlanHistoryStore } from "./usage/plan-history.ts";
 import { createKeysTestRoutes } from "./routes/keys-test.ts";
 import { createDecisionsRoutes } from "./routes/decisions.ts";
 import { createAdminActivityRoutes } from "./routes/admin-activity.ts";
-import { createInstancesRoutes, instancesInView, removeAddedAccount, type AddedAccountRemovalDeps } from "./routes/instances.ts";
+import { createInstancesRoutes, instancesInView, removeAccountMovingBots, removeAddedAccount, saveOrgEngineKey, type AddedAccountRemovalDeps } from "./routes/instances.ts";
 import { accountOwnedBy, accountOwnerOf, allowedWithOwnedAccounts, describeUnownedAccount, unownedAddedAccounts } from "./engines/account-owner.ts";
 import { accountWords } from "../shared/model-accounts.ts";
 import { providerOfInstance } from "../shared/model-provider.ts";
@@ -1581,7 +1586,7 @@ import { createAccountSwitch } from "./usage/account-switch-host.ts";
 import { cleanModeModels, type ModeModels } from "../shared/mode-models.ts";
 import { outcomeOfSettledTurn } from "./usage/learned-routing.ts";
 import { createUsageForecast } from "./usage/usage-forecast.ts";
-import { addedAccount } from "../shared/added-account.ts";
+import { addedAccount, providerFirstAccount } from "../shared/added-account.ts";
 import { createCliTestRoutes } from "./routes/cli-test.ts";
 import { createMcpServersHttpRoutes } from "./routes/mcp-servers-http.ts";
 import { createConfigHttpRoutes } from "./routes/config-http.ts";
@@ -2515,6 +2520,7 @@ bindLeafHost({
   get queuedTurnTrigger() { return queuedTurnTrigger; },
   get hostComputerRefusal() { return hostComputerRefusal; },
   get orgAccountComputerRefusal() { return orgAccountComputerRefusal; },
+  get orgGrokAccountHolder() { return orgGrokAccountHolder; },
   get computerPlaceRefusal() { return computerPlaceRefusal; },
   get externalCompletion() { return externalCompletion; },
   get beginInternalCapabilityGeneration() { return beginInternalCapabilityGeneration; },
@@ -3071,6 +3077,9 @@ bindLeafHost({
   get modelSwitchRefusal() { return modelSwitchRefusal; },
   get orgOwnAccountsOutsideList() { return orgOwnAccountsOutsideList; },
   get orgAllowedEngines() { return orgAllowedEngines; },
+  get orgEngineHidden() { return orgEngineHidden; },
+  get orgEngineHiddenRefusal() { return orgEngineHiddenRefusal; },
+  get orgHiddenEnginesFor() { return orgHiddenEnginesFor; },
   get personPaysEngine() { return personPaysEngine; },
   get orgEngineName() { return orgEngineName; },
   get insideDataDir() { return insideDataDir; },
@@ -4501,6 +4510,7 @@ bindLeafHost({
   get createRoutineEffortForTurn() { return createRoutineEffortForTurn; },
   get createRoutineEngineForBot() { return createRoutineEngineForBot; },
   get createRoutineFolderRoutes() { return createRoutineFolderRoutes; },
+  get createRoutineOutcomeRoutes() { return createRoutineOutcomeRoutes; },
   get createRoutineFullReport() { return createRoutineFullReport; },
   get createRoutineMemoryHint() { return createRoutineMemoryHint; },
   get createRoutineModelForTurn() { return createRoutineModelForTurn; },
@@ -4689,6 +4699,7 @@ bindLeafHost({
   get createTeamExportImportRoutes() { return createTeamExportImportRoutes; },
   get createTeamLibraryGrokRoutes() { return createTeamLibraryGrokRoutes; },
   get createTeamLibraryRoutes() { return createTeamLibraryRoutes; },
+  get createTeamBoardRoutes() { return createTeamBoardRoutes; },
   get createTeamMapRoutes() { return createTeamMapRoutes; },
   get createTeamMemoryHttpRoutes() { return createTeamMemoryHttpRoutes; },
   get createTeamMemoryMemberMayAnswer() { return createTeamMemoryMemberMayAnswer; },
@@ -8841,6 +8852,8 @@ const IDENTITY = identityConfigFromEnv();
 setSharedHost(IDENTITY.kind === "perspicax");
 /** A model on an engine the organization's admin does not allow (allowedEngines). */
 const ORG_ENGINE_NOT_ALLOWED = "Your organization does not allow this model provider.";
+/** D-20261126-018: a provider the organization hid, picked as a new choice. */
+const ORG_ENGINE_HIDDEN = "Your organization does not offer this model provider for a new choice. A bot already on it keeps it.";
 /** 2026-10-30 (lot 2): a model turned off, by the organization or by the person. */
 const MODEL_TURNED_OFF_BY_ORG = "Your organization turned this model off. Pick another model or Auto.";
 const MODEL_TURNED_OFF_BY_PERSON = "You turned this model off in Settings > Providers > Models. Turn it back on there, or pick another model.";
@@ -11565,13 +11578,14 @@ function selectableInstances<T extends SelectableInstance>(instances: readonly T
  * of their own wins over it; the organization's engine policy applies. */
 const selectionContext = {
   company: (instanceId: string) => managedDesktop.owns(instanceId),
-  refusal: (instance: SelectableInstance) => policyModelRefusal(instance) ?? orgEngineAllowRefusal(instance.instanceId)
+  // every use is a new choice: a hidden provider is never picked (D-20261126-018)
+  refusal: (instance: SelectableInstance) => policyModelRefusal(instance) ?? orgEngineAllowRefusal(instance.instanceId) ?? orgEngineHiddenRefusal(instance.instanceId)
 };
 /** #1098: the same for one person, who may pick an engine they pay for. */
 function selectionContextFor(principalId: string | null | undefined) {
   return {
     ...selectionContext,
-    refusal: (instance: SelectableInstance) => policyModelRefusal(instance) ?? orgEngineAllowRefusal(instance.instanceId, principalId)
+    refusal: (instance: SelectableInstance) => policyModelRefusal(instance) ?? orgEngineAllowRefusal(instance.instanceId, principalId) ?? orgEngineHiddenRefusal(instance.instanceId)
   };
 }
 
@@ -11620,8 +11634,9 @@ function accountMovesHost(): AccountMovesHost {
       if (person && IDENTITY.kind === "perspicax") {
         // the person's own access: their sign-in, their key or the organization's key
         const access = personEngineAccess(person) as Array<{ id: string; via: string }>;
+        // a move target is a new choice: never a provider the organization hid (D-20261126-018)
         return orgOfferedEngines(registry.entries(), person)
-          .filter((entry) => personalProviderInstances.visible(entry.instanceId, person) && !accountNames.removed(person, entry.instanceId))
+          .filter((entry) => personalProviderInstances.visible(entry.instanceId, person) && !accountNames.removed(person, entry.instanceId) && !orgEngineHidden(entry.instanceId))
           .map((entry) => ({
             instanceId: entry.instanceId,
             defaultModel: registry.get(entry.instanceId)?.models.default ?? "",
@@ -15176,6 +15191,10 @@ store.onChange((change) => {
       stoppedTurns.delete(change.threadId);
       turnStops.forget(change.threadId);
       routines?.forgetRoutineRequestReceiptsForThread(change.threadId);
+      // #5396: a favorite or popped artifact stays with the bot when its
+      // conversation is cleared or deleted; it is no longer tied to that thread.
+      try { artifactStore.detachThread(change.threadId); }
+      catch { console.error("[artifacts] Could not detach favorite artifacts from a deleted thread."); }
       // A deleted destination must not strand an approval in an internal
       // task. Keep each run's snapshot and expose its execution as fallback.
       for (const run of routines?.listRuns() ?? []) {
@@ -16498,16 +16517,13 @@ const limitFailoverStore = new LimitFailoverStore({ file: join(DATA_DIR, "limit-
  * know of stays a `recovery:` row in the chat. */
 /** The person's message again, with what the turn a usage limit stopped had
  * already done; the message alone when it had done nothing yet. */
-/** 2026-11-02: per payer and engine, until when a plan window is spent (no
- * extra usage or credit left), from the last plan usage report read for that
- * payer (GET /api/plan-usage: the person's own, every few minutes while their
- * app is open; the server's when solo). The scope is the payer's key
- * (autoPayerKey). The usage-limit failover reads it (planLimitUntil) as a
- * hint only: Sagax's quick pick (a wake's or a call's fast model) skips a
- * spent engine. A real refusal on it that names no reset is still held for
- * Sagax's one-hour estimate, never until this reset: a top-up shows only in a
- * later report, which clears this hint, never a hold (2026-11-02). Auto and
- * other-provider backups read only real refusals; same-provider accounts also
+/** 2026-11-02: per payer (autoPayerKey) and engine, until when a plan window is spent (no extra usage or credit
+ * left), from the last usage report read for that payer: an app's (GET /api/plan-usage, every 10 minutes while a
+ * desktop chat is open) and, while an entry is live, the server's own every 5 minutes (usage/plan-report-watch.ts).
+ * The usage-limit failover reads it (planLimitUntil) as a hint only: Sagax's quick pick (a wake's or a call's fast
+ * model) skips a spent engine, and so does a mode's or Auto's pick (M-20261126-101). A real refusal on it that names
+ * no reset is still held for Sagax's one-hour estimate, never until this reset: a top-up shows only in a later report,
+ * which clears this hint, never a hold. Other-provider backups read only real refusals; same-provider accounts also
  * rotate from the report's used percent (#2192). */
 const spentPlans = new Map<string, number>();
 /** #2192: fullest window used-percent per payer and engine, from the last report. */
@@ -16744,7 +16760,7 @@ const limitFailover = createLimitFailoverHost({
   // next fast pick for this payer (voicePickForTurn reads autoRefusalsFor).
   refuseModel: (payer, selection, until) => rememberAutoRefusal(payer, { instanceId: selection.instanceId, model: selection.model }, until),
   // A plan window the person's usage report showed spent (J4), until a turn
-  // on that engine works for them again: only Sagax's quick pick skips it.
+  // on that engine works for them again: Sagax's own picks (quick, a mode, Auto) skip it.
   planLimitUntil: (payer, instanceId) => planLimitUntil(payer, instanceId),
   // #2192: used percent for silent same-provider rotation before the limit.
   planUsedPercent: (payer, instanceId) => planUsedPercentOf(payer, instanceId),
@@ -16781,15 +16797,19 @@ const limitFailover = createLimitFailoverHost({
   },
   threadSelection: (botId, threadId) => store.projectBotForTask(botId, threadId)?.modelSelection ?? null,
   busy: threadBusy,
-  switchThread: (botId, threadId, to) => {
+  switchThread: (botId, threadId, to, back) => {
     const current = store.projectBotForTask(botId, threadId);
     if (!current) return "the conversation is gone";
     if (threadBusy(botId, threadId)) return "the conversation is working";
     const target = registry.get(to.instanceId);
     if (!target?.enabled) return "the engine is unavailable";
-    const refusal = policyModelRefusal(target) ?? orgEngineAllowRefusal(to.instanceId, effectiveBotOwner(current));
+    // D-20261126-018: going back to the engine it left, or to its bot's own,
+    // is no new choice of a hidden provider
+    const alreadyOn = back === true || to.instanceId === current.modelSelection.instanceId || to.instanceId === store.bot(botId)?.modelSelection.instanceId;
+    const refusal = policyModelRefusal(target) ?? orgEngineAllowRefusal(to.instanceId, effectiveBotOwner(current))
+      ?? (alreadyOn ? undefined : orgEngineHiddenRefusal(to.instanceId));
     if (refusal) return refusal;
-    const checked = checkedTaskModelSwitch(current, to, false, true);
+    const checked = checkedTaskModelSwitch(current, to, false, true, { returning: back === true });
     if (!checked.ok) return checked.error;
     if (!store.switchTaskModel(botId, threadId, checked.selection, false, {
       ...hostedModels?.resetTask(current.modelSelection, checked.selection), rewound: true
@@ -17043,6 +17063,7 @@ function agentModelHealthSources(principalId: string, instanceId: string): Healt
   return { refusals, limit: clock || held ? { resetsAt: resets.length ? Math.max(...resets) : null } : null };
 }
 const limitReset = createLimitResetHost({
+  ...createPlanReportWatch({ spentPlans, note: (report, payer) => notePlanLimits(report, payer) }),
   accounts: () => {
     // An organization server's own logins pay nobody's turns (its key runs
     // with an empty home, engine-credentials.ts materializeEngineAccess), so
@@ -17736,7 +17757,10 @@ const routineProblemCards = new RoutineProblemCards<Routine>({
     if (!bot || !latest) { unavailable(""); return; }
     const person = effectiveRunAs(routine);
     const words = serverApprovalWords(languageOfPerson(person));
-    const task = store.createTask(bot.id, routine.name, false, undefined, undefined, undefined, person, runTaskModelFor(bot.id, latest), true);
+    // #5100: openedBy marks this as a bot's hidden investigation, not a #291
+    // AI-client conversation, so its turns are never relayed into the chat.
+    const task = store.createTask(bot.id, routine.name, false, undefined,
+      { botId: bot.id, name: bot.name, at: Date.now() }, undefined, person, runTaskModelFor(bot.id, latest), true);
     if (!task) { unavailable(""); return; }
     const threadId = task.threadId;
     const prompt = investigationPrompt(routine, runs, words.locale, words.t("routine.problemCard.pause"),
@@ -22508,6 +22532,21 @@ const memoryNotesClient = new PerspicaxMemoryNotesClient({
   linkBearer: () => perspicaxDirectory?.linkBearer() ?? null,
 });
 
+/** #4461: every memory a bot keeps is visible in the organization console's
+ * Memory. Solo installs leave this disabled. */
+const consoleMemoryMirror = installConsoleMemoryMirror({
+  client: memoryNotesClient,
+  enabled: () => IDENTITY.kind === "perspicax" && Boolean(perspicaxDirectory?.linkBearer()),
+  ownerOf: (botId) => {
+    const bot = store.bot(botId);
+    if (!bot) return null;
+    const owner = effectiveBotOwner(bot).trim();
+    return owner || null;
+  },
+  botName: (botId) => store.bot(botId)?.name?.trim() || botId,
+  log: (line) => console.warn(line),
+});
+
 /** 2026-11-05 (visible roles, batch 5): the person's own Perspicax journal
  * rows, read with their own sign-in bearer (as the memory notes are). */
 const roleJournalClient = new PerspicaxMemoryNotesClient({
@@ -22684,7 +22723,8 @@ const chiefPeerTargetRule = (noun: string) => (proposerBotId: string, targetBotI
  * selection must resolve, and the destination driver must still support the
  * bot's existing approval setup. */
 const validateModelProposal = (selection: ModelSelection, current?: BotRecord): string | null => {
-  const checked = checkedModelSelection(selection, undefined, true, current ? effectiveBotOwner(current) : undefined);
+  // the bot's own selection, as every model switch: its engine is no new choice (D-20261126-018)
+  const checked = checkedModelSelection(selection, current ? { selection: current.modelSelection, busy: false } : undefined, true, current ? effectiveBotOwner(current) : undefined);
   if (!checked.ok) return checked.error;
   if (current?.approvalGrant) return "Wait for the approval-level confirmation before changing this bot's model";
   if (current) {
@@ -24055,6 +24095,13 @@ const imagePeople: ImagePeople = {
   },
   soloKey: (provider) => providerAccounts.key(undefined, provider),
   account: (person) => grokAccountTokenOf(person),
+  // #5200: the organization's Grok account on the image chain, after the
+  // person's keys and before the organization's key (same consent as the key)
+  orgAccount: async () => {
+    if (IDENTITY.kind !== "perspicax") return undefined;
+    const access = await orgGrokAccountAccess();
+    return access.ok ? access.accessToken : undefined;
+  },
   imageGen: () => cfg.imageGen,
   organizationXaiGiven: (principalId) => orgXaiMediaGiven("image", principalId),
   organizationXaiKey: () => cfg.xai?.key,
@@ -25212,7 +25259,12 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     readWorkspaceText: (botId, path, offset, plugins, personalRoot, librarySkills) =>
       readWorkspaceText(botId, path, offset, plugins as Parameters<typeof readWorkspaceText>[3], personalRoot, librarySkills),
     updateGroupMemory: (groupId, update, opts) => updateGroupMemory(groupId, update as never, opts),
-    updateMemory: (botId, update, opts) => updateMemory(botId, update as never, opts),
+    updateMemory: (botId, update, opts) => {
+      const result = updateMemory(botId, update as never, opts);
+      // #4461: tool writes skip the journal; mirror MEMORY.md when the write lands
+      if (result.ok) consoleMemoryMirror.onBotMemoryWritten(botId, "MEMORY.md");
+      return result;
+    },
     appendMemoryLog: (botId, text, opts) => appendMemoryLog(botId, text as string, opts),
     updateRules: (botId, update, opts) => updateRules(botId, update as never, opts),
     updateDoc: (botId, update, opts) => updateDoc(botId, update as never, opts),
@@ -25221,7 +25273,10 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     // #4439: the bot saves it itself, into the memory its person may write
     saveTeamMemory: (section, entry, meta) => {
       const owner = meta.botId ? effectiveBotOwner(store.bot(meta.botId) ?? {}) : undefined;
-      return teamMemory.save(teamMemoryKeyFor(section, owner), entry, meta);
+      const saved = teamMemory.save(teamMemoryKeyFor(section, owner), entry, meta);
+      // #4461: person-scoped team memory appears in the console for its owner
+      if (owner) consoleMemoryMirror.onTeamEntrySaved(owner, saved.entry);
+      return saved;
     },
     appendDecision: (row) => appendDecision(DATA_DIR, row as never),
     teamMemoryPersonScoped,
@@ -25526,6 +25581,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     },
     orgOfferedEngines,
     consoleEngineAllowed,
+    orgEngineHidden,
     orgOwnAccountsOutsideList,
     personPaysEngine,
     ownerBotsReadOnly,
@@ -26389,6 +26445,25 @@ ROUTES.push(createMemoryManagerRoutes({
     temporary: Boolean(bot.temporary),
   })),
   botReachable: botMemoryReachable,
+  // #4461: console edits and deletes reach local team memory when the page opens
+  syncFromConsole: (auth) => {
+    if (IDENTITY.kind !== "perspicax" || auth.kind !== "session") return;
+    const who = memoryPrincipal(auth, IDENTITY.issuer);
+    if (!who) return;
+    const key = teamMemoryKeyForAuth(auth, "");
+    void consoleMemoryMirror.pullForPrincipal(who.principalId, {
+      applyTeamEdit: (entryId, body, title) => {
+        try {
+          teamMemory.update(key, entryId, { name: title, detail: body });
+        } catch {
+          /* a conflict or oversize body never blocks the Memory page */
+        }
+      },
+      applyTeamDelete: (entryId) => {
+        teamMemory.remove(key, entryId);
+      },
+    });
+  },
   teamSections: (auth) => {
     // #4460: on an organization server, each person sees their own
     // memory (their bots' entries, the ones moved out of a shared team
@@ -28388,9 +28463,10 @@ const botActivityDeps: BotActivityRouteDeps = {
 };
 ROUTES.push(createBotActivityRoutes(botActivityDeps));
 // The Team board (#3409), the `team-board` page source (#3413,
-// server/pages/sources/team-board.ts): the reader's own teams and bots,
-// their code work as the reader may read it, and GitHub read with the
-// reader's own account. Computed on demand, read only.
+// server/pages/sources/team-board.ts) and GET /api/team-board for the
+// native Tools page: the reader's own teams and bots, their code work as
+// the reader may read it, and GitHub read with the reader's own account.
+// Computed on demand, read only.
 const teamBoardActivity = createBotActivityReader(botActivityDeps);
 const teamBoardGithub = createGithubBoardReader({
   token: (person) => githubAccountToken(person),
@@ -28407,10 +28483,10 @@ function teamBoardBots(auth: RequestAuth): BotRecord[] {
   return store.bots.filter((bot) => !bot.hidden && visible.bot(bot.id)
     && (IDENTITY.kind !== "perspicax" || effectiveBotOwner(bot).trim().toLowerCase() === person.trim().toLowerCase()));
 }
-pageSources.register(createTeamBoardSource({
-  person: (auth) => actorPrincipalId(auth) || undefined,
-  viewerId: (auth) => channelFilterViewerId(auth),
-  teams: (auth) => {
+const teamBoardDeps = {
+  person: (auth: RequestAuth) => actorPrincipalId(auth) || undefined,
+  viewerId: (auth: RequestAuth) => channelFilterViewerId(auth),
+  teams: (auth: RequestAuth) => {
     const person = actorPrincipalId(auth);
     const bots = teamBoardBots(auth);
     const names = sectionChannels ? orgVisibleSections(orgSectionNames(), person || undefined) : store.sections;
@@ -28420,8 +28496,8 @@ pageSources.register(createTeamBoardSource({
       bots: bots.filter((bot) => sectionKey(bot.section) === sectionKey(name)).map((bot) => ({ id: bot.id, name: bot.name })),
     })).filter((team) => team.bots.length > 0);
   },
-  bots: (auth) => teamBoardBots(auth).map((bot) => ({ id: bot.id, name: bot.name, ...(bot.managedSections ? { managedSections: bot.managedSections } : {}) })),
-  entries: (board, viewerId) => {
+  bots: (auth: RequestAuth) => teamBoardBots(auth).map((bot) => ({ id: bot.id, name: bot.name, ...(bot.managedSections ? { managedSections: bot.managedSections } : {}) })),
+  entries: (board: { id: string }, viewerId: string | undefined) => {
     const bot = store.bot(board.id);
     if (!bot) return [];
     return teamBoardActivity.list(bot, viewerId, TEAM_BOARD_ENTRIES_PER_BOT, TEAM_BOARD_WORK_WINDOW_MS, { archived: true })
@@ -28435,7 +28511,9 @@ pageSources.register(createTeamBoardSource({
   },
   queued: () => coordinator.liveEdges().filter((edge) => edge.state === "queued").map((edge) => edge.threadId),
   github: teamBoardGithub
-}));
+};
+pageSources.register(createTeamBoardSource(teamBoardDeps));
+ROUTES.push(createTeamBoardRoutes({ board: teamBoardDeps }));
 // The work an orchestrator bot runs through its team (#3461, lot 1 of
 // #3451): GET /api/bots/:id/team-work for the Coding section of its panel,
 // the ids-only `team.work` frame when one of its hand-overs changes state,
@@ -31252,6 +31330,17 @@ ROUTES.push(createRoutineFolderRoutes<Routine>({
   manager: () => routines ?? null,
   onWire: (routine) => routineOnWire(routine)
 }));
+// Routine outcomes (#4098, server/routes/routine-outcomes.ts): group routines
+// under a named result; same right as changing the bot's routines.
+ROUTES.push(createRoutineOutcomeRoutes<Routine>({
+  access: (auth, botId) => {
+    const visible = visibleTo(viewerFor(auth, "/api/routines/outcomes"));
+    if (!store.bot(botId) || hiddenRoutineTarget({ botId }, visible)) return "hidden";
+    return routineNeedsRun(auth, botId) ? "needs_run" : "ok";
+  },
+  manager: () => routines ?? null,
+  onWire: (routine) => routineOnWire(routine)
+}));
 // The person's web search provider and key (server/routes/web-search.ts):
 // their own, no admin right, on a solo or an organization server.
 ROUTES.push(createWebSearchRoutes({
@@ -32120,6 +32209,20 @@ function orgGrokAccountAccess(candidate?: string): Promise<OrgGrokAccess> {
     },
     grokSignIn: grokLiveAccessOf,
   }, candidate);
+}
+
+/** #5200: whose Grok login is the organization's, when that form can serve
+ * a plan (sign-in present). Sync; the token is read only at materialize or
+ * at a live voice/image use. Never logs the value. */
+function orgGrokAccountHolder(): string | undefined {
+  if (IDENTITY.kind !== "perspicax") return undefined;
+  const sub = perspicaxDirectory?.voiceOrgAccount()?.trim();
+  if (!sub) return undefined;
+  const person = orgPersonBySub(sub);
+  if (!person?.active || !engineLogins) return undefined;
+  const instanceId = folderInstance("grokAgent", engineLogins.preferredAccount(person.principalId, "grokAgent") ?? DEFAULT_ACCOUNT);
+  if (!instanceId || !engineLogins.grokAccountIdentity(person.principalId, "primary", instanceId)?.kind) return undefined;
+  return person.principalId;
 }
 
 const voiceModeDeps: VoiceModeDeps = {
@@ -33293,6 +33396,40 @@ function orgConsolePeople(): Array<{ principalId: string; disabled: boolean }> {
     .map((entry) => ({ principalId: entry.principalId!, disabled: Boolean(entry.disabled) }));
 }
 
+/** The organization's engines the console adds to and removes from
+ * (server/org/org-admin-engines.ts, #5351). The rows are the ones GET
+ * capabilities lists, less the voice and media rows (not bot engines). */
+const orgEngineDriver = (instanceId: string): string => providerConfigs()[instanceId]?.driver ?? registry.get(instanceId)?.driverKind ?? "";
+const orgEnginesDeps: EnginesDeps = {
+  engines: () => {
+    const configs = providerConfigs();
+    return orgAdminEngines()
+      .filter((engine: { voice?: boolean; image?: boolean }) => !engine.voice && !engine.image)
+      .map((engine: Parameters<typeof orgEngineRow>[0]) => orgEngineRow(engine, orgEngineDriver(engine.id), configs[engine.id]?.access, orgHiddenEngines().includes(engine.id)));
+  },
+  setHidden: (instanceId, hidden) => {
+    const others = orgHiddenEngines().filter((id) => id !== instanceId);
+    const organization = { ...cfg.organization };
+    const next = hidden ? [...others, instanceId] : others;
+    if (next.length) organization.hiddenEngines = next;
+    else delete organization.hiddenEngines;
+    saveConfig({ organization });
+    cfg.organization = organization;
+    // D-20261126-018: the menus redraw; no bot moves, on hide or on restore
+    broadcast({ kind: "config", ...configStatus() });
+  },
+  refusal: () => (hostedModels ? HOSTED_PROVIDER_SETTINGS_ERROR : null),
+  remove: async (instanceId) => {
+    const { removed, plan } = await removeAccountMovingBots({ ...addedAccountRemoval, accountMoves: accountMovesHost() }, instanceId);
+    return removed.ok ? { ok: true, ...(plan ? { moved: plan.moves, noEngine: plan.noEngine } : {}) } : removed;
+  },
+  setKey: (instanceId, key) => saveOrgEngineKey({
+    cfg, saveConfig, loadConfig, broadcast, configStatus, providerConfigs, reloadProviders,
+    getProviderConfigBusy: addedAccountRemoval.getProviderConfigBusy,
+    setProviderConfigBusy: addedAccountRemoval.setProviderConfigBusy,
+  }, instanceId, orgEngineDriver(instanceId), key),
+};
+
 /** The console's Overview (server/org/org-admin-overview.ts). */
 const orgOverviewDeps = {
   version: releaseVersion,
@@ -33513,7 +33650,10 @@ const orgBotsDeps: BotsDeps = {
     const sourceMode = approvalModeFor(source);
     const mode = memberAutoRefused(copy, ["ask"], sourceMode) ? "ask" : sourceMode;
     store.patchBot(copy.id, {
-      modelSelection: structuredClone(source.modelSelection),
+      // D-20261126-018: a copy is a new bot, never started on a provider the
+      // organization hid: it keeps the start the import gave it, as the app's
+      // Duplicate does
+      ...(orgEngineHidden(source.modelSelection.instanceId) ? {} : { modelSelection: structuredClone(source.modelSelection) }),
       ...(input.name ? { name: input.name } : {}),
       ...(mode !== "full" && mode !== "custom" ? { approvalMode: mode, autoApprove: mode === sourceMode ? source.autoApprove : false } : {}),
       ...(source.speakReplies !== undefined ? { speakReplies: source.speakReplies } : {}),
@@ -33770,7 +33910,7 @@ const botZipHost: BotZipHost = {
   principalByEmail: (email) => principals.byEmail(email)?.id ?? undefined,
   mcpServer: mcpServerSummary,
   engineUsable: (selection) => Boolean(registry.get(selection.instanceId)) && engineInstalled(selection.instanceId)
-    && consoleEngineAllowed(selection.instanceId) && (!hostedModels || hostedModels.allows(selection)),
+    && consoleEngineAllowed(selection.instanceId) && !orgEngineHidden(selection.instanceId) && (!hostedModels || hostedModels.allows(selection)),
   defaultSelection: () => defaultSelection(),
   newBotSelection: (owner, selection, harness) => newBotSelection(owner, selection, harness),
   sectionExists: (name) => store.sections.includes(name),
@@ -34338,6 +34478,33 @@ function orgAllowedEngines(): string[] | null {
   // #4435: a person's own added account follows its provider's first one.
   return IDENTITY.kind === "perspicax" && Array.isArray(allowed) ? allowedWithOwnedAccounts(allowed, cfg.instances) : null;
 }
+/** 2026-11-25: the catalog engines the organization hid (Perspicax, Model
+ * providers, `POST engines/{id}/hide`). Empty on a solo server. */
+function orgHiddenEngines(): string[] {
+  return IDENTITY.kind === "perspicax" ? cfg.organization?.hiddenEngines ?? [] : [];
+}
+/** D-20261126-018: a provider the organization hid is out of every new
+ * choice (a menu, a new bot, a backup, Auto's pick, a fallback), never off:
+ * what already runs on it goes on unchanged, and restoring it moves nothing.
+ * #4435: a person's own added account follows its provider's first one. */
+function orgEngineHidden(instanceId: string): boolean {
+  const hidden = orgHiddenEngines();
+  if (!hidden.length) return false;
+  if (hidden.includes(instanceId)) return true;
+  return Boolean(accountOwnerOf(cfg.instances, instanceId)) && hidden.includes(providerFirstAccount(instanceId, cfg.instances?.[instanceId]?.driver ?? "") ?? "");
+}
+/** The hidden engines the app leaves out of its menus (config `hiddenEngines`):
+ * the organization's, and for a person their own accounts that follow one. */
+function orgHiddenEnginesFor(person?: string | null): string[] {
+  if (!orgHiddenEngines().length) return [];
+  return registry.entries().map((entry) => entry.instanceId)
+    .filter((id) => orgEngineHidden(id) && (person ? personalProviderInstances.visible(id, person) : !personalProviderInstances.ownerOf(id)));
+}
+/** A new choice of this engine (a model picked by name, a new bot's start, a
+ * move target, Auto's pick) while the organization hid it. */
+function orgEngineHiddenRefusal(instanceId: string): string | undefined {
+  return orgEngineHidden(instanceId) ? ORG_ENGINE_HIDDEN : undefined;
+}
 /** Why a model choice may not use this engine here, if it may not.
  * 2026-10-30: an engine outside the organization's list is refused to
  * everyone, admins included. Only with `ownAccountsOutsideList` does it stay
@@ -34428,6 +34595,7 @@ const orgAdmin = createOrgAdminRoutes({
     ...routineRunsRoutes(orgRoutineRunsDeps),
     ...routinesRoutes(orgRoutinesDeps),
     ...opsRoutes(orgOpsDeps),
+    ...enginesRoutes(orgEnginesDeps),
     ...computersRoutes(orgComputersDeps),
   ],
   // The console's file browser (Perspicax 2026-10-08, slice 1: read only).
@@ -36451,6 +36619,7 @@ ROUTES.push(createRoutinesHttpRoutes({
   // Serialize immediately; skip the cloneRun pass listRuns() does for mutable callers.
   listRuns: (from, to) => [...routines!.listRunsRaw(from, to)] as ReturnType<NonNullable<typeof routines>["listRuns"]>,
   listFolders: () => routines!.listFolders(),
+  listOutcomes: () => routines!.listOutcomes(),
   fullReport: (run) => routineFullReport(run),
   normalizeBody: normalizeRoutineBody,
   create: (body, request, opts) => routines!.create(body as never, request, opts as never),
@@ -36963,6 +37132,7 @@ ROUTES.push(createBotsCoreRoutes({
   githubCredentialsFor,
   orgAvatarImageConfig,
   requesterPrincipal,
+  personLanguage: (principalId) => personLanguageCode(languageOfPerson(principalId)),
   takeTemporaryCreateToken,
   botCreationAllowed,
   personBotsReadOnly,
@@ -37058,7 +37228,22 @@ ROUTES.push(createBotsCoreRoutes({
   rejectDeletedThreadSkillStages,
   threadTitleGate,
   titleRegenerations,
-  generateThreadTitle: (instance, excerpt, kind, bot) => generateThreadTitle((bot ? botTitleEngine(bot as BotRecord, instance as ProviderInstance) : instance) as never, excerpt, kind as never)
+  generateThreadTitle: (instance, excerpt, kind, bot) => generateThreadTitle((bot ? botTitleEngine(bot as BotRecord, instance as ProviderInstance) : instance) as never, excerpt, kind as never),
+  // #5367: sagax_settings thread.compact
+  compactThread: async (botId, threadId) => {
+    const bot = store.bot(botId);
+    if (!bot) return { ok: false, status: 404, error: "no such bot" };
+    const task = store.taskByThread(botId, threadId);
+    if (!task) return { ok: false, status: 404, error: "no such task" };
+    const selection = task.modelSelection ?? bot.modelSelection;
+    const instance = registry.get(selection.instanceId);
+    if (!instance) return { ok: false, status: 409, error: "this conversation has no engine to compact with" };
+    await compactConversation({
+      bot, threadId, generation: directTurnGenerationByThread.get(threadId) ?? "manual-compact",
+      instance, model: selection.model, excludedIds: new Set(), manual: true,
+    });
+    return { ok: true };
+  },
 }));
 ROUTES.push(createComputersRoutes({
   listBoxes: () => boat.listManagedBoats(cfg, managedBoatOwners()),
@@ -37663,7 +37848,11 @@ const widgetRenderer = new WidgetRenderer({
   log: (line) => console.log(line)
 });
 const widgetCheckAttempts = new WidgetCheckAttempts();
-ROUTES.push(createBotAvatarGenerateRoutes({ store, ownerOrAdminOf, requesterPrincipal, orgAvatarImageConfig, orgXaiRefusal, wireBot, broadcast }));
+ROUTES.push(createBotAvatarGenerateRoutes({
+  store, ownerOrAdminOf, requesterPrincipal, orgAvatarImageConfig, orgXaiRefusal,
+  personLanguage: (principalId) => personLanguageCode(languageOfPerson(principalId)),
+  wireBot, broadcast,
+}));
 ROUTES.push(createBotObservabilityRoutes({ store, DATA_DIR, EVENTS_DIR, ownerOrAdminOf, computerOwner, outboundCounts }));
 ROUTES.push(createFleetRoutes({ entitled, fleetSocketPath, fleetAvailable, fleetRequest }));
 ROUTES.push(createBotSecretCardRoutes({
@@ -38477,6 +38666,7 @@ const startTurnRunner = createStartTurn({
   officeTurnText,
   orgEngineRefusal,
   orgEngineTurnRefusal,
+  orgEngineHidden,
   orgSpeakerPrincipal,
   principals,
   releaseVersion,

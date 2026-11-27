@@ -10,7 +10,7 @@
 import "./bunbu-mascot.css";
 import "./skin-fx/skin-fx.css";
 import { useEffect, useId, useRef, useState } from "react";
-import { MAUS_COLORS } from "@/lib/mascot";
+import { mascotHex } from "@/lib/mascot";
 import { cn } from "@/lib/cn";
 import { BUNBU_SKIN_TIER, BUNBU_SKINS, type BunbuSkin, type SkinTier } from "../../shared/mascot-look";
 import { relativeLuminance } from "../../shared/mascot-colors";
@@ -45,8 +45,6 @@ export interface BunbuMascotProps {
   label?: string | null;
   className?: string;
 }
-
-const hexOf = (color: string) => (MAUS_COLORS as Record<string, string>)[color] ?? (/^#[0-9a-fA-F]{6}$/.test(color) ? color : "#98DDB9");
 
 /** A Bunbu skin id this build knows, else Plain. */
 export function bunbuSkinId(skin: string | null | undefined): BunbuSkin {
@@ -133,7 +131,7 @@ function Mouth({ mood, lip }: { mood: BunbuMood; lip: string | null }) {
 
 export function BunbuMascot({ skin = "plain", color, size = 44, mood = "idle", action = null, animated = true, detail, move, moveBody = false, label = null, className }: BunbuMascotProps) {
   const known = bunbuSkinId(skin);
-  const hex = hexOf(color);
+  const hex = mascotHex(color, "#98DDB9");
   const paint = bunbuSkinPaint(known, hex);
   const reduced = useReducedMotion();
   const full = fxDetail(size, animated, detail) === "full";

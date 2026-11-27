@@ -496,7 +496,13 @@ export function PendingApprovalActions({
       rememberCommand: rememberCommand || undefined,
       rule,
       ...(ruleScope ? { ruleScope } : {}),
-      settle: { answered: behavior },
+      // #5363: the receipt must say Always allowed when Always allow was
+      // chosen; settle used to carry only `answered`, so the pill read Allowed once.
+      settle: {
+        answered: behavior,
+        ...(always && pending.allowKey ? { alwaysAllowed: pending.allowKey } : {}),
+        ...(rule && ownerRule ? { ruleSaved: { id: "saved", behavior: rule, description: ownerRule.description } } : {}),
+      },
       ...(durableRequest ? {} : { resumes: true }),
       ...(onDecideFailed ? { onError: () => onDecideFailed() } : {}),
     });

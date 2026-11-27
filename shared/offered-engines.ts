@@ -24,6 +24,11 @@
 //   (`sagax_server_engines`, GET /api/me/engines `orgKeyNotGiven`) and that
 //   nothing of their own serves is "notGiven": not offered to pick, still
 //   listed in Settings, where the person can connect their own account.
+// - D-20261126-018: a provider the organization hid (`hiddenEngines`,
+//   Perspicax Model providers) is left out of every list a new choice is
+//   made from, Settings included; it is not off: what already runs on it
+//   keeps it, so the engine a bot or conversation is on stays in its own
+//   menu (`keep`) and `engineOffer` still says "offered".
 import { engineAllowed, type AllowedEngines } from "./org-allowed-engines.ts";
 
 export type EngineOffer = "offered" | "notAllowed" | "notGiven";
@@ -48,6 +53,13 @@ export interface EngineOfferContext {
   ownAccountsOutsideList?: boolean;
   /** The person's own access, when known (null while loading). */
   mine?: readonly PersonEngineAccess[] | null;
+  /** D-20261126-018: the providers the organization hid. */
+  hiddenEngines?: readonly string[] | null;
+}
+
+/** D-20261126-018: the organization hid this provider: no new choice of it. */
+export function engineHidden(context: EngineOfferContext, instanceId: string): boolean {
+  return context.organization && (context.hiddenEngines?.includes(instanceId) ?? false);
 }
 
 /** #1098: the person's own subscription or key runs this engine. An expired
@@ -75,14 +87,19 @@ export function engineOffer(context: EngineOfferContext, instanceId: string): En
  * The engines offered, in their order. `pick` (the default) keeps only the
  * ones the person can pick a model from; `settings` also keeps the ones the
  * organization did not give them, so they can connect their own account.
+ * A hidden provider is left out unless `keep` names it (the engine a bot is
+ * already on, or every hidden one for a caller that keeps each bot's own).
  */
 export function offeredEngines<T extends { instanceId: string }>(
   instances: readonly T[],
   context: EngineOfferContext,
   purpose: "pick" | "settings" = "pick",
+  keep?: string | readonly string[],
 ): T[] {
   if (!context.organization) return [...instances];
+  const kept = (instanceId: string) => (typeof keep === "string" ? keep === instanceId : keep?.includes(instanceId) ?? false);
   return instances.filter((instance) => {
+    if (engineHidden(context, instance.instanceId) && !kept(instance.instanceId)) return false;
     const offer = engineOffer(context, instance.instanceId);
     return offer === "offered" || (purpose === "settings" && offer === "notGiven");
   });

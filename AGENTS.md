@@ -54,7 +54,9 @@ Rules only. How the code works (files, routes, tests, history) lives in
 ## Design
 
 - Every UI change reads `docs/design/ux-reference-grokbot-cursor.md` (section 8 holds the appearance rules per surface) and passes the UX gate there, with headless before and after captures beside the conforming neighbour page (2026-11-07).
-- The composer mode menu follows `docs/model-modes.md`. Under Auto, Reasoning displays Auto until the person chooses a level.
+- The composer mode menu follows `docs/model-modes.md`: Auto, Fast, Expert, Heavy, Custom, then Effort (one name everywhere, never Reasoning) (2026-11-26, #5408).
+- Under Auto, the person's choice always holds. Any Effort level she clicks, even the "Recommended" one, is sent and used every turn, even under Auto. Until she clicks one, the Effort row shows no value and no level is checked: Auto decides turn by turn. Clicking the checked level again hands it back to Auto (D-20261126-017).
+- The chat bar's model chip sits inside the message box, just before the voice button (2026-11-26, #5408).
 - Build is no mode: the server never picks it and no menu offers it; a stored or sent Build is Auto, never an error (2026-11-26, #5398).
 - The chat bar's voice button does the mode the person used last; dictation before any use (2026-11-26, #5399).
 - A bot's title always sits under its name, plain secondary grey, never a tag, pill or outline, on every surface (2026-11-06).
@@ -82,7 +84,7 @@ Rules only. How the code works (files, routes, tests, history) lives in
 ## Approvals and access
 
 - Every approval card offers Always allow, which saves an owner rule the person lists and revokes in Settings > Security; never a card without it (2026-10-19, 2026-11-05).
-- Always allow never answers for another person's environment, a guest's turn, a question or a meeting's consent, and never a security key the person chose (step-up wins) (2026-10-19).
+- Always allow never answers for another person's environment, a guest's turn or a question, and never a security key the person chose (step-up wins); a meeting join card offers it for that provider (2026-10-19, 2026-11-26, #3367).
 - Full access is one decision, `server/approvals/full-access-gate.ts`: never fix a Full card on one surface alone; add the surface to the gate and a regression to `full-access-gate.regressions.test.ts` (2026-11-02, #1905).
 - Full acts without asking: never a typed GO or a confirmation; only Refuse and Ask first rules, isolation, sensitive paths, the shared server and a real question hold a call (2026-10-28).
 - Approve for me and ask-before-contact never invent a may-I card (2026-10-30, #1819).
@@ -108,6 +110,8 @@ Rules only. How the code works (files, routes, tests, history) lives in
 - A caller waiting on a thread (a run_with_engine part such as a routine's verification step) waits for the turn the usage-limit failover carried to the next engine, and is told which engine ran it and which refused; it ends with the refusal only when no engine took the work on (2026-11-19, #4878).
 - A model refusal holds that model only, never the whole engine, unless its plan is spent (2026-11-02).
 - Auto never picks outside the providers the admin left on, a model turned off or a model the provider refused; a refusal climbs toward a stronger model, and a pin always wins (2026-10-29, 2026-10-30).
+- A mode, Auto included, never picks or names a model whose every account is at its usage limit or cannot serve the person now; it takes the next one and keeps the person's setting. All at their limit: the turn keeps its list, the menu names no model and says when one is back. A report at 100 % is read again by the server every 5 minutes (2026-11-26, #5403).
+- A provider the organization hid is out of every new choice only: a bot already on it keeps its engine and model, and hiding or restoring it moves no bot (2026-11-26, #5351).
 - Never put a per-turn value in a pooled process's contract or session inputs: it relaunches the engine on every turn.
 - Perspicax is one fixed `perspicax` mount on every engine; a role switch changes its catalog, never its server name; never narrow the general tool limit back to 32 (2026-11-03, #1935).
 - Never fix the Codex Perspicax bridge by removing the reserved-variable guard or sharing `SAGAX_PERSPICAX_*` with another server (2026-10-30).

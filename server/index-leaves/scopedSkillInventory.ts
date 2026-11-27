@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** scopedSkillInventory (#1388). Pure move from server/index.ts. */
-import { join, relative, sep } from "node:path";
+import { join, posix, relative, sep } from "node:path";
 import { skillsLibraryEnabled } from "../config.ts";
 export type Host = Record<string, any>;
 
@@ -25,7 +25,9 @@ function scopedSkillInventory(bot: BotRecord, instance: { driverKind: string } |
   });
   for (const skill of personal) rows.push({ id: `person:skill:${skill.name}`, name: skill.name, kind: "skill", scope: "person", source: "Me",
     enabled: skill.enabled, capability: { key: `skill:me:${skill.name}`, name: skill.name },
-    ...(skill.enabled ? { description: skill.description, filePath: join(host.IDENTITY.kind === "perspicax" ? "/workspace/sagax-capability-skills/me" : host.personalSkills.root(person), "skills", skill.name, "SKILL.md"), path: `capability-skills/me/skills/${skill.name}/SKILL.md` } : {}) });
+    ...(skill.enabled ? { description: skill.description, filePath: host.IDENTITY.kind === "perspicax"
+      ? posix.join("/workspace/sagax-capability-skills/me", "skills", skill.name, "SKILL.md")
+      : join(host.personalSkills.root(person), "skills", skill.name, "SKILL.md"), path: `capability-skills/me/skills/${skill.name}/SKILL.md` } : {}) });
   if (instance) {
     // Every selected plugin folder reaches every engine, the organization's
     // Flow included (lot 3): Claude natively, the others through the prompt

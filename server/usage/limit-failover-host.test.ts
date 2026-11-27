@@ -732,6 +732,25 @@ describe("what Sagax knows of a limit, and says of its reset", () => {
     expect(w.state.switches).toEqual([]);
   });
 
+  it("M-20261126-101: a mode's pick skips each account whose plan the report shows spent, and keeps the others of the provider", () => {
+    const w = world();
+    const resetsAt = w.clock.now + 3 * 24 * HOUR;
+    const host = createLimitFailoverHost({ ...w.deps, planLimitUntil: (payer, id) => payer === "server" && id !== "codex" && id !== "claude-3" ? resetsAt : null });
+    const engines = [
+      { instanceId: "claude", driverKind: "claudeAgent" }, { instanceId: "claude-2", driverKind: "claudeAgent" },
+      { instanceId: "claude-3", driverKind: "claudeAgent" }, { instanceId: "codex", driverKind: "codex" },
+    ];
+    expect([...host.autoExcluded("server", engines, "report")]).toEqual(["claude", "claude-2"]);
+    // review M1: when the first of them is expected back, for the menu's line; none known for accounts with room
+    expect(host.limitedUntil("server", engines)).toBe(resetsAt);
+    expect(host.limitedUntil("server", engines.slice(2))).toBeNull();
+    // another person's report says nothing of this one's accounts
+    expect([...host.autoExcluded("ada", engines, "report")]).toEqual([]);
+    // the window reset: the accounts are back
+    w.clock.now += 4 * 24 * HOUR;
+    expect([...host.autoExcluded("server", engines, "report")]).toEqual([]);
+  });
+
   it("picks a backup from the refusals Sagax saw, never from a plan the report read as spent", async () => {
     const w = world();
     const host = createLimitFailoverHost({ ...w.deps, planLimitUntil: (_payer, id) => id === "codex" ? w.clock.now + 3 * 24 * HOUR : null });
@@ -995,6 +1014,38 @@ describe("account rotation within a provider (#2192)", () => {
     host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "grok", driverKind: "grokAgent" }, selection: C, payer: "server", at: w.clock.now });
     const verdict = host.routineLimit({ threadId: "thread", cause: LIMIT, takeover: true });
     expect(verdict).toMatchObject({ from: "Grok", to: "Grok (work)", selection: { instanceId: "grok-work", model: "m" } });
+  });
+
+  it("lists the engines that may serve a conversation, held or not (#5406)", () => {
+    const w = world({ allowed: ["codex", "grok", "grok-work"] });
+    const host = createLimitFailoverHost({ ...w.deps, candidatesNow: () => ["codex", "grok", "grok-work"].map((id) => ({ instanceId: id, driverKind: DRIVERS[id]!, models: ["m"] })) });
+    expect(host.servingPool("bot", "thread", undefined)).toEqual(["codex", "grok", "grok-work"]);
+    host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "grok", driverKind: "grokAgent" }, selection: C, payer: "server", at: w.clock.now });
+    host.routineLimit({ threadId: "thread", cause: LIMIT, takeover: true });
+    expect(host.servingPool("bot", "thread", undefined)).toEqual(["codex", "grok", "grok-work"]);
+    // the candidates are not known: nothing is claimed
+    expect(createLimitFailoverHost(w.deps).servingPool("bot", "thread", undefined)).toEqual([]);
+  });
+
+  it("#5421 review H3: with the takeover off, a model chosen by hand is served by its own engine alone; Auto keeps its pool", () => {
+    const w = world({ allowed: ["codex", "grok", "grok-work"] });
+    let on = false;
+    const candidatesNow = () => ["codex", "grok", "grok-work"].map((id) => ({ instanceId: id, driverKind: DRIVERS[id]!, models: ["m"] }));
+    const host = createLimitFailoverHost({ ...w.deps, enabled: () => on, candidatesNow });
+    w.state.selection = { ...C };
+    // SAGAX_LIMIT_FAILOVER=0: no limit moves this conversation's turn, so the
+    // serving account is the only one whose room counts
+    expect(host.servingPool("bot", "thread", undefined)).toEqual(["grok"]);
+    // a model the person picks by hand is the one that serves
+    w.state.selection = { ...B };
+    expect(host.servingPool("bot", "thread", undefined)).toEqual(["codex"]);
+    // Auto skips a held engine on its own pick (autoPickForTurn), switch or not
+    w.state.selection = { instanceId: "grok", model: "grok-4.5", auto: true };
+    expect(host.servingPool("bot", "thread", undefined)).toEqual(["codex", "grok", "grok-work"]);
+    // the takeover back on: the whole pool again
+    on = true;
+    w.state.selection = { ...C };
+    expect(host.servingPool("bot", "thread", undefined)).toEqual(["codex", "grok", "grok-work"]);
   });
 
   it("still takes a pay-per-use key on the same engine when preferred", async () => {

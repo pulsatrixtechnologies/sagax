@@ -200,6 +200,9 @@ export function Composer({
     micHold: voice.micHold,
     pressMic: voice.pressMic,
     toggleMic: voice.toggleMic,
+    text: draft.text,
+    editText: draft.editText,
+    setCaret: focus.setCaret,
   });
 
   return (

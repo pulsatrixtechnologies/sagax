@@ -184,7 +184,7 @@ export function useShellEffects(shell: ShellNavigation) {
   // is absent in the browser.
   useEffect(() => {
     return window.ogb?.onOpenAppSettings?.(section => {
-      dispatch({ type: "toggleAppSettings", open: true, ...(section === "organization" ? { section } : {}) });
+      dispatch({ type: "toggleAppSettings", open: true, ...(section === "organization" || section === "usage" ? { section } : {}) });
     });
   }, [dispatch]);
 

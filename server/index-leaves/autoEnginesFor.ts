@@ -26,6 +26,9 @@ function autoEnginesFor(bot: BotRecord, speaker: TurnSpeaker, guestConfined = fa
     // when the person's own account could run another engine (that one is
     // picked by name, when the organization lets own accounts through).
     if (!host.consoleEngineAllowed(instance.instanceId)) { omit("adminOff"); continue; }
+    // D-20261126-018: a provider the organization hid is no new pick; the
+    // bot's own engine stays Auto's, unchanged
+    if (instance.instanceId !== base?.instanceId && host.orgEngineHidden(instance.instanceId)) { omit("adminOff"); continue; }
     if (host.orgEngineTurnRefusal(bot, instance, speaker)) {
       const expired = payer && isLoginDriver(instance.driverKind) && host.engineLogins?.expired(payer, instance.driverKind, "primary", instance.instanceId);
       omit(expired ? "reconnect" : "credentials"); continue;

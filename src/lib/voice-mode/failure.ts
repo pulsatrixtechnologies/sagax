@@ -22,6 +22,7 @@
 import { isClientCancellation, isStoppedTurnName } from "../../../shared/client-cancel";
 import { failedTurnCause } from "../../../shared/failed-turn";
 import type { VoiceKeyInfo, VoiceKeySource } from "../../../shared/voice-mode";
+import { VOICE_PROVIDER_LABELS } from "../../../shared/voice-providers";
 import type { LocaleKey } from "@/locales";
 import { VoiceProviderError, type VoiceKeyEvent, type VoiceProviderFailure } from "./api";
 
@@ -142,7 +143,8 @@ export type VoiceErrorNoteKey =
   | "voiceMode.transcribeFailed"
   | "voiceMode.noCall"
   | `voiceMode.provider.${Exclude<VoiceProviderFailure, "other">}`
-  | `voiceMode.provider.${Exclude<VoiceProviderFailure, "other" | "down" | "voice">}.named`;
+  | `voiceMode.provider.${Exclude<VoiceProviderFailure, "other" | "down" | "voice">}.named`
+  | `voiceMode.provider.${Exclude<VoiceProviderFailure, "other" | "down" | "voice">}.namedOther`;
 
 /** The locale key naming a key by its source: "your voice key ···Wez8",
  * "your xAI key in Perspicax ···c0Je", "the organization's key". */
@@ -166,10 +168,27 @@ export function voiceKeyActionKey(source: VoiceKeySource): `voiceMode.keyAction.
   return "voiceMode.keyAction.serverKey";
 }
 
+/** The provider of a key that is not xAI's, as the person reads it
+ * ("OpenAI"); null for an xAI key, whose sentences name xAI themselves. */
+function otherProvider(key: VoiceKeyInfo): string | null {
+  return key.provider && key.provider !== "xai" ? VOICE_PROVIDER_LABELS[key.provider] : null;
+}
+
+/** Whose key another provider's is: the organization's, this server's, else
+ * the person's own (#5377). */
+function otherKeyOwner(source: VoiceKeySource): "own" | "org" | "server" {
+  return source === "org-key" || source === "org-account" ? "org" : source === "server" ? "server" : "own";
+}
+
 /** A key as the person reads it, through `t`: its source and its last four
- * characters when known (`tail`: " ···Wez8" or nothing). */
+ * characters when known (`tail`: " ···Wez8" or nothing). A key of another
+ * provider is named by that provider ("your OpenAI key ···n8Qq"), never as
+ * an xAI key (#5377). */
 export function voiceKeyLabel(key: VoiceKeyInfo, t: Translate): string {
-  return t(voiceKeyLabelKey(key.source), { tail: key.last4 ? ` ···${key.last4}` : "" });
+  const tail = key.last4 ? ` ···${key.last4}` : "";
+  const provider = otherProvider(key);
+  if (provider) return t(`voiceMode.key.other.${otherKeyOwner(key.source)}`, { provider, tail });
+  return t(voiceKeyLabelKey(key.source), { tail });
 }
 
 export interface VoiceErrorNote {
@@ -206,6 +225,16 @@ export function voiceErrorNote(
   }
   const key = cause instanceof VoiceProviderError ? cause.key : undefined;
   if (key && (kind === "quota" || kind === "key" || kind === "busy")) {
+    const provider = otherProvider(key);
+    if (provider) {
+      // another provider's key: its own name, and where that key is changed
+      return {
+        key: `voiceMode.provider.${kind}.namedOther` as const,
+        params: { provider, key: voiceKeyLabel(key, t), action: t(`voiceMode.keyAction.other.${otherKeyOwner(key.source) === "org" ? "org" : "own"}`, { provider }) },
+        retry: false,
+        clearsOnVoice: true,
+      };
+    }
     return {
       key: `voiceMode.provider.${kind}.named` as const,
       params: { key: voiceKeyLabel(key, t), action: t(voiceKeyActionKey(key.source)) },

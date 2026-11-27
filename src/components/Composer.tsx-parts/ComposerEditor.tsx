@@ -163,6 +163,8 @@ export function ComposerEditor({
         the hairline. */}
     <div
       data-tour="composer"
+      // the message box: a level of the mode menu opened over it stops at the menu's bottom (ModeMenuLevel.tsx)
+      data-composer-box=""
       data-ultracode={bot && ultracodeFromSelection(bot.modelSelection) ? "" : undefined}
       className={cn(
         COMPOSER_PILL,

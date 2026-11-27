@@ -1,6 +1,7 @@
 import type { RefObject } from "react";
 import type { AppState, Bot, Group } from "@/state/store";
 import type { SectionItemKind } from "@/lib/personal-sections";
+import type { BotDropLine } from "@/lib/section-bot-order";
 import type { SectionDropPlace } from "@/lib/sidebar-layout";
 import type { SidebarDensity } from "@/lib/sidebar-preferences";
 
@@ -47,11 +48,13 @@ export type SectionListDrag = {
   draggingSectionId: string | null;
   dropTarget: { id: string; place: SectionDropPlace } | null;
   itemDropId: string | null;
+  botDropLine: BotDropLine | null;
   setItemDropId: (id: string | null) => void;
   setDraggingSectionId: (id: string | null) => void;
   sectionDragRef: RefObject<{ from: string | null; over: { id: string; place: SectionDropPlace } | null }>;
   acceptItemDrag: (event: React.DragEvent<HTMLDivElement>, id: string) => boolean;
   updateSectionDropTarget: (event: React.DragEvent<HTMLDivElement>, id: string) => void;
+  updateBotDropLine: (event: React.DragEvent<HTMLDivElement>, sectionId: string, present: readonly string[]) => void;
   dropItem: (event: React.DragEvent<HTMLDivElement>, id: string, section: string) => boolean;
   dropSection: (event: React.DragEvent<HTMLDivElement>) => void;
   resetSectionDrag: () => void;

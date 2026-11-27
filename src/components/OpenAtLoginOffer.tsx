@@ -37,7 +37,8 @@ export function OpenAtLoginOffer() {
       setDismissed(true);
     };
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey);
+    // taken off as it was put on (in the capture phase), or it stays for good and takes every Escape after it
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [offered]);
   if (!offered) return null;
   const choose = (choice: "on" | "off") => {

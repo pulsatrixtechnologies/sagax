@@ -7,6 +7,7 @@ import { pickSidebarReaction, type SidebarMascotReactionKind } from "@/lib/sideb
 import { attachSidebarMascotRoot, registerSidebarMascot, refreshSidebarMascotReducedMotion } from "@/lib/sidebar-mascot/loop";
 import { useReducedMotion, type FxMoveRequest } from "./skin-fx/skin-fx";
 import { BotAvatar, type BotAvatarProps, type MausAvatarHandle } from "./Avatar";
+import { AliveSeatAskContext, type AliveSeatAsk } from "./shape-alive";
 
 /** The Shapes move a tap plays on a shape in a row (ShapeMascot plays it at any size, then rests on its still). */
 const SHAPE_REACT: Readonly<Record<SidebarMascotReactionKind, ShapeMove>> = {
@@ -34,14 +35,15 @@ export function SidebarMascotProvider({ rootRef, children }: { rootRef: React.Re
   return children;
 }
 
-export function SidebarMascotAvatar(props: BotAvatarProps & { botId: string }) {
-  const { botId, ...avatarProps } = props;
+export function SidebarMascotAvatar(props: BotAvatarProps & { botId: string; seat?: AliveSeatAsk }) {
+  const { botId, seat, ...avatarProps } = props;
   const wrap = useRef<HTMLSpanElement>(null);
   const box = useRef<HTMLSpanElement>(null);
   const mascotRef = useRef<MausAvatarHandle>(null);
   const reduced = useReducedMotion();
   const look = completeMascotLook(botMascotLook(avatarProps.bot.mascotLook));
-  // a shape in a row is the engine's still (#4145): it joins no pointer loop; a tap plays a move on it
+  // a shape joins no pointer loop of the sidebar's: it lives on the engine's own (#5404: its idle life and
+  // the six states, as the large mascot, only while on screen); a tap plays a move on it
   const [tapMove, setTapMove] = useState<FxMoveRequest | null>(null);
   const alive = !reduced && !avatarProps.animated && look.character !== "shape";
 
@@ -101,13 +103,17 @@ export function SidebarMascotAvatar(props: BotAvatarProps & { botId: string }) {
       onClick={react}
     >
       <span ref={box} className="inline-flex">
-        <BotAvatar
-          {...avatarProps}
-          fillBox
-          sidebarAlive={alive}
-          mascotRef={mascotRef}
-          characterMove={tapMove ?? avatarProps.characterMove}
-        />
+        {/* a pinned tile keeps its seat, the faces of a group's stack share one (shape-alive.ts) */}
+        <AliveSeatAskContext.Provider value={seat ?? null}>
+          <BotAvatar
+            {...avatarProps}
+            fillBox
+            sidebarAlive={alive}
+            shapeAlive
+            mascotRef={mascotRef}
+            characterMove={tapMove ?? avatarProps.characterMove}
+          />
+        </AliveSeatAskContext.Provider>
       </span>
     </span>
   );

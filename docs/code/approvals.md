@@ -149,7 +149,9 @@ Settings > Security (`MyApprovalRules`, also `rules.owner` and
   owner holding host.commands for a holder's card) own rule for that bot,
   Always allow only, checked again at each use (`strictCardRule`).
 - Never: someone else's environment (`crossPerson`), a guest's turn, a
-  question, a meeting's consent (legal consent stays per meeting).
+  question. A meeting join card offers Always allow for that provider
+  (`sagax:meeting`, #3367); the consent announcement in the meeting chat
+  still runs for other participants.
 - A security key the person chose for one of the call's classes is still
   asked each time; the rule never answers it (step-up wins). Saving the
   rule itself is always-grant.

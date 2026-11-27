@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { isOwnerOnlyProtected } from "../owner-only-acl.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -518,7 +519,7 @@ describe("sessions", () => {
     const email = registry.issue({ label: "browser", email: "person@example.test", scopes: ["client"] });
     const paired = pair();
     expect(existsSync(`${file()}.open`)).toBe(true);
-    if (process.platform !== "win32") expect(statSync(`${file()}.open`).mode & 0o777).toBe(0o600);
+    expect(isOwnerOnlyProtected(`${file()}.open`)).toBe(true);
     registry.close(); registry.close();
     expect(existsSync(`${file()}.open`)).toBe(false);
     expect(() => registry.authenticate(email.token)).toThrow("closed");
@@ -600,7 +601,7 @@ describe("sessions", () => {
     const onDisk = readFileSync(file(), "utf8");
     expect(onDisk).not.toContain(token);
     expect(onDisk).toContain(session.id);
-    if (process.platform !== "win32") expect(statSync(file()).mode & 0o777).toBe(0o600); // Windows has no POSIX modes
+    expect(isOwnerOnlyProtected(file())).toBe(true);
     const reloaded = new SessionRegistry({ file: file(), now: () => clock });
     expect(reloaded.authenticate(token)?.id).toBe(session.id);
     expect(reloaded.authenticate("omb_sess_nope")).toBeNull();

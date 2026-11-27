@@ -22,6 +22,7 @@ import { PROVIDER_KEY_FIELDS, PROVIDER_KEYS, savedKeys } from "./settings-provid
 import { engineRow, type EngineRow } from "./settings-engine-row.ts";
 import { USER_PREFERENCE_KEYS } from "./user-preferences.ts";
 import { pageProactiveChoices } from "./proactive-choices-page.ts";
+import { contextUsagePercent } from "./context-usage.ts";
 
 /** `self`: the change targets the bot that is speaking. `shared` (#1545,
  * engines of an organization server): another person's bot, or the
@@ -221,6 +222,8 @@ botField("bot.fallback", "fallback", "array", "Fallback models", "Bot editor > M
 botField("bot.harness", "harness", "string?", "Runs with: the engine that runs this bot's model (piAgent, opencodeGo, openai-compat, or its own tool's kind such as claudeAgent or codex; null for the provider's default). Only what the provider's connection allows", "Bot editor > Model > Runs with");
 // #4417: the bot's context size where its model offers more than one
 botField("bot.contextWindow", "contextWindow", "number?", "Context size in tokens (one of the sizes its model offers, such as 200000 or 1000000; null for the default)", "Bot editor > Model > Context size");
+// #5367: compact this bot's threads before the window fills (0.75 = 75%; null follows the server)
+botField("bot.compactAt", "compactAt", "number?", "Compact threads when context reaches this share of the window (0 to 1, e.g. 0.75) or this many tokens; null follows the server", "Bot editor > Model > Compact at");
 // widening the bots a bot reaches carries the screen's own acknowledgement
 function botReach(key: string, field: string, label: string, where: string, classes?: SettingSpec["classes"]): void {
   add({
@@ -581,6 +584,22 @@ add({
   write: (ids, v) => v === true ? { method: "DELETE", path: `/api/bots/${enc(ids.botId!)}/tasks/${enc(ids.target!)}` } : "value is true.",
   classes: always("delete"),
 });
+// #5367: how full the last turn's context was, and compact this thread now.
+add({
+  key: "thread.contextUsage", family: "thread", target: "thread", value: "number?", label: "Context usage of this conversation as a percent of its window (null until a turn measured it)", where: "Thread",
+  read: (ids) => ({
+    path: `/api/bots/${enc(ids.botId!)}`, list: "bots", match: "id",
+    // Task row so a conversation with no usage yet still reads as null, not 404.
+    field: `tasks[threadId=${ids.target}]`,
+    // Wire stores usage.context as { tokens, window }; bots read the promised percent.
+    shape: (v) => contextUsagePercent((v as { usage?: { context?: { tokens?: number; window?: number } } } | null | undefined)?.usage?.context),
+  }),
+  write: () => "thread.contextUsage is read only: thread.compact folds the conversation when it is full.",
+});
+add({
+  key: "thread.compact", family: "thread", target: "thread", value: "boolean", label: "Compact this conversation now (true)", where: "Thread menu > Compact",
+  write: (ids, v) => v === true ? { method: "POST", path: `/api/bots/${enc(ids.botId!)}/tasks/${enc(ids.target!)}/compact` } : "value is true.",
+});
 // #5233: Stop, as the composer and the teammate exchange view send it (POST
 // /api/bots/:id/interrupt with the thread): false stops the turn running in
 // that conversation only, on any bot of the person; get says whether one is
@@ -908,6 +927,7 @@ pref("appearance.hardwareAcceleration", "appearance", "sagax.hardwareAcceleratio
 pref("appearance.spellcheck", "appearance", "sagax.spellcheck.v1", "boolean", "Check spelling while typing (desktop app)", "Settings > General > Appearance > More appearance > Desktop");
 pref("appearance.botHotkeys", "appearance", "sagax.botHotkeys.v1", "boolean", "Global shortcuts that open a bot (macOS)", "Settings > General > Appearance > More appearance > Desktop");
 pref("appearance.botHotkeyChord", "appearance", "sagax.botHotkeyModifier.v1", "enum:cmd-shift|cmd-alt|ctrl-alt", "Chord of the bots' global shortcuts (Cmd+Shift, Cmd+Option, Ctrl+Option, then the slot number)", "Settings > General > Appearance > More appearance > Desktop");
+pref("appearance.usageMenuBar", "appearance", "sagax.usageMenuBar.v1", "boolean", "Usage in the menu bar (macOS) or the notification area (Windows), desktop app", "Settings > General > Appearance > Usage");
 pref("appearance.sendKey", "appearance", "omb-send-key", "enum:enter|mod-enter", "Send key", "Settings > General > Appearance");
 pref("appearance.runCard", "appearance", "omb-show-run-card", "boolean", "This run card", "Settings > General > Appearance");
 pref("appearance.sidebarLogo", "appearance", "sagax-show-sidebar-logo", "boolean", "Sidebar logo", "Settings > General > Appearance");
@@ -929,6 +949,9 @@ pref("appearance.streamReplies", "appearance", "sagax.streamReplies.v1", "enum:o
 pref("appearance.chatWidth", "appearance", "sagax.chatWidth.v1", "enum:reading|wide|full", "Chat width (reading 960px, the default; wide ~1280px; full fills the pane)", "Settings > General > Appearance > More appearance > Conversation");
 pref("appearance.composerBottomSpace", "appearance", "sagax.composerBottomSpace.v1", "enum:small|standard|large", "Space under the composer (small 16px; standard 48px, the default; large 80px)", "Settings > General > Appearance > More appearance > Conversation");
 pref("appearance.conversationHeader", "appearance", "sagax.conversationHeader.v1", "enum:pill|title", "Conversation header (pill: the bot's name in a centred pill, the default; title: a plain title at the top left)", "Settings > General > Appearance > More appearance > Conversation");
+pref("appearance.usagePillInBar", "appearance", "sagax.usagePillInBar.v1", "enum:on|off", "Usage in the message bar (on, the default: the usage pill after the model choice; off hides it)", "Settings > General > Appearance > More appearance > Conversation");
+pref("appearance.usagePillShape", "appearance", "sagax.usagePillShape.v1", "enum:bars|circles|battery|dots|text", "Usage pill shape (bars: three bars; circles: three circles, the default; battery; dots: three dots; text: text only)", "Settings > General > Appearance > More appearance > Conversation");
+pref("appearance.contextIndicator", "appearance", "sagax.contextIndicator.v1", "enum:on|off", "Context indicator of the conversation (on, the default; off hides the share of the model's context the conversation uses)", "Settings > General > Appearance > More appearance > Conversation");
 pref("models.composerVoiceMode", "models", "sagax.composerVoiceMode.v1", "enum:dictation|conversation", "What a click on the chat bar's voice button starts (dictation, the default; conversation: the voice conversation)", "The chat bar > the voice button's arrow");
 pref("models.dictationLanguage", "models", "sagax.dictationLanguage.v1", "string", "The dictation's language (auto, the default: detected; or a language code such as fr, en)", "The chat bar > the voice button's arrow");
 pref("notifications.sounds", "notifications", "omb-notification-sounds", "boolean", "Notification sounds", "Settings > General > Notifications");

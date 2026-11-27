@@ -52,10 +52,11 @@ export function plainWords(text: string): string {
   return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[’']/g, " ").replace(/\s+/g, " ").trim();
 }
 
-/** The form reactions store: emojibase writes a variation selector after
- * characters that are emoji by default (👍 as "👍️"); the quick row and the
- * chips use the bare form, so the same emoji is one chip whichever picker
- * chose it. A character that needs the selector to be an emoji keeps it. */
+/** The form reactions store. emojibase 16 wrote a variation selector after
+ * characters that are emoji by default (👍 as "👍️"); 18's fully-qualified
+ * form drops that selector for those 152 emoji. Strip it so a reaction
+ * saved under 16 still matches the same chip from 18. A character that
+ * needs the selector to be an emoji (❤️) keeps it. */
 export function canonicalEmoji(unicode: string): string {
   return unicode.replace(/(\p{Emoji_Presentation})️/gu, "$1");
 }

@@ -15,11 +15,19 @@ import path from "node:path";
 
 export const UI_SNAPSHOT_MAX_BYTES = 1_000_000;
 
+function decryptedText(decrypted) {
+  return typeof decrypted === "string" ? decrypted : decrypted?.result;
+}
+
 /**
  * @param {{
  *   dir: string,                         userData/ui-snapshot
  *   dataDir: () => string | null,        the local data folder in use
- *   safeStorage: { isEncryptionAvailable(): boolean, encryptString(s: string): Buffer, decryptString(b: Buffer): string },
+ *   safeStorage: {
+ *     isAsyncEncryptionAvailable(): Promise<boolean>,
+ *     encryptStringAsync(s: string): Promise<Buffer>,
+ *     decryptStringAsync(b: Buffer): Promise<string | { result: string }>,
+ *   },
  *   fs?: typeof nodeFs,
  * }} deps
  */
@@ -30,32 +38,32 @@ export function createUiSnapshotStore({ dir, dataDir, safeStorage, fs = nodeFs }
     const key = crypto.createHash("sha256").update(path.resolve(folder)).digest("hex").slice(0, 32);
     return path.join(dir, `${key}.bin`);
   };
-  const usable = () => {
+  const usable = async () => {
     try {
-      return safeStorage.isEncryptionAvailable();
+      return await safeStorage.isAsyncEncryptionAvailable();
     } catch {
       return false;
     }
   };
   return {
-    read() {
+    async read() {
       const target = file();
-      if (!target || !usable()) return null;
+      if (!target || !(await usable())) return null;
       try {
         const sealed = fs.readFileSync(target);
         if (sealed.length > UI_SNAPSHOT_MAX_BYTES * 2) return null;
-        return safeStorage.decryptString(sealed);
+        return decryptedText(await safeStorage.decryptStringAsync(sealed)) ?? null;
       } catch {
         return null;
       }
     },
-    write(text) {
+    async write(text) {
       const target = file();
-      if (!target || !usable() || typeof text !== "string" || text.length > UI_SNAPSHOT_MAX_BYTES) return false;
+      if (!target || !(await usable()) || typeof text !== "string" || text.length > UI_SNAPSHOT_MAX_BYTES) return false;
       try {
         fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
         const temporary = `${target}.${process.pid}.tmp`;
-        fs.writeFileSync(temporary, safeStorage.encryptString(text), { mode: 0o600 });
+        fs.writeFileSync(temporary, await safeStorage.encryptStringAsync(text), { mode: 0o600 });
         fs.renameSync(temporary, target);
         return true;
       } catch {

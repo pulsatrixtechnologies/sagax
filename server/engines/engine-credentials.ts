@@ -97,11 +97,13 @@ import {
   type PaidKeyConfirm,
 } from "../../shared/credential-resolver.ts";
 
-/** `server` is solo mode only (and rows written before 2026-10-01). */
-export type AccessVia = "subscription" | "owner-key" | "speaker-key" | "server" | "org-key";
+/** `server` is solo mode only (and rows written before 2026-10-01).
+ * `org-account` (#5200): the organization's Grok account, after everything
+ * that is the person's and before the organization's key. */
+export type AccessVia = "subscription" | "owner-key" | "speaker-key" | "server" | "org-key" | "org-account";
 
 /** Every value of AccessVia, for readers of stored rows. */
-export const ACCESS_VIAS: readonly AccessVia[] = ["subscription", "owner-key", "speaker-key", "server", "org-key"];
+export const ACCESS_VIAS: readonly AccessVia[] = ["subscription", "owner-key", "speaker-key", "server", "org-key", "org-account"];
 
 /** Who a turn's credentials belong to: the person who speaks, the bot's
  * owner (their own turn or the bot's routine), or the organization (the
@@ -304,9 +306,14 @@ export interface EngineCredentialInput {
   /** #5180: Act as consent, the personal-key switch, and a paid-key
    * confirmation. Absent: the order below is unchanged. */
   policy?: CredentialPolicy;
-  /** An organization account sign-in this caller already has. Absent: that
-   * form is not a candidate, so the order below does not grow a new winner. */
+  /** An organization Grok account this caller may use (#5200). Absent: that
+   * form is not a candidate. The same consent as the organization's key
+   * (`sagax_server_engines`) is decided by the caller before setting this. */
   orgAccountAvailable?: boolean;
+  /** Whose Grok login folder is the organization's (#5200). Materialize
+   * points the Grok engine at that home; absent with orgAccountAvailable
+   * means the form cannot run yet. */
+  orgAccountPrincipalId?: string;
 }
 
 export type EngineCredentialPlan =
@@ -392,6 +399,15 @@ export function resolveEngineAccess(input: EngineCredentialInput, skip: { key?: 
     // a key pasted on this server never pays pi's Claude models (pi has no file key)
     return { ok: true, via: isOwner ? "owner-key" : "speaker-key", ...who, localKey: true, ...signIn };
   }
+  // #5200: the organization's Grok account, after the person's forms and
+  // before the organization's key. Grok engines only (the account is a
+  // Grok sign-in); same consent gate as the organization's key.
+  if (input.orgAccountAvailable && input.orgAccountPrincipalId?.trim() && grokOrgAccountDriver(driver) && !input.instance.personalOwner) {
+    const judged = payer.principalId || input.owner.principalId;
+    if (input.orgEngineAllowed !== false && (!input.serverEngineAllowed || input.serverEngineAllowed(judged, input.instance.instanceId))) {
+      return { ok: true, via: "org-account", payer: "organization", ...routine };
+    }
+  }
   if (input.keyBacked && !input.instance.personalOwner) {
     // The organization's key serves only the people it was given to. A turn
     // nobody is known to speak for is judged as the bot's owner's.
@@ -408,11 +424,14 @@ export function resolveEngineAccess(input: EngineCredentialInput, skip: { key?: 
   return { ok: false, reason: "no_access", cause: expired ? "sign_in_expired" : "no_credentials", ...who };
 }
 
+/** #5200: the organization's Grok account serves the Grok CLI (subscription
+ * home). The xAI API engine (`grok`) has no login folder for an account. */
+function grokOrgAccountDriver(driver: string): driver is "grokAgent" {
+  return driver === "grokAgent";
+}
+
 /** The forms this engine can already run, in the order resolveEngineAccess
- * uses. An organization account is not one of them: there is no organization
- * sign-in source here (the server's own sign-in was retired), and adding one
- * would change the order. The resolver still accepts that form when a caller
- * has one (shared/credential-resolver.ts). */
+ * uses (#5200: org-account sits after the person's forms and before org-key). */
 export function engineCredentialCandidates(input: EngineCredentialInput): CredentialCandidate[] {
   const payer = turnPayer(input);
   const driver = input.instance.driver;
@@ -446,16 +465,26 @@ export function engineCredentialCandidates(input: EngineCredentialInput): Creden
       ...(provider ? { provider } : {}),
     });
   }
+  const judged = payer.principalId || input.owner.principalId;
+  const orgAllowed = input.orgEngineAllowed !== false && (!input.serverEngineAllowed || input.serverEngineAllowed(judged, input.instance.instanceId));
+  if (input.orgAccountAvailable && input.orgAccountPrincipalId?.trim() && grokOrgAccountDriver(driver) && !input.instance.personalOwner) {
+    candidates.push({
+      form: "org-account",
+      via: "org-account",
+      present: true,
+      available: orgAllowed,
+      paid: false,
+      ...(orgAllowed ? {} : { state: "not_allowed" as const }),
+    });
+  }
   if (input.keyBacked && !input.instance.personalOwner) {
-    const judged = payer.principalId || input.owner.principalId;
-    const allowed = input.orgEngineAllowed !== false && (!input.serverEngineAllowed || input.serverEngineAllowed(judged, input.instance.instanceId));
     candidates.push({
       form: "org-key",
       via: "org-key",
       present: true,
-      available: allowed,
+      available: orgAllowed,
       paid: true,
-      ...(allowed ? {} : { state: "not_allowed" as const }),
+      ...(orgAllowed ? {} : { state: "not_allowed" as const }),
     });
   }
   return candidates;
@@ -518,11 +547,18 @@ export function resolveGovernedEngineAccess(input: EngineCredentialInput, skip: 
   if (narrowed.ok && formOfAccessVia(narrowed.via) === decision.form) {
     return { plan: { ...narrowed, credential: decision }, decision };
   }
-  if (decision.form === "org-account") {
-    return {
-      decision,
-      plan: { ok: false, reason: "no_access", cause: "no_credentials", error: "This engine has no organization account sign-in to run.", ...who },
-    };
+  // #5200: org-account is a first-class via; when the bare resolver missed
+  // it (a skip left only that form), rebuild from the decision.
+  if (decision.form === "org-account" && input.orgAccountAvailable && input.orgAccountPrincipalId?.trim() && grokOrgAccountDriver(input.instance.driver)) {
+    const judged = turnPayer(input).principalId || input.owner.principalId;
+    const allowed = input.orgEngineAllowed !== false && (!input.serverEngineAllowed || input.serverEngineAllowed(judged, input.instance.instanceId));
+    if (allowed) {
+      return {
+        decision,
+        plan: { ok: true, via: "org-account", payer: "organization", ...(turnPayer(input).routine ? { routine: true as const } : {}), ...(turnPayer(input).ownerPays ? { ownerPays: true as const } : {}), credential: decision },
+      };
+    }
+    return { decision, plan: { ok: false, reason: "no_access", cause: "server_engine_not_allowed", ...who } };
   }
   return { plan: narrowed.ok ? { ...narrowed, credential: decision } : narrowed, decision };
 }
@@ -687,6 +723,21 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
       return { ok: false, reason: "no_access", plan: refused };
     }
     return { ok: false, reason: "no_access", detail: "perspicax_unreachable" };
+  }
+  if (plan.via === "org-account") {
+    // #5200: the organization's Grok account runs from the designated
+    // person's own login folder (never copied); same shape as a personal
+    // Grok subscription, identity names the org form.
+    const holder = input.orgAccountPrincipalId?.trim();
+    if (!holder || !grokOrgAccountDriver(driver)) {
+      return materializeEngineAccess(input, planAfter(input, { ...skipped, key: true }), deps, { ...skipped, key: true });
+    }
+    const dir = deps.loginDir(holder, driver, input.instance.instanceId);
+    return {
+      ok: true,
+      plan,
+      access: { via: "org-account", identity: `org-account:${holder}`, engineHome: dir },
+    };
   }
   if (plan.via === "org-key") {
     // The organization's key comes from the instance's own environment; an

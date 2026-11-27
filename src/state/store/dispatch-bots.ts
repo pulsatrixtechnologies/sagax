@@ -44,7 +44,9 @@ export function dispatchBotsEffects(action: Action, env: DispatchEnv): void {
             description: source.description,
             soul: source.soul,
             notifications: source.notifications,
-            modelSelection: source.modelSelection,
+            // D-20261126-018: a copy is a new bot, never started on a provider
+            // the organization hid: it keeps the start it was created with
+            ...(stateRef.current.config?.hiddenEngines?.includes(source.modelSelection.instanceId) ? {} : { modelSelection: source.modelSelection }),
             computer: source.computer,
             cloudBackend: source.cloudBackend,
             autoStartVps: source.autoStartVps,

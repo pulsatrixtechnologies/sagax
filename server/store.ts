@@ -1324,9 +1324,9 @@ export class Store {
       const legacyFile = messagesFile(threadId);
       if (existsSync(legacyFile)) mdb.readThread(threadId, legacyFile);
     }
-    // After legacy transcripts are in SQLite, so the first boot sees their
-    // newest message instead of stamping createdAt and jumping next launch.
-    this.repairThreadUpdatedAts();
+    // #5343: repair off the constructor's turn so a cold messages.db scan
+    // (latestMessageAts) does not block /api/health during boot (46 s+).
+    setImmediate(() => this.repairThreadUpdatedAts());
     if (fillAskedAts) this.fillTaskAskedAts();
     // After the roster is loaded, so identity resolution sees which opener
     // ids are still live.

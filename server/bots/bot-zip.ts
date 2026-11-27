@@ -167,6 +167,8 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   harness: "settings",
   // #4417: the bot's context size travels with its settings
   contextWindow: "settings",
+  // #5367: fold point travels with the bot's model settings
+  compactAt: "settings",
   parkDirectMessages: "settings",
   approvePeerComms: "settings",
   localPrompt: "settings",

@@ -1,8 +1,9 @@
 // @ts-nocheck
 /** autoPickForTurn (#1388). Pure move from server/index.ts. */
 import { pickOrchestrationModel, pickWorkerModel } from "../models/model-auto.ts";
-import { heavyWorthy, pickModeModel, resolveModes } from "../models/model-mode.ts";
+import { heavyWorthy, modesAtLimit, pickModeModel, resolveModes } from "../models/model-mode.ts";
 import { isForcedModelMode, type ModeResolution, type ModelMode } from "../../shared/model-mode.ts";
+import { effortAcceptedByEngine } from "../../shared/ultracode-effort.ts";
 import { statSync } from "node:fs";
 export type Host = Record<string, any>;
 
@@ -28,12 +29,18 @@ function autoPickForTurn(input: {
   const payer = host.autoPayerKey(bot, input.speaker);
   const skip = [...autoRefusalsFor(payer), ...(input.skip ?? [])];
   const offered = host.autoEnginesFor(bot, input.speaker, input.guestConfined === true);
-  // An engine at its usage limit for this payer, and another sign-in to the
-  // same subscription, wait for the reset (server/usage/limit-failover-host.ts);
-  // with nothing else left, Auto keeps its list and the limit says when.
-  const limited = host.limitFailover.autoExcluded(payer, offered);
+  // An engine at its usage limit for this payer waits for the reset
+  // (server/usage/limit-failover-host.ts): one a refusal holds, and one whose
+  // 5-hour or weekly window the payer's usage report shows used up
+  // (M-20261126-101: Auto and every mode take the next model they can be
+  // served now; each account on its own, so a model stays while one of its
+  // accounts has room). With nothing else left, the turn keeps its list and
+  // the limit says when; the menu's preview then names no model, only when
+  // the first account is expected back (modesAtLimit).
+  const limited = host.limitFailover.autoExcluded(payer, offered, "report");
   const open = offered.filter((engine) => !limited.has(engine.instanceId));
   const engines = open.length ? open : offered;
+  const allLimited = offered.length > 0 && open.length === 0;
   // #4329 lot 5: the engines the owner chose to run with come right after the bot's own
   const request = { base: bot.modelSelection, engines, catalog: host.autoCatalogLookup, skip, ...(host.autoHarnessesFor ? { harness: host.autoHarnessesFor(bot) } : {}), ...(host.autoModeModelsFor ? { modeModels: host.autoModeModelsFor(bot) } : {}) };
   // #5014: among the accounts of the picked model's provider that offer it,
@@ -52,6 +59,15 @@ function autoPickForTurn(input: {
       chain: moved < 0 ? [{ instanceId: to, model: from.model }, ...pick.chain] : pick.chain.map((entry, index) => index === moved ? { ...entry, instanceId: to } : entry),
     };
   };
+  // D-20261126-017: under Auto the person's choice always holds. The Effort level she clicked is used on
+  // every turn, whatever model and engine Auto takes for it (a turn Auto hands to Heavy included), wherever
+  // that engine takes the level. Fast, Expert and Heavy chosen by the person keep setting their own.
+  const held = (pick: AutoPick): AutoPick => {
+    const level = bot.modelSelection.effort;
+    if (!level || isForcedModelMode(bot.modelSelection.mode)) return pick;
+    const engine = engines.find((candidate) => candidate.instanceId === pick.selection.instanceId);
+    return engine?.effortLevels && effortAcceptedByEngine(level, engine.effortLevels) ? { ...pick, selection: { ...pick.selection, effort: level } } : pick;
+  };
   if (input.role === "continue") {
     const record = host.store.taskByThread(bot.id, input.threadId)?.autoModel;
     if (record && host.autoRecordUsable(record, engines, skip)) {
@@ -62,12 +78,12 @@ function autoPickForTurn(input: {
       }
       return {
         payer,
-        pick: {
+        pick: held({
           role: record.role, selection, engineLabel: record.engineLabel, modelLabel: record.modelLabel, tier: record.tier,
           ...(record.taskClass ? { taskClass: record.taskClass } : {}), reason: record.reason,
           ...(record.via ? { via: record.via } : {}), ...(record.fromEngineLabel ? { fromEngineLabel: record.fromEngineLabel } : {}),
           chain: [{ instanceId: record.instanceId, model: record.model }, { instanceId: bot.modelSelection.instanceId, model: bot.modelSelection.model }]
-        }
+        })
       };
     }
   }
@@ -85,7 +101,7 @@ function autoPickForTurn(input: {
   // mode's rule picks among the engines they can use (never a pinned model's
   // own engine rule: a call turn takes the pick as a typed turn does, #4888).
   // With nothing usable for the mode the bot's Auto reads the request as before.
-  const modes = input.withModes ? { modes: resolveModes(request) } : {};
+  const modes = input.withModes ? { modes: allLimited ? modesAtLimit(resolveModes(request), host.limitFailover.limitedUntil(payer, offered)) : resolveModes(request) } : {};
   // D-20261126-005: Build is no mode (shared/model-mode.ts); a selection that
   // still names it is no forced mode, so the turn runs as Auto (the request is read)
   if (isForcedModelMode(bot.modelSelection.mode)) {
@@ -97,10 +113,10 @@ function autoPickForTurn(input: {
   const why = input.role === "orchestration" ? heavyWorthy(input.text) : null;
   if (why) {
     const heavy = pickModeModel(request, "heavy");
-    if (heavy?.team?.length) return { payer, pick: onAccount({ ...heavy, autoHeavy: why }), ...modes };
+    if (heavy?.team?.length) return { payer, pick: held(onAccount({ ...heavy, autoHeavy: why })), ...modes };
   }
   const quick = host.parsedQuickTask(input.text);
-  return { payer, pick: onAccount(pickOrchestrationModel(request, quick)), ...modes };
+  return { payer, pick: held(onAccount(pickOrchestrationModel(request, quick))), ...modes };
 
 }
   return autoPickForTurn;

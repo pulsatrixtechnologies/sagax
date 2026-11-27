@@ -147,6 +147,8 @@ export interface MenuToggleCtx {
   headless: boolean;
   windowOnly: boolean;
   fallbackAnchor?: () => HTMLElement | null;
+  /** The width of the menu that opens (the chat bar's mode menu is narrower than the model menu). */
+  width?: number;
 }
 
 /** Opens or closes the model menu and places it next to its anchor. */
@@ -158,15 +160,18 @@ export function makeToggleMenu(ctx: MenuToggleCtx) {
       closeMenu();
       return;
     }
-    const MENU_WIDTH = BASE_MENU_WIDTH;
+    const MENU_WIDTH = ctx.width ?? BASE_MENU_WIDTH;
     anchorRef.current = anchor;
     setMenuDoneCall(onDone ? { call: onDone } : null);
     const box = anchor ? (anchor.closest<HTMLElement>('[role="menu"]') ?? anchor) : null;
     const rect = (anchor ?? (headless ? fallbackAnchor?.() : triggerRef.current))?.getBoundingClientRect();
     if (rect && typeof window.innerWidth === "number") {
       if (anchor && box) {
-        const left = Math.max(8, Math.min(box.getBoundingClientRect().right + 6, window.innerWidth - MENU_WIDTH - 8));
-        setMenuAt({ left, bottom: Math.max(8, window.innerHeight - rect.bottom - 6) });
+        // #5422: open beside the + menu at the row's top, never at the window's top left
+        const menuBox = box.getBoundingClientRect();
+        const left = Math.max(8, Math.min(menuBox.right + 6, window.innerWidth - MENU_WIDTH - 8));
+        const top = Math.max(8, Math.min(rect.top, window.innerHeight - 120));
+        setMenuAt({ left, top });
       } else if (windowOnly) {
         setMenuAt(windowOnlyMenuPlace());
       } else if (headless) {

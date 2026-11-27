@@ -1,7 +1,11 @@
 // xAI TTS runs on the harness with the xAI key (one key for bots on Grok and Grok voice since 2026-10-14).
-// A connected Grok account (subscription) speaks through the CLI voice host
-// instead: the same calls, a different host and one extra header. An API key
-// stays on api.x.ai. The choice is local to the call (withVoiceAuth).
+// A connected Grok account (subscription) speaks on the same xAI API root
+// with its session token and the Grok CLI token header, as the official Grok
+// client does for its own voice: its `voice.api_base` inherits
+// `[endpoints].xai_api_base_url` (https://api.x.ai/v1). The chat proxy
+// (cli-chat-proxy.grok.com) serves no voice route: its 404 on /tts/voices,
+// /tts and /realtime was read as an unknown voice (M-20261126-145, #5179).
+// The choice is local to the call (withVoiceAuth).
 import { AsyncLocalStorage } from "node:async_hooks";
 import { z } from "zod";
 import { WebSocket as WsWebSocket } from "ws";
@@ -10,22 +14,22 @@ import type { Audio, Voice } from "./elevenlabs.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
 const API = (process.env.SAGAX_XAI_TTS_API || "https://api.x.ai/v1").replace(/\/+$/, "");
-/** Subscription voice. An API key is never sent here. */
-const GROK_ACCOUNT_HTTP = "https://cli-chat-proxy.grok.com/v1";
-const GROK_ACCOUNT_REALTIME = "wss://cli-chat-proxy.grok.com/v1/realtime";
+/** The xAI API root a connected account's voice goes to: xAI's own host,
+ * never a configured one (a session token only goes to xAI). */
+const GROK_ACCOUNT_HTTP = "https://api.x.ai/v1";
 const GROK_ACCOUNT_HEADER = "xai-grok-cli";
 const LOOPBACK_HTTP = /^https?:\/\/127\.0\.0\.1:\d{1,5}(?:\/|$)/;
 const LOOPBACK_WS = /^wss?:\/\/127\.0\.0\.1:\d{1,5}(?:\/|$)/;
 
 /** `api-key`: api.x.ai, Bearer only. `grok-account`: the person's connected
- * Grok account, on the CLI voice host, with the CLI token header. */
+ * Grok account, on the xAI API root, with the Grok CLI token header. */
 export type VoiceAuthKind = "api-key" | "grok-account";
 
 const voiceAuth = new AsyncLocalStorage<VoiceAuthKind>();
 
 /** Run `fn` as an API key or as the connected Grok account. The sockets and
  * fetches it starts keep that choice. The token itself stays the argument
- * the caller already passes; this only picks the host and the header. */
+ * the caller already passes; this only picks the xAI API root and the header. */
 export function withVoiceAuth<T>(kind: VoiceAuthKind, fn: () => T): T {
   return voiceAuth.run(kind, fn);
 }
@@ -46,22 +50,14 @@ function wsBase(): string {
   return httpBase().replace(/^http/, "ws");
 }
 
-/** Where a realtime socket opens. A loopback URL is kept (a test, or the
- * server's own loopback override). A connected account otherwise uses the
- * CLI voice host and keeps the query the caller built. */
+/** Where a realtime socket opens: the URL the caller built (xAI's Voice
+ * Agent API, or a loopback in tests). A connected account opens the same
+ * one, with its token header; only a test's loopback override of the fake
+ * subscription host moves it. */
 export function realtimeSocketUrl(passed: string): string {
-  if (LOOPBACK_WS.test(passed)) return passed;
-  if (!accountVoice()) return passed;
+  if (LOOPBACK_WS.test(passed) || !accountVoice()) return passed;
   const override = process.env.SAGAX_GROK_ACCOUNT_REALTIME_URL?.trim() ?? "";
-  if (LOOPBACK_WS.test(override)) return override;
-  try {
-    const given = new URL(passed);
-    const base = new URL(GROK_ACCOUNT_REALTIME);
-    base.search = given.search;
-    return base.toString();
-  } catch {
-    return GROK_ACCOUNT_REALTIME;
-  }
+  return LOOPBACK_WS.test(override) ? override : passed;
 }
 
 function socketHeaders(key: string): Record<string, string> {
@@ -89,7 +85,9 @@ export function grokVoiceFailure(message: string): GrokVoiceFailure {
   // Credits win over a network reading: a 503 body that says out_of_credits
   // is not "could not reach" (#5179, #5180).
   if (/out_of_credits|needs credits|spending limit|insufficient_quota/i.test(message)) return "quota";
-  if (/rejected the key/.test(message)) return "key";
+  // a route the credential is not served at is that credential's, like a
+  // refused key: the next credential may be served (M-20261126-145)
+  if (/rejected the key|does not serve this voice/.test(message)) return "key";
   if (/rate-limiting/.test(message)) return "busy";
   if (/could not find that voice/.test(message)) return "voice";
   if (/Could not reach (?:Grok|OpenAI|ElevenLabs) voice|timed out|(?:Grok|OpenAI|ElevenLabs) voice failed \(HTTP 5\d\d[):]|not reachable/.test(message)) return "down";
@@ -111,14 +109,20 @@ export function handshakeStatus(event: unknown): number | null {
   return match ? Number(match[1]) : null;
 }
 
+/** What a refused request asked for, to read its 404: only a request that
+ * named a voice can be refused for that voice. */
+export interface RefusalAsked {
+  voice?: boolean;
+}
+
 /** A socket error as a Grok voice message: a refused handshake says why
  * (key, credits, rate limit), anything else is the network. */
-function socketFailure(event: unknown): string {
+function socketFailure(event: unknown, asked: RefusalAsked = {}): string {
   const record = event as { message?: unknown; error?: { message?: unknown } } | null;
   const text = [record?.message, record?.error?.message].find((value): value is string => typeof value === "string") ?? "";
   if (/out_of_credits|spending limit|insufficient_quota/i.test(text)) return "The xAI account needs credits to generate speech. out_of_credits";
   const status = handshakeStatus(event);
-  return status === null ? "Could not reach Grok voice. Check your connection." : refusal(status);
+  return status === null ? "Could not reach Grok voice. Check your connection." : refusal(status, {}, asked);
 }
 
 /** The most of an xAI error body read to sort a refusal. */
@@ -141,7 +145,15 @@ export function refusalDetail(body: string): { code?: string; error?: string } {
   }
 }
 
-export function refusal(status: number, detail: { code?: string; error?: string } = {}): string {
+/** The voice the request named is unknown to the provider. */
+const VOICE_NOT_FOUND = "xAI could not find that voice. Refresh the voice list and select a voice again.";
+/** A 404 that is the address: this credential is not served there. */
+const NOT_SERVED = "xAI does not serve this voice request for this key or sign-in (HTTP 404).";
+/** xAI's own words for an unknown voice in an error body ("Voice zed not
+ * found"); a path that merely contains "voices" is not one. */
+const VOICE_REFUSED = /\b(?:unknown|invalid) voice\b|\bvoice(?:_id)?\b[^/]{0,60}\bnot (?:found|exist)/i;
+
+export function refusal(status: number, detail: { code?: string; error?: string } = {}, asked: RefusalAsked = {}): string {
   const said = `${detail.code ?? ""} ${detail.error ?? ""}`;
   if (status === 401 || status === 403 || /incorrect api key|invalid api key|api key (?:is )?(?:invalid|disabled|blocked|revoked)|unauthenticated|permission/i.test(said)) {
     if (/credit|spending limit|billing|exhausted/i.test(said)) return "The xAI account needs credits to generate speech.";
@@ -149,7 +161,11 @@ export function refusal(status: number, detail: { code?: string; error?: string 
   }
   if (status === 402 || status === 503 && /out_of_credits|credit|spending limit|billing/i.test(said) || /out_of_credits|credit|spending limit|billing/i.test(said)) return "The xAI account needs credits to generate speech. out_of_credits";
   if (status === 429 || /rate limit|too many requests/i.test(said)) return "xAI is rate-limiting speech. Wait a moment and try again.";
-  if (status === 404) return "xAI could not find that voice. Refresh the voice list and select a voice again.";
+  // xAI answers an unknown voice_id 404. A voice list, a transcription and a
+  // realtime handshake name none (the call's voice goes in session.update once
+  // the socket is open), so their 404 is the address, never the voice; xAI's
+  // own words naming a voice still are (M-20261126-145, #5179)
+  if (status === 404) return asked.voice || VOICE_REFUSED.test(said) ? VOICE_NOT_FOUND : NOT_SERVED;
   // xAI's category only ("Client specified an invalid argument"), never its message
   const category = detail.code && /^[\w .,:'()-]{1,100}$/.test(detail.code) ? `: ${detail.code}` : "";
   return `Grok voice failed (HTTP ${status}${category}). Try again later.`;
@@ -157,14 +173,14 @@ export function refusal(status: number, detail: { code?: string; error?: string 
 
 /** A refused handshake (`ws` "unexpected-response"): its status and body,
  * read up to REFUSAL_BODY_MAX, as a Grok voice message. */
-function readRefusal(res: { statusCode?: number; on(event: string, cb: (chunk?: unknown) => void): unknown; destroy?(): void }): Promise<string> {
+function readRefusal(res: { statusCode?: number; on(event: string, cb: (chunk?: unknown) => void): unknown; destroy?(): void }, asked: RefusalAsked = {}): Promise<string> {
   return new Promise((resolve) => {
     let body = "";
     let settled = false;
     const done = () => {
       if (settled) return;
       settled = true;
-      resolve(refusal(res.statusCode ?? 0, refusalDetail(body)));
+      resolve(refusal(res.statusCode ?? 0, refusalDetail(body), asked));
     };
     res.on("data", (chunk) => {
       if (body.length < REFUSAL_BODY_MAX) body += String(chunk);
@@ -179,12 +195,12 @@ function readRefusal(res: { statusCode?: number; on(event: string, cb: (chunk?: 
 
 /** Listen for a refused handshake on a `ws` socket (a test's fake has no
  * `on`: the error event's status is used then). */
-function onRefused(socket: WebSocket, failWith: (message: string) => void): void {
+function onRefused(socket: WebSocket, failWith: (message: string) => void, asked: RefusalAsked = {}): void {
   const node = socket as unknown as { on?: (event: string, cb: (req: unknown, res: Parameters<typeof readRefusal>[0]) => void) => void; terminate?: () => void };
   if (typeof node.on !== "function") return;
   // with this listener `ws` leaves the refused request to us: read why, then end it
   node.on("unexpected-response", (_req, res) => {
-    void readRefusal(res).then((message) => {
+    void readRefusal(res, asked).then((message) => {
       failWith(message);
       try { node.terminate?.(); } catch { /* already gone */ }
     }).catch(reportBackgroundError);
@@ -210,7 +226,7 @@ async function readLimitedText(response: Response, max: number): Promise<string>
   return text.slice(0, max);
 }
 
-async function request(path: string, init: RequestInit): Promise<Response> {
+async function request(path: string, init: RequestInit, asked: RefusalAsked = {}): Promise<Response> {
   let response: Response;
   const headers = new Headers(init.headers);
   if (accountVoice()) headers.set("x-xai-token-auth", GROK_ACCOUNT_HEADER);
@@ -226,7 +242,7 @@ async function request(path: string, init: RequestInit): Promise<Response> {
     // read only to sort the refusal (an invalid key is a 400); remote error
     // bodies can echo credentials or request text, so none of it is passed on
     const body = await readLimitedText(response, REFUSAL_BODY_MAX);
-    throw new Error(refusal(response.status, refusalDetail(body)));
+    throw new Error(refusal(response.status, refusalDetail(body), asked));
   }
   return response;
 }
@@ -261,7 +277,7 @@ export async function synthesize(text: string, voiceId: string | undefined, key:
     headers: { authorization: `Bearer ${key}`, "content-type": "application/json", accept: "audio/mpeg" },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(60_000),
-  });
+  }, { voice: Boolean(voice) });
   const mime = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   if (mime !== "audio/mpeg" && mime !== "audio/mp3") {
     await response.body?.cancel();
@@ -333,7 +349,7 @@ export async function synthesizeStream(
     headers: { authorization: `Bearer ${key}`, "content-type": "application/json", accept: "application/octet-stream" },
     body: JSON.stringify(body),
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-  });
+  }, { voice: Boolean(streamVoice) });
   const mime = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   if (mime === "application/json" || mime.startsWith("text/") || !response.body) {
     await response.body?.cancel();
@@ -616,11 +632,12 @@ export function openSpeechStream(
     return { ready, speak() {}, delta() {}, done() {}, clear() {}, close() {} };
   }
   socket.binaryType = "arraybuffer";
+  const asked = { voice: Boolean(speechVoice) };
   onRefused(socket, (message) => {
     if (closed) return;
     handlers.onError(message);
     end();
-  });
+  }, asked);
   socket.addEventListener("open", () => {
     resolveReady();
     if (closed || ping) return;
@@ -643,7 +660,7 @@ export function openSpeechStream(
   });
   socket.addEventListener("error", (event) => {
     if (closed) return;
-    handlers.onError(socketFailure(event));
+    handlers.onError(socketFailure(event, asked));
     end();
   });
   socket.addEventListener("close", end);

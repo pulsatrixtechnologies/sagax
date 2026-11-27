@@ -165,6 +165,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Fallback models | Bot editor > Model > Fallback | `sagax_settings` get, set `bot.fallback` | simple |
 | Runs with: the engine that runs this bot's model (piAgent, opencodeGo, openai-compat, or its own tool's kind such as claudeAgent or codex; null for the provider's default). Only what the provider's connection allows | Bot editor > Model > Runs with | `sagax_settings` get, set `bot.harness` | simple |
 | Context size in tokens (one of the sizes its model offers, such as 200000 or 1000000; null for the default) | Bot editor > Model > Context size | `sagax_settings` get, set `bot.contextWindow` | simple |
+| Compact threads when context reaches this share of the window (0 to 1, e.g. 0.75) or this many tokens; null follows the server | Bot editor > Model > Compact at | `sagax_settings` get, set `bot.compactAt` | simple |
 | Teams the Primary Bot manages (e.g. Built-in) | Bot editor > Permissions > Managed teams | `sagax_settings` get, set `bot.managedSections` | simple |
 | Ask before talking to other bots | Bot editor > Permissions | `sagax_settings` get, set `bot.approvePeerComms` | simple |
 | Send on your behalf ({policy: ask/allow, dailyCap}) | Bot editor > Permissions | `sagax_settings` get, set `bot.outbound` | simple (élargit les droits si allow) |
@@ -234,6 +235,8 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Project | Thread menu > Move to project | `sagax_settings` get, set `thread.project` | simple |
 | Confidential (one way) | Thread menu > Confidential | `sagax_settings` get, set `thread.confidential` | simple |
 | Delete the conversation (true) | Thread menu > Delete | `sagax_settings` set `thread.delete` | suppression |
+| Context usage of this conversation as a percent of its window (null until a turn measured it) | Thread | `sagax_settings` get, set `thread.contextUsage` | simple |
+| Compact this conversation now (true) | Thread menu > Compact | `sagax_settings` set `thread.compact` | simple |
 | Whether a turn is running in this conversation; false stops it (Stop), a teammate's work thread too, for that thread only | Composer > Stop; teammate exchange view > Stop | `sagax_settings` get, set `thread.running` | simple |
 
 ### Routines
@@ -348,6 +351,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Check spelling while typing (desktop app) | Settings > General > Appearance > More appearance > Desktop | `sagax_settings` get, set `appearance.spellcheck` | simple |
 | Global shortcuts that open a bot (macOS) | Settings > General > Appearance > More appearance > Desktop | `sagax_settings` get, set `appearance.botHotkeys` | simple |
 | Chord of the bots' global shortcuts (Cmd+Shift, Cmd+Option, Ctrl+Option, then the slot number) | Settings > General > Appearance > More appearance > Desktop | `sagax_settings` get, set `appearance.botHotkeyChord` | simple |
+| Usage in the menu bar (macOS) or the notification area (Windows), desktop app | Settings > General > Appearance > Usage | `sagax_settings` get, set `appearance.usageMenuBar` | simple |
 | Send key | Settings > General > Appearance | `sagax_settings` get, set `appearance.sendKey` | simple |
 | This run card | Settings > General > Appearance | `sagax_settings` get, set `appearance.runCard` | simple |
 | Sidebar logo | Settings > General > Appearance | `sagax_settings` get, set `appearance.sidebarLogo` | simple |
@@ -368,6 +372,9 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Chat width (reading 960px, the default; wide ~1280px; full fills the pane) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.chatWidth` | simple |
 | Space under the composer (small 16px; standard 48px, the default; large 80px) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.composerBottomSpace` | simple |
 | Conversation header (pill: the bot's name in a centred pill, the default; title: a plain title at the top left) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.conversationHeader` | simple |
+| Usage in the message bar (on, the default: the usage pill after the model choice; off hides it) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.usagePillInBar` | simple |
+| Usage pill shape (bars: three bars; circles: three circles, the default; battery; dots: three dots; text: text only) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.usagePillShape` | simple |
+| Context indicator of the conversation (on, the default; off hides the share of the model's context the conversation uses) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.contextIndicator` | simple |
 
 ### Notifications et confidentialité
 

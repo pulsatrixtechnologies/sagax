@@ -91,6 +91,8 @@ export interface LimitClockOptions {
   waiting?: () => boolean;
   /** The known reset times changed. */
   onChange?: () => void;
+  /** Usage was just read for these accounts (M-20261126-101: the same reading also refreshes the report's verdict). */
+  onUsage?: (report: PlanUsageReport) => void;
   now?: () => number;
   /** Where the refusals held now are kept, with the time each began, so a restart does not end a hold. Absent: memory only. */
   file?: string;
@@ -265,8 +267,11 @@ export class LimitResetClock {
     const accounts = this.options.accounts();
     this.loading = (async () => {
       try {
-        if (accounts.length) this.noteUsage(await this.load(accounts, force));
-        else this.checkedAt = this.now();
+        if (accounts.length) {
+          const report = await this.load(accounts, force);
+          this.noteUsage(report);
+          this.options.onUsage?.(report);
+        } else this.checkedAt = this.now();
       } catch {
         this.checkedAt = this.now();
       } finally {
@@ -279,6 +284,7 @@ export class LimitResetClock {
   start(): void {
     if (this.timer) return;
     // While an engine is held its usage is read every few minutes too, so a limit that reset early ends the hold (upstream #5199).
+    // The same while a usage report keeps one of these accounts out of the modes' picks (`waiting`, M-20261126-101).
     this.timer = setInterval(() => { if (this.holding() || this.options.waiting?.()) void this.ensureFresh(LIMIT_POLL_MS - 1_000).catch(reportBackgroundError); }, 60_000);
     this.timer.unref?.();
   }

@@ -87,13 +87,16 @@ export interface ShapeCanvasProps {
   followPointer: boolean;
   /** Off mounts the engine's still: one painted canvas, no loop. */
   live: boolean;
+  /** The motion the person chose for this mascot, resolved (the picker's gear, else the device's). */
+  reduced: boolean;
+  /** The stage's turn of the body and its held gaze (#5384, shape-stage.ts); none off a stage. */
+  view?: { yaw: number; pitch: number } | undefined;
+  holdGaze?: boolean | undefined;
 }
 
-/** A shape painted by the engine in a material, in the same 84% box as the app's drawing. */
-export function ShapeCanvas({ definition, material, color, ink, depth, state, mood, followPointer, live }: ShapeCanvasProps) {
-  const host = useRef<HTMLSpanElement>(null);
-  const avatar = useRef<MountedAvatar | null>(null);
-  const options: AvatarOptions = {
+/** What the engine is asked to mount for a body in a material. */
+export function canvasOptions({ definition, material, color, ink, depth, state, mood, followPointer, live, reduced, view, holdGaze }: ShapeCanvasProps): AvatarOptions {
+  return {
     definition,
     material,
     color,
@@ -102,10 +105,21 @@ export function ShapeCanvas({ definition, material, color, ink, depth, state, mo
     state,
     mood,
     followPointer: live && followPointer,
+    holdGaze: Boolean(holdGaze),
+    ...(view ? { view } : {}),
+    // the person's choice, resolved by the app: the engine alone would follow the device even under Full
+    reducedMotion: reduced,
     still: !live,
     // the host names the mascot
     label: "",
   };
+}
+
+/** A shape painted by the engine in a material, in the same 84% box as the app's drawing. */
+export function ShapeCanvas(props: ShapeCanvasProps) {
+  const host = useRef<HTMLSpanElement>(null);
+  const avatar = useRef<MountedAvatar | null>(null);
+  const options = canvasOptions(props);
   const latest = useRef(options);
   latest.current = options;
   useEffect(() => {
@@ -118,7 +132,8 @@ export function ShapeCanvas({ definition, material, color, ink, depth, state, mo
     };
   }, []);
   useEffect(() => {
-    avatar.current?.update(latest.current);
+    // a turn by hand: the engine keeps the view it was last given, so a mascot back at the front is told so
+    avatar.current?.update(props.view ? latest.current : { ...latest.current, view: { yaw: 0, pitch: 0 } });
   });
-  return <span ref={host} className="block h-[84%] w-[84%]" data-shape-canvas={material.id} />;
+  return <span ref={host} className="block h-[84%] w-[84%]" data-shape-canvas={props.material.id} />;
 }

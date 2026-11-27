@@ -379,6 +379,7 @@ export function myTurnsText(engine: Pick<MyEngine, "myTurns" | "installed" | "no
  * "Your subscription" to the person who paid, "Owner's credentials" on a
  * routine, never a secret. */
 export function turnAccessLabel(access: { via: string; payer: string; payerPrincipalId?: string; routine?: boolean }, viewerPrincipalId: string | null): string {
+  if (access.via === "org-account") return t("turnAccess.orgAccount");
   if (access.via === "org-key") return t("turnAccess.orgKey");
   if (access.via === "server") return t("turnAccess.server");
   if (access.routine && access.payer === "owner") return t("turnAccess.ownerCredentials");

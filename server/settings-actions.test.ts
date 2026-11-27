@@ -9,7 +9,7 @@ import { createSettingsActions, finalRefusal, settingStepUpClasses, type Setting
 const PERSON: TurnFacts = { automation: false, guest: false, requestUsable: true, senderUnproven: false, provenPerson: "pr_owner", sharedServer: true };
 
 function harness(over: Partial<SettingsActionDeps> & { mode?: "ask" | "auto" | "full"; facts?: TurnFacts; routeStatus?: number | ((method: string, path: string) => number); answer?: unknown } = {}) {
-  const planned: Array<{ effect: string; path: string; method: string; body?: unknown; stepUpClasses: readonly string[]; primary?: unknown; rule?: { scope: Record<string, string> }; noRule?: boolean }> = [];
+  const planned: Array<{ effect: string; path: string; method: string; body?: unknown; stepUpClasses: readonly string[]; primary?: unknown; rule?: { scope: Record<string, string>; description: string }; noRule?: boolean }> = [];
   const audits: unknown[] = [];
   const screens: unknown[] = [];
   const acts = {
@@ -184,7 +184,9 @@ describe("sagax_settings", () => {
     await h.call({ action: "set", key: "bot.approvalMode", target: "b2", value: "auto" });
     expect(h.planned[0]!.effect).toBe("hold");
     expect(h.planned[0]!.noRule).toBeUndefined();
-    expect(h.planned[0]!.rule?.scope).toMatchObject({ setting: "bot.approvalMode", target: "b2", value: expect.any(String) });
+    // #5364: Always allow for a bot setting covers every bot of the person
+    expect(h.planned[0]!.rule?.scope).toEqual({ setting: "bot.approvalMode", value: expect.any(String) });
+    expect(h.planned[0]!.rule?.description).toContain("all your bots");
   });
 
   it("relays the route's own refusal: a member does not do by bot what they cannot do by hand", async () => {
@@ -217,6 +219,24 @@ describe("sagax_settings", () => {
     expect(JSON.parse(String(read.body.text))).toEqual({ key: "bot.effort", value: "low" });
     await h.call({ action: "set", key: "bot.effort", value: "high" });
     expect(h.planned.at(-1)).toMatchObject({ method: "PATCH", body: { modelSelection: { model: "m", effort: "high" } } });
+  });
+
+  // #5367: thread.contextUsage is the percent of the window, not the raw context object.
+  it("reads thread.contextUsage as a percent of the window", async () => {
+    const h = harness({
+      answer: {
+        bots: [{
+          id: "b1",
+          tasks: [{ threadId: "th1", usage: { input: 1, output: 1, costUsd: null, turns: 1, context: { tokens: 75_000, window: 100_000 } } }],
+        }],
+      },
+    });
+    const read = await h.call({ action: "get", key: "thread.contextUsage", target: "th1" });
+    expect(JSON.parse(String(read.body.text))).toEqual({ key: "thread.contextUsage", value: 75 });
+    const empty = await harness({
+      answer: { bots: [{ id: "b1", tasks: [{ threadId: "th1" }] }] },
+    }).call({ action: "get", key: "thread.contextUsage", target: "th1" });
+    expect(JSON.parse(String(empty.body.text))).toEqual({ key: "thread.contextUsage", value: null });
   });
 
   // #1674: a model change is the bot's own, as Edit bot makes it: it names
@@ -603,7 +623,8 @@ describe("sagax_settings: the rest of Settings (#1545, lot 2)", () => {
   });
 
   it("every setting has a get, or is an action the screen offers (create, delete, run, test, sign-in)", () => {
-    const actions = /(?:update|reset|power|Action|Attach|Revoke|create|delete|remove|Delete|Remove|run|Run|Test|SignIn|SignOut|Install|Refresh|Update|Account|Disconnect|Telegram|WhatsApp|commandAllow|template\.|section\.bots|account\.avatar|computer\.rename|liveKeyRemove|Export|Add|Classes|Rotate)/;
+    // #5367: thread.compact is a one-shot action (like Run), write only.
+    const actions = /(?:update|reset|power|Action|Attach|Revoke|create|delete|remove|Delete|Remove|run|Run|Test|SignIn|SignOut|Install|Refresh|Update|Account|Disconnect|Telegram|WhatsApp|commandAllow|template\.|section\.bots|account\.avatar|computer\.rename|liveKeyRemove|Export|Add|Classes|Rotate|compact)/;
     const missing = SETTINGS.filter((spec) => !spec.read && !actions.test(spec.key)).map((spec) => spec.key);
     expect(missing).toEqual([]);
   });

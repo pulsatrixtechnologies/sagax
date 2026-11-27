@@ -275,15 +275,18 @@ test("every lent screen argument is one the driver itself defines, with the same
   const pathsAndCommands = ["click.debug_image_out", "get_desktop_state.screenshot_out_file", "get_window_state.screenshot_out_file",
     "launch_app.additional_arguments", "launch_app.webkit_inspector_port"];
   const notYetLent = ["bring_to_front.session", "browser_click.delivery_mode", "browser_pointer.delivery_mode", "browser_type.replace",
-    "click.capture_id", "click.post_action_wait", "click.target", "double_click.post_action_wait", "drag.post_action_wait", "drag.target",
+    "click.capture_id", "click.post_action_wait", "click.target", "click.ui_tree_revision", "double_click.post_action_wait",
+    "double_click.ui_tree_revision", "drag.post_action_wait", "drag.target", "drag.ui_tree_revision",
     "get_accessibility_tree.session", "get_desktop_state.max_image_dimension", "get_window_state.display_only", "get_window_state.full_output",
     "get_window_state.include_accessibility_tree", "get_window_state.max_dimension", "get_window_state.max_image_dimension",
     "get_window_state.screenshot_format", "get_window_state.screenshot_quality", "get_window_state.since", "get_window_state.timeout_ms",
     "get_window_state.tree_format", "get_window_state.verbose", "hotkey.element_token", "hotkey.post_action_wait", "hotkey.target",
-    "launch_app.session", "list_apps.session", "list_windows.app", "list_windows.session", "move_cursor.delivery_mode", "move_cursor.target",
-    "press_key.post_action_wait", "press_key.target", "right_click.post_action_wait", "scroll.post_action_wait", "scroll.target",
+    "hotkey.ui_tree_revision", "launch_app.session", "list_apps.session", "list_windows.app", "list_windows.session",
+    "move_cursor.delivery_mode", "move_cursor.target", "press_key.post_action_wait", "press_key.target", "press_key.ui_tree_revision",
+    "right_click.post_action_wait", "right_click.ui_tree_revision", "scroll.post_action_wait", "scroll.target", "scroll.ui_tree_revision",
     "set_agent_cursor_motion.effects", "set_agent_cursor_motion.style", "set_agent_cursor_motion.timing", "set_value.post_action_wait",
-    "start_session.cursor_motion", "start_session.cursor_theme", "type_text.post_action_wait", "type_text.target", "zoom.session"];
+    "set_value.ui_tree_revision", "start_session.cursor_motion", "start_session.cursor_theme", "type_text.post_action_wait",
+    "type_text.target", "type_text.ui_tree_revision", "zoom.session"];
   assert.deepEqual(dropped.sort(), [...pathsAndCommands, ...notYetLent].sort());
   assert.equal(lentScreenArguments("get_desktop_state", undefined).arguments !== undefined, true);
   assert.match(lentScreenArguments("get_desktop_state", { screenshot_out_file: "/tmp/x" }).error, /not allowed/);

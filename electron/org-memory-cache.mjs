@@ -171,8 +171,8 @@ const emptyState = () => ({ server: null, mode: null, source: null, person: null
  * @param {string} deps.userData   Electron's userData folder
  * @param {(cmd: string, args: string[], opts: { cwd?: string, env?: Record<string, string> }) => Promise<{ code: number, stdout: string, stderr: string }>} deps.run
  * @param {typeof fetch} deps.fetch
- * @param {(text: string) => Buffer} deps.encrypt  safeStorage.encryptString
- * @param {(data: Buffer) => string} deps.decrypt  safeStorage.decryptString
+ * @param {(text: string) => Promise<Buffer> | Buffer} deps.encrypt  safeStorage.encryptStringAsync
+ * @param {(data: Buffer) => Promise<string> | string} deps.decrypt  safeStorage.decryptStringAsync (unwrapped)
  * @param {(method: "GET" | "POST") => Promise<{ status: number, body: unknown }>} [deps.orgServer]  /api/me/memory-sync-token on the organization server, as the person signed in there (GET: who, POST: their token)
  * @param {() => string | null} [deps.source]  that organization server's origin
  */
@@ -194,9 +194,9 @@ export function createOrgMemoryCache({ userData, run, fetch, encrypt, decrypt, o
     fs.mkdirSync(root, { recursive: true, mode: 0o700 });
     fs.writeFileSync(stateFile, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
   };
-  const readToken = () => {
+  const readToken = async () => {
     try {
-      return decrypt(fs.readFileSync(tokenFile));
+      return await decrypt(fs.readFileSync(tokenFile));
     } catch {
       return null;
     }
@@ -284,7 +284,7 @@ export function createOrgMemoryCache({ userData, run, fetch, encrypt, decrypt, o
   /** Best effort: revoke the kept token at Perspicax (it may revoke itself). */
   async function revokeKept() {
     const state = readState();
-    const token = readToken();
+    const token = await readToken();
     if (!state.server || !token) return;
     try {
       const response = await fetch(`${state.server}/api/v1/memory/sync/token`, {
@@ -343,7 +343,7 @@ export function createOrgMemoryCache({ userData, run, fetch, encrypt, decrypt, o
     }
     const kept = previous.server === origin ? readState() : emptyState();
     fs.mkdirSync(root, { recursive: true, mode: 0o700 });
-    fs.writeFileSync(tokenFile, encrypt(outcome.token), { mode: 0o600 });
+    fs.writeFileSync(tokenFile, await encrypt(outcome.token), { mode: 0o600 });
     writeState({ ...kept, server: origin, mode: "auto", source: source(), person, tokenExpiresAt: outcome.expiresAt, lastError: null, autoError: null });
     return { ok: true };
   }
@@ -377,7 +377,7 @@ export function createOrgMemoryCache({ userData, run, fetch, encrypt, decrypt, o
       // Signed out of this server or out of its organization: its copy goes.
       if (who.ended) return mine ? autoFailed(who) : autoFailed({ ...who, ended: false });
       // Offline or an older server: a copy already here keeps syncing.
-      if (state.server && readToken() !== null && (who.code === "unreachable" || who.code === "unsupported")) return syncNow();
+      if (state.server && (await readToken()) !== null && (who.code === "unreachable" || who.code === "unsupported")) return syncNow();
       return autoFailed(who);
     }
     if (state.mode === "auto" && (state.source !== from || state.person !== who.person)) {
@@ -386,13 +386,13 @@ export function createOrgMemoryCache({ userData, run, fetch, encrypt, decrypt, o
       await eraseNow();
       state = readState();
     }
-    const usable = state.mode === "auto" && state.server && readToken() !== null &&
+    const usable = state.mode === "auto" && state.server && (await readToken()) !== null &&
       !(state.tokenExpiresAt && state.tokenExpiresAt - now() < RENEW_BEFORE_MS);
     if (!usable) {
       const renewed = await renew(who.person);
       if (!renewed.ok) {
         // An older Perspicax: a connection made by hand keeps working.
-        if (renewed.code === "unsupported" && state.server && readToken() !== null) return syncNow();
+        if (renewed.code === "unsupported" && state.server && (await readToken()) !== null) return syncNow();
         return autoFailed(renewed);
       }
     }
@@ -401,7 +401,7 @@ export function createOrgMemoryCache({ userData, run, fetch, encrypt, decrypt, o
 
   async function syncNow(again = false) {
     const state = readState();
-    const token = readToken();
+    const token = await readToken();
     if (!state.server || !token) throw new Error("Connect to Perspicax first");
     const reason = cloudFolderReason(vault);
     if (reason) throw new Error(`The memory folder is in ${reason}; it must stay out of cloud folders`);
@@ -491,7 +491,7 @@ export function createOrgMemoryCache({ userData, run, fetch, encrypt, decrypt, o
       const tiers = await getJson(origin, value, "/api/v1/memory/sync/tiers");
       if (tiers.enabled === false) throw new Error("The memory is off on this Perspicax");
       fs.mkdirSync(root, { recursive: true, mode: 0o700 });
-      fs.writeFileSync(tokenFile, encrypt(value), { mode: 0o600 });
+      fs.writeFileSync(tokenFile, await encrypt(value), { mode: 0o600 });
       writeState({ ...emptyState(), server: origin });
       return api.state();
     },

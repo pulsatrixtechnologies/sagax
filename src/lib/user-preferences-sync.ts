@@ -147,8 +147,21 @@ export async function startPreferenceSync(deps: PreferenceSyncDeps): Promise<Pre
   // local value differs from it is this page's own unsaved change.
   let pushed: UserPreferences;
   if (record?.stored === true) {
+    const local = readPreferences(deps.storage);
     pushed = cleanUserPreferences(record.preferences);
-    applyPreferences(deps.storage, pushed);
+    // Server wins for every key it holds. A key this page already had that the
+    // server has never stored (a choice made just before an update, or before
+    // the watcher saved) stays local and is saved on the next check (#5365):
+    // wiping it here reset "Show Bot threads" to off after a Sagax update.
+    for (const key of USER_PREFERENCE_KEYS) {
+      try {
+        const value = pushed[key];
+        if (value !== undefined) deps.storage.setItem(key, value);
+        else if (local[key] === undefined) deps.storage.removeItem(key);
+      } catch {
+        /* storage refused: the defaults show */
+      }
+    }
   } else {
     let brought: UserPreferences = {};
     try {

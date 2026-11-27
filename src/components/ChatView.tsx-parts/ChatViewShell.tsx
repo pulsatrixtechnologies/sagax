@@ -214,7 +214,7 @@ export function ChatViewShell(m: Record<string, any>) {
             <div ref={topSentinelRef} className="h-2 w-full pointer-events-none" aria-hidden="true" />
           ) : null}
           {windowedMessages.length === 0 && !bot.busy && (!streamHasEarlier || !streamDrawn) && <EmptyChat bot={bot} />}
-          <ChatRowsContext.Provider value={rows}><LiveToolsContext value={liveTools}><LiveTurnsContext value={liveTurns}><ChatBusyContext value={busy}><HeavyLeaderContext value={<BotAvatar bot={bot} size={34} trackPointer={false} />}>
+          <ChatRowsContext.Provider value={rows}><LiveToolsContext value={liveTools}><LiveTurnsContext value={liveTurns}><ChatBusyContext value={busy}><HeavyLeaderContext value={bot}>
             <ConversationGalleryProvider>
             <MessagesList
               confidential={confidential}
@@ -293,7 +293,7 @@ export function ChatViewShell(m: Record<string, any>) {
           Stage mode docks this composer on the page (measured HTML path);
           beside keeps it in the side column. */}
       {!pageStage && (
-      <div ref={composerDockRef} data-composer-dock="" className="pointer-events-none absolute inset-x-0 bottom-0 z-[2]">
+      <div ref={composerDockRef} data-composer-dock="" className="pointer-events-none absolute inset-x-0 bottom-0 z-[3]">
       <ChatEdgeFade edge="bottom" />
       {confidential && <ConfidentialBanner position="bottom" className="mb-1" />}
       {/* Optional beside: bot status above the side-pane composer. */}

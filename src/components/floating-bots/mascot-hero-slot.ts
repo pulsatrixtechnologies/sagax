@@ -5,6 +5,7 @@
 // on the mascot opens (the mascot picker, #5369).
 import { createContext, useContext, type ReactNode } from "react";
 import type { MausMotion, MausState } from "@/lib/mascot";
+import type { ShapeMoodSetting } from "../../../shared/mascot-look";
 
 export interface MascotHeroSlot {
   /** Where the character's name was: the bot's name (28px), edited in place. */
@@ -19,6 +20,8 @@ export interface MascotHeroSlot {
   /** The bot's live state and the moves it plays across the app. */
   state?: MausState;
   motion?: { kind: Exclude<MausMotion, "none">; nonce: number } | null;
+  /** The M key on the hero's shape mascot changes its mood (#5384). */
+  onMood?: (mood: ShapeMoodSetting) => void;
 }
 
 export const MascotHeroSlotContext = createContext<MascotHeroSlot | null>(null);

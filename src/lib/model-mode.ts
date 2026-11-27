@@ -4,6 +4,7 @@
 // shapes are shared/model-mode.ts.
 import { t } from "@/lib/i18n";
 import { effortLabel } from "@/lib/effort-label";
+import { resetTime } from "@/lib/limit-resets";
 import type { EffortLevel, ModelSelection } from "../../shared/model-selection";
 import {
   FORCED_MODEL_MODES, MODEL_MODES, modeOfSelection,
@@ -33,16 +34,25 @@ export function modeBlurb(mode: ModelMode): string {
 
 /** The models behind a mode, as one line: one name, or the team's distinct
  * names (Heavy with several providers). Null for Auto, which reads each
- * request, and for a mode with nothing usable. */
-export function modeModelsLine(mode: ModelMode, resolution: ModeResolution | undefined): string | null {
+ * request, and for a mode with nothing usable. With every account at its
+ * usage limit (M-20261126-101) no model is named, for Auto too: the line
+ * says none can be used now, and when the first one is back. */
+export function modeModelsLine(mode: ModelMode, resolution: ModeResolution | undefined, now = Date.now()): string | null {
+  if (resolution?.limited) return limitedLine(resolution.limited.until, now);
   if (mode === "auto" || !resolution?.pick) return null;
   const names = resolution.team?.length ? resolution.team.map((agent) => agent.modelLabel) : [resolution.pick.modelLabel];
   return [...new Set(names)].join(", ");
 }
 
+/** Every account at its usage limit (M-20261126-101): none can be used now, and when the first one is back. The
+ * menu's tooltips and Settings > Models say it the same way. */
+export function limitedLine(until: number | null, now = Date.now()): string {
+  return until !== null && until > now ? `${t("model.cascade.none")} · ${t("limits.resets", { time: resetTime(until, now) })}` : t("model.cascade.none");
+}
+
 /** The side tooltip's line: what it does, then which model backs it. */
-export function modeTooltip(mode: ModelMode, resolution: ModeResolution | undefined): string {
-  const models = modeModelsLine(mode, resolution);
+export function modeTooltip(mode: ModelMode, resolution: ModeResolution | undefined, now = Date.now()): string {
+  const models = modeModelsLine(mode, resolution, now);
   return models ? t("model.mode.tip", { what: modeBlurb(mode), models }) : modeBlurb(mode);
 }
 
@@ -53,9 +63,10 @@ export const CHAT_BAR_MODES: readonly ModelMode[] = MODEL_MODES;
 
 /** The modes the person is offered: Auto always, the others only with a model
  * they can use (a choice that cannot work is not shown). Before the server
- * has answered every mode shows. */
+ * has answered every mode shows. A mode whose every account is at its usage
+ * limit stays (M-20261126-101): it works again at the reset its tooltip says. */
 export function offeredModes(resolutions: Record<ModelMode, ModeResolution> | undefined): ModelMode[] {
-  return CHAT_BAR_MODES.filter((mode) => mode === "auto" || !resolutions || Boolean(resolutions[mode]?.pick));
+  return CHAT_BAR_MODES.filter((mode) => mode === "auto" || !resolutions || Boolean(resolutions[mode]?.pick || resolutions[mode]?.limited));
 }
 
 /** The mode a selection reads as in the chat bar: one still set on Build

@@ -199,6 +199,9 @@ describe("realtime call bridge", () => {
     expect(realtimeDropReason(1006, "xAI rejected the key or its TTS permissions. Check the xAI key in Settings.")).toBe("key");
     expect(realtimeDropReason(1011)).toBe("server");
     expect(realtimeDropReason(1006)).toBe("network");
+    // M-20261126-145: an address the credential is not served at is that
+    // credential's, never "the network"
+    expect(realtimeDropReason(1006, "xAI does not serve this voice request for this key or sign-in (HTTP 404).")).toBe("key");
     expect(realtimeDropReason(undefined)).toBe("network");
     const { upstream, frames } = setup();
     upstream.onclose?.({ code: 1011 });

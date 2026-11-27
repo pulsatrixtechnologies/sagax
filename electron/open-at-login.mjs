@@ -27,7 +27,8 @@ export function choiceDocument(choice) {
 export function applyLoginItem(app, choice, platform) {
   if (platform !== "darwin" || choice === "unset") return { applied: false, openAtLogin: false };
   const openAtLogin = choice === "on";
-  app.setLoginItemSettings({ openAtLogin, openAsHidden: false });
+  // Electron 45 removed openAsHidden (and wasOpenedAsHidden / restoreState).
+  app.setLoginItemSettings({ openAtLogin });
   return { applied: true, openAtLogin };
 }
 

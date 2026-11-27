@@ -173,7 +173,7 @@ describe("the key a voice failure is about (2026-10-28)", () => {
     expect(voiceErrorNote("speech-failed", "down", down, translate)).toEqual({ key: "voiceMode.provider.down", retry: false, clearsOnVoice: true });
     // an older server names no key: the plain line too
     expect(voiceErrorNote("speech-failed", "quota", new VoiceProviderError("x", "quota", 502), translate).key).toBe("voiceMode.provider.quota");
-    const both = "No call was placed: the connected Grok account is out of credits, and the xAI API key is out of credits too.";
+    const both = "No call was placed: your connected Grok account is out of credits. Add credits on the connected Grok account, then call back. Your organization's xAI key is out of credits.";
     const note = voiceErrorNote("speech-failed", "quota", new VoiceProviderError(both, "quota", 502, { key: { source: "grok-account", last4: "4Dd" } }), translate);
     expect(t(note.key, note.params)).toBe(both);
   });
@@ -183,6 +183,25 @@ describe("the key a voice failure is about (2026-10-28)", () => {
       .toBe("your voice key ···Wez8 was refused (no credits). The voice now runs on your xAI key in Perspicax ···c0Je.");
     expect(voiceKeyFallbackNote({ used: { source: "org-key", last4: null }, skipped: [{ source: "voice-key", last4: "Wez8", failure: "quota" }, { source: "perspicax-key", last4: "c0Je", failure: "key" }] }, translate))
       .toBe("your xAI key in Perspicax ···c0Je was refused (key rejected). The voice now runs on the organization's xAI key.");
+  });
+
+  it("names another provider's key by that provider, never as an xAI key (#5377)", () => {
+    const own = new VoiceProviderError("needs credits", "quota", 502, { key: { source: "perspicax-key", last4: "n8Qq", provider: "openai" } });
+    const quota = voiceErrorNote("transcribe-failed", "quota", own, translate);
+    expect(quota).toMatchObject({ key: "voiceMode.provider.quota.namedOther", retry: false, clearsOnVoice: true });
+    expect(t(quota.key, quota.params)).toBe("OpenAI has no credits left for your OpenAI key ···n8Qq. Add credits to that OpenAI account, or change the key in Settings > Providers. The answers stay in the chat.");
+    const org = new VoiceProviderError("rejected", "key", 502, { key: { source: "org-key", last4: "f8Dd", provider: "elevenlabs" } });
+    const rejected = voiceErrorNote("speech-failed", "key", org, translate);
+    expect(t(rejected.key, rejected.params)).toBe("ElevenLabs rejected the organization's ElevenLabs key ···f8Dd: invalid, revoked, or without voice permission. Ask an admin, or add your own ElevenLabs key in Settings > Providers. The answers stay in the chat.");
+    const server = new VoiceProviderError("busy", "busy", 502, { key: { source: "server", last4: null, provider: "openai" } });
+    const busy = voiceErrorNote("transcribe-failed", "busy", server, translate);
+    expect(t(busy.key, busy.params)).toBe("OpenAI is rate-limiting this server's OpenAI key. It comes back by itself; the answers stay in the chat.");
+    expect(voiceKeyFallbackNote({ used: { source: "perspicax-key", last4: "n8Qq", provider: "openai" }, skipped: [{ source: "org-key", last4: "c0Je", failure: "quota" }] }, translate))
+      .toBe("the organization's xAI key ···c0Je was refused (no credits). The voice now runs on your OpenAI key ···n8Qq.");
+    for (const key of ["voiceMode.key.other.own", "voiceMode.key.other.org", "voiceMode.key.other.server", "voiceMode.keyAction.other.own", "voiceMode.keyAction.other.org", "voiceMode.provider.quota.namedOther", "voiceMode.provider.key.namedOther", "voiceMode.provider.busy.namedOther"]) {
+      expect(en).toHaveProperty([key]);
+      expect(fr).toHaveProperty([key]);
+    }
   });
 
   it("names the organization's Grok account as its own source, never as a key (#5200)", () => {

@@ -18,9 +18,18 @@ import { useMenuMotion } from "./MenuMotion";
 import { COMPOSER_POPOVER_RISE_CLASS, MENU_FIT_ROW, MENU_SURFACE, MenuDivider, MenuGlyph, menuRow } from "./menu-look";
 import type { ComposerModelChip, ComposerModelMenuControl } from "./ModelPicker";
 import { composerModelLabel } from "./ModelPicker.tsx-parts/helpers";
+import { chatBarChipLabel, shownMode } from "@/lib/model-mode";
 import { ultracodeFromSelection } from "@/lib/ultracode-chrome";
 import { useStoreSelector } from "@/state/store-selector";
-import type { Bot } from "@/state/store";
+import type { Bot, InstanceInfo } from "@/state/store";
+
+/** #5422: the + menu's Model row says what the chip says (mode under Auto,
+ * or the model picked by hand), never only the base model name. */
+export function foldedModelRowLabel(instances: readonly InstanceInfo[], selection: Bot["modelSelection"]): string {
+  const mode = shownMode(selection);
+  if (mode && selection.auto === true) return chatBarChipLabel(mode, selection.effort);
+  return composerModelLabel(instances, selection);
+}
 
 /** The quiet circle, the reference's (#4152): its secondary fill, a 0.5 px
  * inner hairline in its faint tertiary border (never the field border's
@@ -258,7 +267,8 @@ export function ComposerModelRow({ chip, onOpen }: {
     >
       <MenuGlyph><Brain size={16} aria-hidden="true" /></MenuGlyph>
       <span className="min-w-0 flex-1 truncate">{t("composer.plus.model")}</span>
-      <span data-composer-model-value className={cn("max-w-[140px] shrink truncate text-ink-tertiary", chip.ultracode && "ultracode-effort-chip")}>{chip.label}</span>
+      {/* #5422: use the room the + menu has; the whole label stays in the title */}
+      <span data-composer-model-value title={chip.title ?? chip.label} className={cn("min-w-0 max-w-[min(100%,14rem)] shrink truncate text-ink-tertiary", chip.ultracode && "ultracode-effort-chip")}>{chip.label}</span>
       <ChevronRight size={14} className="shrink-0 text-ink-tertiary" aria-hidden="true" />
     </button>
   );
@@ -274,7 +284,7 @@ export function ComposerFoldedModelRow({ bot, modelMenu, close }: {
 }) {
   const instances = useStoreSelector((state) => state.instances);
   const [open, setOpen] = useState(false);
-  const label = composerModelLabel(instances, bot.modelSelection);
+  const label = foldedModelRowLabel(instances, bot.modelSelection);
   return (
     <ComposerModelRow
       // a running turn: the model menu itself says what can change (BusyModelMenu)

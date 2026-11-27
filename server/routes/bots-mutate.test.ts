@@ -254,6 +254,84 @@ describe("bots-mutate routes", () => {
   });
 });
 
+// M-20261126-101: the menu's preview reads the limits as the turn's pick does
+describe("GET /api/bots/:id/auto-model", () => {
+  it("lists an account whose plan the usage report shows spent as held by its limit", async () => {
+    const engines = [
+      { instanceId: "claude", displayName: "Claude Code", models: { options: [] } },
+      { instanceId: "grok", displayName: "Grok", models: { options: [] } },
+    ];
+    // no turn was refused yet: only a reading of the person's usage report knows of the limit
+    const autoExcluded = vi.fn((_payer: string, _engines: unknown, pick?: string) => new Set(pick === "report" ? ["claude"] : []));
+    const route = createBotsMutateRoutes(baseDeps({ autoEnginesFor: vi.fn(() => engines), limitFailover: { autoExcluded } } as unknown as Partial<BotsMutateRouteDeps>));
+    const { ctx, json } = context("/api/bots/osprey/auto-model");
+    expect(await dispatchRoutes([route], ctx)).not.toBe(PASS);
+    expect(json.mock.calls[0]?.[2]).toMatchObject({ excluded: [{ instanceId: "claude", engineLabel: "Claude Code", reason: "limit" }] });
+  });
+
+  // review M1: with every account at its limit the turn would still try its
+  // list, and the preview names none of it: no pick, no sentence about one
+  it("names no model as Auto's next one while every account is at its limit", async () => {
+    const engines = [
+      { instanceId: "claude", displayName: "Claude Code", models: { options: [{ id: "opus", label: "Claude Opus" }] } },
+      { instanceId: "grok", displayName: "Grok", models: { options: [{ id: "grok-4", label: "Grok 4" }] } },
+    ];
+    const pick = { selection: { instanceId: "claude", model: "opus" }, chain: [{ instanceId: "claude", model: "opus" }, { instanceId: "grok", model: "grok-4" }] };
+    const preview = async (spent: string[]) => {
+      const autoExcluded = vi.fn((_payer: string, _engines: unknown, kind?: string) => new Set(kind === "report" ? spent : []));
+      // the turn's own verdict with every account at its limit (autoPickForTurn, modesAtLimit)
+      const modes = spent.length === engines.length ? { modes: { auto: { mode: "auto", pick: null, limited: { until: null } } } } : {};
+      const route = createBotsMutateRoutes(baseDeps({
+        autoEnginesFor: vi.fn(() => engines), limitFailover: { autoExcluded },
+        autoPickForTurn: vi.fn(() => ({ pick, ...modes })), autoModelRecord: vi.fn(() => ({ instanceId: "claude", model: "opus", modelLabel: "Claude Opus" })),
+        explainPick: vi.fn(() => "Claude Opus is the strongest."),
+      } as unknown as Partial<BotsMutateRouteDeps>));
+      const { ctx, json } = context("/api/bots/osprey/auto-model");
+      await dispatchRoutes([route], ctx);
+      return json.mock.calls[0]?.[2] as { pick: unknown; explanation: string };
+    };
+    expect(await preview(["claude"])).toMatchObject({ pick: { modelLabel: "Claude Opus" }, explanation: "Claude Opus is the strongest." });
+    expect(await preview(["claude", "grok"])).toMatchObject({ pick: null, explanation: "" });
+  });
+
+  // review M1b, N1: Settings > Models reads the same answer; with every
+  // account at its limit (the turn's verdict, `modes.auto.limited`) it names no
+  // model as Auto's order and leaves each account out for its limit
+  it("puts every account at its limit under left out, with no order of choice", async () => {
+    const engines = [
+      { instanceId: "claude", displayName: "Claude Code", models: { options: [{ id: "opus", label: "Claude Opus" }] } },
+      { instanceId: "grok", displayName: "Grok", models: { options: [{ id: "grok-4", label: "Grok 4" }] } },
+    ];
+    const preview = async (spent: string[], turn: unknown) => {
+      const autoExcluded = vi.fn((_payer: string, _engines: unknown, kind?: string) => new Set(kind === "report" ? spent : []));
+      const route = createBotsMutateRoutes(baseDeps({
+        autoEnginesFor: vi.fn(() => engines), limitFailover: { autoExcluded },
+        autoPickForTurn: vi.fn(() => turn), autoModelRecord: vi.fn(() => ({ instanceId: "grok", model: "grok-4", modelLabel: "Grok 4" })),
+        explainPick: vi.fn(() => "Grok 4 is the next one."),
+      } as unknown as Partial<BotsMutateRouteDeps>));
+      const { ctx, json } = context("/api/bots/osprey/auto-model");
+      await dispatchRoutes([route], ctx);
+      return json.mock.calls[0]?.[2] as { chain: unknown[]; excluded: unknown[]; modes?: { auto?: { limited?: unknown } } };
+    };
+    // every account spent: the turn keeps its whole list and says so in its modes
+    const all = await preview(["claude", "grok"], {
+      pick: { selection: { instanceId: "claude", model: "opus" }, chain: [{ instanceId: "claude", model: "opus" }, { instanceId: "grok", model: "grok-4" }] },
+      modes: { auto: { mode: "auto", pick: null, limited: { until: 1_900_000_000_000 } } },
+    });
+    expect(all.chain).toEqual([]);
+    expect(all.excluded).toEqual([
+      { instanceId: "claude", engineLabel: "Claude Code", reason: "limit" },
+      { instanceId: "grok", engineLabel: "Grok", reason: "limit" },
+    ]);
+    expect(all.modes?.auto?.limited).toEqual({ until: 1_900_000_000_000 });
+    expect(all).not.toHaveProperty("limited");
+    // one account with room: the turn's order (without the spent one) stays, the spent one is left out
+    const one = await preview(["claude"], { pick: { selection: { instanceId: "grok", model: "grok-4" }, chain: [{ instanceId: "grok", model: "grok-4" }] } });
+    expect(one.chain).toEqual([{ instanceId: "grok", model: "grok-4", engineLabel: "Grok", modelLabel: "Grok 4" }]);
+    expect(one.excluded).toEqual([{ instanceId: "claude", engineLabel: "Claude Code", reason: "limit" }]);
+  });
+});
+
 // #4527 lot E: the person's own tools left out of a bot's list
 describe("PATCH /api/bots/:id toolKeep", () => {
   /** A person's state with one tool left out (the rule's verdict, set directly). */

@@ -33,15 +33,15 @@ const expectedVersion = String(sdkPackage.version);
 
 const RELEASES = {
   x64: {
-    version: "0.45.4",
-    file: "cua-driver-rs-0.45.4-windows-x86_64-binary.zip",
-    sha256: "949927b4cb0519c6fb1377878d67d79a8d6fae7bc56cbed17c7aa26448d82cb5",
+    version: "0.61.3",
+    file: "cua-driver-rs-0.61.3-windows-x86_64-binary.zip",
+    sha256: "4dd46c5a3ab0e46644feeb86b28f8c61b655539337a9ef72702867879763ff82",
     machine: 0x8664,
   },
   arm64: {
-    version: "0.45.4",
-    file: "cua-driver-rs-0.45.4-windows-arm64-binary.zip",
-    sha256: "8bdd935ef6cf9679eb4d10f713b35e03f368ea60acb8b2c4d24ca867be182485",
+    version: "0.61.3",
+    file: "cua-driver-rs-0.61.3-windows-arm64-binary.zip",
+    sha256: "3a926d3a96da29d9f081d1b927e59c7c38b83b77e6d8e7e10f81b94882d47c7b",
     machine: 0xaa64,
   },
 };
@@ -56,10 +56,12 @@ if (Object.values(RELEASES).some((release) => expectedVersion !== release.versio
 async function binaryVersion(candidate) {
   if (!candidate || !existsSync(candidate)) return null;
   try {
-    const { stdout } = await run(candidate, ["--version"], { timeout: 5000, windowsHide: true });
-    return stdout.match(/cua-driver\s+([\d.]+)/)?.[1] ?? null;
-  } catch {
-    return null;
+    const { stdout, stderr } = await run(candidate, ["--version"], { timeout: 5000, windowsHide: true });
+    // Some runner images print the banner on stderr (#5321).
+    return `${stdout}\n${stderr}`.match(/cua-driver\s+([\d.]+)/)?.[1] ?? null;
+  } catch (error) {
+    const mixed = `${error?.stdout ?? ""}\n${error?.stderr ?? ""}`;
+    return mixed.match(/cua-driver\s+([\d.]+)/)?.[1] ?? null;
   }
 }
 
@@ -74,12 +76,20 @@ function peMachine(bytes) {
 /** Whether `candidate` is cua-driver at the SDK's version for `arch`. A
  * binary this host can run reports its version; one it cannot run (arm64 on
  * an x64 host) is accepted only by its PE machine type, and only when it
- * comes from the pinned release archive (`pinned`). */
+ * comes from the pinned release archive (`pinned`). #5321: a pinned official
+ * archive whose `--version` probe fails on the runner (empty output, crash)
+ * is still accepted after the archive digest and PE machine type match. */
 async function acceptable(candidate, arch, pinned) {
   if (!candidate || !existsSync(candidate)) return false;
   if (peMachine(await readFile(candidate)) !== RELEASES[arch].machine) return false;
-  if (runsHere(arch)) return (await binaryVersion(candidate)) === expectedVersion;
-  return pinned;
+  if (!runsHere(arch)) return pinned;
+  const version = await binaryVersion(candidate);
+  if (version === expectedVersion) return true;
+  if (pinned && version === null) {
+    console.warn(`CUA Driver ${expectedVersion} for win32-${arch}: --version probe failed; accepting the pinned release archive`);
+    return true;
+  }
+  return false;
 }
 
 async function officialBinary(arch) {

@@ -269,15 +269,24 @@ export function memberOwnHostToolCall(tool: string | undefined, input: unknown, 
     case "add_mcp_server": return place.ownMcpList;
     case "attach_file": {
       const path = argsOf(input)?.path;
-      if (typeof path !== "string" || !path.trim() || !isAbsolute(path)) return false;
-      if (place.ownLocalVm && (path === VM_GUEST_WORKSPACE || path.startsWith(`${VM_GUEST_WORKSPACE}/`))
-        && !path.split("/").some((segment) => segment === ".." || segment === ".")) return true;
-      const real = realLocation(path);
-      return place.botRoots.some((root) => {
-        const rel = relative(realLocation(root), real);
-        if (rel === "" || isAbsolute(rel) || rel === ".." || rel.startsWith(`..${sep}`)) return false;
-        return !rel.split(sep).some((segment) => sensitiveHiddenSegment(segment));
-      });
+      if (typeof path !== "string" || !path.trim()) return false;
+      // #5358: a relative path the bot just wrote is still in its folders
+      const candidates = isAbsolute(path)
+        ? [path]
+        : place.botRoots.map((root) => join(root, path));
+      for (const candidate of candidates) {
+        if (place.ownLocalVm && (candidate === VM_GUEST_WORKSPACE || candidate.startsWith(`${VM_GUEST_WORKSPACE}/`))
+          && !candidate.split("/").some((segment) => segment === ".." || segment === ".")) return true;
+        if (!isAbsolute(candidate)) continue;
+        const real = realLocation(candidate);
+        const own = place.botRoots.some((root) => {
+          const rel = relative(realLocation(root), real);
+          if (rel === "" || isAbsolute(rel) || rel === ".." || rel.startsWith(`..${sep}`)) return false;
+          return !rel.split(sep).some((segment) => sensitiveHiddenSegment(segment));
+        });
+        if (own) return true;
+      }
+      return false;
     }
     default: return false;
   }
@@ -358,8 +367,10 @@ export type MemberAdminReason = typeof MEMBER_ADMIN_REASONS[number];
 export const HOST_RUN_REASONS: ReadonlySet<MemberAdminReason> = new Set(["host-shell", "host-engine-tool", "outside-own-folders"]);
 
 /** Host-level built-in servers that drive the shared host itself (its
- * desktop, browser, files, shell). */
-const HOST_ITSELF_MCP_SERVERS: ReadonlySet<string> = new Set(["computer", "browser", "shell", "files", "terminal"]);
+ * desktop, files, shell). The built-in browser (`browser`) is the bot's own
+ * web surface on an organization server (#5229, #5334): not shared-host work
+ * that EXEC_USE_BOT_COMPUTER would redirect away from. */
+const HOST_ITSELF_MCP_SERVERS: ReadonlySet<string> = new Set(["computer", "shell", "files", "terminal"]);
 
 /** M-20261119-006: Sagax's own servers of a person's place: their cloud
  * computer (sagax-environment), their own computer (sagax-desktop) and the

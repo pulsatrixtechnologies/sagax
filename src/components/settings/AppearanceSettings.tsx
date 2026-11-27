@@ -29,6 +29,7 @@ import { parseSidebarDensity, setSidebarDensity, SIDEBAR_DENSITIES, useSidebarDe
 import { setStreamReplies, useStreamReplies } from "@/lib/stream-replies-preference";
 import { CHAT_WIDTHS, parseChatWidth, setChatWidth, useChatWidth, type ChatWidth } from "@/lib/chat-width-preference";
 import { COMPOSER_BOTTOM_SPACES, parseComposerBottomSpace, setComposerBottomSpace, useComposerBottomSpace, type ComposerBottomSpace } from "@/lib/composer-bottom-space";
+import { contextIndicator, parseUsagePillShape, USAGE_PILL_SHAPES, usagePillInBar, usagePillShape, type UsagePillShape } from "@/lib/usage-pill-preferences";
 import { CONVERSATION_HEADERS, parseConversationHeader, setConversationHeader, useConversationHeader, type ConversationHeader } from "@/lib/conversation-header";
 import { parseSendKey, SEND_KEYS, sendKeyLabel, setSendKey, useSendKey } from "@/lib/send-key";
 import { setShowSidebarLogo, useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
@@ -36,7 +37,7 @@ import { sidebarBotThreads, useSidebarBotThreads } from "@/lib/sidebar-bot-threa
 import { setSidebarPeopleApart, useSidebarPeopleApart } from "@/lib/sidebar-people-apart-preference";
 import { setShowRoutinesBadge, useShowRoutinesBadge } from "@/lib/routines-badge-preferences";
 import { contrastChoice, CONTRAST_CHOICES, MOTION_CHOICES, motionChoice, TEXT_SIZE_CHOICES, textSizeChoice } from "@/lib/accessibility-preferences";
-import { BOT_HOTKEY_MODIFIERS, botHotkeyModifierChoice, botHotkeysChoice, hardwareAccelerationChoice, hasDesktopShellPreferences, spellcheckChoice } from "@/lib/desktop-shell-preferences";
+import { BOT_HOTKEY_MODIFIERS, botHotkeyModifierChoice, botHotkeysChoice, hardwareAccelerationChoice, hasDesktopShellPreferences, spellcheckChoice, usageMenuBarChoice } from "@/lib/desktop-shell-preferences";
 import { CompactRow, DescribedRow, PillSelect, SettingsGroup, Switch } from "../SettingsPrimitives";
 import { SidebarHiddenSettings } from "../SidebarHiddenSettings";
 import { SkinPicker } from "../SkinPicker";
@@ -195,6 +196,28 @@ function ComposerBottomSpaceRow() {
         }))}
       />
     </CompactRow>
+  );
+}
+
+/** The usage pill of the message bar (M-20261126-106, M-20261126-108, #5406):
+ * shown or not, its shape, and the conversation's context indicator. */
+function UsagePillRows() {
+  const inBar = usagePillInBar.use() === "on";
+  const shape = usagePillShape.use();
+  const context = contextIndicator.use() === "on";
+  return (
+    <>
+      <SwitchLine label={t("settings.usagePill.inBar.title")} ariaLabel={t("settings.usagePill.inBar.show")} checked={inBar} onChange={(on) => usagePillInBar.set(on ? "on" : "off")} rowId="usagePillInBar" />
+      <CompactRow label={t("settings.usagePill.shape.title")} rowId="usagePillShape">
+        <PillSelect<UsagePillShape>
+          value={shape}
+          ariaLabel={t("settings.usagePill.shape.chooseAria")}
+          onChange={(next) => usagePillShape.set(parseUsagePillShape(next))}
+          options={USAGE_PILL_SHAPES.map((option) => ({ value: option, label: t(`settings.usagePill.shape.${option}`) }))}
+        />
+      </CompactRow>
+      <SwitchLine label={t("settings.contextIndicator.title")} ariaLabel={t("settings.contextIndicator.show")} checked={context} onChange={(on) => contextIndicator.set(on ? "on" : "off")} rowId="contextIndicator" />
+    </>
   );
 }
 
@@ -493,6 +516,20 @@ export function BotHotkeysRows() {
   );
 }
 
+/** Appearance > Usage (#5407): the usage icon of the macOS menu bar, or of
+ * the Windows notification area. Only where the desktop app can show one. */
+export function UsageMenuBarGroup() {
+  const shown = usageMenuBarChoice.use() === "true";
+  const platform = typeof window === "undefined" ? undefined : window.ogb?.platform;
+  if (!hasDesktopShellPreferences() || !window.ogb?.usageTray || (platform !== "darwin" && platform !== "win32")) return null;
+  const label = t(platform === "win32" ? "settings.usageMenuBar.titleWindows" : "settings.usageMenuBar.title");
+  return (
+    <SettingsGroup title={t("settings.section.usage")} groupId="usageDisplay">
+      <SwitchLine label={label} checked={shown} onChange={(on) => usageMenuBarChoice.set(on ? "true" : "false")} rowId="usageMenuBar" />
+    </SettingsGroup>
+  );
+}
+
 function ThemeCustomizeRows() {
   const [open, setOpen] = useState(false);
   return (
@@ -599,6 +636,7 @@ export function AppearanceSettings() {
         <ChatWidthRow />
         <ComposerBottomSpaceRow />
         <ConversationHeaderRow />
+        <UsagePillRows />
         <SwitchLine label={t("settings.botReplyBubbles.title")} checked={replyBubbles} onChange={(on) => botReplyBubbles.set(on ? "on" : "off")} rowId="botReplyBubbles" />
         <SwitchLine label={t("settings.botBubbleAccent.title")} checked={bubbleAccent} onChange={(on) => botBubbleAccent.set(on ? "1" : "0")} rowId="botBubbleAccent" />
         <ThreadsViewRow />
@@ -616,6 +654,7 @@ export function AppearanceSettings() {
         <SwitchLine label={t("settings.showPermissions.title")} ariaLabel={t("settings.showPermissions.show")} checked={permissions} onChange={setShowPermissions} rowId="showPermissions" />
         <SidebarHiddenFold />
       </SettingsGroup>
+      <UsageMenuBarGroup />
       <SettingsGroup title={[t("settings.sidebarLogo.title"), t("settings.routinesBadge.title")].join(", ")} groupId="sidebarAdvanced" advanced>
         <SwitchLine label={t("settings.sidebarLogo.title")} ariaLabel={t("settings.sidebarLogo.show")} checked={logo} onChange={setShowSidebarLogo} rowId="sidebarLogo" />
         <SwitchLine label={t("settings.routinesBadge.title")} ariaLabel={t("settings.routinesBadge.show")} checked={routinesBadge} onChange={setShowRoutinesBadge} rowId="routinesBadge" />

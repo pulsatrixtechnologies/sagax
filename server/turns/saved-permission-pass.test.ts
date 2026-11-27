@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isOwnerOnlyProtected } from "../owner-only-acl.ts";
 import { allowSavedPermission, savePermissionPass, takeMatchingPermissionPass } from "./saved-permission-pass.ts";
 
 describe("a saved permission is used once (#4528)", () => {
@@ -47,7 +48,7 @@ describe("a saved permission is used once (#4528)", () => {
 
 describe("a saved permission survives a restart (#4528)", () => {
   it("is still used once after a restart, and the file keeps no words of the step", async () => {
-    const { mkdtempSync, readFileSync, rmSync, statSync } = await import("node:fs");
+    const { mkdtempSync, readFileSync, rmSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
     const dir = mkdtempSync(join(tmpdir(), "saved-permission-"));
@@ -55,7 +56,7 @@ describe("a saved permission survives a restart (#4528)", () => {
       savePermissionPass({ DATA_DIR: dir }, { threadId: "t", tool: "Bash", summary: "SECRET_STEP ls memory" });
       const file = join(dir, "permission-passes.json");
       expect(readFileSync(file, "utf8")).not.toContain("SECRET_STEP");
-      if (process.platform !== "win32") expect(statSync(file).mode & 0o777).toBe(0o600); // Windows has no POSIX modes
+      expect(isOwnerOnlyProtected(file)).toBe(true);
       // the server stops between the answer and the follow-up call
       const restarted = { DATA_DIR: dir };
       expect(allowSavedPermission(restarted, {

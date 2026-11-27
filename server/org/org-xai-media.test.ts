@@ -68,6 +68,18 @@ describe("the organization's xAI key for speech and images, per person (2026-10-
     }
   });
 
+  // #5223: the image refusal is the person's language, never English written here
+  it("says the image refusal in the person's language (#5223)", () => {
+    const english = orgXaiRefusal("image", "en");
+    const french = orgXaiRefusal("image", "fr");
+    expect(english.cause).toBe("server_engine_not_allowed");
+    expect(english.error).toBe("Your organization has not given you image and video generation on its xAI key. Ask an admin to give it to you in Perspicax.");
+    expect(french.error).toBe("Ton organisation ne t'a pas donné la génération d'images et de vidéos sur sa clé xAI. Demande à un admin de te la donner dans Perspicax.");
+    expect(french.error).not.toMatch(/Your organization|Ask an admin/);
+    // no language: English catalog source, same as every other imageWord
+    expect(orgXaiRefusal("image").error).toBe(english.error);
+  });
+
   it("shows the xAI voice and images as not configured for a person not given them", () => {
     const status = {
       tts: { provider: "xai", configured: true, ready: true, voice: "eve" },

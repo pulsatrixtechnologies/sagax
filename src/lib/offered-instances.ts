@@ -14,7 +14,7 @@ import { useMyEngines, usePerspicaxOrg, type MyEngine } from "@/lib/perspicax-or
  * card has loaded (usePerspicaxOrg); the server already leaves out what
  * the organization does not allow before that. */
 export function engineOfferContext(config: ConfigStatus | null | undefined, organization: boolean, mine: readonly MyEngine[] | null): EngineOfferContext {
-  return { organization, allowedEngines: config?.allowedEngines ?? null, ownAccountsOutsideList: config?.ownAccountsOutsideList === true, mine };
+  return { organization, allowedEngines: config?.allowedEngines ?? null, ownAccountsOutsideList: config?.ownAccountsOutsideList === true, mine, hiddenEngines: config?.hiddenEngines ?? null };
 }
 
 /** 2026-10-30 (lot 2): the models turned off, by the organization and by the person. */
@@ -23,8 +23,10 @@ export function modelSwitches(config: ConfigStatus | null | undefined): ModelSwi
 }
 
 /** `state.instances` as offered to this person: the engines, then on each
- * only the models still on ("pick"; "settings" keeps every model). */
-export function useOfferedInstances(purpose: "pick" | "settings" = "pick"): InstanceInfo[] {
+ * only the models still on ("pick"; "settings" keeps every model). A
+ * provider the organization hid is left out unless `keep` names it (the
+ * engine a bot is already on, D-20261126-018). */
+export function useOfferedInstances(purpose: "pick" | "settings" = "pick", keep?: string | readonly string[]): InstanceInfo[] {
   const { state } = useStore();
   const org = usePerspicaxOrg();
   const mine = useMyEngines();
@@ -32,8 +34,8 @@ export function useOfferedInstances(purpose: "pick" | "settings" = "pick"): Inst
   const disabledOrg = state.config?.disabledModels;
   const disabledMine = state.config?.myDisabledModels;
   return useMemo(
-    () => offeredModels(state.instances, context, { org: disabledOrg, mine: disabledMine }, purpose),
+    () => offeredModels(state.instances, context, { org: disabledOrg, mine: disabledMine }, purpose, keep),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.instances, context.organization, context.allowedEngines, context.ownAccountsOutsideList, mine, purpose, disabledOrg, disabledMine],
+    [state.instances, context.organization, context.allowedEngines, context.ownAccountsOutsideList, context.hiddenEngines, mine, purpose, disabledOrg, disabledMine, keep],
   );
 }

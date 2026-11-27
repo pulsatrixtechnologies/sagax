@@ -341,8 +341,11 @@ describe("control-omb ui drives the real renderer", () => {
       await ui("screenshot", info.ui, "--out", join(evidenceDir, "azure-models.png"));
       await evaluate(`document.querySelector('[aria-label="Close settings"]').click(); true`);
       await clickWhenShown('main [data-composer-model-chip] button[data-tour="model"]');
-      await openProviderModels(info.ui, `server:${instance.providerAccount?.serverId ?? instance.instanceId}`);
-      expect(await evaluate(`document.querySelector('[data-model-menu]').textContent`)).toContain("Azure Foundry");
+      const cascadeKey = `server:${instance.providerAccount?.serverId ?? instance.instanceId}`;
+      await openProviderModels(info.ui, cascadeKey);
+      // Cascade levels sit beside the mode menu and each carries data-model-menu
+      // (#3568): querySelector alone would read only the root mode rows.
+      expect(await evaluate(`document.querySelector(${JSON.stringify(`[data-model-cascade-provider=${JSON.stringify(cascadeKey)}]`)})?.textContent`)).toContain("Azure Foundry");
       await evaluate(`document.querySelector('[data-model-option="azure-chat"]').scrollIntoView({ block: "center" }); true`);
       await ui("screenshot", info.ui, "--out", join(evidenceDir, "azure-model-picker.png"));
       await evaluate(`document.querySelector('[data-model-option="azure-chat"]').click(); true`);

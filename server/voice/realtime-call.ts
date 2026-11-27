@@ -68,7 +68,7 @@ export type RealtimeDropReason = "key" | "network" | "server";
  * network. */
 export function realtimeDropReason(code: number | undefined, lastError?: string): RealtimeDropReason {
   if (code === 1008 || code === 4001 || code === 4003 || code === 4401 || code === 4403) return "key";
-  if (lastError && /rejected the key|api key|permission|credits/i.test(lastError)) return "key";
+  if (lastError && /rejected the key|does not serve this voice|api key|permission|credits/i.test(lastError)) return "key";
   if (code !== undefined && code >= 1011 && code <= 1014) return "server";
   if (code !== undefined && code >= 4500 && code < 4600) return "server";
   return "network";

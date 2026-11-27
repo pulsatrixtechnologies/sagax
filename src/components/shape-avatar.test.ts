@@ -45,6 +45,7 @@ beforeAll(async () => {
 const ENGINE_FOR: Readonly<Record<string, string>> = {
   star: "star", cloud: "cloud", ghost: "ghost", cat: "cat", shield: "shield",
   pad: "controller", cup: "mug", bulb: "lightbulb", say: "chat", sprout: "sprout", tome: "book", ship: "rocket",
+  egg: "egg",
 };
 
 describe("every shape is an engine definition", () => {
@@ -301,7 +302,8 @@ describe("the fourteen moves play over the engine (#4145 regression: no move dra
 
   it("makes every size live while a move plays, and tells which", () => {
     const source = readFileSync(join(here, "ShapeMascot.tsx"), "utf8");
-    expect(source).toMatch(/const live = !reduced && \(shapeIsLive\(size, animated, detail, reduced\) \|\| playing !== null\)/);
+    // #5404: a mascot asked alive (the sidebar's) is live too, while it holds a seat
+    expect(source).toMatch(/const live = !reduced && \(seated \|\| shapeIsLive\(size, animated, detail, reduced\) \|\| playing !== null\)/);
     expect(source).toContain('"data-shape-move": playing.clip');
   });
 });

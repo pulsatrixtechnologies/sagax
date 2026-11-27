@@ -8,7 +8,7 @@
  "cloud": {"engine":"cloud","box":[9,24,91,76],"size":[82,52],"commands":8,"subpaths":1,"outline":"9f8ae5c95e467d40","eyes":[50,54,17,1.2]},
  "drop": {"engine":"drop","box":[24.3,12,75.7,88],"size":[51.4,76],"commands":66,"subpaths":1,"outline":"2c2d48649e7ceb71","eyes":[50,55.9,16.1,1.2]},
  "pumpkin": {"engine":"pumpkin","box":[12,13.6,88,86.4],"size":[76,72.8],"commands":77,"subpaths":2,"outline":"6073d969278a0fa0","eyes":[50,58.9,15.8,1.2]},
- "egg": {"engine":"egg","box":[18.7,12,81.3,88],"size":[62.6,76],"commands":66,"subpaths":1,"outline":"a9f6df472f0300e1","eyes":[49.5,56.3,16.1,1.2]},
+ "egg": {"engine":"egg","box":[18,10,82,88],"size":[64,78],"commands":6,"subpaths":1,"outline":"e204907f931dbd59","eyes":[50,54,17,1.2]},
  "gem": {"engine":"gem","box":[15.4,12,84.6,88],"size":[69.2,76],"commands":66,"subpaths":1,"outline":"000e9e021dc5cb33","eyes":[49.6,55.2,16.1,1.2]},
  "wedge": {"engine":"wedge","box":[12,14.1,88,86],"size":[76,71.9],"commands":66,"subpaths":1,"outline":"c4fc870e0a263a23","eyes":[51.2,61,16.2,1.2]},
  "diamond": {"engine":"diamond","box":[12,12,88,88],"size":[76,76],"commands":66,"subpaths":1,"outline":"7033f6a476dc1b22","eyes":[50,54.2,15,1.2]},

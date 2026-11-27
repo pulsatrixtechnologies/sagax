@@ -4,6 +4,7 @@ import { useThreadPrefetch, type ThreadPrefetchIntent } from "@/state/thread-pre
 import {
   memo,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -297,6 +298,9 @@ export function groupPreview(group: Group, bots: Bot[], config: ConfigStatus | n
 
 /** A small member stack identifies a group without turning it into a card. */
 export function StackedMauses({ members, density, viewerId }: { members: Bot[]; density: SidebarDensity; viewerId: string }) {
+  // the faces of the stack share one of the page's live seats (shape-alive.ts)
+  const stackId = useId();
+  const stackSeat = useMemo(() => ({ share: `stack-${stackId}` }), [stackId]);
   const iconOnly = density === "icons";
   // Same footprint as a bot row's avatar (BotListItem: 28 compact, 36
   // comfortable, Grok Bot's) so group and bot names share one left edge.
@@ -321,7 +325,7 @@ export function StackedMauses({ members, density, viewerId }: { members: Bot[]; 
           hover and selected rows. The faces simply overlap. */}
       {shown.map((b, index) => (
         <span key={b.id} className={cn("absolute rounded-full", spots[index])}>
-          <SidebarMascotAvatar botId={b.id} bot={b} primary={isViewersPrimaryBot(b, viewerId)} primaryRingClassName="ring-sidebar" state="idle" size={face} animated={false} />
+          <SidebarMascotAvatar botId={b.id} bot={b} primary={isViewersPrimaryBot(b, viewerId)} primaryRingClassName="ring-sidebar" state="idle" size={face} animated={false} seat={stackSeat} />
         </span>
       ))}
     </div>
@@ -1979,7 +1983,9 @@ export function BotListItem({
     <>
       {/* flex, not inline: an inline wrapper adds a baseline gap under the
           avatar and makes the row taller than before the presence dot. */}
-      <span data-sidebar-row-avatar className="relative flex shrink-0" title={iconOnly ? undefined : [bot.name, title].filter(Boolean).join("\n")}>
+      {/* #5404: the drawing stops 1px short of the name (the gap: 10px comfortable, 8px compact); a
+          live mascot's ribbons (done, working) swing wider than its body and crossed the first letters */}
+      <span data-sidebar-row-avatar className="relative flex shrink-0" style={iconOnly ? undefined : { clipPath: `inset(-100% ${comfortable ? -9 : -7}px)` }} title={iconOnly ? undefined : [bot.name, title].filter(Boolean).join("\n")}>
         <SidebarMascotAvatar
           botId={bot.id}
           bot={bot}
@@ -2582,6 +2588,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
       // density above (src/lib/sidebar-preferences.ts)
       data-sidebar-layout={viewport === "phone" ? "drawer" : autoRail ? "auto-rail" : "own"}
       data-sidebar-density={density}
+      data-sidebar-logo={showLogo ? "" : undefined}
       data-sidebar-surface=""
       style={density === "icons" ? { width: SIDEBAR_RAIL_WIDTH } : { width: sidebarWidth }}
       className={cn(

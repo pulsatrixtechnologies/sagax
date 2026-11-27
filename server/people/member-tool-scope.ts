@@ -188,7 +188,8 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   remote_session_exec: "conversation",
   // the speaker's own host as the bot's computer; its access rule applies (#2726)
   host_computer: "conversation",
-  // join_meeting only stages a consent card; the person approves each join
+  // join_meeting stages a consent card; Always allow for that provider may
+  // join next time (#3367); Full access still never does (isolation hold)
   join_meeting: "conversation",
   // 2026-10-28: the tools below reached the catalog without a class, so a
   // member's call waited for an admin. Each acts only for the person the

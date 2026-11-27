@@ -171,9 +171,13 @@ describe("what can still wait for an organization admin on a member's bot", () =
     expect(reason({ tool: "agents__vm_exec", workspaceRoot: root })).toBe("host-tool");
     expect(reason({ tool: "Read", paths: ["/etc/passwd"], workspaceRoot: root })).toBe("outside-own-folders");
     // the engine's own tools of the shared host: work on the host, like the shell
-    for (const tool of ["WebFetch", "mcp__computer__click", "browser__navigate"]) {
+    for (const tool of ["WebFetch", "mcp__computer__click"]) {
       expect(reason({ tool, workspaceRoot: root })).toBe("host-engine-tool");
     }
+    // #5229, #5334: the built-in browser is the bot's own web surface, never
+    // redirected off the organization server by EXEC_USE_BOT_COMPUTER.
+    expect(reason({ tool: "browser__navigate", workspaceRoot: root })).toBeNull();
+    expect(reason({ tool: "mcp__browser__agent_browser_open", workspaceRoot: root })).toBeNull();
     // foreign-tool: provably someone else's place, the organization's own
     // server list, or the organization's account connectors
     expect(reason({ tool: "mcp__sagax-desktop__screenshot", workspaceRoot: root, placeOfAnotherPerson: true })).toBe("foreign-tool");

@@ -180,14 +180,16 @@ describe("POST /api/internal/image (#2954)", () => {
     });
   });
 
-  // #5223 review, point 2: the voice refuses a person turned off in their
-  // organization (payer_disabled); the image gives the same verdict.
-  it("a person turned off in their organization gets the voice's own refusal, and nothing is asked of a provider", async () => {
+  // #5223: a person turned off gets payer_disabled in their language; nothing
+  // is asked of a provider.
+  it("a person turned off in their organization gets payer_disabled in their language, and nothing is asked of a provider", async () => {
     const out = await call({ prompt: "an owl" }, { credentials: async () => ({ refused: "payer_disabled" }) });
     expect(out.status).toBe(403);
-    expect(out.payload).toEqual({ error: "refused: payer_disabled", code: "payer_disabled" });
+    expect(out.payload).toEqual({ error: "Your access is turned off in your organization.", code: "payer_disabled" });
     expect(out.fetchCalls).toEqual([]);
     expect(out.appended).toEqual([]);
+    const french = await call({ prompt: "an owl" }, { credentials: async () => ({ refused: "payer_disabled" }), language: () => "fr" });
+    expect(french.payload).toEqual({ error: "Ton accès est coupé dans ton organisation.", code: "payer_disabled" });
   });
 
   it("refuses an empty prompt", async () => {

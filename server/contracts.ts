@@ -142,7 +142,7 @@ export type RequestOutcome = "allowed-once" | "rejected" | "answered" | "unavail
  * are both a person's own key from Perspicax (the bot's owner's, or the
  * person who spoke's). */
 export interface TurnAccessInput {
-  via: "subscription" | "owner-key" | "speaker-key" | "server" | "org-key";
+  via: "subscription" | "owner-key" | "speaker-key" | "server" | "org-key" | "org-account";
   identity: string;
   environment?: Record<string, string>;
   /** File-backed key sealed for this person (engine-api-keys.ts). */

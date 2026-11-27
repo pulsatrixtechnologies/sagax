@@ -20,7 +20,7 @@ import { fallbackWithModel } from "../../../shared/handoff-model";
 import { currentTaskBot, useStore, visibleMessages, type Bot } from "@/state/store";
 import { pendingApprovals } from "../PendingApproval";
 import { engineOfferContext, useOfferedInstances } from "@/lib/offered-instances";
-import { engineOffer } from "../../../shared/offered-engines";
+import { engineHidden, engineOffer } from "../../../shared/offered-engines";
 import { useMyEngines, usePerspicaxOrg } from "@/lib/perspicax-org";
 import { botWithViewerSettings, useViewerBotOverride, viewerLocalBotSettings } from "@/lib/viewer-bot-overrides";
 import { useBotEditor } from "./BotEditorContext";
@@ -216,6 +216,9 @@ function IfItFailsCard({ bot, canSwitch, canOrder }: { bot: Bot; canSwitch: bool
   // accounts through (#1098, 2026-10-30). #2080: the same answer as
   // Settings > Models, the server default included.
   const keep = (entry: Backup) => {
+    // D-20261126-018: a backup on a provider the organization hid is skipped
+    // like one it no longer offers, unless it is the bot's own engine
+    if (entry.instanceId !== bot.modelSelection.instanceId && engineHidden(offerContext, entry.instanceId)) return false;
     const offer = engineOffer(offerContext, entry.instanceId);
     return offer === "offered" || (offer === "notGiven" && mine?.find((row) => row.instanceId === entry.instanceId)?.orgNotAllowed !== true);
   };

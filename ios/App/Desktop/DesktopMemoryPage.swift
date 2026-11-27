@@ -555,7 +555,8 @@ struct DesktopMemoryPage: View {
                     DesktopNoteCheckbox(on: !rows.isEmpty && checked.count == rows.count)
                 }
                 .buttonStyle(.plain)
-                DesktopText(Text("\(rows.count) notes · tap to open"), size: 12, line: 16, color: \.inkSecondary)
+                // memoryManager.listHint on desktop: click to preview, double-click to open
+                DesktopText(Text("\(rows.count) notes · click to preview, double-click to open"), size: 12, line: 16, color: \.inkSecondary)
             }
             .padding(.horizontal, 30).padding(.vertical, 6)
             Rectangle().fill(theme.hairline.opacity(0.4)).frame(height: 1)

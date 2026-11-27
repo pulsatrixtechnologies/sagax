@@ -62,18 +62,22 @@ export function useEngineLimitDetail({ limit, weekly, botId, threadId, messages 
 }
 
 /** The actions of a limit detail: "Continue at ...", "Try again now",
- * "Switch engine" and "See usage", each as it always behaved. */
-export function EngineLimitActions({ detail, botId, onDone }: {
+ * "Switch engine" and "See usage", each as it always behaved. `only`
+ * "release": "Try again now" alone, for a detail that shows the other
+ * actions only when every account is blocked (the usage pill, #5421). */
+export function EngineLimitActions({ detail, botId, onDone, only }: {
   detail: ReturnType<typeof useEngineLimitDetail>;
   botId?: string;
   /** An action was taken: the detail closes. */
   onDone: () => void;
+  only?: "release";
 }) {
   const dispatch = useStoreDispatch();
   const { limit, near, continueAt } = detail;
+  const all = only === undefined;
   return (
     <>
-      {near && continueAt && (
+      {all && near && continueAt && (
         <button
           type="button"
           role="menuitem"
@@ -99,7 +103,7 @@ export function EngineLimitActions({ detail, botId, onDone }: {
           {t("chat.limit.tryAgainNow")}
         </button>
       )}
-      {botId && (
+      {all && botId && (
         <button
           type="button"
           role="menuitem"
@@ -110,15 +114,17 @@ export function EngineLimitActions({ detail, botId, onDone }: {
           {t("sendBlock.switchEngine")}
         </button>
       )}
-      <button
-        type="button"
-        role="menuitem"
-        data-testid="engine-limit-usage"
-        onClick={() => { onDone(); dispatch({ type: "toggleAppSettings", open: true, section: "usage" }); }}
-        className={MENU_ROW}
-      >
-        {t("chat.notice.weekly.more")}
-      </button>
+      {all && (
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="engine-limit-usage"
+          onClick={() => { onDone(); dispatch({ type: "toggleAppSettings", open: true, section: "usage" }); }}
+          className={MENU_ROW}
+        >
+          {t("chat.notice.weekly.more")}
+        </button>
+      )}
     </>
   );
 }
@@ -126,7 +132,7 @@ export function EngineLimitActions({ detail, botId, onDone }: {
 /** The quiet limit indicator beside a model picker outside the chat bar (JC
  * 2026-11-08: no banner above the chat, ever; M-20261125-070: the chat bar
  * itself shows the usage meter under the message box, ComposerMeter.tsx, and
- * no dot). A small dot, warning near the limit and danger at it, with the
+ * no dot, even with that pill hidden, #5421). A small dot, warning near the limit and danger at it, with the
  * usage line as its tooltip; a click opens a small menu holding the line,
  * the weekly window and the actions. Nothing renders when the engine is
  * nowhere near its limit. */

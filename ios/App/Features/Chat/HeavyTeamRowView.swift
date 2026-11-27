@@ -9,8 +9,9 @@
 import SwiftUI
 import CompanionCore
 
-/// The owls that stand for the experts, one plumage each (the desktop's AGENT_COLORS).
-private let expertColors = ["blue", "green", "orange", "purple", "pink"]
+/// The owls that stand for the experts, one plumage each (the desktop's AGENT_COLORS): eight,
+/// the most experts a team may have (D-20261126-023, shared/heavy-team.ts HEAVY_MAX_EXPERTS).
+private let expertColors = ["blue", "green", "orange", "purple", "pink", "teal", "yellow", "coral"]
 
 /// A leader's step in the person's words (the desktop's leaderStepText).
 private func leaderStepText(_ step: HeavyTeamLine.LeaderStep) -> String {

@@ -64,8 +64,15 @@ const log: string[] = [];
 /** the voice each accepted session was given ("" = the provider's own default) */
 const spoken: string[] = [];
 
+/** A refusal body of its own for one bearer (a 404 that names the voice). */
+const bodies: Record<string, string> = {};
+/** xAI's own words naming the voice on a 404 (#5179); a bare 404 is the
+ * address, never the voice (M-20261126-145). */
+const VOICE_NOT_FOUND_BODY = JSON.stringify({ code: "Not found", error: "Voice eve not found" });
+
 /** xAI's own words on a refused handshake, as its API writes them. */
-function refusalBody(status: number): string {
+function refusalBody(status: number, bearer = ""): string {
+  if (bodies[bearer]) return bodies[bearer]!;
   if (status === 402) return JSON.stringify({ code: "Some resource has been exhausted", error: "Your team has either used all available credits or reached its monthly spending limit. To continue making API requests, please purchase more credits or raise your spending limit." });
   if (status === 400) return JSON.stringify({ code: "Client specified an invalid argument", error: "Incorrect API key provided. You can obtain an API key from the console." });
   return JSON.stringify({ code: "refused", error: "refused" });
@@ -94,7 +101,7 @@ beforeAll(async () => {
       xaiSockets.handleUpgrade(req, socket, head, (ws) => xaiSockets.emit("connection", ws, req));
       return;
     }
-    const body = refusalBody(status);
+    const body = refusalBody(status, bearer);
     socket.end(`HTTP/1.1 ${status} Refused\r\ncontent-type: application/json\r\ncontent-length: ${Buffer.byteLength(body)}\r\nconnection: close\r\n\r\n${body}`);
   });
   await new Promise<void>((resolve) => xai.listen(0, "127.0.0.1", resolve));
@@ -150,6 +157,7 @@ afterAll(async () => {
 beforeEach(() => {
   orgKey = ORG_KEY;
   for (const key of Object.keys(answers)) delete answers[key];
+  for (const key of Object.keys(bodies)) delete bodies[key];
   asked.length = 0;
   usage.length = 0;
   log.length = 0;
@@ -325,6 +333,7 @@ describe("a voice the provider does not know", () => {
   it("calls the same credential back on its own default voice instead of losing the call", async () => {
     clock += 10 * VOICE_KEY_REFUSAL_TTL_MS;
     answers[BEN_KEY] = [404, 101];
+    bodies[BEN_KEY] = VOICE_NOT_FOUND_BODY;
     answers[ORG_KEY] = 101;
     const call = await placeCall("p-ben", "eve");
     expect(call).toMatchObject({ type: "ready", key: { source: "perspicax-key", last4: BEN_KEY.slice(-4) } });
@@ -342,12 +351,15 @@ describe("a voice the provider does not know", () => {
   it("says the voice to the person when no credential knows it, and never calls it credits or a network", async () => {
     clock += 10 * VOICE_KEY_REFUSAL_TTL_MS;
     answers[BEN_KEY] = 404;
+    bodies[BEN_KEY] = VOICE_NOT_FOUND_BODY;
     answers[ORG_KEY] = 402;
     const call = await placeCall("p-ben", "eve");
     expect(call.type).toBe("refused");
     expect(call.code).toBe("realtime_voice_unknown");
     // the call is in French: the person's own language, the words of the voice
-    expect(call.error).toBe("Aucun appel : xAI ne connaît pas cette voix. Recharge la liste des voix et choisis-en une autre.");
+    // for the credential closest to them, then one line for the organization's
+    // key behind it (M-20261126-145)
+    expect(call.error).toBe("Aucun appel : xAI ne connaît pas la voix choisie pour ta clé xAI dans Perspicax. Recharge la liste des voix et choisis-en une autre. La clé xAI de ton organisation n'a plus de crédits.");
     // each cause stays on its own line: the voice first (the credential closest
     // to the person), the organization's credits behind it
     expect(call.tried).toEqual([
@@ -358,6 +370,26 @@ describe("a voice the provider does not know", () => {
     // voice); the organization's key was asked once: credits are not a name
     expect(asked).toEqual([BEN_KEY, BEN_KEY, ORG_KEY]);
     expect(spoken).toEqual([]);
+  });
+
+  // M-20261126-145: the subscription voice host answered 404 on the realtime
+  // handshake, with or without a voice name, and it was read as an unknown
+  // voice. A handshake carries no voice (it goes in session.update once the
+  // socket is open): a bare 404 is the address the credential is not served
+  // at. The same credential is never asked again on a default voice, and the
+  // next one takes the call.
+  it("a bare 404 on the handshake is the address, never the voice: the next credential takes the call", async () => {
+    clock += 10 * VOICE_KEY_REFUSAL_TTL_MS;
+    answers[BEN_KEY] = 404;
+    answers[ORG_KEY] = 101;
+    const call = await placeCall("p-ben", "eve");
+    expect(call).toMatchObject({ type: "ready", key: { source: "org-key", last4: ORG_KEY.slice(-4) } });
+    expect(asked).toEqual([BEN_KEY, ORG_KEY]);
+    expect(call.voiceReset).toBeUndefined();
+    expect(call.skipped).toEqual([{ source: "perspicax-key", last4: BEN_KEY.slice(-4), failure: "key" }]);
+    expect(log.some((line) => line.includes("does not know the voice"))).toBe(false);
+    // the session still carries the voice the person chose
+    expect(spoken).toEqual(["eve"]);
   });
 
   it("keeps a plain out-of-credits call saying credits (#5180)", async () => {
@@ -376,7 +408,8 @@ describe("a voice the provider does not know", () => {
 // #5222: the reasons the server computes reach the person inside the refused
 // frame, written in the person's own language, and each one says where to go
 // and what to do. These are the paths where no connected Grok account was
-// tried, so `noCallReason` stays quiet and the server writes the sentence.
+// tried, so `noCallReason` stays quiet; two or more identities use
+// `chainCallReason`, a single refusal uses `realtimeKeyRefusedCallReason`.
 describe("a refusal the person reads in their own language, end to end", () => {
   it("an organization out of credits is an administrator's business, said in French", async () => {
     clock += 10 * VOICE_KEY_REFUSAL_TTL_MS;
@@ -408,8 +441,9 @@ describe("a refusal the person reads in their own language, end to end", () => {
     answers[ORG_KEY] = 402;
     const call = await placeCall("p-ben");
     expect(call.code).toBe("realtime_key_refused");
+    // two identities: chainCallReason only (first cause + org key named as org)
     expect(call.error).toBe(
-      "Aucun appel : ta clé xAI dans Perspicax n'a plus de crédits, et la clé xAI de ton organisation n'a plus de crédits. Ajoute des crédits à ce compte xAI, ou change la clé dans Perspicax (Fournisseurs > Grok), puis rappelle. Pour la clé que tu as reçue, demande à un administrateur de ton organisation.",
+      "Aucun appel : ta clé xAI dans Perspicax n'a plus de crédits. Ajoute des crédits à ce compte xAI, ou change la clé dans Perspicax (Fournisseurs > Grok), puis rappelle. La clé xAI de ton organisation n'a plus de crédits.",
     );
     expect(asked).toEqual([BEN_KEY, ORG_KEY]);
   });

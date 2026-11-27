@@ -9,9 +9,11 @@ function applyOrgEngineAllowList() {
 
   const allowed = host.orgAllowedEngines();
   if (!allowed) return;
+  // D-20261126-018: a provider the organization hid is never where a bot is
+  // moved to (a new choice), the New bot default included
   const engines = host.registry.entries().map((entry) => ({
     instanceId: entry.instanceId,
-    installed: host.engineInstalled(entry.instanceId),
+    installed: host.engineInstalled(entry.instanceId) && !host.orgEngineHidden(entry.instanceId),
     defaultModel: host.registry.get(entry.instanceId)?.models.default ?? ""
   }));
   const preferred = host.cfg.newBotDefaults?.profile.modelSelection ?? host.cfg.defaultModelSelection;

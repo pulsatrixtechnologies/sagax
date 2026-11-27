@@ -1,6 +1,6 @@
 // A person's skills are one library, referenced by every one of their bots.
 // Only reviewed SKILL.md files leave it for that person's environment.
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import { composeSkillMd, parseSkillMd, scanSkillText } from "../../shared/skill-md.ts";
 import { principalDir, type PersonCapabilities } from "../people/person-connections.ts";
 import { deleteLibrarySkill, installLibrarySkill, listLibrarySkills, readLibrarySkillFile, setLibrarySkillReviewState, updateLibrarySkill } from "./skill-library.ts";
@@ -60,9 +60,13 @@ export class PersonalSkills {
   prompt(person: string, organization: boolean, excludeNames?: ReadonlySet<string>): string {
     const skills = this.enabled(person).filter((skill) => !excludeNames?.has(skill.name));
     if (!skills.length) return "";
-    const root = organization ? "/workspace/sagax-capability-skills/me" : this.root(person);
+    // Organization sandboxes always see POSIX /workspace/… paths (#4495): path.join
+    // on Windows would turn that into backslashes the container never has.
+    const fileFor = (name: string) => organization
+      ? posix.join("/workspace/sagax-capability-skills/me", "skills", name, "SKILL.md")
+      : join(this.root(person), "skills", name, "SKILL.md");
     return "\n\nYour person's skills:\n" + skills.map((skill) =>
-      `- ${skill.name}: ${skill.description} Read ${JSON.stringify(join(root, "skills", skill.name, "SKILL.md"))}.`,
+      `- ${skill.name}: ${skill.description} Read ${JSON.stringify(fileFor(skill.name))}.`,
     ).join("\n") + "\nRead the exact file when its task matches. Follow the user's instructions.\n";
   }
 }

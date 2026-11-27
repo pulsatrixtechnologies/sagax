@@ -49,6 +49,16 @@ export interface FakeSpeechControls {
   errorNext: boolean;
 }
 
+/** Live switches of the fake speech to text, the socket and the upload
+ * alike (tests change them). */
+export interface FakeSttControls {
+  /** refuse every speech to text request with this status and JSON body
+   * (an account out of credits answers 503 `out_of_credits`) */
+  refuse: { status: number; body: Record<string, unknown> } | null;
+  /** take the socket, then answer the first audio with an error and close */
+  failOnAudio: boolean;
+}
+
 /** Paths a voice call may use. Anything else (chat, responses, realtime)
  * would mean xAI was asked to answer instead of the bot. */
 export const XAI_VOICE_PATHS = new Set(["/v1/tts", "/v1/tts/voices", "/v1/stt"]);
@@ -92,6 +102,7 @@ export interface FakeXaiVoice {
    * bound by POST /__utterance. */
   timings: FakeXaiTiming[];
   speech: FakeSpeechControls;
+  stt: FakeSttControls;
   close(): Promise<void>;
 }
 
@@ -160,6 +171,7 @@ export async function startFakeXaiVoice(options: FakeXaiOptions = {}): Promise<F
   const timings: FakeXaiTiming[] = [];
   const startedAt = Date.now();
   const speech: FakeSpeechControls = { refuse: false, openDelayMs: 0, dropAfter: 0, errorNext: false };
+  const stt: FakeSttControls = { refuse: null, failOnAudio: false };
   const transcripts = [...(options.transcripts ?? [])];
   let currentTranscript: string | undefined;
   let boundUtteranceId: string | undefined;
@@ -261,6 +273,11 @@ export async function startFakeXaiVoice(options: FakeXaiOptions = {}): Promise<F
         const parsed = multipart(body, String(req.headers["content-type"] ?? ""));
         record.fields = parsed.fields;
         record.fileHead = parsed.fileHead;
+        if (stt.refuse) {
+          res.writeHead(stt.refuse.status, { "content-type": "application/json" });
+          res.end(JSON.stringify(stt.refuse.body));
+          return;
+        }
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ text: takeText(), language: parsed.fields.language ?? "en", duration: 1.2 }));
         return;
@@ -287,6 +304,12 @@ export async function startFakeXaiVoice(options: FakeXaiOptions = {}): Promise<F
       return;
     }
     if (url.pathname !== "/v1/stt") { socket.destroy(); return; }
+    if (stt.refuse) {
+      // a refused handshake, as xAI answers an account it will not serve
+      const body = JSON.stringify(stt.refuse.body);
+      socket.end(`HTTP/1.1 ${stt.refuse.status} Refused\r\ncontent-type: application/json\r\ncontent-length: ${Buffer.byteLength(body)}\r\nconnection: close\r\n\r\n${body}`);
+      return;
+    }
     sockets.handleUpgrade(req, socket, head, (ws) => {
       ws.send(JSON.stringify({ type: "transcript.created" }));
       // the utterance being heard: its audio so far and the words already said
@@ -295,6 +318,11 @@ export async function startFakeXaiVoice(options: FakeXaiOptions = {}): Promise<F
       ws.on("message", (data, binary) => {
         if (binary) {
           record.audioBytes = (record.audioBytes ?? 0) + (data as Buffer).length;
+          if (stt.failOnAudio) {
+            ws.send(JSON.stringify({ type: "error", message: "fake transcription error" }));
+            ws.close();
+            return;
+          }
           const partials = options.sttPartials;
           if (partials) {
             utteranceBytes += (data as Buffer).length;
@@ -404,6 +432,7 @@ export async function startFakeXaiVoice(options: FakeXaiOptions = {}): Promise<F
     requests,
     timings,
     speech,
+    stt,
     close: () => new Promise<void>((resolve) => {
       for (const client of sockets.clients) client.terminate();
       sockets.close();

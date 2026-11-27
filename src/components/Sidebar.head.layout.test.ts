@@ -115,7 +115,10 @@ describe("sidebar head row height", () => {
     const head = sidebar.slice(sidebar.indexOf("<div data-sidebar-head"), sidebar.indexOf("{/* Bot list."));
     expect(head).toMatch(/\(macInset \|\| browser\) && \(density === "icons" \|\| showLogo\) && \(\s*<div className=\{cn\("flex h-9 items-center"/);
     expect(chatView).toContain('{(macInset || browser) && <div className="content-topbar-strip" />}');
-    expect(styles).toMatch(/\[data-skin="pulsatrix-light"\] \.content-topbar-strip \{[^}]*height: 36px;/);
+    // the chat strip is 36px when the sidebar logo is on, and on Pulsatrix Light (#5379)
+    expect(styles).toMatch(/\.app-shell-row:has\(\[data-sidebar-logo\]\) \.content-topbar-strip,\s*\[data-skin="pulsatrix-light"\] \.content-topbar-strip \{[^}]*height: 36px;/);
+    expect(sidebar).toContain('data-sidebar-logo={showLogo ? "" : undefined}');
+    expect(styles).toMatch(/\[data-skin="pulsatrix-light"\] \[data-sidebar-title-row\] \{[^}]*margin-top: 36px;/);
   });
 
   // Owner, 2026-11-25 (#5379), measured with a ruler: the head's circles sat

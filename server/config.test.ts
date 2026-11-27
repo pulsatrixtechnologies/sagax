@@ -1,4 +1,5 @@
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { isOwnerOnlyProtected } from "./owner-only-acl.ts";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -1540,7 +1541,7 @@ describe("Grok voice key migration (2026-10-14)", () => {
     const lines = log.mock.calls.map((call) => String(call[0]));
     expect(lines.some((line) => line.includes("Grok voice key is now the xAI key"))).toBe(true);
     expect(lines.join("\n")).not.toContain("voice-secret");
-    if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(isOwnerOnlyProtected(path)).toBe(true);
     // a second boot finds nothing left to migrate and leaves the file alone
     const written = readFileSync(path, "utf8");
     ensureDirs();
@@ -1600,7 +1601,7 @@ describe("onboarding engine key migration", () => {
     expect(readFileSync(path, "utf8")).not.toContain(SECRET);
     // …the sealed store does, and the running driver gets it back…
     expect(readFileSync(join(DATA_DIR, "provider-keys.enc"), "utf8")).not.toContain(SECRET);
-    if (process.platform !== "win32") expect(statSync(join(DATA_DIR, "provider-keys.enc")).mode & 0o777).toBe(0o600);
+    expect(isOwnerOnlyProtected(join(DATA_DIR, "provider-keys.enc"))).toBe(true);
     const live = instanceConfigs(loadConfig())["api-0a1b2c3d"]!.config as { key?: string };
     expect(live.key).toBe(SECRET);
     // …the log says what moved, never the value…
@@ -1655,7 +1656,7 @@ describe("legacy feature flag migration", () => {
     ensureDirs();
     expect(readDisk()).toEqual({ profile: { name: "Ada" }, features: { browser: false, skillAuthoring: true } });
     expect(skillAuthoringEnabled(loadConfig())).toBe(true);
-    if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(isOwnerOnlyProtected(path)).toBe(true);
     // a second boot finds nothing left to migrate and leaves the file alone
     const written = readFileSync(path, "utf8");
     ensureDirs();
@@ -2555,7 +2556,7 @@ describe("the saved mail settings", () => {
     saveConfig({ mail });
     expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ profile: { name: "Ada" }, mail });
     expect(loadConfig().mail).toEqual(mail);
-    if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(isOwnerOnlyProtected(path)).toBe(true);
   });
 
   it("are not part of the generic config patch: the mail route owns them", () => {
@@ -2728,5 +2729,15 @@ describe("the Claude Code MCP servers switch (#1098)", () => {
     expect(claudeUserMcpEnabled({} as AppConfig, true)).toBe(false);
     expect(claudeUserMcpEnabled({ features: { claudeUserMcp: false } } as AppConfig)).toBe(false);
     expect(claudeUserMcpEnabled({ features: { claudeUserMcp: true } } as AppConfig, true)).toBe(true);
+  });
+});
+
+describe("a solo server's own modes (M-20261125-074, D-20261126-023)", () => {
+  const seats = (count: number) => Array.from({ length: count }, (_, at) => ({ instanceId: `acct-${at + 1}`, model: `model-${at + 1}` }));
+
+  it("keeps up to eight Heavy experts, saved and read back, and refuses a ninth", () => {
+    expect(parseConfigPatch({ modeModels: { heavy: seats(8) } }).modeModels?.heavy).toEqual(seats(8));
+    expect(parseStoredConfig({ modeModels: { heavy: seats(8) } }).modeModels?.heavy).toHaveLength(8);
+    expect(() => parseConfigPatch({ modeModels: { heavy: seats(9) } })).toThrow();
   });
 });

@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 
 import { expect, it } from "vitest";
 
+import { hostTimeout } from "../../server/testing/host-timeout.ts";
+
 // @babel/core ships no types; only the few fields read here are declared.
 interface BabelNode {
   type: string;
@@ -176,7 +178,8 @@ it("the scanner flags « vous », « votre », « vos », « vôtre » and -ez v
   expect(vouvoiementIn("x.ts", `const a = { en: "Rez", fr: "Créez", "pt-BR": "Crie uma vez" };`)).toHaveLength(1);
 });
 
-it("fr: French written by the server and shared code uses tu, never vous / votre / vos nor a verb in -ez", async () => {
+// Babel 8's parse of server/ + shared/ is ~35 s here (was under 20 s on 7).
+it("fr: French written by the server and shared code uses tu, never vous / votre / vos nor a verb in -ez", { timeout: hostTimeout(60_000) }, async () => {
   const bad = SCANNED.flatMap((dir) => sourceFiles(join(ROOT, dir)))
     .map((path) => relative(ROOT, path).split("\\").join("/"))
     .filter((file) => !skippedFile(file))

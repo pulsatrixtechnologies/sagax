@@ -4,7 +4,7 @@
  * conversation it read and its context entries, so the turn's context
  * selection does not read and turn every message into text a second time. */
 import { foldPoint, deterministicSummary, draftSummary } from "../context/compaction-summary.ts";
-import { contextWindowFor, nativeCompactionPoint, shouldCompact, compactBudget, defaultCompactAt } from "../context/context-budget.ts";
+import { contextWindowFor, nativeCompactionPoint, shouldCompact, compactBudget, compactAtFor } from "../context/context-budget.ts";
 import { selectReplay, MAX_SUMMARY_BYTES, DEFAULT_REBUILD_BYTES } from "../context/context-rebuild.ts";
 import { autoCompactWindow } from "../drivers/claude.ts";
 import { remindAfterCompaction } from "../finish-until.ts";
@@ -95,7 +95,7 @@ async function compactConversation(input: {
   const replayWouldDrop = Boolean(replayFold && replayFold.folded.some(entry => entry.id !== record?.id) && keptStart >= 0
     && history.slice(keptStart).reduce((n, entry) => n + Buffer.byteLength(entry.text) + 16, 0) <= rebuildBytes / 2 - 128);
   if (!manual && !replayWouldDrop && !shouldCompact({ contextTokens: measurement?.tokens, estimatedBytes: bytes,
-    budget: compactBudget(window, host.cfg.context?.compactAt ?? defaultCompactAt(instance.driverKind), nativeCompactAt), floor, window, nativeCompactAt })) return unchanged;
+    budget: compactBudget(window, compactAtFor(bot.compactAt, host.cfg.context?.compactAt, instance.driverKind), nativeCompactAt), floor, window, nativeCompactAt })) return unchanged;
   const fold = manual ? { folded: history, firstKeptId: "" } : foldPoint(history);
   if (!fold) return;
   const foldedThroughId = manual

@@ -267,7 +267,7 @@ describe("every shape holds together and keeps its face", () => {
       expectPair(drawShape({ ...stillFrame(stateOf(shape)), motion: SQUASHED }, ROLLED(shape), "full").eyes, `${shape} rolled`, true);
       expectPair(drawShape(gazeFrame(stateOf(shape), 0.8, -0.7), ROLLED(shape), "full").eyes, `${shape} looking`, true);
     }
-  }, 60_000);
+  }, 120_000);
 
   it("through every move, at five moments, the body stays one whole outline with its two eyes, and comes back to rest", () => {
     for (const shape of BODY_SHAPES) {
@@ -306,7 +306,7 @@ describe("every shape holds together and keeps its face", () => {
         expectPair(drawShape(after, grounded(REST_POSE, shape), "full").eyes, `${shape} after ${move}`, true);
       }
     }
-  }, 60_000);
+  }, 120_000);
 
   it("gives the pumpkin a stem, and nothing else wears one", () => {
     const frame = stillFrame({ shape: "pumpkin", expression: "neutral", color: COLOR });

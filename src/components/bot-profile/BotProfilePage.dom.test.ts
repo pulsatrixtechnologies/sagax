@@ -25,6 +25,8 @@ import {
   type BotProfileTab,
 } from "@/lib/persona-sections";
 import { openFolds } from "../settings/nested-surfaces";
+import { loadAllBakedStills } from "../shape-stills";
+import { completeMascotLook, type MascotLook } from "../../../shared/mascot-look";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -153,9 +155,10 @@ afterEach(() => {
   sentMessages.length = 0;
 });
 
-async function mount(locale: "en" | "fr", org = true) {
+async function mount(locale: "en" | "fr", org = true, look?: MascotLook) {
   setLocale(locale);
   fixture = editBotFixture(org);
+  if (look) (fixture.bot as { mascotLook?: MascotLook }).mascotLook = look;
   routinesListings = 0;
   // the organization probe is cached once per page: ask again for this fixture
   await loadPerspicaxOrg(true);
@@ -537,7 +540,446 @@ describe("bot profile page: General cards in place (#3398)", () => {
     expect(host.querySelector("[data-bot-profile-page]"), "the page stays").not.toBeNull();
   });
 
-  // M-20261119-081: General > Settings has an Appearance row again (after Model), opening what the mascot opens:
+  // #5384, the review of #5389: the mascot is the picker's preview, turned by hand. A double click on a turned
+  // mascot brings it back to the front, as Reset view does, and leaves the picker as it was: each of its two
+  // clicks opened or closed the picker, which came back mounted anew on Shapes. The second review of #5389: the
+  // Reset view button sits beside the mascot, outside the picker's anchor and panel, so its press was a press
+  // outside and closed the picker; it is the mascot's own control and leaves the picker as it was too.
+  describe("bringing the turned header mascot back to the front", () => {
+    // reduced motion: the drawing holds still between two events, so the page settles (the way back is immediate)
+    const shape = { ...completeMascotLook({ character: "shape", shape: "cup" } as MascotLook), motion: "reduced" } as MascotLook;
+    beforeAll(async () => { await loadAllBakedStills(); });
+    const stage = () => host.querySelector<HTMLElement>("[data-bot-profile-hero] button[data-mascot-stage]")!;
+    const viewOf = () => stage().querySelector("[data-shape]")?.getAttribute("data-shape-view") ?? null;
+    const popover = () => document.querySelector<HTMLElement>("[data-mascot-picker-popover]");
+    const send = async (type: string, detail: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: 100, clientY: 100, button: 0, detail });
+      if (type.startsWith("pointer")) Object.defineProperty(event, "pointerId", { value: 1 });
+      await act(async () => { stage().dispatchEvent(event); });
+    };
+    /** What a browser sends for a double click, and whether the picker was there after each event. */
+    const doubleClick = async () => {
+      const seen: boolean[] = [];
+      for (const detail of [1, 2]) {
+        for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+          await send(type, detail);
+          seen.push(popover() !== null);
+        }
+      }
+      await send("dblclick", 2);
+      seen.push(popover() !== null);
+      return seen;
+    };
+    const turn = async () => {
+      await act(async () => { stage().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true })); });
+      expect(viewOf()).toBe("0.2 0");
+    };
+    /** Past any click still held. */
+    const wait = async () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 500)); });
+
+    it("G06: a double click, picker closed: the mascot faces front again and the picker never opens", async () => {
+      await mount("en", true, shape);
+      await home("general");
+      await turn();
+      expect(popover()).toBeNull();
+      expect(await doubleClick(), "the picker after each event").not.toContain(true);
+      await wait();
+      await settle();
+      expect(viewOf(), "back to the front").toBeNull();
+      expect(popover(), "the picker stays closed").toBeNull();
+    });
+
+    it("G07: a double click, picker open on Characters: the mascot faces front again and the same picker stays, on Characters", async () => {
+      await mount("en", true, shape);
+      await home("general");
+      await click(stage(), "the mascot");
+      await until(() => document.querySelector("[data-mascot-picker-popover] [data-mascot-picker]"));
+      await click(popover()!.querySelector<HTMLElement>('[data-mascot-picker-tab="characters"]'), "the Characters tab");
+      const picker = popover()!.querySelector<HTMLElement>("[data-mascot-picker]")!;
+      const selected = () => popover()?.querySelector('[data-mascot-picker-tab][aria-selected="true"]')?.getAttribute("data-mascot-picker-tab");
+      expect(selected()).toBe("characters");
+      await turn();
+      expect(await doubleClick(), "the picker after each event").not.toContain(false);
+      await wait();
+      await settle();
+      expect(viewOf(), "back to the front").toBeNull();
+      expect(popover()?.querySelector("[data-mascot-picker]"), "the same picker, never mounted anew").toBe(picker);
+      expect(selected(), "still on Characters").toBe("characters");
+    });
+
+    /** What a browser sends for a press and a click, and whether the picker was there after each event. */
+    const press = async (node: HTMLElement) => {
+      const seen: boolean[] = [];
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+        const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: 100, clientY: 100, button: 0, detail: 1 });
+        if (type.startsWith("pointer")) Object.defineProperty(event, "pointerId", { value: 1 });
+        await act(async () => { node.dispatchEvent(event); });
+        seen.push(popover() !== null);
+      }
+      return seen;
+    };
+    const openOnCharacters = async () => {
+      await mount("en", true, shape);
+      await home("general");
+      await click(stage(), "the mascot");
+      await until(() => document.querySelector("[data-mascot-picker-popover] [data-mascot-picker]"));
+      await click(popover()!.querySelector<HTMLElement>('[data-mascot-picker-tab="characters"]'), "the Characters tab");
+      await turn();
+      return popover()!.querySelector<HTMLElement>("[data-mascot-picker]")!;
+    };
+    const selected = () => popover()?.querySelector('[data-mascot-picker-tab][aria-selected="true"]')?.getAttribute("data-mascot-picker-tab");
+
+    it("the Reset view button, picker open on Characters: the mascot faces front again and the same picker stays, on Characters", async () => {
+      const picker = await openOnCharacters();
+      expect(selected()).toBe("characters");
+      const reset = host.querySelector<HTMLButtonElement>("[data-bot-profile-hero] [data-mascot-turn-reset]");
+      expect(reset, "the Reset view button").not.toBeNull();
+      expect(reset!.hidden, "shown while the mascot is turned").toBe(false);
+      expect(stage().contains(reset), "beside the mascot, not in its button").toBe(false);
+      expect(await press(reset!), "the picker after each event").not.toContain(false);
+      await wait();
+      await settle();
+      expect(viewOf(), "back to the front").toBeNull();
+      expect(popover()?.querySelector("[data-mascot-picker]"), "the same picker, never mounted anew").toBe(picker);
+      expect(selected(), "still on Characters").toBe("characters");
+    });
+
+    it("G40: a press outside the mascot, its Reset view button and the picker still closes the picker, the mascot left turned", async () => {
+      await openOnCharacters();
+      const outside = host.querySelector<HTMLElement>("[data-bot-profile-page]")!;
+      expect(outside.closest("[data-mascot-turn], [data-mascot-picker-popover]"), "outside both").toBeNull();
+      const seen = await press(outside);
+      expect(seen[0], "closed at the press").toBe(false);
+      await settle();
+      expect(popover(), "the picker is closed").toBeNull();
+      expect(viewOf(), "still turned").toBe("0.2 0");
+    });
+
+    // The gesture table of docs/mascots.md ("Turned by hand: every gesture"), the rows about the picker, the page
+    // and the focus, on the real page. Each test is one row, named by its id. Escape closes what it closed before
+    // the mascot was turned by hand, only when the mascot has nothing to cancel [D-20261119-031].
+    describe("the gesture table", () => {
+      const page = () => host.querySelector<HTMLElement>("[data-bot-profile-page]");
+      const resetButton = () => host.querySelector<HTMLButtonElement>("[data-bot-profile-hero] [data-mascot-turn-reset]")!;
+      const pickerNode = () => popover()?.querySelector<HTMLElement>("[data-mascot-picker]") ?? null;
+      const closed = async () => { await mount("en", true, shape); await home("general"); };
+      const opened = async () => {
+        await closed();
+        stage().focus();
+        await click(stage(), "the mascot");
+        await until(() => pickerNode());
+        return pickerNode()!;
+      };
+      /** Where the browser has the focus: a focused element that hides loses it to the body. */
+      const focused = () => {
+        const active = document.activeElement;
+        if (!(active instanceof HTMLElement) || !active.isConnected || active.closest("[hidden]")) return document.body;
+        return active;
+      };
+      /** A key pressed wherever the focus is. */
+      const keyPress = async (name: string) => {
+        const event = new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true });
+        await act(async () => { focused().dispatchEvent(event); });
+        await settle();
+        return event;
+      };
+      const at = async (node: HTMLElement, type: string, x: number, y: number) => {
+        const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, detail: 1 });
+        if (type.startsWith("pointer")) Object.defineProperty(event, "pointerId", { value: 1 });
+        await act(async () => { node.dispatchEvent(event); });
+      };
+      /** A press on the mascot dragged 50 px across and 20 px up, then let go over `end`; what the picker was after each event. */
+      const drag = async (end: HTMLElement = stage()) => {
+        const seen: boolean[] = [];
+        const step = async (node: HTMLElement, type: string, x: number, y: number) => { await at(node, type, x, y); seen.push(popover() !== null); };
+        // a press on a button gives it the focus (Chromium)
+        stage().focus();
+        await step(stage(), "pointerdown", 100, 100);
+        await step(stage(), "pointermove", 120, 95);
+        await step(stage(), "pointermove", 150, 80);
+        // the mascot holds the pointer once the drag began: its release comes to it, and the click to what is under the pointer
+        await act(async () => {
+          const up = new MouseEvent("pointerup", { bubbles: true, cancelable: true, clientX: 150, clientY: 80, button: 0 });
+          Object.defineProperty(up, "pointerId", { value: 1 });
+          stage().dispatchEvent(up);
+          end.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: 150, clientY: 80, button: 0, detail: 1 }));
+        });
+        seen.push(popover() !== null);
+        await settle();
+        seen.push(popover() !== null);
+        return seen;
+      };
+      /** A real press on the Reset view button: it takes the focus, then the click. */
+      const pressReset = async () => {
+        const button = resetButton();
+        const seen: boolean[] = [];
+        for (const type of ["pointerdown", "mousedown"]) { await at(button, type, 100, 100); seen.push(popover() !== null); }
+        button.focus();
+        for (const type of ["pointerup", "mouseup", "click"]) { await at(button, type, 100, 100); seen.push(popover() !== null); }
+        await settle();
+        return seen;
+      };
+
+      it("G01: a click on the mascot facing front, picker closed, opens the picker at once", async () => {
+        await closed();
+        await act(async () => { stage().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 })); });
+        expect(host.querySelector("[data-bot-profile-picker-open]"), "open with the click, no wait").not.toBeNull();
+        await until(() => pickerNode());
+        expect(pickerNode()).not.toBeNull();
+        expect(viewOf()).toBeNull();
+      });
+
+      it("G02: a click on the mascot facing front, picker open, closes the picker at once", async () => {
+        await opened();
+        await act(async () => { stage().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 })); });
+        expect(popover()).toBeNull();
+        expect(page(), "the page stays").not.toBeNull();
+      });
+
+      it("G03: a click on a turned mascot, picker closed, opens the picker once no second click came; the mascot stays turned", async () => {
+        await closed();
+        await turn();
+        await act(async () => { stage().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 })); });
+        expect(host.querySelector("[data-bot-profile-picker-open]"), "held: it may be a double click").toBeNull();
+        await wait();
+        await until(() => pickerNode());
+        expect(pickerNode()).not.toBeNull();
+        expect(viewOf()).toBe("0.2 0");
+      });
+
+      it("G04: a click on a turned mascot, picker open, closes the picker once no second click came; the mascot stays turned", async () => {
+        await opened();
+        await turn();
+        await act(async () => { stage().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 })); });
+        expect(popover(), "held: it may be a double click").not.toBeNull();
+        await wait();
+        await settle();
+        expect(popover()).toBeNull();
+        expect(viewOf()).toBe("0.2 0");
+        expect(page()).not.toBeNull();
+      });
+
+      it("G05: a double click on the mascot facing front is two clicks, as before: the picker opens and closes", async () => {
+        await closed();
+        const seen = await doubleClick();
+        // after the first click the picker is there, after the second it is gone
+        expect(seen[4], "open after the first click").toBe(true);
+        expect(seen[9], "closed after the second").toBe(false);
+        await wait();
+        await settle();
+        expect(popover()).toBeNull();
+        expect(viewOf()).toBeNull();
+        expect(page()).not.toBeNull();
+      });
+
+      it("G09: a drag turns the mascot by the site's figures and opens nothing", async () => {
+        await closed();
+        expect(await drag(), "the picker after each event").not.toContain(true);
+        // 50 px across is 0.55 rad, 20 px up is 0.18 rad
+        expect(viewOf()).toBe("0.55 0.18");
+        expect(page()).not.toBeNull();
+      });
+
+      it("G10: a drag with the picker open turns the mascot and leaves the same picker, let go on the mascot, over the panel or outside", async () => {
+        const picker = await opened();
+        expect(await drag(), "let go on the mascot").not.toContain(false);
+        expect(viewOf()).toBe("0.55 0.18");
+        expect(await drag(popover()!), "let go over the panel").not.toContain(false);
+        expect(await drag(page()!), "let go outside").not.toContain(false);
+        expect(pickerNode(), "never mounted anew").toBe(picker);
+      });
+
+      it("G13: a drag begun outside and ended on the mascot closes the picker at its press and turns nothing", async () => {
+        await opened();
+        await at(page()!, "pointerdown", 600, 500);
+        await at(stage(), "pointermove", 150, 80);
+        await at(stage(), "pointerup", 150, 80);
+        await settle();
+        expect(popover()).toBeNull();
+        expect(viewOf()).toBeNull();
+      });
+
+      for (const name of ["Home", "0", "Escape"]) {
+        const id = name === "Home" ? "G17" : name === "0" ? "G18" : "G19";
+        it(`${id}: ${name} on a turned mascot, picker open, brings it back; the same picker and the page stay`, async () => {
+          const picker = await opened();
+          stage().focus();
+          await turn();
+          expect((await keyPress(name)).defaultPrevented).toBe(true);
+          expect(viewOf()).toBeNull();
+          expect(pickerNode()).toBe(picker);
+          expect(page()).not.toBeNull();
+          expect(document.activeElement).toBe(stage());
+        });
+      }
+
+      it("G20: Escape on a turned mascot, picker closed, brings it back and the page stays; Home and 0 too", async () => {
+        await closed();
+        stage().focus();
+        for (const name of ["Escape", "Home", "0"]) {
+          await turn();
+          expect((await keyPress(name)).defaultPrevented, name).toBe(true);
+          expect(viewOf(), name).toBeNull();
+          expect(page(), name).not.toBeNull();
+          expect(popover(), name).toBeNull();
+        }
+      });
+
+      it("G21: Escape on the mascot facing front, picker open, closes the picker; the page stays and the focus is on the mascot", async () => {
+        await opened();
+        stage().focus();
+        await keyPress("Escape");
+        expect(popover()).toBeNull();
+        expect(page()).not.toBeNull();
+        expect(document.activeElement).toBe(stage());
+      });
+
+      it("G22: Escape on the mascot facing front, picker closed, nothing previewed, closes the page as before", async () => {
+        await closed();
+        stage().focus();
+        await keyPress("Escape");
+        expect(page()).toBeNull();
+      });
+
+      it("G25: Escape on a mascot that previews a state drops the preview; the picker and the page stay, and the next Escape is theirs", async () => {
+        const picker = await opened();
+        stage().focus();
+        await keyPress("5");
+        expect(stage().querySelector("[data-shape]")?.getAttribute("data-agent-state")).toBe("blocked");
+        await keyPress("Escape");
+        expect(stage().querySelector("[data-shape]")?.getAttribute("data-agent-state")).not.toBe("blocked");
+        expect(pickerNode()).toBe(picker);
+        expect(page()).not.toBeNull();
+        await keyPress("Escape");
+        expect(popover()).toBeNull();
+        expect(page()).not.toBeNull();
+      });
+
+      it("G30: the Reset view button, picker open: the mascot faces front, the same picker stays, the focus is on the mascot", async () => {
+        const picker = await opened();
+        await turn();
+        expect(await pressReset(), "the picker after each event").not.toContain(false);
+        expect(viewOf()).toBeNull();
+        expect(pickerNode()).toBe(picker);
+        expect(focused(), "the focus is on the mascot").toBe(stage());
+      });
+
+      it("G32: after the Reset view button, picker open, Escape closes the picker and the page stays; the next Escape closes the page", async () => {
+        await opened();
+        await turn();
+        await pressReset();
+        await keyPress("Escape");
+        expect(page(), "the page stays").not.toBeNull();
+        expect(popover(), "the picker closed").toBeNull();
+        expect(focused()).toBe(stage());
+        await keyPress("Escape");
+        expect(page()).toBeNull();
+      });
+
+      it("G33: after the Reset view button, picker closed, the focus is on the mascot and Escape does what it does on the mascot", async () => {
+        await closed();
+        await turn();
+        expect(await pressReset()).not.toContain(true);
+        expect(viewOf()).toBeNull();
+        expect(focused()).toBe(stage());
+        // a key of the mascot still works: the focus did not fall to the top of the document
+        await keyPress("ArrowRight");
+        expect(viewOf()).toBe("0.2 0");
+        await keyPress("Escape");
+        expect(viewOf()).toBeNull();
+        expect(page(), "it had something to cancel").not.toBeNull();
+      });
+
+      it("G36: Escape from the focused Reset view button brings the mascot back and closes nothing, picker open or closed", async () => {
+        const picker = await opened();
+        await turn();
+        resetButton().focus();
+        expect((await keyPress("Escape")).defaultPrevented).toBe(true);
+        expect(viewOf()).toBeNull();
+        expect(pickerNode()).toBe(picker);
+        expect(page()).not.toBeNull();
+        expect(focused()).toBe(stage());
+        // picker closed
+        await keyPress("Escape");
+        expect(popover()).toBeNull();
+        await turn();
+        resetButton().focus();
+        await keyPress("Escape");
+        expect(viewOf()).toBeNull();
+        expect(page(), "the page stays").not.toBeNull();
+        expect(focused()).toBe(stage());
+      });
+
+      it("G47: a double click on the Reset view button, picker open: the mascot faces front and the same picker stays, on its tab", async () => {
+        const picker = await openOnCharacters();
+        const seen = await pressReset();
+        // the button is gone (reduced motion: at once): the second click and the dblclick land on the mascot under it
+        for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click", "dblclick"]) {
+          const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: 100, clientY: 100, button: 0, detail: 2 });
+          if (type.startsWith("pointer")) Object.defineProperty(event, "pointerId", { value: 1 });
+          await act(async () => { stage().dispatchEvent(event); });
+          seen.push(popover() !== null);
+        }
+        await wait();
+        await settle();
+        seen.push(popover() !== null);
+        expect(seen, "the picker after each event").not.toContain(false);
+        expect(viewOf()).toBeNull();
+        expect(pickerNode(), "never mounted anew").toBe(picker);
+        expect(selected()).toBe("characters");
+        // picker closed: nothing opens
+        await keyPress("Escape");
+        expect(popover()).toBeNull();
+        await turn();
+        const closedSeen = await pressReset();
+        for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click", "dblclick"]) {
+          const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: 100, clientY: 100, button: 0, detail: 2 });
+          if (type.startsWith("pointer")) Object.defineProperty(event, "pointerId", { value: 1 });
+          await act(async () => { stage().dispatchEvent(event); });
+          closedSeen.push(popover() !== null);
+        }
+        await wait();
+        await settle();
+        closedSeen.push(popover() !== null);
+        expect(closedSeen, "the picker after each event, closed").not.toContain(true);
+      });
+
+      it("G48: a focus on the Reset view button when the mascot comes back by its own keys goes to the mascot; Escape then closes the picker and the page stays", async () => {
+        await opened();
+        await turn();
+        // Home on the mascot, the focus already on the button (a Tab during the way back, in a browser that lets it land)
+        resetButton().focus();
+        await act(async () => { stage().dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true, cancelable: true })); });
+        await settle();
+        expect(viewOf()).toBeNull();
+        expect(focused(), "not left on a hidden button, so not on the document").toBe(stage());
+        await keyPress("Escape");
+        expect(popover()).toBeNull();
+        expect(page(), "the page stays").not.toBeNull();
+      });
+
+      it("G38: the picker closed by Escape from its panel gives the focus back to the mascot that opened it, turned or not", async () => {
+        await opened();
+        expect(popover()!.contains(document.activeElement), "the panel took the focus").toBe(true);
+        await keyPress("Escape");
+        expect(popover()).toBeNull();
+        expect(document.activeElement).toBe(stage());
+        expect(page()).not.toBeNull();
+      });
+
+      it("G39: Escape with the focus in the panel closes the picker and leaves a turned mascot turned", async () => {
+        await opened();
+        await turn();
+        popover()!.focus();
+        await keyPress("Escape");
+        expect(popover()).toBeNull();
+        expect(viewOf()).toBe("0.2 0");
+        expect(page()).not.toBeNull();
+      });
+    });
+  });
+
+
   // [M-20261125-063] the mascot picker under the mascot, where it was the mascot editor's modal
   it("regression M-20261119-081: General > Settings has an Appearance row after Model that opens the mascot picker", async () => {
     await mount("en");

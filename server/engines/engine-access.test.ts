@@ -286,7 +286,8 @@ describe("the admin gate on a member's bot", () => {
   it("still sends to an admin what goes beyond the owner's rights", () => {
     // a host-level built-in server, a shell, a fetch from the host
     expect(ownerGate("mcp__computer__click")).toBe(true);
-    expect(ownerGate("mcp__browser__navigate")).toBe(true);
+    // #5229, #5334: the built-in browser is the member's own web surface
+    expect(ownerGate("mcp__browser__navigate")).toBe(false);
     expect(ownerGate("agents__vm_exec")).toBe(true);
     expect(ownerGate("Bash", { command: "ls", cwd: root })).toBe(true);
     expect(ownerGate("WebFetch")).toBe(true);
@@ -489,7 +490,10 @@ describe("host-level agents tools in the member's own environment", () => {
     expect(gate("mcp__agents__attach_file", { path: "/home/cua/workspace/out.png" }, place({ ownLocalVm: true }))).toBe(false);
     expect(gate("mcp__agents__attach_file", { path: "/home/cua/workspace/../../etc/passwd" }, place({ ownLocalVm: true }))).toBe(true);
     expect(gate("mcp__agents__attach_file", { path: "/home/cua/workspace/out.png" }, place())).toBe(true);
-    expect(gate("mcp__agents__attach_file", { path: "relative.txt" }, place())).toBe(true);
+    // #5358: a relative path the bot just created in its workspace is theirs
+    writeFileSync(join(workspace, "relative.txt"), "x");
+    expect(gate("mcp__agents__attach_file", { path: "relative.txt" }, place())).toBe(false);
+    expect(gate("mcp__agents__attach_file", { path: "../other.txt" }, place())).toBe(true);
   });
 
   it("never the Perspicax admin tools, a shell command or a lookalike server", () => {

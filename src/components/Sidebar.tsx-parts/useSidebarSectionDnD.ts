@@ -19,7 +19,7 @@ import {
   type SidebarDensity,
 } from "@/lib/sidebar-preferences";
 import type { SectionItemKind } from "@/lib/personal-sections";
-import { dropAnchor, placeBotInSection, readSectionBotOrder, writeSectionBotOrder } from "@/lib/section-bot-order";
+import { botDropLineAt, dropAnchor, placeBotInSection, readSectionBotOrder, writeSectionBotOrder, type BotDropLine } from "@/lib/section-bot-order";
 import { ITEM_DRAG_TYPE, isAutomaticSidebarSection, parseItemDrag, sectionLabel } from "./helpers";
 
 /** Section collapse/reorder and item drag onto sections. */
@@ -50,6 +50,8 @@ export function useSidebarSectionDnD({
     over: { id: string; place: SectionDropPlace } | null;
   }>({ from: null, over: null });
   const [itemDropId, setItemDropId] = useState<string | null>(null);
+  const [botDropLine, setBotDropLine] = useState<BotDropLine | null>(null);
+  const draggingBotId = useRef<string | null>(null);
 
   const layoutInteractive = sidebarLayoutInteractive(density, q);
   const sectionCollapsed = (id: string) =>
@@ -122,9 +124,18 @@ export function useSidebarSectionDnD({
       event.dataTransfer.effectAllowed = "move";
       if (layoutInteractive) event.dataTransfer.setData(ITEM_DRAG_TYPE, JSON.stringify({ kind, id: itemId }));
       event.dataTransfer.setData(SPLIT_DRAG_TYPE, splitDragData({ kind, id: itemId }));
-      if (kind === "bot") addBotCalendarDrag(event.dataTransfer, itemId);
+      if (kind === "bot") {
+        draggingBotId.current = itemId;
+        addBotCalendarDrag(event.dataTransfer, itemId);
+      } else {
+        draggingBotId.current = null;
+      }
     },
-    onDragEnd: () => setItemDropId(null),
+    onDragEnd: () => {
+      draggingBotId.current = null;
+      setItemDropId(null);
+      setBotDropLine(null);
+    },
   });
   const acceptItemDrag = (event: React.DragEvent<HTMLDivElement>, id: string): boolean => {
     if (!event.dataTransfer.types.includes(ITEM_DRAG_TYPE)) return false;
@@ -134,10 +145,21 @@ export function useSidebarSectionDnD({
     if (itemDropId !== id) setItemDropId(id);
     return true;
   };
+  const updateBotDropLine = (event: React.DragEvent<HTMLDivElement>, sectionId: string, present: readonly string[]) => {
+    const dragged = draggingBotId.current;
+    if (!dragged || !layoutInteractive || isAutomaticSidebarSection(sectionId)) {
+      if (botDropLine) setBotDropLine(null);
+      return;
+    }
+    const next = botDropLineAt(sectionId, event.target, event.clientY, dragged, present);
+    if (botDropLine?.sectionId === next?.sectionId && botDropLine?.beforeId === next?.beforeId) return;
+    setBotDropLine(next);
+  };
   const dropItem = (event: React.DragEvent<HTMLDivElement>, id: string, section: string): boolean => {
     if (!event.dataTransfer.types.includes(ITEM_DRAG_TYPE)) return false;
     event.preventDefault();
     setItemDropId(null);
+    setBotDropLine(null);
     if (isAutomaticSidebarSection(id)) return true;
     const item = parseItemDrag(event.dataTransfer.getData(ITEM_DRAG_TYPE));
     if (item) {
@@ -150,6 +172,7 @@ export function useSidebarSectionDnD({
         writeSectionBotOrder(placeBotInSection(readSectionBotOrder(), section, item.id, dropAnchor(event.target, event.clientY, item.id), present));
       }
     }
+    draggingBotId.current = null;
     return true;
   };
 
@@ -178,6 +201,7 @@ export function useSidebarSectionDnD({
     reorderAnnouncement,
     sectionDragRef,
     itemDropId,
+    botDropLine,
     setItemDropId,
     layoutInteractive,
     sectionCollapsed,
@@ -185,6 +209,7 @@ export function useSidebarSectionDnD({
     moveSidebarSection,
     resetSectionDrag,
     updateSectionDropTarget,
+    updateBotDropLine,
     itemDragProps,
     acceptItemDrag,
     dropItem,

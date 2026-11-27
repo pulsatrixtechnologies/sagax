@@ -2514,5 +2514,6 @@
   "listening.back": "返回收听",
   "listening.couldNotStart": "无法开始收听：{error}",
   "listening.computerDenied": "电脑声音需要系统的屏幕与系统音频录制权限。",
-  "listening.openSettings": "打开设置"
+  "listening.openSettings": "打开设置",
+  "sandboxDesktop.ownComputerNotice": "The bot is already working on this computer. There is nothing to mirror here."
 }

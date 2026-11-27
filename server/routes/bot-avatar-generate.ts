@@ -3,6 +3,7 @@ import type { BotRecord, Store } from "../store.ts";
 import type { WireBot } from "../../shared/wire.ts";
 import { botAvatarUrlFromStoredPath } from "../../shared/bot-avatar.ts";
 import { avatarGenerationRequestSchema, avatarGenerationStateMatches, snapshotAvatarGenerationState, generateAvatarImage } from "../media/avatar-image.ts";
+import type { ImageLanguage } from "../media/image-words.ts";
 import { saveImage, deleteAttachment } from "../attachments/attachments.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -11,14 +12,17 @@ export interface BotAvatarGenerateRouteDeps {
   ownerOrAdminOf: (auth: RequestAuth, bot: BotRecord) => boolean;
   requesterPrincipal: (auth: RequestAuth) => string | null;
   orgAvatarImageConfig: (principalId: string | null) => Promise<Parameters<typeof generateAvatarImage>[0] | null>;
-  orgXaiRefusal: (kind: "image") => Record<string, unknown>;
+  /** #5223: the refusal in the asking person's language. */
+  orgXaiRefusal: (kind: "image", language?: ImageLanguage) => Record<string, unknown>;
+  /** The asking person's language for a refusal (#5223). */
+  personLanguage?: (principalId: string | null) => ImageLanguage;
   wireBot: (bot: BotRecord) => WireBot;
   broadcast: (frame: { kind: "bot"; bot: WireBot }) => void;
 }
 
 export function createBotAvatarGenerateRoutes(deps: BotAvatarGenerateRouteDeps): RouteHandler {
   return async ({ req, res, path, method, auth, json, readBody }) => {
-    const { store, ownerOrAdminOf, requesterPrincipal, orgAvatarImageConfig, orgXaiRefusal, wireBot, broadcast } = deps;
+    const { store, ownerOrAdminOf, requesterPrincipal, orgAvatarImageConfig, orgXaiRefusal, personLanguage, wireBot, broadcast } = deps;
     const m = path.match(/^\/api\/bots\/([\w-]+)\/avatar\/generate$/);
     if (m && method === "POST") {
       const existing = store.bot(m[1]);
@@ -37,9 +41,10 @@ export function createBotAvatarGenerateRoutes(deps: BotAvatarGenerateRouteDeps):
       // request owns before the first await so a late result cannot win.
       const initialAvatar = snapshotAvatarGenerationState(existing);
       // 2026-10-16: on the organization's xAI key only for the person asking.
-      const imageCfg = await orgAvatarImageConfig(requesterPrincipal(auth));
+      const principalId = requesterPrincipal(auth);
+      const imageCfg = await orgAvatarImageConfig(principalId);
       if (!imageCfg) {
-        json(res, 403, orgXaiRefusal("image"));
+        json(res, 403, orgXaiRefusal("image", personLanguage?.(principalId)));
         return;
       }
       const parsed = avatarGenerationRequestSchema.safeParse(await readBody(req));

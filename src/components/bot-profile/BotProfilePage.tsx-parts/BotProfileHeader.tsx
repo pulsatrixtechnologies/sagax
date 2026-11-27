@@ -19,7 +19,7 @@ import { useOrgPeople } from "@/lib/perspicax-org";
 import { personaSharingSummary } from "@/lib/bot-sharing";
 import { avatarImageFrom, dragMayCarryImage } from "@/lib/avatar-input";
 import { botMascotSkin } from "../../../../shared/mascot-skins";
-import { completeMascotLook } from "../../../../shared/mascot-look";
+import { completeMascotLook, withEngineLook, type MascotLook } from "../../../../shared/mascot-look";
 import { BOT_PROFILE_LIMITS } from "../../../../shared/bot-profile";
 import { useAvatarSources } from "../../appearance/AvatarSources";
 import { useCaptionChrome } from "../../DesktopCapabilities";
@@ -97,6 +97,8 @@ export function useBotProfileHero({ bot, derived, onOpenAppearance }: {
     ...(onOpenAppearance ? { onOpen: onOpenAppearance, openLabel: t("botProfile.tab.appearance") } : {}),
     state: derived.activeState,
     motion: derived.mascotMotion,
+    // the M key on the hero's shape mascot (#5384): the mood the picker's pill sets
+    onMood: (mood) => derived.patch({ mascotLook: withEngineLook(completeMascotLook(bot.mascotLook), { mood }) as MascotLook }),
   };
   const heroLook = completeMascotLook(bot.mascotLook);
   const heroPicture = (bot.avatarCrop ?? "mascot") !== "mascot" && bot.avatarUrl ? bot : undefined;

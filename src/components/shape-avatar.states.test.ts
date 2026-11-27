@@ -82,14 +82,16 @@ describe("the mascot takes the engine's state from the bot's activity", () => {
     expect(urls.size).toBe(AGENT_STATES.length);
   });
 
-  it("thinking is the engine's three dots and blocked its exclamation mark, in the body's colour; the others keep the body and both eyes", () => {
+  it("blocked is the engine's exclamation mark; thinking and the others keep the body and both eyes (#5415)", () => {
     for (const shape of MASCOT_SHAPES.slice(0, 6)) {
       const def = shapeDefinition(shape);
       const kinds = (state: (typeof AGENT_STATES)[number]) => {
         const frame = stateStill(def, state, "neutral");
         return { marks: frame.shapes.filter((part) => part.kind === "slice" && part.key.startsWith("mark-")).length, eyes: frame.shapes.filter((part) => part.kind === "eye").length };
       };
+      // the engine's thinking still is three dots; the app never draws it for a bot (#5415)
       expect(kinds("thinking"), shape).toEqual({ marks: 3, eyes: 0 });
+      expect(enginePose("idle", "thinking", "neutral"), shape).toEqual({ state: "thinking", mood: "neutral", motion: "thinking" });
       expect(kinds("blocked"), shape).toEqual({ marks: 2, eyes: 0 });
       for (const state of ["working", "waiting", "done"] as const) expect(kinds(state), `${shape} ${state}`).toEqual({ marks: 0, eyes: 2 });
     }
@@ -110,7 +112,9 @@ describe("the mascot takes the engine's state from the bot's activity", () => {
     expect(enginePose("working", "idle", "neutral")).toEqual({ state: "idle", mood: "neutral", motion: "thinking" });
     // what the bot does wins over its face
     expect(enginePose("working", "working", "neutral")).toEqual({ state: "working", mood: "neutral", motion: null });
-    expect(enginePose("idle", "thinking", "neutral")).toEqual({ state: "thinking", mood: "neutral", motion: null });
+    // thinking keeps the at-work body, never the engine's three dots (#5415)
+    expect(enginePose("idle", "thinking", "neutral")).toEqual({ state: "thinking", mood: "neutral", motion: "thinking" });
+    expect(enginePose("idle", "thinking", "happy")).toEqual({ state: "thinking", mood: "happy", motion: "happy" });
     // a happy bot is happy in every state; a finished turn is happy as it was before
     expect(enginePose("idle", "waiting", "happy")).toEqual({ state: "waiting", mood: "happy", motion: null });
     expect(enginePose("working", "idle", "happy")).toEqual({ state: "idle", mood: "happy", motion: "happy" });
@@ -131,12 +135,25 @@ describe("the mascot takes the engine's state from the bot's activity", () => {
 
   it("a skin never paints a mark as the body's face", () => {
     const def = shapeDefinition("cup");
+    // the engine's thinking still has no face to paint; the app does not use it (#5415)
     expect(skinFace(stateStill(def, "thinking", "neutral"))).toBeNull();
     expect(skinFace(stateStill(def, "blocked", "neutral"))).toBeNull();
     expect(skinFace(stateStill(def, "waiting", "neutral"))).not.toBeNull();
     const html = renderToStaticMarkup(createElement(ShapeMascot, { shape: "cup", skin: "gold", color: "blue", size: 28, animated: false, agentState: "thinking" }));
     expect(html).toContain("data-shape-body");
-    expect(html).not.toContain("data-skin-face");
+    // thinking keeps the body, so a gold skin still finds a face (#5415)
+    expect(html).toContain("data-skin-face");
+  });
+
+  it("a busy bot's sidebar still keeps the mascot body, never three dots (#5415)", () => {
+    const html = draw({ bot: bot({ busy: true }) });
+    expect(html).toContain('data-agent-state="thinking"');
+    const url = stillOf(html);
+    expect(url).toBeTruthy();
+    // the at-work baked still (eyes present), not the engine's mark-only thinking frame
+    expect(svgOf(url!)).toMatch(/<ellipse |<path /);
+    expect(svgOf(url!)).not.toMatch(/mark-/);
+    expect(stillOf(html)).toBe(stillUrl(`cup||thinking|${BLUE}|${INK}`, moodFrame(bakedStill("cup")!, "thinking"), BLUE, INK));
   });
 });
 

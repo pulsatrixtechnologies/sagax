@@ -671,6 +671,13 @@ export function ruleCoversSituation(rule: Pick<OwnerRule, "from">, situation: Ru
  * (server/rules/custom-rules-org.ts). */
 export function ruleCoversExactScope(rule: OwnerRule, tool: string, scope: RuleScope): boolean {
   if (rule.behavior !== "allow" || rule.tool !== tool || !standingGrantsAllowed()) return false;
+  // #5364: a sagax_settings rule without a bot target covers that setting
+  // on every bot of the person (Always allow at person level).
+  if (tool === "sagax_settings" && rule.scope.setting && !("target" in rule.scope)) {
+    if (scope.setting !== rule.scope.setting) return false;
+    if ("value" in rule.scope) return scope.value === rule.scope.value;
+    return !("value" in scope);
+  }
   const keys = Object.keys(rule.scope);
   if (keys.length !== Object.keys(scope).length) return false;
   return keys.every((key) => scope[key] === rule.scope[key]);

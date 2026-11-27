@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-// Heavy mode in the chat (#4901, #5089, #5090): the row while the experts
-// work (the orbit: they turn around the bot, the speaker pulses, lines link
-// them while they critique, they merge into the bot on agreement), after,
-// Auto's one line, and the Thoughts panel it opens.
+// Heavy mode in the chat (#4901, #5089): the row while the experts work,
+// after, Auto's one line, and the Thoughts panel it opens. Here the bot's
+// mascot is no shape, so the experts are the pile of owls; a shape's
+// division is HeavyDivision.dom.test.ts.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,7 +14,7 @@ import type { Message } from "@/state/store";
 import type { HeavyTeamLine } from "../../shared/heavy-team";
 
 vi.mock("./Avatar", () => ({
-  MausAvatar: (props: { color: string; state?: string }) => ({ $$typeof: Symbol.for("react.transitional.element"), type: "span", key: null, ref: null, props: { "data-owl": props.color, "data-owl-state": props.state }, _owner: null, _store: {} }),
+  MausAvatar: (props: { color: string; state?: string; animated?: boolean }) => ({ $$typeof: Symbol.for("react.transitional.element"), type: "span", key: null, ref: null, props: { "data-owl": props.color, "data-owl-state": props.state, "data-owl-animated": String(props.animated) }, _owner: null, _store: {} }),
 }));
 
 const { HeavyTeamRow } = await import("./HeavyTeamRow");
@@ -65,24 +65,36 @@ afterEach(() => {
 });
 
 describe("a Heavy run while the experts work", () => {
-  it("draws the orbit: the experts around the bot, the one speaking pulsing, no line while they propose", () => {
+  it("keeps the experts' pile of owls against the header while they work, for a bot whose mascot is no shape", () => {
     render(createElement(HeavyTeamRow, { message: message(line()), busy: true }));
-    expect($("[data-heavy-orbit]")!.dataset.heavyOrbit).toBe("running");
-    expect($$("[data-heavy-orbit-expert]")).toHaveLength(3);
-    expect($$("[data-heavy-orbit-speaking]").map((seat) => seat.dataset.heavyOrbitExpert)).toEqual(["1"]);
-    expect($("[data-heavy-orbit-speaking] .heavy-orbit-speaking")).not.toBeNull();
-    expect($$("[data-heavy-orbit-link]")).toHaveLength(0);
-    expect($("[data-heavy-orbit-leader]")).not.toBeNull();
+    expect($$("[data-heavy-open] [data-owl]").map((owl) => owl.dataset.owl)).toEqual(["blue", "green", "orange"]);
+    expect($("[data-heavy-division]")).toBeNull();
+    expect($("[data-heavy-avatars]")!.nextElementSibling).toBe($("[data-heavy-header]"));
   });
 
-  it("links every two experts while they critique each other", () => {
-    render(createElement(HeavyTeamRow, { message: message(critique()), busy: true }));
-    expect($$("[data-heavy-orbit-link]").map((link) => link.dataset.heavyOrbitLink)).toEqual(["1-2", "1-3", "2-3"]);
+  it("keeps the pile alive while they work, the one speaking at work, as the orbit drew them; still once the run is over", () => {
+    render(createElement(HeavyTeamRow, { message: message(line()), busy: true }));
+    expect($$("[data-owl]").map((owl) => [owl.dataset.owlState, owl.dataset.owlAnimated])).toEqual([["thinking", "true"], ["idle", "true"], ["idle", "true"]]);
+    render(createElement(HeavyTeamRow, { message: message(line({ phase: "done", thoughtEndedAt: T0 + 6_000 })), busy: false }));
+    expect($$("[data-owl]").map((owl) => [owl.dataset.owlState, owl.dataset.owlAnimated])).toEqual([["idle", "false"], ["idle", "false"], ["idle", "false"]]);
   });
 
-  it("says Experts thinking with the round and the seconds, and a live preview of the exchange", () => {
+  it("dims an expert that failed mid-run, in the pile and in the preview", () => {
+    const failed = line({ agents: line().agents.map((agent) => (agent.n === 2 ? { ...agent, status: "failed" as const } : agent)) });
+    render(createElement(HeavyTeamRow, { message: message(failed), busy: true }));
+    expect($$("[data-heavy-owl]").map((owl) => owl.hasAttribute("data-heavy-failed"))).toEqual([false, true, false]);
+    expect(($("[data-heavy-owl='2'] > span") as HTMLElement).style.opacity).toBe("0.45");
+    expect($("[data-heavy-agent='2']")!.textContent).toBe("Expert 2 · SecurityDid not finish · The rollback plan is the real risk.");
+  });
+
+  it("while the leader picks the team the row shows the bot itself, as the orbit's centre did", () => {
+    render(createElement(HeavyTeamRow, { message: message(line({ phase: "planning", agents: [], rounds: [] })), busy: true }));
+    expect($("[data-heavy-leader-avatar] [data-owl]")).not.toBeNull();
+  });
+
+  it("says what the experts do in the round, the round and the seconds, and a live preview of the exchange", () => {
     render(createElement(HeavyTeamRow, { message: message(critique()), busy: true }));
-    expect($("[data-heavy-header]")!.textContent).toBe("Experts thinking · round 2 of 5 · 6s");
+    expect($("[data-heavy-header]")!.textContent).toBe("Experts critiquing · round 2 of 5 · 6s");
     expect($$("[data-heavy-agent]").map((row) => row.textContent)).toEqual([
       "Expert 1 · SkepticWeighing the cutover window against the backup",
       "Expert 2 · SecurityThe rollback plan is the real risk.",
@@ -99,14 +111,18 @@ describe("a Heavy run while the experts work", () => {
   it("counts on, a second at a time", () => {
     render(createElement(HeavyTeamRow, { message: message(line()), busy: true }));
     act(() => { vi.advanceTimersByTime(3_000); });
-    expect($("[data-heavy-header]")!.textContent).toBe("Experts thinking · round 1 of 5 · 9s");
+    expect($("[data-heavy-header]")!.textContent).toBe("Experts proposing · round 1 of 5 · 9s");
   });
 
-  it("a run nobody patches any more, in a chat that no longer works, reads as stopped, with no orbit", () => {
+  it("between two rounds says they think, with the round that just ended", () => {
+    render(createElement(HeavyTeamRow, { message: message(line({ rounds: [{ n: 1, kind: "propose", startedAt: T0 + 1_000, endedAt: T0 + 5_000 }] })), busy: true }));
+    expect($("[data-heavy-header]")!.textContent).toBe("Experts thinking · round 1 of 5 · 6s");
+  });
+
+  it("a run nobody patches any more, in a chat that no longer works, reads as stopped", () => {
     render(createElement(HeavyTeamRow, { message: message(line()), busy: false }));
     expect($("[data-heavy-header]")!.textContent).toBe("Stopped after 6s");
     expect($("[data-heavy-preview]")).toBeNull();
-    expect($("[data-heavy-orbit]")).toBeNull();
   });
 
   it("says in one line that Auto chose Heavy on its own", () => {
@@ -122,20 +138,10 @@ describe("agreement and after", () => {
     agents: line().agents.map((agent) => ({ ...agent, status: "done" as const, live: undefined, speaking: undefined, agrees: true, messages: ["Plan.", "Agreed."] })),
   });
 
-  it("on agreement the experts merge into the bot while it writes", () => {
-    render(createElement(HeavyTeamRow, { message: message(agreed("leader")), busy: true }));
-    expect($("[data-heavy-orbit]")!.dataset.heavyOrbit).toBe("merged");
-    for (const seat of $$("[data-heavy-orbit-expert]")) {
-      expect(seat.style.opacity).toBe("0");
-      expect(seat.style.transform).toContain("scale(0.3)");
-    }
-  });
-
-  it("is then one quiet line: Thought for 8s and how it ended, no orbit, no preview", () => {
+  it("is then one quiet line: Thought for 8s and how it ended, no preview", () => {
     render(createElement(HeavyTeamRow, { message: message(agreed("done")), busy: false }));
     expect($("[data-heavy-header]")!.textContent).toBe("Thought for 8s");
     expect($("[data-heavy-outcome]")!.textContent).toBe("· agreed in round 2");
-    expect($("[data-heavy-orbit]")).toBeNull();
     expect($("[data-heavy-preview]")).toBeNull();
     expect($$("[data-owl]").map((owl) => owl.dataset.owl)).toEqual(["blue", "green", "orange"]);
     act(() => { vi.advanceTimersByTime(60_000); });

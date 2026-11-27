@@ -170,6 +170,7 @@ describe("resolveCredential (#5180)", () => {
     expect(credentialFormText("org-key")).toBe("Organization API key");
     expect(formOfAccessVia("subscription")).toBe("personal-account");
     expect(formOfAccessVia("speaker-key")).toBe("personal-key");
+    expect(formOfAccessVia("org-account")).toBe("org-account");
     expect(formOfAccessVia("org-key")).toBe("org-key");
     expect(formOfAccessVia("server")).toBeNull();
     const decision = resolveCredential({

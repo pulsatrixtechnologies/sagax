@@ -135,13 +135,17 @@ export async function callTranscriptsTool(name: string, args: Json, context: Too
     const threads = Array.isArray(r.threads) ? r.threads.filter(jsonRecord) : [];
     if (!threads.length) return { text: "No threads yet: you have none of your own beyond this one, and you have not opened any on a teammate." };
     const stateWord: Record<string, string> = { running: "running", "waiting-on-you": "waiting on the person", queued: "queued", idle: "idle" };
-    const lines = threads.map((thread) => {
+    // #5366: never list a row without its id (a blank id made deletes impossible).
+    const lines = threads.flatMap((thread) => {
+      const id = typeof thread.threadId === "string" ? thread.threadId.trim() : "";
+      if (!id) return [];
       const where = thread.own === true ? "yours" : `on @${String(thread.botName)}`;
       const state = stateWord[String(thread.state)] ?? String(thread.state);
       const unread = thread.unread === true ? ", unread for the person" : "";
       const handoff = typeof thread.delegationId === "string" && thread.delegationId ? ` [delegation id: ${thread.delegationId}]` : "";
-      return `- "${String(thread.title)}" (${where}, ${state}${unread}) [thread id: ${String(thread.threadId)}]${handoff}`;
+      return [`- "${String(thread.title)}" (${where}, ${state}${unread}) [thread id: ${id}]${handoff}`];
     });
+    if (!lines.length) return { text: "No threads with ids yet. Call list_threads again after a thread is opened." };
     return { text: `Threads, newest first:\n${lines.join("\n")}` };
   }
   if (name === "listening_read") {

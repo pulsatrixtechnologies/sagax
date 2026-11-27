@@ -250,6 +250,8 @@ export interface InternalRequestsDeps {
   canAccessTeam(bot: InternalRequestsBot, name: string, sectionId?: string): boolean;
   orgOfferedEngines<T extends { instanceId: string }>(instances: readonly T[], person?: string | null): readonly T[];
   consoleEngineAllowed(instanceId: string): boolean;
+  /** D-20261126-018: a provider the organization hid is no new choice. */
+  orgEngineHidden(instanceId: string): boolean;
   orgOwnAccountsOutsideList(): boolean;
   personPaysEngine(principalId: string, instanceId: string): boolean;
   ownerBotsReadOnly(bot: InternalRequestsBot): boolean;
@@ -914,8 +916,8 @@ export async function handleInternalRequestsLate(deps: InternalRequestsDeps, ctx
       // team; an archived bot or temporary agent is not listed
       bots: setupBots,
       instances: deps.orgOfferedEngines(instances, ownerId).filter((instance) =>
-        deps.consoleEngineAllowed(instance.instanceId)
-        || (deps.orgOwnAccountsOutsideList() && deps.personPaysEngine(ownerId, instance.instanceId))
+        !deps.orgEngineHidden(instance.instanceId) && (deps.consoleEngineAllowed(instance.instanceId)
+        || (deps.orgOwnAccountsOutsideList() && deps.personPaysEngine(ownerId, instance.instanceId)))
       ).map((instance) => ({
         instanceId: instance.instanceId,
         driverKind: instance.driverKind,

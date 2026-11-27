@@ -25,6 +25,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { ensureOwnerOnlyAcl, modeRequestsOwnerOnly } from "./owner-only-acl.ts";
 
 export type AtomicWriteOptions = {
   mode?: number;
@@ -86,6 +87,10 @@ export function writeFileAtomic(path: string, data: string | NodeJS.ArrayBufferV
     closeSync(fd);
     fd = null;
     renameWithRetry(tmp, path);
+    // Windows ignores open() mode bits (#5258): apply the owner-only ACL on
+    // the final path after the rename so the private file is never left with
+    // an inherited Everyone grant from a shared parent folder.
+    if (modeRequestsOwnerOnly(options.mode)) ensureOwnerOnlyAcl(path);
   } catch (e) {
     if (fd !== null) {
       try {

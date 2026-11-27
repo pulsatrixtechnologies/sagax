@@ -42,10 +42,12 @@ export async function releaseLimit(engine: string): Promise<void> {
   rememberLimits(await api<EngineLimitsReport>("/api/limit-resets/release", { method: "POST", body: JSON.stringify({ engine }) }));
 }
 
-/** Every engine's limit, kept fresh while something on screen shows it. */
-export function useEngineLimits(): EngineLimit[] {
+/** Every engine's limit, kept fresh while something on screen shows it.
+ * `active` false: nothing is read yet (a menu not opened), what is known shows. */
+export function useEngineLimits(active = true): EngineLimit[] {
   const [engines, setEngines] = useState<EngineLimit[]>(() => report?.engines ?? []);
   useEffect(() => {
+    if (!active) return;
     const listener = (next: EngineLimitsReport) => setEngines(next.engines);
     listeners.add(listener);
     if (report) setEngines(report.engines);
@@ -55,7 +57,7 @@ export function useEngineLimits(): EngineLimit[] {
       listeners.delete(listener);
       if (!listeners.size && timer) { clearInterval(timer); timer = null; }
     };
-  }, []);
+  }, [active]);
   return engines;
 }
 

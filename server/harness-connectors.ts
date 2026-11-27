@@ -119,6 +119,10 @@ export function accountConnectorsForTurn(input: ClaudeAiTurnInput): "own" | "for
   if (input.restrictedByPolicy || !ACCOUNT_CONNECTOR_DRIVERS.has(input.driver)) return "none";
   const principal = connectorPrincipalFor(input);
   if (input.identity === "perspicax") {
+    // #5200: an organization Grok account is an account form too; its
+    // connectors serve the person who was given that form (same consent as
+    // the organization's key). A key never brings account connectors.
+    if (input.via === "org-account") return principal ? "own" : "foreign";
     if (input.via !== "subscription") return "none";
     if (input.payerPrincipalId !== undefined && input.payerPrincipalId.trim().toLowerCase() !== principal) return "foreign";
     return principal ? "own" : "foreign";

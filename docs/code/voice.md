@@ -148,10 +148,12 @@ covered by `server/meetings/*.test.ts` and `server/routes/meetings.test.ts`:
   and the card's answer refuse with 403 `meetings_disabled`. Turning it (or
   the built-in browser) off makes every running meeting leave.
 
-- Every join is the person's own tap on its consent card. Nothing applies it
-  for them: no Full access path, no always-allow rule, no Live call answer
-  (`liveCardKind` is `review`), not the composer's approval stepper. Direct
-  conversations only.
+- Every join starts from the consent card in the chat (not the composer's
+  approval stepper). Full access never joins on its own (isolation hold).
+  Always allow for that provider (#3367) does, once the person saved it on
+  a prior card. A Live call may answer the open card (`liveCardKind` is
+  `approval`). Direct conversations only. The consent announcement in the
+  meeting chat still runs.
 - Nothing is recorded before the consent announcement ("<bot> (transcription)",
   for whom, xAI outside Québec, audio not kept, type "stop") is visible in
   the meeting chat and the chat can be read; otherwise the bot leaves without
@@ -240,6 +242,29 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   (`via: "org-key"`) and it shows no last four. For what names no person,
   the link route answers it with `{"org_account": true}`, and its state
   alone with `{"org_account": "test"}` (`docs/org-admin-api.md`).
+- A connected Grok account (`grok-account`, `org-account`) speaks on
+  `api.x.ai` with its session token and the Grok CLI token header
+  (`withVoiceAuth` in `server/tts/grok.ts`), the root the official Grok
+  client sends its own voice to (its `voice.api_base` inherits
+  `[endpoints].xai_api_base_url`). The chat proxy
+  (`cli-chat-proxy.grok.com`) serves no voice route: its 404 was read as an
+  unknown voice (#5424, #5179). Tests point `SAGAX_GROK_ACCOUNT_VOICE_API`
+  and `SAGAX_GROK_ACCOUNT_REALTIME_URL` at a loopback fake.
+- A 404 is an unknown voice only when the request named one, or xAI's body
+  says so; a voice list, a transcription and a realtime handshake (the voice
+  goes in `session.update`) name none, so their 404 is `key` (the
+  credential is not served there, the next one may be). A saved voice a
+  credential does not know is asked back on its own default voice, for
+  speech (`speakOnKnownVoice`, the speech socket) as for a call, and the next
+  sentences go there at once (`VoiceKeyRefusals.voiceUnknown`).
+- A chain where no credential served names its first real cause: `tried`
+  is put back in the person's order (`inPersonOrder`; the refusal memory may
+  have tried their account last). With two or more identities,
+  `chainCallReason` leads with the closest credential's own cause (and a
+  provider-aware action: an OpenAI or ElevenLabs key never points at xAI or
+  the Grok page), then says the others in one line, org keys named as the
+  organization's; the body's `key` and `failure` are that first cause, so
+  the bar and the phone name it, never only the last refusal (#5424).
 - A refused realtime handshake keeps xAI's reason (`openRealtimeSocket` in
   `server/tts/grok.ts`): 402 is `quota`, 401, 403 and xAI's 400 are `key`,
   only a failure of xAI is `down`. A key refused for itself is remembered,
@@ -528,3 +553,40 @@ and no line yet, `ListeningCard` shows the reason alone. Tests:
 `src/lib/listening/listening-session.refusal.test.ts` (a stand-in voice
 service: no socket, a 503 `out_of_credits`, a 502), and
 `src/components/ListeningCard.dom.test.ts`.
+
+
+## Who transcribes a Listening session (2026-11-26, #5377)
+
+The Sagax server transcribes, with the person's own speech to text choice.
+The page cuts the microphone (and the computer's sound, a channel of its
+own) into utterances and sends their audio to `GET /voice/listen` with
+`purpose=listening`, else each one whole to `POST /voice/transcribe`
+(`src/lib/voice-mode/stt-stream.ts`); the page then posts the lines
+(`POST /api/listening/:id/lines`). Both routes are the call's and the
+dictation's (`server/voice/voice-mode.ts`): `requestedChoice` reads `stt`
+(Settings > Voice, or the bot's own), `voiceKeysFor` orders the keys (the
+chosen provider first, then every other one of `VOICE_STT_PROVIDERS` the
+person has a key for), and a key refused for credits or for itself gives way
+to the next, another provider included. The phone line's voice service of
+Perspicax is not on this path.
+
+A provider that took the listening socket and then stopped serving it (the
+session closes the page with 1011 after its reopens failed) is now
+remembered like one whose socket never opened (`giveWay` in
+`createListenAction`): the page's next socket starts with the next key or
+provider, with the same line in the Events lens. Before, the next socket
+went back to the provider that had just given up.
+
+What the card says when no key can transcribe: the key refused last is named
+by its own provider (`voiceKeyLabel` and `voiceErrorNote` in
+`src/lib/voice-mode/failure.ts`; an OpenAI or ElevenLabs key was called an
+xAI key, on the call and the dictation too), and Listening adds
+`listening.otherProvider` when a provider of `VOICE_STT_PROVIDERS` was not
+tried: a key of that provider, added in Settings > Providers, transcribes
+without anything else to change.
+
+Tests: `server/voice/listening-stt-provider.e2e.test.ts` (loopback xAI and
+OpenAI: credits refused at the socket, at the upload, after the socket
+opened, on every key), `src/lib/listening/listening-session.refusal.test.ts`,
+`src/lib/voice-mode/failure.test.ts`. `server/testing/fake-xai-voice.ts`
+has the `stt` switches (`refuse`, `failOnAudio`).

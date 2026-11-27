@@ -15,6 +15,10 @@ export const botHotkeysChoice = localChoice<"true" | "false">("sagax.botHotkeys.
 export const BOT_HOTKEY_MODIFIERS = ["cmd-shift", "cmd-alt", "ctrl-alt"] as const;
 export const botHotkeyModifierChoice = localChoice<(typeof BOT_HOTKEY_MODIFIERS)[number]>("sagax.botHotkeyModifier.v1", BOT_HOTKEY_MODIFIERS, "cmd-shift");
 
+/** Settings > Appearance: the usage icon of the macOS menu bar or of the
+ * Windows notification area (#5407), on until the person turns it off. */
+export const usageMenuBarChoice = localChoice<"true" | "false">("sagax.usageMenuBar.v1", ["true", "false"], "true");
+
 export function hasDesktopShellPreferences(): boolean {
   return typeof window !== "undefined" && Boolean(window.ogb?.shellPreferences);
 }
@@ -39,6 +43,7 @@ function push(): void {
     spellcheck: spellcheckChoice.get() === "true",
     botHotkeys: botHotkeysChoice.get() === "true",
     botHotkeyModifier: botHotkeyModifierChoice.get(),
+    usageInMenuBar: usageMenuBarChoice.get() === "true",
   });
 }
 
@@ -52,12 +57,13 @@ export function installDesktopShellPreferences(): () => void {
     if (stored(hardwareAccelerationChoice.key) === null && !kept.hardwareAcceleration) hardwareAccelerationChoice.set("false");
     if (stored(spellcheckChoice.key) === null && !kept.spellcheck) spellcheckChoice.set("false");
     if (stored(botHotkeysChoice.key) === null && kept.botHotkeys === false) botHotkeysChoice.set("false");
+    if (stored(usageMenuBarChoice.key) === null && kept.usageInMenuBar === false) usageMenuBarChoice.set("false");
     // the chord is not a boolean: only a missing or unknown value is adopted
     const pageChoseChord = (BOT_HOTKEY_MODIFIERS as readonly string[]).includes(storedText(botHotkeyModifierChoice.key) ?? "");
     if (!pageChoseChord && kept.botHotkeyModifier && kept.botHotkeyModifier !== "cmd-shift") botHotkeyModifierChoice.set(kept.botHotkeyModifier);
   }
   const modifierKnown = (BOT_HOTKEY_MODIFIERS as readonly string[]).includes(storedText(botHotkeyModifierChoice.key) ?? "");
-  if (modifierKnown || [hardwareAccelerationChoice, spellcheckChoice, botHotkeysChoice].some((choice) => stored(choice.key) !== null)) push();
-  const stops = [hardwareAccelerationChoice, spellcheckChoice, botHotkeysChoice, botHotkeyModifierChoice].map((choice) => choice.subscribe(push));
+  if (modifierKnown || [hardwareAccelerationChoice, spellcheckChoice, botHotkeysChoice, usageMenuBarChoice].some((choice) => stored(choice.key) !== null)) push();
+  const stops = [hardwareAccelerationChoice, spellcheckChoice, botHotkeysChoice, botHotkeyModifierChoice, usageMenuBarChoice].map((choice) => choice.subscribe(push));
   return () => stops.forEach((stop) => stop());
 }

@@ -1,5 +1,17 @@
 import { expect, it } from "vitest";
-import { compactBudget, contextWindowFor, defaultCompactAt, nativeCompactionPoint, shouldCompact, DEFAULT_CONTEXT_WINDOW } from "./context-budget.ts";
+import { compactAtFor, compactBudget, contextUsagePercent, contextWindowFor, defaultCompactAt, nativeCompactionPoint, shouldCompact, DEFAULT_CONTEXT_WINDOW } from "./context-budget.ts";
+
+it("reports context usage as a percent of the window (#5367)", () => {
+  expect(contextUsagePercent({ tokens: 75_000, window: 100_000 })).toBe(75);
+  expect(contextUsagePercent({ tokens: 0, window: 100_000 })).toBeUndefined();
+  expect(contextUsagePercent(undefined)).toBeUndefined();
+});
+
+it("prefers the bot's compactAt over the server's (#5367)", () => {
+  expect(compactAtFor(0.75, 0.8, "claudeAgent")).toBe(0.75);
+  expect(compactAtFor(undefined, 0.8, "claudeAgent")).toBe(0.8);
+  expect(compactAtFor(undefined, undefined, "grokAgent")).toBe(0.5);
+});
 
 it("keeps compaction reachable below small model windows", () => {
   expect(compactBudget(8_000)).toBe(6_400);

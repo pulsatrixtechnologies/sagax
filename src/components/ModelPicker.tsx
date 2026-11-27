@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import { Monitor } from "lucide-react";
 import { type Bot, type ModelSelection, type useStore } from "@/state/store";
 import { shallowEqual, useStoreCommands, useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
-import { engineOffer } from "../../shared/offered-engines";
+import { engineHidden, engineOffer } from "../../shared/offered-engines";
 import { engineOfferContext, modelSwitches } from "@/lib/offered-instances";
 import { accountPickChipLine } from "@/lib/account-pick";
 import { credentialFormLabelKey } from "../../shared/credential-resolver";
@@ -67,6 +67,7 @@ import { modelPickerComposerLabel, modelPickerFollowLine, modelPickerSummary } f
 import { currentProvider } from "@/lib/model-menu-steps";
 import { chatBarChipLabel, shownMode } from "@/lib/model-mode";
 import type { ModelPanelProps } from "./ModelPanel";
+import { CUSTOM_GLYPH, MODE_GLYPHS, MODE_MENU_WIDTH } from "./ModeMenu";
 
 export {
   COMPOSER_MODEL_EVENT,
@@ -228,7 +229,7 @@ export function ModelPicker({
   const autoOn = selection.auto === true && !viewerLocal && !choose;
   const autoTask = state.own?.tasks
     ?.find((task) => task.threadId === (threadId ?? bot.threadId));
-  const autoStatus = useAutoModelStatus(bot.id, threadId, (autoOn || anyOpen) && !choose, JSON.stringify([selection, state.config?.disabledModels, state.config?.myDisabledModels, state.instances]));
+  const autoStatus = useAutoModelStatus(bot.id, threadId, (autoOn || anyOpen) && !choose, JSON.stringify([selection, state.config?.disabledModels, state.config?.myDisabledModels, state.instances]), anyOpen);
   const autoPreview = autoStatus?.auto ? autoStatus.pick : null;
   const autoRecord = autoOn ? autoTask?.autoModel ?? autoPreview : null;
   const active = state.instances.find((instance) => instance.instanceId === selection.instanceId);
@@ -238,9 +239,13 @@ export function ModelPicker({
   const switches = modelSwitches(state.config);
   const notAllowed = (instance: typeof state.instances[number]) => engineOffer(offerContext, instance.instanceId) === "notAllowed";
   const notGiven = (instance: typeof state.instances[number]) => engineOffer(offerContext, instance.instanceId) === "notGiven";
+  // D-20261126-018: a provider the organization hid stays only in the menu
+  // of what is already on it, as its model in use; a conversation on a
+  // backup can still go back to its bot's own engine
+  const ownEngine = state.own?.modelSelection.instanceId;
   const pickerInstances = offerContext.organization
     ? configured.filter((instance) => !notAllowed(instance) &&
-      (instance.instanceId === selection.instanceId || (!orgRefusesEngine(instance) && !notGiven(instance))))
+      (instance.instanceId === selection.instanceId || (!engineHidden(offerContext, instance.instanceId) || instance.instanceId === ownEngine) && !orgRefusesEngine(instance) && !notGiven(instance)))
     : configured;
   // #4329 lot 6: "Runs with", the bot's own setting (src/components/RunsWith.tsx):
   // the engines offered here that may run its model; a pick writes the bot's choice
@@ -374,7 +379,7 @@ export function ModelPicker({
   // cascade provider, account, model. The chip names the mode, or the model
   // the person pinned there.
   const modeUi = modes && inComposer && !choose && !viewerLocal && !windowOnly;
-  // M-20261125-074: the chip under the message box names the mode, then the
+  // M-20261125-074, M-20261126-104: the chip in the message box names the mode, then the
   // reasoning level in use: the one the mode imposes (Fast, Expert, Heavy), or
   // the one the person chose under Auto. M-20261125-073: Build reads as Auto.
   const modeNow = shownMode(selection);
@@ -382,15 +387,20 @@ export function ModelPicker({
   const composerLabel = choose ? choose.label
     : modeUi && autoOn && modeNow ? chatBarChipLabel(modeNow, modeLevel)
     : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel, accountLabel, modes: modeUi });
+  // M-20261126-104: Custom's row names the model picked by hand, the one the selection
+  // keeps under a mode too (a turn off the modes runs it); its tooltip says the provider and the account
   const modeMenu: ModelPanelProps["modes"] = modeUi ? {
     current: modeNow,
-    pinnedLabel: autoOn ? undefined : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel, accountLabel }),
+    pinnedLabel: active ? modelLabel(active, selection.model) : autoOn ? undefined : selection.model || undefined,
+    pinnedTitle: autoOn ? undefined : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel, accountLabel }),
     resolutions: autoStatus?.modes,
     onPick: chooseMode,
   } : undefined;
 
   const toggleMenu = makeToggleMenu({
     locked, menu, closeMenu, anchorRef, triggerRef, setMenuDoneCall, setMenuAt, setMenu, headless, windowOnly, fallbackAnchor,
+    // the chat bar's mode menu is placed with its own width
+    width: modeUi ? MODE_MENU_WIDTH : undefined,
   });
   if (menuControl) menuControl.current = { toggle: (anchor, onDone) => toggleMenu(anchor, onDone), close: () => closeMenu() };
 
@@ -411,7 +421,7 @@ export function ModelPicker({
     inComposer, botId: bot.id, toggleMenu, onChip, composerLabel, composerTitle, ultracodeChip, menuShownOpen,
   });
 
-  const effortTitle = active?.capabilities?.modelVariants ? t("model.reasoning") : t("model.effort");
+  const effortTitle = t("model.effort");
   // #2963, #4329: each provider's mark, in the menu and the window's
   // column: a vendor's logo, a server's own icon (its engine instance's),
   // this computer's monitor.
@@ -444,6 +454,8 @@ export function ModelPicker({
     menu,
     toggleMenu: () => toggleMenu(),
     composerLabel,
+    // M-20261126-104: in the chat bar the chip leads with the icon of its mode, or Custom's for a model picked by hand
+    chipGlyph: modeUi ? (modeNow ? MODE_GLYPHS[modeNow] : CUSTOM_GLYPH) : undefined,
     followLine: followLine + servedLine,
     summary,
     selection,
@@ -639,7 +651,9 @@ function ModelPickerShell({
           frameRef={menuRef}
         />
       )}
-      {!windowOnly && menuMotion.shown && portal(containedBusy ? (
+      {/* M-20261126-104: one Effort everywhere. While the bot works the chat bar's mode menu still
+          opens, its modes and models locked, its Effort row open; the other surfaces keep the short menu */}
+      {!windowOnly && menuMotion.shown && portal(containedBusy && !modeMenu ? (
         <div
           ref={menuRef}
           data-model-menu=""
@@ -658,7 +672,6 @@ function ModelPickerShell({
             bot={bot}
             threadId={threadId}
             updateBotDefault={busyUpdatesBotDefault}
-            variants={Boolean(active?.capabilities?.modelVariants)}
           />
         </div>
       ) : ModelPickerMenu({

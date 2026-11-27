@@ -62,6 +62,30 @@ export function dropAnchor(target: EventTarget | null, clientY: number, draggedI
   return nextId && nextId !== draggedId ? nextId : null;
 }
 
+/** Where the insertion line sits while a bot is dragged inside a team (#5392):
+ * `beforeId` is the bot the line sits above, or null for a line under the last. */
+export type BotDropLine = { sectionId: string; beforeId: string | null };
+
+export function botDropLineAt(
+  sectionId: string,
+  target: EventTarget | null,
+  clientY: number,
+  draggedId: string,
+  present: readonly string[],
+): BotDropLine | null {
+  if (!sectionId.trim() || !draggedId || present.length === 0) return null;
+  const others = present.filter((id) => id !== draggedId);
+  if (!others.length) return null;
+  if (!target || typeof (target as Element).closest !== "function") return { sectionId, beforeId: null };
+  const row = (target as Element).closest("[data-sidebar-bot-row]");
+  if (!row || !row.closest("[data-sidebar-nest]")) {
+    // over the section but not a row: land at the end
+    return { sectionId, beforeId: null };
+  }
+  const beforeId = dropAnchor(target, clientY, draggedId);
+  return { sectionId, beforeId };
+}
+
 /** Saved ids first, in that order. Everyone else keeps the order they arrived in. */
 export function orderedBots<T extends { id: string }>(bots: readonly T[], saved: readonly string[] | undefined): T[] {
   if (!saved?.length) return [...bots];

@@ -1,6 +1,7 @@
 import type { Dispatch } from "react";
 import { segmentsAbove } from "@/lib/single-stream";
 import { ChatErrorBanner, ChatNotice, ChatReconnectBanner, ChatStaleBanner } from "../ChatErrorBanner";
+import { CHAT_EDGE_FADE_PX } from "../ChatEdgeFade";
 import { ChatFindBar } from "../ChatFindBar";
 import { ConfidentialBanner } from "../ConfidentialBanner";
 import { AccessCard } from "../AccessCard";
@@ -14,6 +15,10 @@ import type { Action, Bot, Message } from "@/state/store";
 import { PinnedBanner } from "./PinnedBanner";
 import { RoutineRunRow } from "./chips";
 import type { SideChat } from "./sideChat";
+
+/** Header bar (52px) plus the top edge fade past it (#5359): banners start
+ * below the fade so a notice is not half hidden. */
+const BANNERS_TOP_PAD = 52 + CHAT_EDGE_FADE_PX.top;
 
 /** Banner stack under the floating header (timing, confidential, notices, pin). */
 export function ChatViewBanners({
@@ -60,7 +65,7 @@ export function ChatViewBanners({
     <>
       {/* Banners sit below the floating header; the wrapper vanishes when
           none is showing so the transcript can run to the top. */}
-      <div className="chat-banners pt-[52px] empty:hidden">
+      <div className="chat-banners empty:hidden" style={{ paddingTop: BANNERS_TOP_PAD }} data-chat-banners-pad={BANNERS_TOP_PAD}>
       {confidential && <ConfidentialBanner position="top" className="mb-2" />}
       {/* Voice mode's call pill: first in the stack, centered right under
           the name chip; collapsed it keeps its own small row, expanded its

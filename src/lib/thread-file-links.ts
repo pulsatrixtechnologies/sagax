@@ -47,15 +47,6 @@ export function resetThreadFileLinks() {
   entries.clear();
 }
 
-/** A word the bot could mean as a file: one token with an extension, or a
- * path. Keeps prose, commands and identifiers like `useState` out. */
-export function looksLikeFileName(text: string): boolean {
-  const value = text.trim();
-  if (!value || value.length > 1024 || /\s/.test(value) || /^[a-z][a-z\d+.-]*:\/\//i.test(value) && !/^file:\/\//i.test(value)) return false;
-  if (/[<>|*?"`$]/.test(value)) return false;
-  return /\.[A-Za-z0-9]{1,8}$/.test(value) || /[\\/]/.test(value) && /[^\\/]$/.test(value);
-}
-
 function normalize(value: string): string {
   let path = value.trim();
   if (/^file:\/\//i.test(path)) {
@@ -66,6 +57,37 @@ function normalize(value: string): string {
 
 function basename(path: string): string {
   return path.split("/").filter(Boolean).at(-1) ?? path;
+}
+
+/** Home or drive root on this computer (not an API path like `/api/bots`). */
+function looksLikeHomeOrDrivePath(path: string): boolean {
+  return /^(?:~[\\/]|\/(?:Users|home)(?:[\\/]|$)|[a-zA-Z]:[\\/])/i.test(path);
+}
+
+/** Absolute path on this computer (#5393): home/drive prefix, or another
+ * absolute path with a file extension. Spaces are allowed. */
+export function looksLikeAbsoluteLocalPath(text: string): boolean {
+  const value = text.trim();
+  if (!value || value.length > 1024) return false;
+  if (/[<>|*?"`$]/.test(value)) return false;
+  if (/^[a-z][a-z\d+.-]*:\/\//i.test(value) && !/^file:\/\//i.test(value)) return false;
+  if (!/^(?:\/(?!\/)|~[\\/]|[a-zA-Z]:[\\/]|file:\/\/)/i.test(value)) return false;
+  const path = normalize(value);
+  const hasSlash = /[\\/]/.test(path.slice(1));
+  const hasExt = /\.[A-Za-z0-9]{1,8}$/.test(path);
+  if (looksLikeHomeOrDrivePath(path)) return hasSlash || hasExt;
+  return hasSlash && hasExt;
+}
+
+/** A word the bot could mean as a file: one token with an extension, or a
+ * path. Keeps prose, commands and identifiers like `useState` out. Absolute
+ * local paths may contain spaces (#5393). */
+export function looksLikeFileName(text: string): boolean {
+  const value = text.trim();
+  if (looksLikeAbsoluteLocalPath(value)) return true;
+  if (!value || value.length > 1024 || /\s/.test(value) || /^[a-z][a-z\d+.-]*:\/\//i.test(value) && !/^file:\/\//i.test(value)) return false;
+  if (/[<>|*?"`$]/.test(value)) return false;
+  return /\.[A-Za-z0-9]{1,8}$/.test(value) || /[\\/]/.test(value) && /[^\\/]$/.test(value);
 }
 
 /** Desktop app, on its own computer (not paired to another server). */
@@ -162,4 +184,79 @@ export function useThreadFileLink(threadId: string | undefined, text: string): T
     void load(threadId!);
   }, [candidate, threadId, link, entry]);
   return link;
+}
+
+/** Absolute local paths written as inline code (#5393), even when the
+ * conversation's file list does not name them and even with spaces. The
+ * desktop app offers Open / Show in Finder; a missing path is reported on
+ * click. */
+const absoluteLocal = new Map<string, string | null>();
+const absoluteListeners = new Set<() => void>();
+const absoluteProbing = new Set<string>();
+
+function emitAbsolute() {
+  for (const listener of absoluteListeners) listener();
+}
+
+async function probeAbsolute(path: string) {
+  if (absoluteLocal.has(path) || absoluteProbing.has(path)) return;
+  const bridge = localBridge();
+  if (!bridge) {
+    absoluteLocal.set(path, null);
+    emitAbsolute();
+    return;
+  }
+  absoluteProbing.add(path);
+  try {
+    const found = await bridge.localFilesExist!([path]);
+    absoluteLocal.set(path, found[0] ?? null);
+  } catch {
+    absoluteLocal.set(path, null);
+  } finally {
+    absoluteProbing.delete(path);
+    emitAbsolute();
+  }
+}
+
+/** Tests. */
+export function resetAbsoluteLocalPaths() {
+  absoluteLocal.clear();
+  absoluteProbing.clear();
+}
+
+function absoluteLink(path: string, localPath: string): ThreadFileLink {
+  const name = basename(normalize(path));
+  return {
+    threadId: "",
+    file: { id: `local:${path}`, messageId: "", source: "written", path, name, at: 0, size: null, available: true, localPath },
+    localPath,
+  };
+}
+
+/** An absolute local path the desktop app can open here (#5393). */
+export function useLocalAbsoluteFileLink(text: string): ThreadFileLink | null {
+  const path = text.trim();
+  const candidate = looksLikeAbsoluteLocalPath(path) && Boolean(localBridge());
+  const subscribeAbsolute = useCallback(
+    (listener: () => void) => {
+      if (!candidate) return () => undefined;
+      absoluteListeners.add(listener);
+      return () => { absoluteListeners.delete(listener); };
+    },
+    [candidate],
+  );
+  const resolved = useSyncExternalStore(
+    subscribeAbsolute,
+    () => (candidate ? absoluteLocal.get(path) : undefined),
+    () => undefined,
+  );
+  useEffect(() => {
+    if (!candidate || absoluteLocal.has(path)) return;
+    void probeAbsolute(path);
+  }, [candidate, path]);
+  if (!candidate) return null;
+  // Probed and present: the expanded absolute path. Not probed yet, or
+  // missing: still offer the link so a click reports missing through
+  // reveal/open (OutsideWorkspaceFile does the same).
+  return absoluteLink(path, typeof resolved === "string" ? resolved : path);
 }

@@ -811,6 +811,7 @@ const PAYER_PHRASE: Readonly<Record<AutoPayerVia, string>> = {
   subscription: "your subscription can run",
   "owner-key": "your own key can pay for",
   "speaker-key": "your own key can pay for",
+  "org-account": "the organization's Grok account can run",
   "org-key": "the organization's key can pay for",
   server: "this server can run",
 };

@@ -30,6 +30,7 @@ import bunny from "../../third_party/open-bot-avatar/gallery/bunny.json" with { 
 import camera from "../../third_party/open-bot-avatar/gallery/camera.json" with { type: "json" };
 import cat from "../../third_party/open-bot-avatar/gallery/cat.json" with { type: "json" };
 import cloud from "../../third_party/open-bot-avatar/gallery/cloud.json" with { type: "json" };
+import egg from "../../third_party/open-bot-avatar/gallery/egg.json" with { type: "json" };
 import ghost from "../../third_party/open-bot-avatar/gallery/ghost.json" with { type: "json" };
 import magnifier from "../../third_party/open-bot-avatar/gallery/magnifier.json" with { type: "json" };
 import paintBrush from "../../third_party/open-bot-avatar/gallery/paint-brush.json" with { type: "json" };
@@ -41,7 +42,7 @@ import witchHat from "../../third_party/open-bot-avatar/gallery/witch-hat.json" 
 
 /** The engine's gallery (third_party/open-bot-avatar/gallery, copied verbatim), by id. */
 const GALLERY: Readonly<Record<string, unknown>> = {
-  book, brain, bull, bunny, camera, cat, cloud, ghost, magnifier, "paint-brush": paintBrush, palette, rocket, shield, star, "witch-hat": witchHat,
+  book, brain, bull, bunny, camera, cat, cloud, egg, ghost, magnifier, "paint-brush": paintBrush, palette, rocket, shield, star, "witch-hat": witchHat,
 };
 
 type BakedShape = { engine: string } | { own: unknown };
@@ -157,6 +158,9 @@ export function engineMood(mood: ShapeMood): AvatarMotion {
  * - At rest the bot keeps the face it had: idle, happy, or the at-work pose
  *   of a bot whose own face is a working one (engineFrame).
  * - A state from the bot's activity wins over that face.
+ * - `thinking` keeps that at-work body too (#5415): the engine's own thinking
+ *   replaces the body with three dots, which the sidebar would show as the
+ *   bot's icon and the person would take for a "..." menu.
  * - The person's mood (happy) shapes the eyes on top of any state; a finished
  *   turn (done) is happy, as it was before the states.
  */
@@ -167,6 +171,12 @@ export interface EnginePose {
 }
 
 export function enginePose(mood: ShapeMood, state: AvatarState = "idle", moodSetting: AvatarMood = "neutral"): EnginePose {
+  // thinking: keep the body via motion (engineFrame), never the engine's three
+  // dots; state stays "thinking" so data-agent-state and the animator age it (#5415)
+  if (state === "thinking") {
+    const happy = moodSetting === "happy";
+    return { state: "thinking", mood: happy ? "happy" : "neutral", motion: happy ? "happy" : "thinking" };
+  }
   if (state !== "idle") return { state, mood: moodSetting === "happy" || state === "done" ? "happy" : "neutral", motion: null };
   const motion = moodSetting === "happy" ? "happy" : engineMood(mood);
   return { state: "idle", mood: motion === "happy" ? "happy" : "neutral", motion };
@@ -198,6 +208,8 @@ export interface EngineFrameOptions {
   motionBlend?: AvatarMotionBlend;
   reducedMotion: boolean;
   depth?: number;
+  /** The extra turn a person gave the body by hand (#5384), over the pose's own. */
+  view?: { yaw: number; pitch: number };
 }
 
 /**
@@ -208,14 +220,16 @@ export interface EngineFrameOptions {
  */
 export function engineFrame(def: AvatarDefinition, mood: AvatarMotion, options: EngineFrameOptions): AvatarFrame {
   const depth = options.depth === undefined ? {} : { depth: options.depth };
-  if (mood !== "thinking") return avatarFrame(def, { motion: mood, time: options.time, gaze: options.gaze, motionBlend: options.motionBlend, reducedMotion: options.reducedMotion, ...depth });
+  const turn = options.view;
+  if (mood !== "thinking") return avatarFrame(def, { motion: mood, time: options.time, gaze: options.gaze, motionBlend: options.motionBlend, reducedMotion: options.reducedMotion, ...depth, ...(turn ? { view: turn } : {}) });
   // at rest the eyes take the whole look and the body stays; live, the engine gives the eyes a share and turns the body toward
   // the target, so the target is set further out and the view takes that turn back: the pose is the same either way
   const still = options.reducedMotion;
   const gaze = still ? { x: AT_WORK.gazeX, y: AT_WORK.gazeY } : { x: AT_WORK.gazeX / LOOK.eyes, y: -1 };
-  const view = still
+  const posed = still
     ? { yaw: AT_WORK.yaw, pitch: AT_WORK.pitch }
     : { yaw: AT_WORK.yaw - (gaze.x * LOOK.yaw - LOOK.baseYaw), pitch: AT_WORK.pitch - (-gaze.y * LOOK.pitch - LOOK.basePitch / 2) };
+  const view = turn ? { yaw: posed.yaw + turn.yaw, pitch: posed.pitch + turn.pitch } : posed;
   const body = avatarFrame(def, { state: "idle", mood: "neutral", view, gaze, time: options.time, reducedMotion: still, ...depth });
   const { root } = avatarFrame(def, { state: "thinking", time: options.time, reducedMotion: still, ...depth });
   return { ...body, root, shapes: body.shapes.map((shape) => (shape.kind === "eye" ? { ...shape, mark: underLid(shape.mark, AT_WORK.lids[shape.key === "eye-0" ? 0 : 1]) } : shape)) };

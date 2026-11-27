@@ -8,18 +8,28 @@
 // click opens the same mascot picker under the draft's avatar.
 // A picture dropped on the avatar, or pasted while it has focus, becomes the
 // bot's picture through the same upload as the Appearance pane (25 MB).
+// A shape mascot is turned by hand here, as on the open-bot-avatar site's
+// stage (#5384, floating-bots/use-mascot-turn.tsx): a drag turns it, a press
+// that barely moved is still the click. The bot panel's own avatar is drawn
+// under the live size (64 px, filled to its box): at rest it stays the still
+// image it was, and moves only while it is turned (shape-stage.ts, `small`).
 import { useRef, useState } from "react";
 
 import { avatarImageFrom, dragMayCarryImage } from "@/lib/avatar-input";
 import { cn } from "@/lib/cn";
+import { generateBotShapeAvatar } from "@/lib/shape-avatar-generate-client";
 
 import type { Bot } from "@/state/store";
 import { useStoreDispatch } from "@/state/store-selector";
 import { useBotEditor } from "./bot-settings/BotEditorContext";
 import { t } from "@/lib/i18n";
-import { type MausMotion, type MausState } from "@/lib/mascot";
+import { agentStateForBot, type MausMotion, type MausState } from "@/lib/mascot";
 import { BotAvatar } from "./Avatar";
 import { MascotPickerPopover } from "./floating-bots/MascotPickerPopover";
+import { MascotGlassCaustic, MascotTurnReset, turnCursor, useMascotTurn } from "./floating-bots/use-mascot-turn";
+import { ShapeStageContext } from "./shape-stage";
+import { LIVE_MIN } from "./ShapeMascot";
+import { completeMascotLook, withEngineLook, type MascotLook } from "../../shared/mascot-look";
 import { useAvatarSources, type AvatarPatch } from "./appearance/AvatarSources";
 
 export function BotProfileAvatarCard({
@@ -40,7 +50,7 @@ export function BotProfileAvatarCard({
    * there). The pencil badge is gone (2026-10-14): a click on the mascot
    * opens the editor, and the "..." menu has Edit bot. */
   onContextMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  /** The mascot's size: 92 in the bot panel (#2196, Grok Bot parity); 144 on
+  /** The mascot's size: 64 in the bot panel, filled to its box (#4151); 144 on
    * the profile page; the bot wizard's Identity step draws it at 104. */
   size?: number;
   /** What a click does instead of opening the profile page (the profile
@@ -56,17 +66,46 @@ export function BotProfileAvatarCard({
   const [dropping, setDropping] = useState(false);
   const avatarRef = useRef<HTMLButtonElement>(null);
   const sources = useAvatarSources(bot, onPatch);
-  const open = () => {
+  // a picture is never turned
+  const wearsPicture = (bot.avatarCrop ?? "mascot") !== "mascot" && Boolean(bot.avatarUrl);
+  const turn = useMascotTurn({
+    look: bot.mascotLook,
+    picture: wearsPicture,
+    small: size < LIVE_MIN,
+    onMood: (mood) => onPatch({ mascotLook: withEngineLook(completeMascotLook(bot.mascotLook), { mood }) as MascotLook }),
+  });
+  const poking = useRef(false);
+  const open = (event: React.MouseEvent<HTMLButtonElement>) => {
+    // the poke below, coming back up: it is the drawing's click, not a second one on the avatar
+    if (poking.current) return;
     if (draft) setDraftOpen((value) => !value);
     else if (onOpen) onOpen();
     else dispatch({ type: "openPersonaEditor", botId: bot.id });
+    // A click pokes the mascot, as it did when the pointer landed on the drawing (a shape winks, ShapeMascot):
+    // the pointer lands on the button now, so the button hands its click on to the drawing.
+    const drawn = event.currentTarget.querySelector("[data-shape]");
+    if (!drawn) return;
+    poking.current = true;
+    try { drawn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); } finally { poking.current = false; }
   };
 
   return (
     <div className="relative">
       {/* room above for a move's jump and effects: the panel scrolls, so anything past its top is cut by a straight edge.
-          pt-5 from 80px up (panel 92, wizard 104, profile 144) so a jump clears the box. */}
+          pt-5 from 80px up (wizard 104, profile 144; the panel's 64 is under it) so a jump clears the box. */}
       <div className={cn("flex justify-center pb-0", size >= 80 ? "pt-5" : "pt-3")}>
+        <span
+          className="relative inline-flex"
+          data-mascot-turn={turn.enabled ? (turn.dragging ? "dragging" : "") : undefined}
+          // Escape on a turned-by-hand avatar or its Reset view button, the draft's picker open: once the mascot has
+          // nothing to cancel the key closes the picker alone, never the window around it (the picker's own Escape,
+          // #5369). A character that is not turned keeps the key where it went before.
+          onKeyDown={(event) => {
+            if (!turn.enabled || event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing || !(draft && draftOpen)) return;
+            event.preventDefault();
+            setDraftOpen(false);
+          }}
+        >
         <button
           ref={avatarRef}
           type="button"
@@ -74,6 +113,8 @@ export function BotProfileAvatarCard({
           aria-expanded={draft ? draftOpen : undefined}
           data-avatar-edit=""
           onClick={open}
+          {...turn.handlers}
+          aria-description={turn.enabled ? t("mascotStage.hint") : undefined}
           onContextMenu={onContextMenu}
           onDragOver={(event) => {
             if (sources.busy || !dragMayCarryImage(event.dataTransfer)) return;
@@ -100,8 +141,14 @@ export function BotProfileAvatarCard({
           }}
           title={t("botPanel.avatar.dropOrPaste")}
           data-avatar-dropping={dropping ? "" : undefined}
-          className={cn("rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent", dropping && "ring-2 ring-accent")}
+          // The pointer never lands on the drawing (pointer-events is inherited): a moving drawing rewrites its
+          // nodes on every frame, and a press whose node is gone at the release is no click for the browser.
+          // The button's own layer over its whole box takes the pointer instead, corners included: the box is
+          // round, and the drawing's corners were part of what a press reached.
+          className={cn("relative rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent [&>*]:pointer-events-none after:absolute after:inset-0 after:content-['']", turnCursor(turn), dropping && "ring-2 ring-accent")}
         >
+          <ShapeStageContext.Provider value={turn.stage}>
+          <MascotGlassCaustic turn={turn} bot={bot} state={agentStateForBot(bot)} />
           <BotAvatar
             bot={bot}
             state={activeState}
@@ -110,7 +157,10 @@ export function BotProfileAvatarCard({
             motion={mascotMotion?.kind ?? "none"}
             motionKey={mascotMotion?.nonce ?? 0}
           />
+          </ShapeStageContext.Provider>
         </button>
+        <MascotTurnReset turn={turn} className="-right-3 top-0" />
+        </span>
       </div>
       {sources.error && <p role="alert" className="-mt-1 pb-2 text-center text-[11.5px] text-danger">{sources.error}</p>}
       {draft && draftOpen && (
@@ -120,6 +170,7 @@ export function BotProfileAvatarCard({
           onPatch={onPatch}
           onClose={() => setDraftOpen(false)}
           onUseMascot={(bot.avatarCrop ?? "mascot") !== "mascot" ? () => onPatch({ avatarCrop: "mascot" }) : undefined}
+          onGenerate={bot.id ? (direction) => generateBotShapeAvatar(bot.id, direction) : undefined}
         />
       )}
     </div>

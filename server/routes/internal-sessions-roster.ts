@@ -1,5 +1,6 @@
 // Agents, threads and close for internal session routes (#1383).
 // Dispatch order stays in createInternalSessionsRoutes.
+import { backgroundOrigin } from "../../shared/background-threads.ts";
 import { peerStatus, peerStatusWords, reachablePeers } from "../peers/peer-roster.ts";
 import { queuedThreadPosition } from "../turns/steer-queue.ts";
 import type { InternalRouteContext } from "./internal-route.ts";
@@ -58,10 +59,10 @@ export async function handleInternalSessionsRoster(
   // have met. Without that the bot can only say it is in no room at
   // all, while the person is looking at it in that very room.
   // list_threads: the caller's own threads, plus — on every peer it can
-  // reach — only the threads the caller itself opened. A peer's other
-  // threads are its own business (and the person's), so the scope is
-  // "what you started", never "what that bot is doing". State is read
-  // the way the sidebar reads it, so the bot and the person agree.
+  // reach — the threads the caller itself opened. #5366: a Full-access
+  // bot also lists every person-facing thread of those peers (so Dispatch
+  // can clean up), never a routine run, AI-client or bot-hidden task.
+  // State is read the way the sidebar reads it, so the bot and the person agree.
   if (method === "GET" && path === "/api/internal/threads") {
     const from = internalSender;
     const fromThreadId = capability.threadId;
@@ -73,34 +74,39 @@ export async function handleInternalSessionsRoster(
       state: "running" | "waiting-on-you" | "queued" | "idle" | "closed";
       unread: boolean; openedAt: number; delegationId?: string; own: boolean;
     }> = [];
+    const seen = new Set<string>();
     const stateOf = (bot: InternalSessionsBot, task: InternalSessionsTask) =>
       threadListState(task, {
         awaiting: deps.awaitingAnswer(task.threadId),
         busy: deps.threadBusy(bot.id, task.threadId),
         queued: queuedThreadPosition(bot.id, task.threadId) !== null || deps.activeDirect(task.threadId),
       });
-    // On a Cloud home a turn that may use the lent Mac sees only the
-    // conversations the owner alone opened and wrote in: a title is words
-    // too (cloudLendingView).
-    const shown = (_threadId: string) => true;
     // A confidential thread is listed in itself only: its title is words too.
-    const listable = (threadId: string) => threadId === fromThreadId || !deps.isConfidentialThread(threadId);
-    for (const task of deps.tasks(from.id)) {
-      if (!shown(task.threadId) || !listable(task.threadId)) continue;
+    const listable = (threadId: string) => Boolean(threadId) && (threadId === fromThreadId || !deps.isConfidentialThread(threadId));
+    const push = (bot: InternalSessionsBot, task: InternalSessionsTask, own: boolean) => {
+      if (!task.threadId || !listable(task.threadId) || seen.has(task.threadId)) return;
+      seen.add(task.threadId);
       rows.push({
-        threadId: task.threadId, botId: from.id, botName: from.name, title: task.title,
-        state: stateOf(from, task), unread: task.unread === true, openedAt: task.openedBy?.at ?? task.createdAt,
-        delegationId: task.openedBy?.delegationId, own: true,
+        threadId: task.threadId, botId: bot.id, botName: bot.name, title: task.title || "Untitled",
+        state: stateOf(bot, task), unread: task.unread === true, openedAt: task.openedBy?.at ?? task.createdAt,
+        delegationId: task.openedBy?.delegationId, own,
       });
-    }
+    };
+    for (const task of deps.tasks(from.id)) push(from, task, true);
+    const fullAccess = from.approvalMode === "full" || from.chiefOfStaff === true;
     for (const peer of reachablePeers(deps.bots(), from)) {
       for (const task of deps.tasks(peer.id)) {
-        if (task.openedBy?.botId !== from.id || !shown(task.threadId) || !listable(task.threadId)) continue;
-        rows.push({
-          threadId: task.threadId, botId: peer.id, botName: peer.name, title: task.title,
-          state: stateOf(peer, task), unread: task.unread === true, openedAt: task.openedBy!.at,
-          delegationId: task.openedBy.delegationId, own: false,
+        if (task.openedBy?.botId === from.id) {
+          push(peer, task, false);
+          continue;
+        }
+        if (!fullAccess) continue;
+        const origin = backgroundOrigin({
+          ...task,
+          personWrote: task.askedAt !== undefined && task.openedBy?.kind !== "agent" ? true : undefined,
         });
+        if (origin === "routine-run" || origin === "routine-results" || origin === "ai-client" || origin === "bot-hidden") continue;
+        push(peer, task, false);
       }
     }
     rows.sort((a, b) => b.openedAt - a.openedAt);

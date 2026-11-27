@@ -74,6 +74,19 @@ resolved list lives in Plugins > Installed (maintainer, 2026-11-01). Form mirror
 `shared/org-capability-form.ts`. Tests: `server/org/org-capabilities.test.ts`,
 `server/routes/org-capabilities.test.ts`, `shared/org-capability-form.test.ts`.
 
+## Bot memory in the organization console (#4461)
+
+On a linked organization server every memory a bot later reads back is
+visible in the console's Memory section (`server/memory/console-memory-mirror.ts`,
+installed from `server/index.ts` via `installConsoleMemoryMirror`). Owner of
+truth: the console (tiers me, team, org). Local files stay the working copy
+the bot reads each turn; the mirror pushes on journaled writes and on
+`memory_update` / team-memory saves, with `bot` and `written_at` (Perspicax
+#2051), and can pull console edits and deletes back. Solo installs are
+unchanged. Inventory of stores and which are mirrored: `MEMORY_STORE_INVENTORY`
+in that module. Secrets stay filtered by the console (flagged, not refused).
+Tests: `server/memory/console-memory-mirror.test.ts`.
+
 ## Organization memory signals (2026-10-11)
 
 Perspicax keeps the organization's work log and a duplicate detector over
@@ -337,6 +350,32 @@ Covered by `src/components/SettingsModal.orgCleanup.test.ts`,
   `server/routes/credential-vault.test.ts`,
   `server/perspicax/perspicax-org-routes.test.ts`, `server/org/org-admin-ops.test.ts`, C5
   in `server/org/org-admin-console.e2e.test.ts`.
+- The organization's engines from the Perspicax console (2026-11-25,
+  #5351, `server/org/org-admin-engines.ts`, contract in
+  `docs/org-admin-api.md`, "Engines"): six admin routes under
+  `/api/org/admin/engines`, listed in `GET capabilities` `routes`. An added
+  account is removed through the instance routes' own removal
+  (`removeAccountMovingBots`); the organization's key of a key engine is
+  written where the provider card writes it (`saveOrgEngineKey`, the
+  `config` target of `engineKeyTarget`), never answered, logged or audited;
+  a catalog engine is hidden in `organization.hiddenEngines`, with
+  `allowedEngines` and `disabledModels` left as stored. Hidden is for new
+  choices only (D-20261126-018): `orgEngineHidden` in `server/index.ts`
+  refuses it in `checkedModelSelection` (engine changed, unless `alsoOn`
+  names it: the bot's own engine, a failover's return), the selection
+  contexts (new bot, move target, team setup and import), the console's
+  model change and copy, the target of `applyOrgEngineAllowList`, Auto's
+  pool (`autoEnginesFor`), `run_with_engine` (`relayEnginesFor`) and the
+  startup recovery's backups (`start-turn-finish.ts`), the bot's own engine
+  kept each time; turns and `allowedEngines` never read it, so no bot
+  moves. The app gets `hiddenEngines` in its config and
+  `offeredEngines` (`shared/offered-engines.ts`) leaves it out of every list
+  but the one of a bot already on it (`keep`). On a managed workspace the
+  rows say `removable: false` and `takesKey: false`; an engine not here is
+  `404 engine_not_found`. A person's own account, server and keys are not
+  in these routes. Tests: `server/org/org-admin-engines.test.ts`,
+  `shared/offered-engines.test.ts`, `src/components/ModelPicker.interaction.test.ts`,
+  C5 in `server/org/org-admin-console.e2e.test.ts`.
 - Sharing in the organization is one compact row per bot (avatar, owner,
   sharing count, running or idle from `/api/org/bots` `look`/`running`);
   the grants open inline, the force actions sit in an admin-only row menu

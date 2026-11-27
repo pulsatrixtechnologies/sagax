@@ -12,7 +12,7 @@ import { ENGINE_REFUSAL_TTL_MS, type EngineRefusal } from "../engines/engine-ref
 import type { RoutineUsageLimit } from "../routines/routine-limit-words.ts";
 import { classifyRoutineFailure } from "../routines/routine-recovery.ts";
 import { pickAccountByRule } from "./account-strategy.ts";
-import { billsEachUse, limitBackupAllowed, pickLimitBackup, sameProvider, type LimitCandidate, type LimitEngine, type LimitFailover, type LimitFailoverStore } from "./limit-failover.ts";
+import { billsEachUse, limitBackupAllowed, limitServingPool, pickLimitBackup, sameProvider, type LimitCandidate, type LimitEngine, type LimitFailover, type LimitFailoverStore } from "./limit-failover.ts";
 import { limitKindOf, limitResetFromText, limitResetOrEstimate, type LimitKind } from "./limit-reset-time.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
@@ -78,16 +78,13 @@ export interface LimitFailoverHostDeps {
    * that model is not picked again for this payer before `until`, and the
    * engine's other models stay theirs (Auto's refusal memory). */
   refuseModel?: (payer: string, selection: ModelSelection, until: number) => void;
-  /** J4 plan usage: until when a plan window of this engine is spent for
-   * this payer (used at 100 % with no extra usage or credit left, with the
-   * reset its provider reported), from the last usage report Sagax read;
-   * null when none is known. A report is only a hint (an early reset, a
-   * top-up it shows only later, an allowance it does not show): only Sagax's
-   * quick pick (a wake's or a call's fast model) skips such an engine. A
-   * refusal on it that names no reset is still held for Sagax's estimate,
-   * never until that window's reset. Auto, a backup and a run's takeover
-   * read only the refusals Sagax saw for other providers; same-provider
-   * accounts rotate on the report too (#2192). */
+  /** J4 plan usage: until when a plan window of this engine is spent for this payer (used at 100 % with no extra
+   * usage or credit left, with the reset its provider reported), from the last usage report Sagax read (an app's, or
+   * the server's own while one is spent: plan-report-watch.ts); null when none is known. A report is only a hint (an
+   * early reset, a top-up it shows only later, an allowance it does not show): Sagax's quick pick skips such an engine,
+   * and so does a mode's or Auto's (M-20261126-101). A refusal on it that names no reset is still held for Sagax's
+   * estimate, never until that window's reset. A backup and a run's takeover read only the refusals Sagax saw for
+   * other providers; same-provider accounts rotate on the report too (#2192). */
   planLimitUntil?: (payer: string, instanceId: string) => number | null;
   /** #2192: fullest window used-percent (0–100) from the last plan usage
    * report for this payer and instance; null when unknown. A backup of
@@ -124,7 +121,9 @@ export interface LimitFailoverHostDeps {
   /** The thread still runs a turn (the failed one settling, or a newer one). */
   busy: (botId: string, threadId: string) => boolean;
   /** Moves the thread (not the bot); the refusal in words, or null once done. */
-  switchThread: (botId: string, threadId: string, to: ModelSelection) => string | null;
+  /** `back`: the conversation goes back to the engine it left (a hidden
+   * provider it was on stays its own, D-20261126-018). */
+  switchThread: (botId: string, threadId: string, to: ModelSelection, back?: boolean) => string | null;
   /** One row in the thread. A switch and a return are transparent (the maintainer,
    * 2026-10-29): a hidden `notice:` row and a line in the Events lens; only
    * a wait the person must know of reads in the chat. Auto's own switch is
@@ -165,13 +164,18 @@ export interface LimitFailoverHost {
   dispatchOf(threadId: string): LimitDispatch | undefined;
   /** Readiness uses the same selection as beforeTurn without moving a thread. */
   backupFor(botId: string, threadId: string, speaker: unknown, from: string): Promise<ModelSelection | null>;
-  /** The engines Sagax must not pick for this payer now: one a refusal holds
-   * at its usage limit. Sibling accounts of the same provider stay available
-   * for silent rotation (#2192). `pick` "quick": Sagax's quick pick (a
-   * wake's or a call's fast model) also skips an engine whose plan the
-   * payer's usage report showed spent (planLimitUntil); Auto and its panel
-   * read only the refusals Sagax saw. */
-  autoExcluded(payer: string, engines: readonly LimitEngine[], pick?: "quick"): Set<string>;
+  /** #5406: the engines that may run a turn of this conversation when a limit
+   * moves it (limitServingPool), from what is known now. With the takeover
+   * off, a model chosen by hand is served by its own engine alone (#5421).
+   * Empty when the candidates are not known. Never throws. */
+  servingPool(botId: string, threadId: string, speaker: unknown): string[];
+  /** The engines Sagax must not pick for this payer now: one a refusal holds at its usage limit. Sibling accounts
+   * of the same provider stay available for silent rotation (#2192). `pick` "quick" (a wake's or a call's fast
+   * model) and "report" (a mode's or Auto's pick and the menu's preview, M-20261126-101) also skip an engine whose
+   * plan the payer's usage report showed spent (planLimitUntil); without it, only the refusals Sagax saw. */
+  autoExcluded(payer: string, engines: readonly LimitEngine[], pick?: "quick" | "report"): Set<string>;
+  /** When the first of these engines a "report" pick leaves out is expected back for this payer; null when none is. */
+  limitedUntil(payer: string, engines: readonly LimitEngine[]): number | null;
   /** #2192: after a limit or provider error the backup answered with no text:
    * try the next pool member once (same provider first), with the steps
    * already taken. True when a resend was started. */
@@ -316,8 +320,8 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     const refusal = deps.refusal?.(botId, threadId, speaker, instanceId);
     return refusal?.cause === "signed_out" ? undefined : refusal;
   };
-  /** The same, or a plan window the payer's usage report showed spent: only
-   * Sagax's quick pick (a wake's or a call's fast model) reads it. */
+  /** The same, or a plan window the payer's usage report showed spent: what
+   * Sagax's own picks read (a wake's or a call's fast model, a mode, Auto). */
   const quickHeldUntil = (payer: string, instanceId: string): number | null =>
     heldUntil(payer, instanceId) ?? planUntil(payer, instanceId);
   /** The engines among `engines` a turn of this payer must not run on now:
@@ -576,7 +580,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     if (run) {
       if (backup && store.takeResend(`routine:${run.id}`)) {
         if (backHome && backLine) {
-          const refused = deps.switchThread(dispatch.botId, threadId, backHome);
+          const refused = deps.switchThread(dispatch.botId, threadId, backHome, true);
           if (!refused) {
             store.forget(threadId);
             deps.replaceFailure(threadId, turnId, backLine, dispatch.at);
@@ -793,17 +797,35 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       const engine = deps.engine(from);
       return engine ? pick(botId, threadId, speaker, engine, deps.payer(botId, speaker)) : null;
     },
+    servingPool(botId, threadId, speaker) {
+      try {
+        const candidates = deps.candidatesNow?.(botId, threadId, speaker);
+        if (!candidates) return [];
+        // #5421 review H3: with the takeover off (SAGAX_LIMIT_FAILOVER=0) no
+        // limit moves a turn of a model chosen by hand (turnFailed,
+        // beforeTurn): its own engine is the only one that serves. Auto still
+        // skips a held engine on its own pick (autoPickForTurn, autoExcluded).
+        const selection = deps.enabled() ? null : deps.threadSelection(botId, threadId);
+        if (selection && selection.auto !== true) return [selection.instanceId];
+        return limitServingPool({ preferred: deps.preferred(botId, threadId), candidates, config: deps.config });
+      } catch {
+        return [];
+      }
+    },
     autoExcluded(payer, engines, pick) {
       try {
-        // A refusal's hold (for Sagax's quick pick, also a plan window the
-        // payer's usage report showed spent). Sibling accounts of the same
-        // provider stay available for silent rotation (#2192).
-        return outOf(payer, engines, pick === "quick");
+        // A refusal's hold (for Sagax's quick pick, a mode's and Auto's, also a plan window the payer's usage report
+        // showed spent). Sibling accounts of the same provider stay available for silent rotation (#2192).
+        return outOf(payer, engines, pick !== undefined);
       } catch (failure) {
         console.warn(`[limit-failover] auto: ${failure instanceof Error ? failure.message : String(failure)}`);
         return new Set<string>();
       }
     },
+    limitedUntil: (payer, engines) => engines.reduce<number | null>((first, engine) => {
+      const at = quickHeldUntil(payer, engine.instanceId);
+      return at !== null && (first === null || at < first) ? at : first;
+    }, null),
 
     emptyReplyRetry({ botId, threadId, speaker, messageId, turnId, trigger }) {
       try {
@@ -1034,7 +1056,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         if (!row || !same(deps.threadSelection(botId, threadId), row.to)) return null;
         const payer = deps.payer(botId, speaker);
         store.block(payer, row.to.instanceId, deps.now() + BACKUP_REFUSED_MS);
-        const refused = deps.switchThread(botId, threadId, row.from);
+        const refused = deps.switchThread(botId, threadId, row.from, true);
         if (refused) console.warn(`[limit-failover] ${threadId}: could not go back to ${row.from.instanceId}: ${refused}`);
         store.forget(threadId);
         return { from: deps.engineName(row.from.instanceId), to: deps.engineName(row.to.instanceId) };
@@ -1122,7 +1144,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
           const current = deps.threadSelection(botId, threadId);
           if (!same(current, row.to)) store.forget(threadId);
           else if (store.due(row) && store.blockedUntil(payer, row.from.instanceId) === null && !limitRefusal(botId, threadId, speaker, row.from.instanceId)) {
-            const refused = deps.switchThread(botId, threadId, row.from);
+            const refused = deps.switchThread(botId, threadId, row.from, true);
             if (!refused) {
               store.forget(threadId);
               deps.note(threadId, { kind: "back", engine: deps.engineName(row.from.instanceId) });

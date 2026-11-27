@@ -66,7 +66,8 @@ export function pickBotContextSize(dispatch: ReturnType<typeof useStore>["dispat
  * and the person's defaults are the state. */
 export function useBotContextSizes(bot: Pick<Bot, "id" | "modelSelection" | "contextWindow">): ContextSizeChoice[] {
   const { dispatch } = useStore();
-  const instances = useOfferedInstances();
+  // the bot's own engine stays, even one the organization hid (D-20261126-018)
+  const instances = useOfferedInstances("pick", bot.modelSelection.instanceId);
   const { defaults } = useContextDefaults(botChoosesContextSize(instances, bot.modelSelection));
   return botContextSizes({ instances, selection: bot.modelSelection, chosen: bot.contextWindow, defaults, onPick: pickBotContextSize(dispatch, bot.id) });
 }

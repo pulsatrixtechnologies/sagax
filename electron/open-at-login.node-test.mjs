@@ -16,8 +16,8 @@ test("accepting on a Mac turns the login item on, and declining turns it off", (
   assert.deepEqual(applyLoginItem(app, "on", "darwin"), { applied: true, openAtLogin: true });
   assert.deepEqual(applyLoginItem(app, "off", "darwin"), { applied: true, openAtLogin: false });
   assert.deepEqual(seen, [
-    { openAtLogin: true, openAsHidden: false },
-    { openAtLogin: false, openAsHidden: false },
+    { openAtLogin: true },
+    { openAtLogin: false },
   ]);
   assert.equal(choiceDocument("on"), JSON.stringify({ choice: "on" }));
 });

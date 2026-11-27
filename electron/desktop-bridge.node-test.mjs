@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 
-import { attachmentName, botTmpDir, botTmpName, bridgeOperationError, commandEnvironment, createDesktopBridge, commandNamesAppData, createLocalVm, executeBridgeOperation, localPath, removeClosedTree, sandboxedCommandArgv, sweepBotTmpRoot, validBridgeOperation, vmCommandWithBotTmp } from "./desktop-bridge.mjs";
+import { annotateAppleEventsFailure, attachmentName, botTmpDir, botTmpName, bridgeOperationError, commandEnvironment, commandNeedsAppleEvents, createDesktopBridge, commandNamesAppData, createLocalVm, executeBridgeOperation, localPath, removeClosedTree, sandboxedCommandArgv, sweepBotTmpRoot, validBridgeOperation, vmCommandWithBotTmp } from "./desktop-bridge.mjs";
 import net from "node:net";
 import { zipArchive } from "../server/testing/archive-fixtures.mjs";
 
@@ -1066,10 +1066,28 @@ test("on macOS a bot's command runs under sandbox-exec, denied the app's own dat
   assert.equal(argv[0], "/usr/bin/sandbox-exec");
   assert.equal(argv[1], "-p");
   assert.deepEqual(argv.slice(3), ["/bin/zsh", "-lc", "ls"]);
-  assert.equal(argv[2], '(version 1)(allow default)(deny file-read* file-write* (subpath "/h/data"))');
+  assert.equal(argv[2], '(version 1)(allow default)(allow process-info*)(allow sysctl-read)(deny file-read* file-write* (subpath "/h/data"))');
   // #3582: nothing of the bots' temporary folders in the profile.
   assert.doesNotMatch(argv[2], /sagax-bots/);
   assert.ok(sandboxedCommandArgv("ls", { hidden: ['/h/a"b'], shell: "/bin/sh" })[2].includes('"/h/a\\"b"'));
+});
+
+test("#5375: Apple Events commands skip sandbox-exec; refusals name System Settings", () => {
+  assert.equal(commandNeedsAppleEvents("osascript -e 'tell application \"Terminal\" to count windows'"), true);
+  assert.equal(commandNeedsAppleEvents("echo hi"), false);
+  const ok = annotateAppleEventsFailure({ content: [{ type: "text", text: "hi\n[exit 0]" }] });
+  assert.equal(ok.content.length, 1);
+  const apple = annotateAppleEventsFailure({
+    isError: true,
+    content: [{ type: "text", text: "Terminal got an error: A privilege violation occurred. (-10004)\n[exit 1]" }],
+  });
+  assert.match(apple.content.at(-1).text, /Privacy & Security > Automation/);
+  assert.match(apple.content.at(-1).text, /Sagax/);
+  const ps = annotateAppleEventsFailure({
+    isError: true,
+    content: [{ type: "text", text: "zsh:1: operation not permitted: ps\n[exit 127]" }],
+  });
+  assert.match(ps.content.at(-1).text, /Full Disk Access|Automation/);
 });
 
 test("the Local VM command gets the bot's own TMPDIR; the person's other bots' folders stay within reach", async () => {

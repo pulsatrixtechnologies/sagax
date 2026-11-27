@@ -19,9 +19,15 @@
 //   then the mascot rests again: the body's motion, the eyes closing or
 //   opening, its turn into the egg, the hexagon or the triangle, and what the
 //   move adds beside it (thought dots, a mark, a badge, rings, ribbons,
-//   specks), all from the moves' own timelines (shape-moves.ts).
+//   specks), all from the moves' own timelines (shape-moves.ts);
+// - on a stage (shape-stage.ts, #5384: the bot page's hero, the bot panel's
+//   avatar) the person turns the large mascot by hand, as on the engine's own
+//   site: the stage's view is added to every frame, the gaze holds while the
+//   body is dragged, and under reduced motion the mascot stays the moving
+//   drawing (the engine's reduced motion: no idle life, but it turns and its
+//   eyes follow), where off a stage it is the still image.
 import "./shape-mascot.css";
-import { cloneElement, Fragment, isValidElement, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { cloneElement, Fragment, isValidElement, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { avatarFrame, createAnimator, pointerGaze, type AvatarDefinition, type AvatarState, type EyeMark, type FrameShape, type Matrix } from "open-bot-avatar";
 import { requestFrame, subscribeFrames, trackPointer } from "open-bot-avatar/dom";
 import { MAUS_COLORS } from "@/lib/mascot";
@@ -30,9 +36,11 @@ import { DEFAULT_ENGINE_LOOK, isBodyShape, MASCOT_SHAPES, SHAPE_DEPTH, SHAPE_SKI
 import type { MascotAvatarDef } from "../../shared/mascot-look";
 import { bakedShapeFor, engineFrame, enginePose, eyeMarkup, isMarkSlice, lookDefinition, moodFrame, pathsMarkup, runtimeStill, shapesMarkup, stateStill, stillUrl, type BakedStill, type EnginePose, type ShapeMood, type StillFrame, type StillPath } from "./shape-avatar";
 import { ShapeCanvas, useShapeMaterial } from "./shape-material";
+import { ShapeStageContext } from "./shape-stage";
 import { mixHex, MOVE_TIMING, ShapeEngine, stillFrame as restFrame, isShapeMove, rainbowStops, type ShapeFrame, type ShapeMove } from "./shape-engine";
 import { loadBakedStill, useBakedStill } from "./shape-stills";
 import { shapeSkinBase, shapeSkinLayers, type ShapeSkinBase, type ShapeSkinLayers } from "./skin-fx/shape-skins";
+import { useAliveSeat } from "./shape-alive";
 import { EquipFx, MoveFx } from "./skin-fx/SkinFx";
 import { fxDetail, fxPalette, useEquipBurst, useFxVisibility, useMoveBurst, useReducedMotion, useReplayMove, type FxDetail, type FxMoveRequest } from "./skin-fx/skin-fx";
 
@@ -54,6 +62,15 @@ export interface ShapeMascotProps {
   engineLook?: Partial<EngineLook>;
   /** Off draws the still (thumbnails, lists); a move still plays. */
   animated?: boolean;
+  /**
+   * Alive at any size, whatever `animated` says (the sidebar's rows and
+   * tiles, #5404): the idle life and the six states, as the large mascot,
+   * on the same loop; still under reduced motion, off screen, and while it
+   * waits for one of the page's seats (shape-alive.ts).
+   */
+  alive?: boolean | undefined;
+  /** The size the mascot is laid out and painted at when its holder draws it larger than `size` (BotAvatar fillBox); `size` keeps deciding what it is (still, live, a skin's detail). */
+  drawSize?: number | undefined;
   /** "static" forces the still at any size (pickers, thumbnails); "full" asks for the live mascot at any size (skin cards, the desktop mascot). */
   detail?: FxDetail;
   /** A one-shot move: one of the fourteen Shapes moves, or a skin's move (wave, dance...) that plays its effect. */
@@ -319,6 +336,15 @@ function withEyes(frame: StillFrame, open: [number, number]): StillFrame {
   };
 }
 
+/**
+ * The engine's frame of a state, live. The body's colour goes with it: the
+ * ribbons of working and done are shades of that colour, and without it the
+ * engine shades its own default orange (#5384).
+ */
+export function liveStateFrame(definition: AvatarDefinition, options: Parameters<typeof avatarFrame>[1] & { color: string }) {
+  return avatarFrame(definition, { ...options, ...(HEX.test(options.color) ? { color: options.color } : { color: undefined }) });
+}
+
 const seconds = () => (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
 
 /* --------------------------------------------------------------- live */
@@ -336,6 +362,11 @@ interface LiveInput {
   move: { clip: ShapeMove; key: number } | null;
   moveShape: BodyShape;
   skinned: boolean;
+  /** The stage's turn of the body (none off a stage or facing front) and its held gaze. */
+  view: { yaw: number; pitch: number } | undefined;
+  holdGaze: boolean;
+  /** Reduced motion on a stage: the engine's own (no idle life, the look snaps), the loop resting once settled. */
+  reduced: boolean;
 }
 
 /** The live loop of one mascot: the engine's frames on its shared clock, written onto the SVG; off screen it rests. */
@@ -377,7 +408,7 @@ function useLiveShape(host: React.RefObject<HTMLSpanElement | null>, refs: DrawR
     }, 0);
     const unsubscribe = subscribeFrames({
       measure: () => {
-        rect = started && visible && latest.current.followPointer ? el.getBoundingClientRect() : null;
+        rect = started && visible && latest.current.followPointer && !latest.current.holdGaze ? el.getBoundingClientRect() : null;
       },
       draw: (time, pointer) => {
         if (!started || !visible || document.hidden) return false;
@@ -396,7 +427,8 @@ function useLiveShape(host: React.RefObject<HTMLSpanElement | null>, refs: DrawR
         const target = input.followPointer && pointer && rect && rect.width > 0 ? pointerGaze(pointer, rect, { x: input.definition.eyes.x / 100, y: input.definition.eyes.y / 100 }) : null;
         // at work the pose is the app's own over the engine's idle (engineFrame): the engine eases between idle and happy only
         const { pose } = input;
-        const step = animator.step({ now: now * 1000, state: pose.state, mood: pose.mood, target, reducedMotion: false });
+        const { view, reduced } = input;
+        const step = animator.step({ now: now * 1000, state: pose.state, mood: pose.mood, target, hold: input.holdGaze, reducedMotion: reduced });
         // the move's body (the egg, the hexagon, the triangle) once it has turned more than half way
         const into = playing && input.move ? MOVE_BODY[input.move.clip] : undefined;
         const morphStill = into && playing && playing.morphed >= 0.5 ? morphStills.get(into) : undefined;
@@ -406,8 +438,8 @@ function useLiveShape(host: React.RefObject<HTMLSpanElement | null>, refs: DrawR
         } else {
           // at rest, the app's own pose (engineFrame); in a state, the engine's own frame for it, its age counted by the animator
           const flat = pose.motion
-            ? engineFrame(input.definition, pose.motion, { motionBlend: step.motionBlend, time, gaze: step.gaze, reducedMotion: false, depth: input.depth })
-            : avatarFrame(input.definition, { state: pose.state, mood: pose.mood, stateAge: step.stateAge, motionBlend: step.motionBlend, time, gaze: step.gaze, reducedMotion: false, ...(input.depth === undefined ? {} : { depth: input.depth }) });
+            ? engineFrame(input.definition, pose.motion, { motionBlend: step.motionBlend, time, gaze: step.gaze, reducedMotion: reduced, depth: input.depth, view })
+            : liveStateFrame(input.definition, { state: pose.state, mood: pose.mood, stateAge: step.stateAge, motionBlend: step.motionBlend, time, gaze: step.gaze, reducedMotion: reduced, color: input.color, ...(input.depth === undefined ? {} : { depth: input.depth }), ...(view ? { view } : {}) });
           frame = { paths: flat.paths.map((path): StillPath => [path.id, path.d, path.evenOdd, path.box.w * path.box.h]), root: flat.root, shapes: flat.shapes };
         }
         if (playing && moves) frame = withEyes(frame, moveEyeOpen(playing, moves.rest));
@@ -440,6 +472,8 @@ function useLiveShape(host: React.RefObject<HTMLSpanElement | null>, refs: DrawR
         if (refs.back.current) refs.back.current.innerHTML = extras.back;
         if (refs.front.current) refs.front.current.innerHTML = extras.front;
         refs.move.current?.setAttribute("transform", playing ? playing.transform : "");
+        // reduced motion (a stage only): frames while the look or a change still eases, then the loop rests until the pointer or the view moves
+        if (reduced) return step.moving;
         return input.size < SMALL_LIVE && !playing ? SMALL_FRAME_S : true;
       },
     });
@@ -466,6 +500,14 @@ function preloadMoveBody(clip: ShapeMove) {
   });
 }
 
+/** The frame of a body turned by hand, at rest (no idle life): what the page draws before the loop's first frame. */
+function turnedFrame(definition: AvatarDefinition, pose: EnginePose, depth: number | undefined, view: { yaw: number; pitch: number }): StillFrame {
+  const flat = pose.motion
+    ? engineFrame(definition, pose.motion, { reducedMotion: true, depth, view })
+    : avatarFrame(definition, { state: pose.state, mood: pose.mood, reducedMotion: true, view, ...(depth === undefined ? {} : { depth }) });
+  return { paths: flat.paths.map((path): StillPath => [path.id, path.d, path.evenOdd, path.box.w * path.box.h]), root: flat.root, shapes: flat.shapes.filter((shape) => shape.kind !== "ribbon") };
+}
+
 /* ---------------------------------------------------------- component */
 
 export function ShapeMascot({
@@ -477,6 +519,8 @@ export function ShapeMascot({
   agentState = "idle",
   engineLook,
   animated = true,
+  alive = false,
+  drawSize,
   detail,
   move,
   moveBody = false,
@@ -502,6 +546,12 @@ export function ShapeMascot({
   // the person's motion preference for this mascot (the picker's gear, #5369), else the device's
   const systemReduced = useReducedMotion();
   const reduced = settings.motion === "reduced" || (settings.motion === "system" && systemReduced);
+  // on a stage the large mascot is turned by hand (#5384); a thumbnail inside one is not
+  const stage = useContext(ShapeStageContext);
+  const stageBusy = stage !== null && (stage.holdGaze || stage.previewState !== null || Math.abs(stage.view.yaw) > 0.01 || Math.abs(stage.view.pitch) > 0.01);
+  const onStage = stage !== null && animated && detail !== "static" && (size >= LIVE_MIN || (stage.small === true && stageBusy));
+  const view = onStage && (Math.abs(stage.view.yaw) > 0.01 || Math.abs(stage.view.pitch) > 0.01) ? stage.view : undefined;
+  const shownState = onStage && stage.previewState ? stage.previewState : agentState;
   const uid = `shape-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   // the still: the shape's baked frames, or (a person's own drawing, the flat Outline skin) inferred once here
@@ -509,9 +559,11 @@ export function ShapeMascot({
   const baked = useBakedStill(bakedId);
   const still = bakedId ? baked : runtimeStill(definition, depth);
   // what the bot is doing and how it feels, in the engine's terms; at rest the app's own pose (one of the baked moods)
-  const pose = enginePose(mood, agentState, settings.mood);
+  const pose = enginePose(mood, shownState, settings.mood);
   const motion = pose.motion;
-  const frame = motion ? (still ? moodFrame(still, motion) : null) : stateStill(definition, pose.state, pose.mood, depth);
+  const atRest = motion ? (still ? moodFrame(still, motion) : null) : stateStill(definition, pose.state, pose.mood, depth);
+  // turned by hand: the engine's frame under that view, until the loop draws over it
+  const frame = useMemo(() => (view && atRest ? turnedFrame(definition, pose, depth, view) : atRest), [atRest, definition, pose.state, pose.mood, pose.motion, depth, view?.yaw, view?.pitch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // a Shapes move plays at any size, then the mascot rests again
   const shapeMove = move && isShapeMove(move.clip) ? { clip: move.clip, key: move.key } : null;
@@ -526,6 +578,12 @@ export function ShapeMascot({
     timer.current = window.setTimeout(() => setPlaying(null), MOVE_TIMING[clip].duration * 1000 + 120);
   };
   useEffect(() => () => window.clearTimeout(timer.current), []);
+  // alive at any size (the sidebar, #5404): while on screen and holding one of the page's seats (shape-alive.ts)
+  const root = useRef<HTMLSpanElement>(null);
+  // the engine holds a body in a material still under the device's reduced motion, whatever the bot's Motion
+  // says: it would not move, so it takes no seat
+  const engineStill = material !== null && systemReduced;
+  const seated = useAliveSeat(root, alive && !reduced && !engineStill, pose.state !== "idle");
   const seen = useRef(0);
   useEffect(() => {
     if (!shapeMove || shapeMove.key === seen.current || reduced) return;
@@ -533,14 +591,15 @@ export function ShapeMascot({
     play(shapeMove.clip, shapeMove.key);
   }, [shapeMove?.key, shapeMove?.clip, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const live = !reduced && (shapeIsLive(size, animated, detail, reduced) || playing !== null);
+  const live = !reduced && (seated || shapeIsLive(size, animated, detail, reduced) || playing !== null);
+  // the loop also runs for a reduced mascot on a stage: it turns and its eyes follow, with no idle life
+  const looping = live || onStage;
   // the skin's full look (filters, its moving layers) when large or asked for; it moves only while live
   const full = fxDetail(size, animated, detail) === "full";
   const faceD = frame ? skinFace(frame)?.union ?? null : null;
   const layers = useMemo(() => (faceD ? shapeSkinLayers(knownSkin, faceD, hex, uid, full) : null), [knownSkin, faceD, hex, uid, full]);
   const flatSkin = layers ? skinIsFlat(layers, paint) : knownSkin === "plain";
 
-  const root = useRef<HTMLSpanElement>(null);
   useFxVisibility(root, live);
   const equip = useEquipBurst(knownSkin, live);
   const burst = useMoveBurst(shapeMove ? null : move, live);
@@ -555,7 +614,7 @@ export function ShapeMascot({
     eyes: useRef<SVGGElement>(null),
     front: useRef<SVGGElement>(null),
   };
-  useLiveShape(root, refs, uid, live && frame !== null && !material, {
+  useLiveShape(root, refs, uid, looping && frame !== null && !material, {
     definition,
     still,
     color: body,
@@ -567,22 +626,25 @@ export function ShapeMascot({
     move: playing,
     moveShape: isBodyShape(known) ? known : "circle",
     skinned: !flatSkin,
+    view,
+    holdGaze: onStage && stage.holdGaze,
+    reduced,
   });
 
   const palette = fxPalette(paint.fx, hex);
   let drawing: ReactNode = null;
   if (material) {
-    drawing = <ShapeCanvas definition={definition} material={material} color={body} ink={ink} depth={chosenDepth} state={pose.state} mood={pose.mood} followPointer={followPointer && settings.followPointer} live={live} />;
+    drawing = <ShapeCanvas definition={definition} material={material} color={body} ink={ink} depth={chosenDepth} state={pose.state} mood={pose.mood} followPointer={followPointer && settings.followPointer} live={looping} reduced={reduced} view={view} holdGaze={onStage && stage.holdGaze} />;
   } else if (frame) {
-    drawing = live || !flatSkin
-      ? <ShapeSvg uid={uid} frame={frame} color={body} ink={ink} layers={flatSkin ? null : layers} paint={paint} faceD={faceD} refs={refs} live={live} />
+    drawing = looping || !flatSkin
+      ? <ShapeSvg uid={uid} frame={frame} color={body} ink={ink} layers={flatSkin ? null : layers} paint={paint} faceD={faceD} refs={refs} live={looping} />
       : <img src={stillUrl(`${bakedId ?? definition.id}|${depth ?? ""}|${motion ?? `${pose.state}+${pose.mood}`}|${body}|${ink}`, frame, body, ink)} alt="" width={size} height={size} draggable={false} decoding="async" className="block h-[84%] w-[84%] select-none" />;
   }
   return (
     <span
       ref={root}
       className={cn("shape-mascot relative inline-flex shrink-0 items-center justify-center", live && full && "skin-fx-live", burst && moveBody && `fx-body-move fx-body-${burst.move}`, equip && "fx-equip-pop", className)}
-      style={{ width: size, height: size }}
+      style={{ width: drawSize ?? size, height: drawSize ?? size }}
       // a poke winks, on the click and never on the press (#4433): a move
       // turns a still image into the moving drawing, and doing it on
       // pointerdown took the pressed element off the page, so what holds the
@@ -593,9 +655,11 @@ export function ShapeMascot({
       data-skin-tier={paint.tier}
       data-mood={motion ?? pose.mood}
       data-agent-state={pose.state}
+      data-shape-alive={seated ? "" : undefined}
       data-shape-material={settings.material}
       data-fx={full ? "full" : "static"}
       data-shape-drawn={frame ? "" : undefined}
+      data-shape-view={view ? `${Math.round(view.yaw * 1000) / 1000} ${Math.round(view.pitch * 1000) / 1000}` : undefined}
       {...(playing ? { "data-shape-move": playing.clip } : {})}
       role={label ? "img" : undefined}
       aria-label={label ?? undefined}

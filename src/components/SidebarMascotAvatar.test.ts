@@ -8,8 +8,8 @@ import { SidebarMascotAvatar } from "./SidebarMascotAvatar";
 import { isShapeMove } from "./shape-moves";
 
 vi.mock("./Avatar", () => ({
-  BotAvatar: ({ sidebarAlive }: { sidebarAlive?: boolean }) =>
-    createElement("span", { "data-mock-avatar": "", "data-sidebar-alive": sidebarAlive ? "1" : "0" }),
+  BotAvatar: ({ sidebarAlive, shapeAlive }: { sidebarAlive?: boolean; shapeAlive?: boolean }) =>
+    createElement("span", { "data-mock-avatar": "", "data-sidebar-alive": sidebarAlive ? "1" : "0", "data-shape-alive": shapeAlive ? "1" : "0" }),
   InitialsAvatar: () => createElement("span"),
 }));
 
@@ -39,7 +39,7 @@ describe("SidebarMascotAvatar", () => {
     expect(html).toContain('data-sidebar-alive="0"');
   });
 
-  it("keeps a shape out of the pointer loop: a row's shape is the engine's still (#4145)", () => {
+  it("keeps a shape out of the sidebar's pointer loop, and asks it alive on the engine's own (#4145, #5404)", () => {
     const html = renderToStaticMarkup(
       createElement(SidebarMascotAvatar, {
         botId: "b1",
@@ -49,6 +49,7 @@ describe("SidebarMascotAvatar", () => {
       }),
     );
     expect(html).toContain('data-sidebar-alive="0"');
+    expect(html).toContain('data-shape-alive="1"');
   });
 
   it("plays a Shapes move on a shape in a row when it is tapped (#4145 regression: no reaction lost)", () => {

@@ -31,16 +31,22 @@ describe("the avatar menu's starred subscription (2026-11-03)", () => {
     expect(usageSummary([codex, grok], "codex")).toEqual({ percent: 100, name: "Codex", account: "Codex" });
   });
 
-  it("keeps the highest plan, unnamed, with no favorite", () => {
-    expect(usageSummary([grok, codex], null)).toEqual({ percent: 100, name: null, account: "Codex" });
+  it("with no favorite, every account together, the usage pill's sum (#5421 review M5)", () => {
+    // one account full and another nearly empty: the person's usage is not 100%
+    const full = row({ id: "claude", name: "Claude", weekly: open(100), fiveHour: open(12) });
+    const spare = row({ id: "claude-2", name: "Claude (work)", weekly: open(18), fiveHour: open(0) });
+    expect(usageSummary([full, spare], null)).toEqual({ percent: 59, name: null, account: null });
+    // the limit report blocks the full one: it brings no room in either window
+    const held = [{ engine: "claude", name: "Claude", driver: "claude" as const, window: "weekly" as const, usedPercent: 100, resetsAt: null, blocked: true }];
+    expect(usageSummary([{ ...full, instanceIds: ["claude"] }, spare], null, held)).toEqual({ percent: 59, name: null, account: null });
     expect(usageSummary([], null)).toEqual({ percent: null, name: null, account: null });
   });
 
-  it("falls back to the highest once the favorite is gone or reports no window", () => {
+  it("falls back to the sum once the favorite is gone or reports no window", () => {
     // signed out: connectedPlanRows leaves the row out
-    expect(usageSummary([codex], "grok")).toEqual({ percent: 100, name: null, account: "Codex" });
-    expect(usageSummary([codex, row({ id: "grok", name: "Grok", state: "no-windows" })], "grok")).toEqual({ percent: 100, name: null, account: "Codex" });
-    expect(usageSummary([codex, row({ id: "grok", name: "Grok" })], "grok")).toEqual({ percent: 100, name: null, account: "Codex" });
+    expect(usageSummary([codex], "grok")).toEqual({ percent: 100, name: null, account: null });
+    expect(usageSummary([codex, row({ id: "grok", name: "Grok", state: "no-windows" })], "grok")).toEqual({ percent: 100, name: null, account: null });
+    expect(usageSummary([codex, row({ id: "grok", name: "Grok" })], "grok")).toEqual({ percent: 100, name: null, account: null });
   });
 });
 

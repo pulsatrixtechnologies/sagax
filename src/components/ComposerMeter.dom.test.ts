@@ -135,7 +135,8 @@ describe("the usage pill of the message bar", () => {
   it("M-20261126-099: says the return only when every account is blocked, in danger, and then offers the actions", async () => {
     fixture.plan = [provider({ weekly: window(100) }), second({ weekly: window(100, "2026-10-22T03:00:00Z") })];
     fixture.serves = ["claude", "work"];
-    engineLimits([limit(100, true)]);
+    // the server's limit report blocks both (#5421 review H1: its verdict, not the windows')
+    engineLimits([limit(100, true), { ...limit(100, true), engine: "work", name: "Claude (work)" }]);
     await mount();
     expect(pillText()).toMatch(/^wk 100% · back /);
     expect(half("usage")?.dataset.tone).toBe("danger");
@@ -146,6 +147,81 @@ describe("the usage pill of the message bar", () => {
     await click(half("usage"));
     await click(host.querySelector('[data-testid="engine-limit-usage"]'));
     expect(fixture.dispatch).toHaveBeenCalledWith({ type: "toggleAppSettings", open: true, section: "usage" });
+  });
+
+  // #5421 review, HIGH 1: "blocked" is the server's limit report, never a window at 100%
+  it("#5421 review H1: one Claude account, its week at 100%, Extra Usage free, the report says not blocked: no danger, no return, no limit action", async () => {
+    fixture.plan = [provider({ weekly: window(100) })];
+    engineLimits([{ ...limit(100), blocked: false }]);
+    await mount();
+    expect(pillText()).toBe("wk 100%");
+    expect(half("usage")?.dataset.tone).toBe("warning");
+    expect(half("usage")?.querySelector("[data-usage-pill]")?.className).not.toContain("text-danger");
+    await click(half("usage"));
+    for (const action of ["engine-limit-continue", "engine-limit-release", "engine-limit-switch", "engine-limit-usage"]) {
+      expect(detailOf().querySelector(`[data-testid="${action}"]`)).toBeNull();
+    }
+    expect(detailOf().querySelector('[data-usage-account="claude"]')?.hasAttribute("data-blocked")).toBe(false);
+    expect(detailOf().querySelector('[data-usage-col="back"]')?.textContent).toBe("");
+  });
+
+  // #5421 review, HIGH 2: the pool is never dropped while it is read again
+  describe("#5421 review H2: who can serve stays on screen", () => {
+    const codex = () => provider({ id: "codex", name: "dev@acme.test", driver: "codex", instanceId: "codex", instanceIds: ["codex"], fiveHour: window(null), weekly: window(10) });
+    /** The pool's read: answered (`serves`), never answered, or refused. */
+    const pool = (answers: Array<"answer" | "pending" | "fail">) => {
+      const held = [{ ...limit(100, true), held: true }];
+      limits.rememberLimits({ checkedAt: NOW, engines: held });
+      fixture.api.mockImplementation(async (path: unknown) => {
+        if (typeof path === "string" && path.includes("/auto-model")) {
+          const next = answers.shift() ?? "answer";
+          if (next === "pending") return new Promise(() => {});
+          if (next === "fail") throw new Error("server away");
+        }
+        return answer(path, () => ({ providers: fixture.plan }), held);
+      });
+    };
+
+    beforeEach(() => {
+      fixture.plan = [provider({ weekly: window(100) }), codex()];
+      fixture.serves = ["claude", "codex"];
+    });
+
+    it("the detail opens while the pool is read again: the same figure, both accounts, no limit action but Try again now", async () => {
+      pool(["answer", "pending"]);
+      await mount();
+      expect(pillText()).toBe("wk 55%");
+      await click(half("usage"));
+      expect(pillText()).toBe("wk 55%");
+      expect(half("usage")?.dataset.tone).not.toBe("danger");
+      // Codex free in sight, Claude held folded below: both still there
+      expect(accountIds()).toEqual(["codex"]);
+      expect(detailOf().querySelector("[data-usage-free]")?.textContent).toBe("Free accounts: 1 of 2");
+      expect(detailOf().querySelector('[data-usage-fold="limited"]')?.textContent).toBe("At the limit (1)");
+      for (const action of ["engine-limit-continue", "engine-limit-switch", "engine-limit-usage"]) {
+        expect(detailOf().querySelector(`[data-testid="${action}"]`)).toBeNull();
+      }
+      // the serving engine's hold keeps its own action, as before the pill
+      expect(detailOf().querySelector('[data-testid="engine-limit-release"]')?.textContent).toBe("Try again now");
+    });
+
+    it("a read that fails keeps the last pool", async () => {
+      pool(["answer", "fail"]);
+      await mount();
+      await click(half("usage"));
+      expect(pillText()).toBe("wk 55%");
+      expect(detailOf().querySelector("[data-usage-free]")?.textContent).toBe("Free accounts: 1 of 2");
+    });
+
+    it("before the first answer, what the app knows shows, never called blocked", async () => {
+      pool(["pending"]);
+      await mount();
+      expect(pillText()).toBe("wk 100%");
+      expect(half("usage")?.dataset.tone).toBe("warning");
+      await click(half("usage"));
+      expect(detailOf().querySelector('[data-testid="engine-limit-continue"]')).toBeNull();
+      expect(detailOf().querySelector('[data-testid="engine-limit-switch"]')).toBeNull();
+    });
   });
 
   it("turns warning from 75% of the sum, quiet below", async () => {
@@ -232,6 +308,7 @@ describe("the usage pill of the message bar", () => {
     const full = provider({ id: "z", name: "z@acme.test", instanceId: "z", instanceIds: ["z"], fiveHour: window(5), weekly: window(100) });
     fixture.plan = [full, provider({ weekly: window(60) }), ...free];
     fixture.serves = ["claude", "b", "c", "d", "e", "z"];
+    engineLimits([limit(60), { ...limit(100, true), engine: "z", name: "Claude (z)" }]);
     await mount();
     await click(half("usage"));
     expect(accountIds()).toEqual(["claude", "b", "c"]);
@@ -337,14 +414,50 @@ describe("Settings > Appearance: the pill, its shape, the context indicator (M-2
     expect(detail.querySelector("[data-composer-meter-compact]")).not.toBeNull();
   });
 
-  it("the context indicator switched off leaves two measures and no context line; with the pill off too there is no meter", async () => {
+  it("the context indicator switched off leaves two measures and no context figure, and keeps Compact now (#5421 review M4); with the pill off too there is no meter", async () => {
     act(() => prefs.contextIndicator.set("off"));
     await mount();
     expect(half("usage")!.querySelectorAll("svg g")).toHaveLength(2);
     expect(half("usage")?.getAttribute("aria-label")).toBe("Usage of every account that can serve this bot: 5h 31% · wk 89%");
     await click(half("usage"));
-    expect(detailOf().querySelector("[data-composer-meter-context]")).toBeNull();
+    const context = detailOf().querySelector("[data-composer-meter-context]")!;
+    expect(context.textContent).not.toContain("Context 84k");
+    const compact = context.querySelector<HTMLButtonElement>("[data-composer-meter-compact]")!;
+    expect(compact.textContent).toBe("Compact now");
+    await click(compact);
+    expect(fixture.api).toHaveBeenCalledWith("/api/bots/scout/compact", expect.objectContaining({ method: "POST" }));
     act(() => prefs.usagePillInBar.set("off"));
     expect(host.querySelector("[data-composer-meter]")).toBeNull();
+  });
+
+  it("#5421 review M4: the pill and the context both hidden, a nearly full context brings its ring back, with Compact now", async () => {
+    act(() => prefs.contextIndicator.set("off"));
+    act(() => prefs.usagePillInBar.set("off"));
+    await mount({ bot: bot({ tasks: [{ threadId: "t-1", usage: { turns: 4, input: 100, output: 50, context: { tokens: 170_000, window: 200_000 } } }] }) });
+    expect(half("context")?.textContent).toBe("85%");
+    await click(half("context"));
+    expect(host.querySelector('[data-composer-meter-detail="context"] [data-composer-meter-compact]')?.textContent).toBe("Compact now");
+  });
+
+  it("#5421 review M3: the pill hidden, a held serving engine keeps Try again now in the bar (the limit dot)", async () => {
+    engineLimits([{ ...limit(100, true), held: true }]);
+    act(() => prefs.usagePillInBar.set("off"));
+    await mount();
+    expect(half("usage")).toBeNull();
+    const dot = host.querySelector<HTMLButtonElement>('[data-testid="engine-limit-indicator"]');
+    expect(dot).not.toBeNull();
+    await click(dot);
+    const release = host.querySelector<HTMLButtonElement>('[data-testid="engine-limit-menu"] [data-testid="engine-limit-release"]');
+    expect(release?.textContent).toBe("Try again now");
+    fixture.api.mockClear();
+    await click(release);
+    expect(fixture.api).toHaveBeenCalledWith("/api/limit-resets/release", expect.objectContaining({ method: "POST", body: JSON.stringify({ engine: "claude" }) }));
+  });
+
+  it("#5421 review M3: the pill hidden and nothing held, no dot; the pill off reads no pool", async () => {
+    act(() => prefs.usagePillInBar.set("off"));
+    await mount();
+    expect(host.querySelector('[data-testid="engine-limit-indicator"]')).toBeNull();
+    expect(fixture.api.mock.calls.some((call) => String(call[0]).includes("/auto-model"))).toBe(false);
   });
 });

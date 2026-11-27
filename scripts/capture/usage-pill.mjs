@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Captures of the usage pill (#5406): every shape in four situations, and the
- * pill's detail under a message box for 1, 3 and 10 accounts (gallery
+ * Captures of the usage pill (#5406): every shape in six situations, and the
+ * pill's detail under a message box for 1, 3 and 10 accounts, a week that
+ * Extra Usage still serves and a local model left free (#5421) (gallery
  * src/gallery/usage-pill.html), then the rows of Settings > Appearance >
  * Conversation (gallery src/gallery/panel-visibility.html), light and dark.
  * Headless Chrome only.
@@ -59,6 +60,8 @@ try {
     ["3-blocked", "accounts=3&state=blocked"],
     ["10", "accounts=10"],
     ["10-folds-open", "accounts=10&folds=open"],
+    ["1-extra", "accounts=1&state=extra"],
+    ["3-local", "accounts=3&state=local"],
   ];
   for (const [scheme, skin] of [["light", "daylight"], ["dark", "pulsatrix"]]) {
     const open = async (query, viewport) => {
@@ -67,7 +70,7 @@ try {
       await page.goto(`${gallery}?skin=${skin}&lang=${lang}&${query}`, { waitUntil: "networkidle", timeout: 180_000 });
       return page;
     };
-    const shapes = await open("view=shapes", { width: 1000, height: 420 });
+    const shapes = await open("view=shapes", { width: 1280, height: 420 });
     await shapes.waitForSelector("[data-gallery-shape='text'] [data-usage-pill]");
     await shapes.waitForTimeout(300);
     const shapesFile = `shapes-${lang}-${scheme}.png`;

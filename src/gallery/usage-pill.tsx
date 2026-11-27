@@ -3,14 +3,18 @@
  * shape in four situations (the real UsagePill), and the pill under a message
  * box with its detail open (the real ComposerMeterView and
  * UsageAccountsDetail) for 1, 3 and 10 accounts. Mocked accounts only, with
- * invented names. No server. Not shipped in the app.
- * ?skin=<id>&lang=<code>&view=shapes|detail&accounts=<1|3|10>&state=free|blocked&folds=open&shape=<shape> */
+ * invented names, and a mocked limit report (the server's verdict, #5421):
+ * an account at 100% of its week is blocked, except `state=extra` (Extra
+ * Usage still free). `state=local`: every account blocked, a local model
+ * free. No server. Not shipped in the app.
+ * ?skin=<id>&lang=<code>&view=shapes|detail&accounts=<1|3|10>&state=free|blocked|extra|local&folds=open&shape=<shape> */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ComposerMeterView } from "../components/ComposerMeter";
 import { MENU_ROW } from "../components/menu-look";
 import { UsagePill } from "../components/UsagePill";
 import { loadLocale, t } from "../lib/i18n";
+import type { EngineLimit } from "../../shared/limit-reset";
 import type { PlanRow, PlanWindow } from "../lib/plan-usage";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { servingAccounts, usagePill, type UsageAccount } from "../lib/usage-pill";
@@ -46,27 +50,42 @@ const TEN: PlanRow[] = [
 const THREE: PlanRow[] = [TEN[0]!, TEN[1]!, TEN[2]!];
 const THREE_BLOCKED: PlanRow[] = [row("bots", "ada.bots@acme.test", "claude", null, 12, 100, 55), row("own", "ada@acme.test", "claude", null, 23, 100, 59), row("codex", "ada@acme.test", "codex", "Business", null, 100, 120 + 29 / 60)];
 const count = params.get("accounts") ?? "3";
-const blocked = params.get("state") === "blocked";
-const rows = count === "10" ? TEN : count === "1" ? (blocked ? [THREE_BLOCKED[0]!] : [TEN[0]!]) : blocked ? THREE_BLOCKED : THREE;
-const accountsOf = (list: PlanRow[]) => servingAccounts({ rows: list, serves: list.map((entry) => entry.id), engine: "bots", now: NOW });
+const state = params.get("state") ?? "free";
+const blocked = state === "blocked" || state === "local";
+const rows = state === "extra" ? [row("bots", "ada.bots@acme.test", "claude", null, 12, 100, 55)]
+  : count === "10" ? TEN : count === "1" ? (blocked ? [THREE_BLOCKED[0]!] : [TEN[0]!]) : blocked ? THREE_BLOCKED : THREE;
+/** The mocked limit report: a week at 100% blocks, unless Extra Usage still has room. */
+const limitsOf = (list: PlanRow[]): EngineLimit[] => list.map((entry) => ({
+  engine: entry.id, name: entry.name, driver: entry.driver as EngineLimit["driver"], window: "weekly", usedPercent: entry.weekly.usedPercent,
+  resetsAt: entry.weekly.resetsAt ? Date.parse(entry.weekly.resetsAt) : null, blocked: state !== "extra" && (entry.weekly.usedPercent ?? 0) >= 100,
+}));
+const accountsOf = (list: PlanRow[]) => servingAccounts({
+  rows: list, serves: [...list.map((entry) => entry.id), ...(state === "local" ? ["local"] : [])], engine: "bots", limits: limitsOf(list),
+  engineName: (engine) => (engine === "local" ? "Ollama" : engine), now: NOW,
+});
 
 /** The mock-up's four situations, as sums: all is well, 3 accounts full of 10,
- * everything blocked, a conversation that is nearly full. */
+ * everything blocked, a conversation that is nearly full; then #5421's two: a
+ * week at 100% that Extra Usage still serves, and every account blocked with
+ * a local model free. */
 const sum = (weekly: number, fiveHour: number, over: Partial<UsageAccount> = {}): UsageAccount[] => [{
-  id: "sum", name: "sum", plan: null, fiveHour, weekly, hours: 5, serving: true, blocked: weekly >= 100, backAt: weekly >= 100 ? NOW + 55 * H : null, weight: null, driver: "claude", ...over,
+  id: "sum", name: "sum", plan: null, fiveHour, weekly, hours: 5, serving: true, blocked: false, backAt: null, driver: "claude", ...over,
 }];
+const held = { blocked: true, backAt: NOW + 55 * H };
 const SITUATIONS = [
   { accounts: sum(22, 12), context: 34 },
   { accounts: [...sum(44, 20), ...sum(44, 20, { id: "second", serving: false })], context: 60 },
-  { accounts: sum(100, 12), context: 34 },
+  { accounts: sum(100, 12, held), context: 34 },
   { accounts: sum(30, 15), context: 92 },
+  { accounts: sum(100, 12), context: 34 },
+  { accounts: [...sum(100, 12, { ...held, serving: false }), { id: "engine:local", name: "Ollama", plan: null, fiveHour: null, weekly: null, hours: 5, serving: true, blocked: false, backAt: null, driver: "" }], context: 34 },
 ];
 
 function Shapes() {
   return (
     <div data-gallery-sample="shapes" className="inline-flex flex-col gap-3 rounded-2xl border border-hairline/60 bg-panel p-5">
       {USAGE_PILL_SHAPES.map((shape) => (
-        <div key={shape} data-gallery-shape={shape} className="grid grid-cols-[150px_repeat(4,max-content)] items-center gap-x-5">
+        <div key={shape} data-gallery-shape={shape} className="grid grid-cols-[150px_repeat(6,max-content)] items-center gap-x-5">
           <span className="text-[13px] text-ink">{t(`settings.usagePill.shape.${shape}`)}</span>
           {SITUATIONS.map((situation, index) => (
             <span key={index} className="flex h-6 items-center rounded-full border border-hairline/40 px-2 text-[12px] leading-4 text-ink-secondary">
@@ -100,6 +119,7 @@ function Detail() {
                 <>
                   <button type="button" role="menuitem" className={MENU_ROW}>{t("chat.limit.continueAt", { time: "21 h" })}</button>
                   <button type="button" role="menuitem" className={MENU_ROW}>{t("sendBlock.switchEngine")}</button>
+                  <button type="button" role="menuitem" className={MENU_ROW}>{t("chat.notice.weekly.more")}</button>
                 </>
               )}
             />

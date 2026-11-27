@@ -5,7 +5,9 @@
 // for a limit that is hit. The serving account is marked; the free accounts
 // come first, the accounts at their limit are folded below; past three rows
 // the free ones fold too; the height is fixed, an opened fold scrolls inside.
-// No sentence repeats what the bars say. The rows' order and folds are
+// No sentence repeats what the bars say. An account is at its limit only when
+// the server's limit report says so (#5421): a week at 100% that Extra Usage
+// still serves stays among the free ones, in warning. The rows' order and folds are
 // `usageDetailLayout` (src/lib/usage-pill.ts); this component holds no store
 // and no fetch.
 import { useState } from "react";
@@ -20,13 +22,13 @@ const FILL: Record<MeasureTone, string> = { quiet: "bg-ink-secondary", warning: 
 const CELL = "h-8 whitespace-nowrap px-1.5 py-0 align-middle";
 const MUTED = "text-[12px] leading-4 text-ink-tertiary";
 
-function Meter({ percent, label }: { percent: number; label: string }) {
+function Meter({ percent, label, blocked }: { percent: number; label: string; blocked: boolean }) {
   const shown = Math.round(Math.min(100, Math.max(0, percent)));
   return (
     <span className="inline-flex items-center gap-2">
       <span role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={shown}
         className="relative inline-block h-[5px] w-10 overflow-hidden rounded-full bg-ink-secondary/25">
-        <span className={cn("absolute inset-y-0 left-0 rounded-full", FILL[measureTone(shown)])} style={{ width: `${shown}%` }} />
+        <span className={cn("absolute inset-y-0 left-0 rounded-full", FILL[measureTone(shown, blocked)])} style={{ width: `${shown}%` }} />
       </span>
       <span className="min-w-[4ch] text-ink">{limitFigure(shown)}</span>
     </span>
@@ -39,6 +41,9 @@ function AccountRow({ account, favorite }: { account: UsageAccount; favorite?: P
   const name = account.plan ? `${account.name} · ${account.plan}` : account.name;
   const note = account.row?.note ?? null;
   const unmetered = account.fiveHour === null && account.weekly === null;
+  // an engine with no window: a key has no limit; one the plan report does
+  // not know (a local model, a plan that could not be read) has no figure
+  const none = account.unlimited ? t("usageDetail.noLimit") : t("usageDetail.noFigure");
   return (
     <tr data-usage-account={account.id} data-serving={account.serving ? "" : undefined} data-blocked={account.blocked ? "" : undefined} className="group/plan">
       <th scope="row" className={cn(CELL, "w-full max-w-0 text-left font-normal")}>
@@ -52,11 +57,11 @@ function AccountRow({ account, favorite }: { account: UsageAccount; favorite?: P
       </th>
       <td data-usage-col="session" className={CELL}>
         {account.fiveHour !== null
-          ? <Meter percent={account.fiveHour} label={`${account.name} · ${session}`} />
-          : <span className={MUTED}>{unmetered ? t("usageDetail.noLimit") : t("usageDetail.noSession", { hours: account.hours })}</span>}
+          ? <Meter percent={account.fiveHour} label={`${account.name} · ${session}`} blocked={account.blocked} />
+          : <span className={MUTED}>{unmetered ? none : t("usageDetail.noSession", { hours: account.hours })}</span>}
       </td>
       <td data-usage-col="week" className={CELL}>
-        {account.weekly !== null && <Meter percent={account.weekly} label={`${account.name} · ${week}`} />}
+        {account.weekly !== null && <Meter percent={account.weekly} label={`${account.name} · ${week}`} blocked={account.blocked} />}
       </td>
       <td data-usage-col="back" className={cn(CELL, "text-danger")}>
         {account.blocked && account.backAt !== null ? backText(account.backAt) : null}
@@ -96,13 +101,16 @@ export function UsageAccountsDetail({ accounts, favorite, initialOpen, className
   // with nothing free the accounts at their limit are all there is to read
   const [limited, setLimited] = useState<boolean | null>(initialOpen?.limited ?? null);
   if (!accounts.length) return null;
-  const limitedOpen = limited ?? layout.free.length === 0;
+  // one account: its row is the whole table, no fold says it twice
+  const alone = accounts.length === 1;
+  const limitedOpen = alone || (limited ?? layout.free.length === 0);
   const hours = accounts.find((account) => account.fiveHour !== null)?.hours ?? 5;
   const free = layout.free.length + layout.moreFree.length;
   return (
     <div data-usage-detail="" className={cn("menu-scroll max-h-[188px] min-w-0 overflow-y-auto overscroll-contain text-[13px] leading-[18px] tabular-nums", className)}>
       <table aria-label={t("usageDetail.aria")} className="w-full border-collapse">
-        <thead>
+        {/* the header stays in sight while an opened fold scrolls */}
+        <thead className="sticky top-0 z-[1] bg-[var(--menu-fill)]">
           <tr className="text-[12px] leading-4 text-ink-secondary">
             <th scope="col" data-usage-free="" className="h-7 whitespace-nowrap px-1.5 text-left font-normal">{t("usageDetail.free", { free, total: accounts.length })}</th>
             <th scope="col" className="h-7 whitespace-nowrap px-1.5 text-left font-normal">{t("usageDetail.session", { hours })}</th>
@@ -116,7 +124,7 @@ export function UsageAccountsDetail({ accounts, favorite, initialOpen, className
             <Fold name="more-free" open={moreFree} onToggle={() => setMoreFree((open) => !open)} label={t("usageDetail.moreFree", { count: layout.moreFree.length })} />
           )}
           {moreFree && layout.moreFree.map((account) => <AccountRow key={account.id} account={account} favorite={favorite} />)}
-          {layout.limited.length > 0 && (
+          {layout.limited.length > 0 && !alone && (
             <Fold name="limited" open={limitedOpen} onToggle={() => setLimited(!limitedOpen)} label={t("usageDetail.atLimit", { count: layout.limited.length })} />
           )}
           {limitedOpen && layout.limited.map((account) => <AccountRow key={account.id} account={account} favorite={favorite} />)}

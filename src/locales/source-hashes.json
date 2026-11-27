@@ -19495,7 +19495,9 @@
       "settings.usagePill.shape.dots": "57652dba054af4fec20409b6664fe00c3c6372a65460ffee69451b9de52ec7d3",
       "settings.usagePill.shape.text": "8bbfc646f3f5d9c2cfae1e1f5ddf339e2cc84973255a30f7a633dbfc1a45d3e8",
       "settings.contextIndicator.title": "9e9b3f21f04f86fe0a5dc422202aa3ca72f8ca29ce5c24d645e6d34cafe156a7",
-      "settings.contextIndicator.show": "b4f542e10f6510702375e8792f9275b334cce3d451220b743b8393b2f9ac0b44"
+      "settings.contextIndicator.show": "b4f542e10f6510702375e8792f9275b334cce3d451220b743b8393b2f9ac0b44",
+      "usagePill.freeEngine": "c85099dc40760fac6da04c66702bb894b54782f5d83cd910ffadbe5fe3163853",
+      "usageDetail.noFigure": "8b32f57febf324e36f00405be6971235c19571a8582a96c4f7f136f9a34cf6e4"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

@@ -12,11 +12,17 @@
 // "back <day> <hour>" only when every account is blocked. A click opens the
 // detail: one row per account (UsageAccountsDetail), the context's tokens
 // with "Compact now", and the limit's actions only when everything is
-// blocked. The figures are read again when the detail opens and every minute
-// while it stays open (D-20261125-014). Settings > Appearance chooses the
-// shape, hides the pill, and hides the context indicator; with the pill
-// hidden the context keeps its own small ring. A measure with no data is
-// absent. In a narrow window the pill keeps its shape, without the words.
+// blocked ("Try again now" whenever the serving engine is held, as before the
+// pill). The figures are read again when the detail opens and every minute
+// while it stays open (D-20261125-014); who can serve is read when the detail
+// opens, the last answer kept on screen meanwhile and if the read fails
+// (#5421 review H2). Settings > Appearance chooses the shape, hides the pill,
+// and hides the context indicator; no action is lost (#5421 review M3, M4):
+// with the pill hidden the context keeps its own small ring and the limit dot
+// comes back while the serving engine is held (its "Try again now"); with
+// the context indicator hidden the detail keeps "Compact now", and with both
+// hidden the ring comes back at 80% (the nearly-full warning). A measure with
+// no data is absent. The named percentage stays in sight in a narrow window.
 // With no plan window for the engine (an API key account, a plan read that
 // failed), the pill still shows whenever the dot did: it draws from the
 // engine's own limit, with its line and its actions (#5372 review).
@@ -29,6 +35,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { useAutoModelStatus } from "@/lib/auto-model-preview";
 import { contextHalf } from "@/lib/composer-meter";
+import { CONTEXT_WARNING_PERCENT } from "@/lib/context-warning";
 import { engineName, useEngineLimits } from "@/lib/limit-resets";
 import { toggleUsageFavorite, useUsageFavorite } from "@/lib/usage-favorite";
 import { contextDetail } from "@/lib/usage";
@@ -36,9 +43,10 @@ import { rowsForEngine, weeklyLimitNotice } from "@/lib/usage-notices";
 import { servingAccounts, usagePill, type UsageAccount } from "@/lib/usage-pill";
 import { contextIndicator, usagePillInBar, usagePillShape, type UsagePillShape } from "@/lib/usage-pill-preferences";
 import type { Bot } from "@/state/store";
+import type { AutoModelPreview } from "../../shared/auto-model";
 import { usePlanRows } from "./ChatUsageNotices";
 import { useCompact } from "./ContextWarning";
-import { EngineLimitActions, useEngineLimitDetail } from "./LimitResetContinue";
+import { EngineLimitActions, EngineLimitIndicator, useEngineLimitDetail } from "./LimitResetContinue";
 import type { PlanUsageViewProps } from "./PlanUsage";
 import { UsageAccountsDetail, type UsageAccountsDetailProps } from "./UsageAccountsDetail";
 import { UsagePill, usagePillLabel } from "./UsagePill";
@@ -81,6 +89,9 @@ export interface ComposerMeterViewProps {
     /** The engine's own limit sentence, when its figure comes from the limit
      * report and not from a plan window. */
     line?: string | null;
+    /** False until the server has said who can serve the bot: nothing is
+     * called blocked meanwhile (#5421 review H2). Absent: known. */
+    poolKnown?: boolean;
   };
   /** The person's choices (Settings > Appearance): the pill in the message
    * bar, its shape, the context indicator. Absent: shown, circles, shown. */
@@ -89,9 +100,11 @@ export interface ComposerMeterViewProps {
   contextShown?: boolean;
   now?: number;
   /** The detail's actions, drawn by the owner: Compact now; the limit's
-   * actions (shown only when every account is blocked). */
+   * actions (shown only when every account is blocked); "Try again now" of
+   * the serving engine's hold (shown whenever the owner gives it). */
   contextActions?: ReactNode;
   usageActions?: (close: () => void) => ReactNode;
+  releaseAction?: (close: () => void) => ReactNode;
   /** A detail opened or closed (the owner reads its figures again). */
   onOpenChange?: (open: MeterHalf | null) => void;
   /** Tests and the gallery: render with a detail open, a fold open. */
@@ -100,7 +113,7 @@ export interface ComposerMeterViewProps {
 }
 
 /** The pill and its details, without a store: every figure comes from its owner. */
-export function ComposerMeterView({ context, usage, pill = true, shape = "circles", contextShown = true, now, contextActions, usageActions, onOpenChange, initialOpen = null, initialFolds }: ComposerMeterViewProps) {
+export function ComposerMeterView({ context, usage, pill = true, shape = "circles", contextShown = true, now, contextActions, usageActions, releaseAction, onOpenChange, initialOpen = null, initialFolds }: ComposerMeterViewProps) {
   const [open, setOpenState] = useState<MeterHalf | null>(initialOpen);
   const rootRef = useRef<HTMLSpanElement>(null);
   const changed = useRef(onOpenChange);
@@ -126,16 +139,24 @@ export function ComposerMeterView({ context, usage, pill = true, shape = "circle
     };
   }, [open]);
 
+  // the pill's third measure, only while the person shows the context
   const measured = contextShown ? context : undefined;
-  const values = pill && usage?.accounts.length ? usagePill({ accounts: usage.accounts, context: measured?.percent ?? null, now }) : null;
+  const values = pill && usage?.accounts.length ? usagePill({ accounts: usage.accounts, context: measured?.percent ?? null, now, poolKnown: usage.poolKnown }) : null;
   // accounts with no figure and nothing blocked: nothing to say, no pill
-  const usageShown = values && (values.named || values.blocked) ? values : null;
-  // the context's own ring: only while the pill does not carry it
-  const contextAlone = usageShown ? undefined : measured;
+  const usageShown = values && (values.named || values.blocked || values.freeEngine) ? values : null;
+  // the context's own ring, only while the pill does not carry it; hidden by
+  // the person, it still comes back once the context is nearly full, so
+  // Compact now stays one click away (#5421 review M4)
+  const ringContext = contextShown || (context && context.percent >= CONTEXT_WARNING_PERCENT) ? context : undefined;
+  const contextAlone = usageShown ? undefined : ringContext;
   if (!usageShown && !contextAlone) return null;
   const shown = open === "context" ? (contextAlone ? "context" : null) : open === "usage" ? (usageShown ? "usage" : null) : null;
-  const contextAria = measured ? t("composer.meter.contextAria", { percent: measured.percent }) : "";
+  const contextAria = contextAlone ? t("composer.meter.contextAria", { percent: contextAlone.percent }) : "";
   const usageAria = usageShown ? t("usagePill.aria", { text: usagePillLabel(usageShown, Boolean(measured)) }) : "";
+  const close = () => setOpen(null);
+  // the context's tokens in the detail while the person shows the context;
+  // Compact now always (#5421 review M4)
+  const contextLine = measured?.detail ?? null;
   return (
     <span ref={rootRef} data-composer-meter="" role="group" aria-label={t("composer.meter.aria")} className="relative flex items-center">
       <span className="flex h-6 items-center rounded-full border border-hairline/40 text-[12px] leading-4 text-ink-secondary">
@@ -153,7 +174,8 @@ export function ComposerMeterView({ context, usage, pill = true, shape = "circle
             aria-label={usageAria} title={usageAria}
             onClick={() => setOpen(open === "usage" ? null : "usage")}
             className={HALF}>
-            <UsagePill values={usageShown} shape={shape} showContext={Boolean(measured)} textClassName={FIGURE} />
+            {/* M-20261126-099: the named percentage stays in sight, narrow or not */}
+            <UsagePill values={usageShown} shape={shape} showContext={Boolean(measured)} />
           </button>
         )}
       </span>
@@ -167,27 +189,36 @@ export function ComposerMeterView({ context, usage, pill = true, shape = "circle
         <div role="dialog" aria-label={usageAria} data-composer-meter-detail="usage" className={cn(DETAIL, USAGE_DETAIL)}>
           <UsageAccountsDetail accounts={usage.accounts} favorite={usage.favorite} initialOpen={initialFolds} />
           {usage.line && <p data-composer-meter-limit="" className="px-2 py-1 tabular-nums">{usage.line}</p>}
-          {measured && (measured.detail || contextActions) && (
+          {context && (contextLine || contextActions) && (
             <div data-composer-meter-context="" className="flex min-h-8 items-center gap-2 border-t border-hairline/40 pt-1">
-              {measured.detail && <p className="min-w-0 flex-1 truncate px-2 text-[13px] tabular-nums text-ink-secondary">{measured.detail}</p>}
-              {contextActions && <span className="shrink-0">{contextActions}</span>}
+              {contextLine && <p className="min-w-0 flex-1 truncate px-2 text-[13px] tabular-nums text-ink-secondary">{contextLine}</p>}
+              {contextActions && <span className={cn("shrink-0", !contextLine && "ml-auto")}>{contextActions}</span>}
             </div>
           )}
-          {usageShown.blocked && usageActions?.(() => setOpen(null))}
+          {usageShown.blocked ? usageActions?.(close) : releaseAction?.(close)}
         </div>
       )}
     </span>
   );
 }
 
+/** The names the server gives the engines of its answer ("Claude Code",
+ * "Ollama"), for an engine the limit report does not name. */
+function labelsOf(preview: AutoModelPreview | null): Map<string, string> {
+  const labels = new Map<string, string>();
+  if (!preview) return labels;
+  const entries = [...preview.chain, ...preview.excluded, ...preview.backups, ...Object.values(preview.modes ?? {}).flatMap((mode) => [mode.pick, ...(mode.team ?? [])])];
+  for (const entry of entries) if (entry?.instanceId && entry.engineLabel && !labels.has(entry.instanceId)) labels.set(entry.instanceId, entry.engineLabel);
+  return labels;
+}
+
 /** The meter of one conversation: its readings, from the store and the server. */
 export function ComposerMeter({ bot, threadId }: { bot: Bot; threadId: string }) {
   const [open, setOpen] = useState<MeterHalf | null>(null);
-  // counts the usage detail's openings: each one reads who can serve again
-  const [reads, setReads] = useState(0);
   const task = bot.tasks?.find((candidate) => candidate.threadId === threadId);
   const own = threadId === bot.threadId;
   const context = contextHalf(task?.usage, own ? bot.messages : []);
+  const pill = usagePillInBar.use() === "on";
 
   // the engine this conversation really runs on (Auto resolved): the one marked as serving
   const selection = bot.modelSelection;
@@ -195,26 +226,26 @@ export function ComposerMeter({ bot, threadId }: { bot: Bot; threadId: string })
   const limits = useEngineLimits();
   const limit = limits.find((candidate) => candidate.engine === engine);
   const rows = usePlanRows(open === "usage");
-  // who can serve this conversation: the usage-limit takeover's own pool (no second verdict)
-  const serves = useAutoModelStatus(bot.id, threadId, true, String(reads))?.serves;
-  const accounts = servingAccounts({ rows, serves, engine, driver: limit?.driver, limits, engineName });
+  // who can serve this conversation: the usage-limit takeover's own pool (no
+  // second verdict), read again when the detail opens with the last answer
+  // kept meanwhile; a model chosen by hand is another pool (#5421 review H3)
+  const preview = useAutoModelStatus(bot.id, threadId, pill, selection.auto === true ? "auto" : selection.instanceId, open === "usage");
+  const labels = labelsOf(preview);
+  const accounts = servingAccounts({ rows, serves: preview?.serves, engine, driver: limit?.driver, limits, engineName: (id) => labels.get(id) ?? engineName(id) });
   const detail = useEngineLimitDetail({ limit, weekly: weeklyLimitNotice(rowsForEngine(rows, engine, limit?.driver)), botId: bot.id, threadId, messages: own ? bot.messages : undefined });
   // the serving engine has no plan window: its figure is its own limit's, said by its line
   const serving = accounts.find((account) => account.serving);
   const fromLimit = Boolean(serving && !serving.row && detail.near);
   const compact = useCompact();
   const favorite = useUsageFavorite();
-  return (
+  const meter = (
     <ComposerMeterView
       context={context ? { percent: context.percent, detail: task?.usage ? contextDetail(task.usage) : null } : undefined}
-      usage={accounts.length ? { accounts, favorite: { id: favorite, onToggle: toggleUsageFavorite }, line: fromLimit ? detail.line : null } : undefined}
-      pill={usagePillInBar.use() === "on"}
+      usage={accounts.length ? { accounts, favorite: { id: favorite, onToggle: toggleUsageFavorite }, line: fromLimit ? detail.line : null, poolKnown: preview !== null } : undefined}
+      pill={pill}
       shape={usagePillShape.use()}
       contextShown={contextIndicator.use() === "on"}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next === "usage") setReads((count) => count + 1);
-      }}
+      onOpenChange={setOpen}
       contextActions={own ? (
         <button type="button" data-composer-meter-compact="" disabled={Boolean(bot.busy) || compact.pending}
           title={bot.busy ? t("contextWarning.busy") : undefined}
@@ -224,6 +255,18 @@ export function ComposerMeter({ bot, threadId }: { bot: Bot; threadId: string })
         </button>
       ) : undefined}
       usageActions={(close) => <EngineLimitActions detail={detail} botId={bot.id} onDone={close} />}
+      releaseAction={limit?.held ? (close) => <EngineLimitActions detail={detail} botId={bot.id} onDone={close} only="release" /> : undefined}
     />
+  );
+  // #5421 review M3: the pill hidden, the serving engine's hold keeps its
+  // "Try again now" in the bar: the limit dot the pill replaced, as it was
+  if (pill || !limit?.held) return meter;
+  return (
+    <span className="flex items-center gap-2">
+      {meter}
+      <span data-composer-limit-dot="" className="relative block size-2.5">
+        <EngineLimitIndicator engine={engine} driver={limit.driver} botId={bot.id} threadId={threadId} messages={own ? bot.messages : undefined} />
+      </span>
+    </span>
   );
 }

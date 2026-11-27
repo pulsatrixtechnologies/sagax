@@ -166,8 +166,9 @@ export interface LimitFailoverHost {
   /** Readiness uses the same selection as beforeTurn without moving a thread. */
   backupFor(botId: string, threadId: string, speaker: unknown, from: string): Promise<ModelSelection | null>;
   /** #5406: the engines that may run a turn of this conversation when a limit
-   * moves it (limitServingPool), from what is known now. Empty when the
-   * candidates are not known. Never throws. */
+   * moves it (limitServingPool), from what is known now. With the takeover
+   * off, a model chosen by hand is served by its own engine alone (#5421).
+   * Empty when the candidates are not known. Never throws. */
   servingPool(botId: string, threadId: string, speaker: unknown): string[];
   /** The engines Sagax must not pick for this payer now: one a refusal holds
    * at its usage limit. Sibling accounts of the same provider stay available
@@ -800,7 +801,14 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     servingPool(botId, threadId, speaker) {
       try {
         const candidates = deps.candidatesNow?.(botId, threadId, speaker);
-        return candidates ? limitServingPool({ preferred: deps.preferred(botId, threadId), candidates, config: deps.config }) : [];
+        if (!candidates) return [];
+        // #5421 review H3: with the takeover off (SAGAX_LIMIT_FAILOVER=0) no
+        // limit moves a turn of a model chosen by hand (turnFailed,
+        // beforeTurn): its own engine is the only one that serves. Auto still
+        // skips a held engine on its own pick (autoPickForTurn, autoExcluded).
+        const selection = deps.enabled() ? null : deps.threadSelection(botId, threadId);
+        if (selection && selection.auto !== true) return [selection.instanceId];
+        return limitServingPool({ preferred: deps.preferred(botId, threadId), candidates, config: deps.config });
       } catch {
         return [];
       }

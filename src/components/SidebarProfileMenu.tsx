@@ -578,7 +578,10 @@ function useAccountMenuData(enabled: boolean, refresh = 0): AccountMenuData {
     const unwatch = watchSavedServers(window.ogb?.environments, (next) => { if (alive) setEnvironments(next); });
     return () => { alive = false; unwatch(); };
   }, [enabled, refresh]);
-  const summary = usageSummary(rows, favorite);
+  // #5421 review M5: the Usage row says the pill's own sum, with the limit
+  // report's verdict, read once the menu has opened
+  const limits = useEngineLimits(plans);
+  const summary = usageSummary(rows, favorite, limits);
   return {
     percent: summary.percent,
     percentName: summary.name,

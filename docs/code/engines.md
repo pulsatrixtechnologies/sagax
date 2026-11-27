@@ -144,8 +144,12 @@ A stop is not recorded. Tests: `learned-routing.test.ts`,
 The chat bar's usage pill (#5406) reads the same pool: `limitServingPool`
 (`server/usage/limit-failover.ts`) lists the engines `pickLimitBackup` may
 pick, without the holds, and GET `/api/bots/<id>/auto-model` sends it as
-`serves` (`LimitFailoverHost.servingPool`). The app sums the windows of the
-accounts behind them (`src/lib/usage-pill.ts`); see `docs/model-modes.md`.
+`serves` (`LimitFailoverHost.servingPool`). With the takeover off
+(`SAGAX_LIMIT_FAILOVER=0`) a model chosen by hand is served by its own engine
+alone; Auto keeps the pool, since its own pick skips a held engine (#5421).
+The app sums the windows of the accounts behind them and takes "blocked"
+from the limit report only (`src/lib/usage-pill.ts`); see
+`docs/model-modes.md`.
 Tests: `limit-failover.test.ts` ("limitServingPool"),
 `limit-failover-host.test.ts`, `src/lib/usage-pill.test.ts`.
 

@@ -35,38 +35,55 @@ Auto without an error (`RETIRED_MODEL_MODE`, `shared/model-mode.ts`).
   `src/lib/usage-pill.ts`, the context measure `src/lib/composer-meter.ts`)
   replaces the limit dot in the chat bar (M-20261126-095, M-20261126-096,
   M-20261126-099, #5406): a small shape of three measures and a named
-  percentage always in sight. The week and the short session are a sum of
-  every account that can serve the bot, never the serving account alone: the
-  engines the usage-limit takeover may move a turn to (`serves` of GET
+  percentage always in sight, narrow window or not. The week and the short
+  session are a sum of every account that can serve the bot, never the
+  serving account alone. The pill renders no verdict of its own (#5421): who
+  can serve is the usage-limit takeover's pool (`serves` of GET
   `/api/bots/<id>/auto-model`, `limitServingPool` in
-  `server/usage/limit-failover.ts`), their windows from the plan report and
-  their holds from the limit report; an older server names no pool and the
-  serving provider's accounts answer. The sum is weighted by plan when every
-  account's plan size is known on one scale (Claude Pro 1, Max 5x 5, Max 20x
-  20), else it is the mean of the percentages; an account with no 5-hour
-  limit counts as 0% of that window; an engine with no window is in no sum
-  but keeps the pill from saying "blocked". The third measure is the share of
-  the model's window the conversation uses. The text names the fuller account
-  limit ("wk 44%", "5h 20%") and adds "back <day> <hour>" only when every
-  account refuses work. A measure is quiet, warning from 75%, danger when
-  full. `usagePill` is the pure function a place outside the chat bar reads
-  (the three values and the text). A click opens the detail
+  `server/usage/limit-failover.ts`; with `SAGAX_LIMIT_FAILOVER=0` a model
+  chosen by hand is served by its own engine alone, Auto keeps its pool),
+  whether an account refuses work is the limit report's `blocked` (GET
+  `/api/limit-resets`: a full window that Claude's Extra Usage still serves
+  is not blocked, a refusal's hold is), and the windows come from the plan
+  report; an older server names no pool and the serving provider's accounts
+  answer. The pool is read when the chat bar mounts and again when the detail
+  opens, the last answer kept on screen meanwhile and when a read fails
+  (`useAutoModelStatus`'s `open`); until a first answer, nothing is called
+  blocked. Each window's sum is the mean of the accounts that have it; a
+  blocked account counts as full in every window it has; an account with no
+  5-hour limit (Codex) is out of that window's sum; an engine with no window
+  (a local model, a key) is in no sum. The plan's size is not weighed: the
+  plan report names none. The third measure is the share of the model's
+  window the conversation uses. The text names the fuller of the windows a
+  free account still has ("wk 44%", "5h 20%"), adds "back <day> <hour>" only
+  when every account is blocked, and names the free engine when it is the
+  only room left ("wk 100% · Ollama free"). A sum under 100 never rounds to
+  100. A measure is quiet, warning from 75%, danger only when every account
+  is blocked. `usagePill` is the pure function a place outside the chat bar
+  reads (the three values and the text); `accountsUsage` sums every
+  signed-in account for a place that names no bot (the account menu's Usage
+  row, the menu bar). A click opens the detail
   (`src/components/UsageAccountsDetail.tsx`): one row per account, the
   session and the week as columns, the return time once and only for a limit
   that is hit, the serving account marked, the free accounts first, three
-  rows then a fold, the accounts at their limit folded below, a fixed height;
-  then the context's tokens with Compact now; the limit's actions (Continue,
-  Try again now, Switch engine, See usage) only when everything is blocked.
-  The figures are read when the detail opens and every minute while it is
-  open. The account menu's Usage draws the same detail for every signed-in
-  account. Settings > Appearance > Conversation holds the person's choices
+  rows then a fold, the accounts at their limit folded below, a fixed height
+  with a header that stays in sight; then the context's tokens with Compact
+  now; "Try again now" while the serving engine is held; the other limit
+  actions (Continue, Switch engine, See usage) only when everything is
+  blocked. The figures are read when the detail opens and every minute while
+  it is open. The account menu's Usage draws the same detail for every
+  signed-in account, and its row says the same sum unless an account is
+  starred. Settings > Appearance > Conversation holds the person's choices
   (`src/lib/usage-pill-preferences.ts`): the pill in the message bar
   (`sagax.usagePillInBar.v1`, on), its shape (`sagax.usagePillShape.v1`: bars,
   circles, battery, dots, text; circles) and the context indicator
-  (`sagax.contextIndicator.v1`, on); with the pill off the context keeps its
-  own ring. With no plan window for the engine the pill draws from the
-  engine's own limit once it is near, with its line. The conversation's
-  header shows no token figure any more.
+  (`sagax.contextIndicator.v1`, on). No action is lost: with the pill off the
+  context keeps its own ring and the limit dot comes back while the serving
+  engine is held (its "Try again now"); with the context indicator off the
+  detail keeps Compact now, and with both off the ring comes back at 80%.
+  With no plan window for the engine the pill draws from the engine's own
+  limit once it is near, with its line. The conversation's header shows no
+  token figure any more.
 - The voice button (`src/components/ComposerVoiceButton.tsx`,
   `src/lib/composer-voice.ts`): the mic for dictation or the waves for the
   voice conversation; a click does the mode the person used last

@@ -143,7 +143,7 @@ describe("the keys that may serve a voice, in order (server/voice/voice-keys.ts)
     expect(refusals.untold("p-ada", [{ ...dry, last4: "0000", failure: "down" }, { ...dry, last4: "1111", failure: "busy" }])).toEqual([]);
   });
 
-  it("presents a connected Grok account through the CLI voice host, every other source as an API key", () => {
+  it("presents a connected Grok account on the xAI API root, every other source as an API key", () => {
     expect(voiceKeyAuth({ source: "grok-account" })).toBe("grok-account");
     for (const source of ["voice-key", "perspicax-key", "org-key", "server"]) expect(voiceKeyAuth({ source })).toBe("api-key");
   });

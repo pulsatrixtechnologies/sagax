@@ -257,11 +257,12 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   sentences go there at once (`VoiceKeyRefusals.voiceUnknown`).
 - A chain where no credential served names its first real cause: `tried`
   is put back in the person's order (`inPersonOrder`; the refusal memory may
-  have tried their account last), and when its refusals are not all xAI
-  credits or keys, `chainCallReason` leads with the closest credential's own
-  cause, then says the others in one line; the body's `key` and `failure`
-  are that first cause, so the bar and the phone name it, never only the
-  last refusal (#5424).
+  have tried their account last). With two or more identities,
+  `chainCallReason` leads with the closest credential's own cause (and a
+  provider-aware action: an OpenAI or ElevenLabs key never points at xAI or
+  the Grok page), then says the others in one line, org keys named as the
+  organization's; the body's `key` and `failure` are that first cause, so
+  the bar and the phone name it, never only the last refusal (#5424).
 - A refused realtime handshake keeps xAI's reason (`openRealtimeSocket` in
   `server/tts/grok.ts`): 402 is `quota`, 401, 403 and xAI's 400 are `key`,
   only a failure of xAI is `down`. A key refused for itself is remembered,

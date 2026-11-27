@@ -66,18 +66,17 @@ type Side = "credits" | "refused" | "missing";
 
 /** One plain sentence when a connected Grok account was tried and every
  * tried credential is out of credits or refused. Null otherwise, so a
- * voice that never tried an account keeps today's words. */
-export function noCallReason(tried: readonly { source: string; failure: string }[], language: NoCallLanguage): string | null {
+ * voice that never tried an account keeps today's words. Two or more
+ * identities go through `chainCallReason` only (org keys named as the
+ * organization's, first cause then the rest). This keeps the single-account
+ * case that names a missing API key. */
+export function noCallReason(tried: readonly { source: string; failure: string; provider?: string }[], language: NoCallLanguage): string | null {
   if (!tried.some((entry) => entry.source === "grok-account")) return null;
   if (!tried.every((entry) => entry.failure === "quota" || entry.failure === "key")) return null;
+  if (tried.length >= 2) return chainCallReason(tried, language);
   const account = tried.find((entry) => entry.source === "grok-account");
-  // the organization's Grok account is an account too, never "the xAI API key"
-  const orgAccount = tried.find((entry) => entry.source === "org-account");
-  const api = tried.filter((entry) => entry.source !== "grok-account" && entry.source !== "org-account");
   const accountSide: Side = account?.failure === "quota" ? "credits" : "refused";
-  const apiSide: Side = api.length === 0 ? "missing" : api.every((entry) => entry.failure === "quota") ? "credits" : "refused";
-  const orgSide = orgAccount ? (orgAccount.failure === "quota" ? "credits" : "refused") : null;
-  return language === "fr" ? french(accountSide, apiSide, orgSide) : english(accountSide, apiSide, orgSide);
+  return language === "fr" ? french(accountSide, "missing", null) : english(accountSide, "missing", null);
 }
 
 /** One plain sentence when the provider does not know the voice name that was
@@ -188,17 +187,29 @@ const ANY_OWN_ACTION: Record<NoCallLanguage, string> = {
   en: `Add credits to that xAI account, or change the key in ${VOICE_SETTINGS.en}, then call back.`,
 };
 
-function ownAction(rows: readonly { source: string; failure: string }[], language: NoCallLanguage): string {
-  const actions = rows.map(({ source, failure }) => {
-    if (source !== "voice-key") return OWN_ACTION[source]?.[language] ?? ANY_OWN_ACTION[language];
-    if (failure === "quota") {
-      return language === "fr"
+/** An action written for xAI, rewritten for another provider: "xAI" and the
+ * Perspicax "Grok" page become that provider's name (OpenAI, ElevenLabs). */
+function providerAwareAction(text: string, provider: string | undefined): string {
+  if (!provider || provider === "xai") return text;
+  const label = providerLabel({ provider });
+  return text.replaceAll("xAI", label).replaceAll("Grok", label);
+}
+
+function ownAction(rows: readonly { source: string; failure: string; provider?: string }[], language: NoCallLanguage): string {
+  const actions = rows.map(({ source, failure, provider }) => {
+    let text: string;
+    if (source !== "voice-key") {
+      text = OWN_ACTION[source]?.[language] ?? ANY_OWN_ACTION[language];
+    } else if (failure === "quota") {
+      text = language === "fr"
         ? `Ajoute des crédits au compte xAI associé à ta clé vocale, ou change ta clé vocale dans ${VOICE_SETTINGS.fr}, puis rappelle.`
         : `Add credits to the xAI account for your voice key, or change your voice key in ${VOICE_SETTINGS.en}, then call back.`;
+    } else {
+      text = language === "fr"
+        ? `Change ta clé vocale dans ${VOICE_SETTINGS.fr}, puis rappelle.`
+        : `Change your voice key in ${VOICE_SETTINGS.en}, then call back.`;
     }
-    return language === "fr"
-      ? `Change ta clé vocale dans ${VOICE_SETTINGS.fr}, puis rappelle.`
-      : `Change your voice key in ${VOICE_SETTINGS.en}, then call back.`;
+    return providerAwareAction(text, provider);
   });
   return [...new Set(actions)].join(" ");
 }
@@ -294,9 +305,6 @@ function providerLabel(row: { provider?: string }): string {
   return VOICE_PROVIDER_LABELS[(row.provider ?? "xai") as VoiceProviderId] ?? "xAI";
 }
 
-/** Credits and a refused key: what another credential can fix. */
-const finalFailure = (failure: string): boolean => failure === "quota" || failure === "key";
-
 /** An account is "il" in French, a key "elle". */
 const isAccount = (source: string): boolean => source === "grok-account" || source === "org-account";
 
@@ -375,23 +383,14 @@ function chainRest(rows: readonly ChainRow[], language: NoCallLanguage): string 
   return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`;
 }
 
-/** One plain sentence when the whole chain failed and its refusals are not
- * all credits or keys of xAI (an unknown voice, a provider that did not
- * answer, another provider's keys), or the connected account's state is not
- * the others' (refused while the key behind it is dry): the first real cause
- * comes first, named with the credential closest to the person (`tried` in
- * their order), then one line for every credential behind it
- * (M-20261126-145). The person used to read only the last refusal ("no
- * credits"). Null for a single refusal and for the other chains of xAI
- * credits and keys, which the sentences above already say whole
- * (noCallReason, realtimeKeyRefusedCallReason). */
+/** One plain sentence when two or more credentials failed: the first real
+ * cause comes first, named with the credential closest to the person
+ * (`tried` in their order), then one line for every credential behind it
+ * (M-20261126-145). Org keys are named as the organization's. Null only for
+ * a single refusal (or none), which `noCallReason` and
+ * `realtimeKeyRefusedCallReason` still say whole. */
 export function chainCallReason(tried: readonly ChainRow[], language: NoCallLanguage): string | null {
   if (tried.length < 2) return null;
-  const xaiFinal = tried.every((row) => finalFailure(row.failure) && (row.provider ?? "xai") === "xai");
-  // noCallReason says one state for the account and one for the rest ("non
-  // plus", "aussi"): right only when they agree
-  const accountApart = tried.some((row) => row.source === "grok-account") && new Set(tried.map((row) => row.failure)).size > 1;
-  if (xaiFinal && !accountApart) return null;
   const [first, ...rest] = tried;
   return `${chainHead(first!, language)} ${chainRest(rest, language)}`;
 }

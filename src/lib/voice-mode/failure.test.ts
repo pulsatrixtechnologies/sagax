@@ -173,7 +173,7 @@ describe("the key a voice failure is about (2026-10-28)", () => {
     expect(voiceErrorNote("speech-failed", "down", down, translate)).toEqual({ key: "voiceMode.provider.down", retry: false, clearsOnVoice: true });
     // an older server names no key: the plain line too
     expect(voiceErrorNote("speech-failed", "quota", new VoiceProviderError("x", "quota", 502), translate).key).toBe("voiceMode.provider.quota");
-    const both = "No call was placed: the connected Grok account is out of credits, and the xAI API key is out of credits too.";
+    const both = "No call was placed: your connected Grok account is out of credits. Add credits on the connected Grok account, then call back. Your organization's xAI key is out of credits.";
     const note = voiceErrorNote("speech-failed", "quota", new VoiceProviderError(both, "quota", 502, { key: { source: "grok-account", last4: "4Dd" } }), translate);
     expect(t(note.key, note.params)).toBe(both);
   });

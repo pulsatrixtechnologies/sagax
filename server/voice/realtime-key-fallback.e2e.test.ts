@@ -408,7 +408,8 @@ describe("a voice the provider does not know", () => {
 // #5222: the reasons the server computes reach the person inside the refused
 // frame, written in the person's own language, and each one says where to go
 // and what to do. These are the paths where no connected Grok account was
-// tried, so `noCallReason` stays quiet and the server writes the sentence.
+// tried, so `noCallReason` stays quiet; two or more identities use
+// `chainCallReason`, a single refusal uses `realtimeKeyRefusedCallReason`.
 describe("a refusal the person reads in their own language, end to end", () => {
   it("an organization out of credits is an administrator's business, said in French", async () => {
     clock += 10 * VOICE_KEY_REFUSAL_TTL_MS;
@@ -440,8 +441,9 @@ describe("a refusal the person reads in their own language, end to end", () => {
     answers[ORG_KEY] = 402;
     const call = await placeCall("p-ben");
     expect(call.code).toBe("realtime_key_refused");
+    // two identities: chainCallReason only (first cause + org key named as org)
     expect(call.error).toBe(
-      "Aucun appel : ta clé xAI dans Perspicax n'a plus de crédits, et la clé xAI de ton organisation n'a plus de crédits. Ajoute des crédits à ce compte xAI, ou change la clé dans Perspicax (Fournisseurs > Grok), puis rappelle. Pour la clé que tu as reçue, demande à un administrateur de ton organisation.",
+      "Aucun appel : ta clé xAI dans Perspicax n'a plus de crédits. Ajoute des crédits à ce compte xAI, ou change la clé dans Perspicax (Fournisseurs > Grok), puis rappelle. La clé xAI de ton organisation n'a plus de crédits.",
     );
     expect(asked).toEqual([BEN_KEY, ORG_KEY]);
   });

@@ -1,5 +1,6 @@
-// Shared pieces of the model menu's layout (#5051): the fixed icon zone,
-// Optimize for on one line, and reasoning levels that stay whole.
+// Shared pieces of the model menu's layout (#5051, #5338): the fixed icon
+// zone, Optimize for on one line, reasoning levels that stay whole, and the
+// composer's cascading system menus for Reasoning and All models.
 import CompanionCore
 import SwiftUI
 
@@ -151,87 +152,128 @@ struct ModelMenuReasoning: View {
     }
 }
 
-/// The same drill-down rows in the phone sheet and the iPad popover.
-struct ComposerMenuPanel<ModelRow: View>: View {
-    @Binding var panel: ComposerModes.Panel
-    let list: ComposerModes.ManualList
+/// Reasoning as a system nested menu (#5338): the mode menu stays on screen.
+struct ComposerCascadeReasoning<LabelContent: View>: View {
     let reasoning: ComposerModes.Reasoning
     let automatic: Bool
     let pickEffort: (String?) -> Void
-    @ViewBuilder var modelRow: (ModelMenuRow) -> ModelRow
-
-    private var visiblePanel: ComposerModes.Panel { ComposerModes.settle(panel, providers: list.providers) }
-
-    private var heading: String {
-        switch visiblePanel {
-        case .root, .providers: return String(localized: "All models")
-        case .reasoning: return String(localized: "Reasoning")
-        case let .accounts(id): return list.providers.first { $0.id == id }?.label ?? ""
-        case let .models(id, accountId):
-            guard let provider = list.providers.first(where: { $0.id == id }) else { return "" }
-            let account = provider.accounts.first { $0.id == accountId }
-            return [provider.label, provider.accounts.count > 1 ? account?.label : nil].compactMap { $0 }.joined(separator: " · ")
-        }
-    }
+    @ViewBuilder var label: () -> LabelContent
 
     var body: some View {
-        Button {
-            panel = ComposerModes.back(visiblePanel, providers: list.providers)
-        } label: {
-            Label { Text(verbatim: heading) } icon: { Image(systemName: "chevron.left") }
-        }
-        .accessibilityLabel(Text("Back"))
-        .accessibilityIdentifier("model-menu-back")
-        switch visiblePanel {
-        case .providers:
-            ForEach(list.top) { modelRow($0) }
-            if !list.favorites.isEmpty {
-                Text("Favorites").font(.caption).foregroundStyle(.secondary)
-                ForEach(list.favorites) { modelRow($0) }
-            }
-            ForEach(list.providers) { provider in
-                link(provider.label, current: provider.current) { panel = ComposerModes.open(provider) }
-                    .accessibilityIdentifier("model-provider.\(provider.id)")
-            }
-        case let .accounts(id):
-            if let provider = list.providers.first(where: { $0.id == id }) {
-                ForEach(provider.accounts) { account in
-                    link(account.label ?? provider.label, current: account.rows.contains(where: \.current)) { panel = .models(id, account.id) }
-                        .accessibilityIdentifier("model-account.\(account.id)")
-                }
-            }
-        case let .models(id, accountId):
-            if let provider = list.providers.first(where: { $0.id == id }),
-               let account = provider.accounts.first(where: { $0.id == accountId }) {
-                ForEach(account.rows) { modelRow($0) }
-            }
-        case .reasoning:
+        Menu {
             ForEach(reasoning.choices, id: \.self) { level in
-                Button { pickEffort(level) } label: {
-                    HStack {
+                Button {
+                    pickEffort(level)
+                } label: {
+                    if level == reasoning.value {
+                        Label(reasoning.label(level, automatic: automatic), systemImage: "checkmark")
+                    } else {
                         Text(verbatim: reasoning.label(level, automatic: automatic))
-                        Spacer()
-                        if level == reasoning.value { Image(systemName: "checkmark").accessibilityHidden(true) }
                     }
-                    .contentShape(Rectangle())
                 }
-                .accessibilityAddTraits(level == reasoning.value ? .isSelected : [])
                 .accessibilityIdentifier("model-reasoning.\(level ?? "default")")
             }
-        case .root: EmptyView()
+        } label: {
+            label()
+        }
+        .disabled(reasoning.disabled)
+        .accessibilityIdentifier("model-mode-reasoning")
+    }
+}
+
+/// All models as cascading system menus (#5338): provider, then account, then
+/// model. A provider with one account opens on its models. Favorites lead.
+struct ComposerCascadeAllModels<LabelContent: View>: View {
+    let list: ComposerModes.ManualList
+    let favoriteKeys: [String]
+    let onPick: (ModelMenuRow) -> Void
+    let onStar: (ModelMenuRow) -> Void
+    @ViewBuilder var label: () -> LabelContent
+
+    var body: some View {
+        Menu {
+            ForEach(list.top) { row in
+                modelButtons(row, star: false)
+            }
+            if !list.favorites.isEmpty {
+                Section(String(localized: "Favorites")) {
+                    ForEach(list.favorites) { row in
+                        modelButtons(row, star: true)
+                    }
+                }
+            }
+            ForEach(list.providers) { provider in
+                providerMenu(provider)
+            }
+        } label: {
+            label()
+        }
+        .accessibilityIdentifier("model-all")
+    }
+
+    @ViewBuilder
+    private func providerMenu(_ provider: ComposerModes.ManualProvider) -> some View {
+        switch ComposerModes.open(provider) {
+        case let .models(_, accountId):
+            if let account = provider.accounts.first(where: { $0.id == accountId }) {
+                Menu {
+                    ForEach(account.rows) { modelButtons($0, star: true) }
+                } label: {
+                    providerLabel(provider.label, current: provider.current)
+                }
+                .accessibilityIdentifier("model-provider.\(provider.id)")
+            }
+        case .accounts(_):
+            Menu {
+                ForEach(provider.accounts) { account in
+                    Menu {
+                        ForEach(account.rows) { modelButtons($0, star: true) }
+                    } label: {
+                        providerLabel(account.label ?? provider.label, current: account.rows.contains(where: \.current))
+                    }
+                    .accessibilityIdentifier("model-account.\(account.id)")
+                }
+            } label: {
+                providerLabel(provider.label, current: provider.current)
+            }
+            .accessibilityIdentifier("model-provider.\(provider.id)")
+        case .root, .reasoning, .providers, .models(_, _):
+            EmptyView()
         }
     }
 
-    private func link(_ title: String, current: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack {
-                Text(verbatim: title)
-                Spacer()
-                if current { Image(systemName: "checkmark") }
-                Image(systemName: "chevron.right").foregroundStyle(.secondary)
-            }
-            .contentShape(Rectangle())
+    @ViewBuilder
+    private func providerLabel(_ title: String, current: Bool) -> some View {
+        if current {
+            Label(title, systemImage: "checkmark")
+        } else {
+            Text(verbatim: title)
         }
-        .accessibilityAddTraits(current ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private func modelButtons(_ row: ModelMenuRow, star: Bool) -> some View {
+        Button {
+            onPick(row)
+        } label: {
+            if row.current {
+                Label(row.label, systemImage: "checkmark")
+            } else {
+                Text(verbatim: row.label)
+            }
+        }
+        .accessibilityIdentifier("model-row.\(row.key)")
+        if star, row.kind == .model {
+            let starred = favoriteKeys.contains(row.key)
+            Button {
+                onStar(row)
+            } label: {
+                Label(
+                    starred ? String(localized: "Remove \(row.label) from favorites") : String(localized: "Add \(row.label) to favorites"),
+                    systemImage: starred ? "star.fill" : "star"
+                )
+            }
+            .accessibilityIdentifier("model-favorite.\(row.instanceId ?? "").\(row.modelId ?? "")")
+        }
     }
 }

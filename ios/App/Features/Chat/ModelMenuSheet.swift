@@ -84,7 +84,6 @@ struct ModelMenuSheet: View {
 
     private enum Page: Hashable { case root, all }
 
-    @State private var panel: ComposerModes.Panel = .root
     @State private var preview: ComposerModes.Preview?
 
     private var levelRow: ComposerModes.Reasoning {
@@ -155,10 +154,6 @@ struct ModelMenuSheet: View {
                     HStack { Text("Loading models"); Spacer(); ProgressView() }
                 } else if !query.isEmpty {
                     searchResults
-                } else if choose == nil, panel != .root {
-                    ComposerMenuPanel(panel: $panel, list: manual, reasoning: levelRow, automatic: ComposerModes.mode(of: selection) == .auto, pickEffort: setEffort) { model in
-                        row(row: model, id: "model-row.\(model.key)", star: true)
-                    }
                 } else {
                     switch page {
                     case .root: root
@@ -211,25 +206,46 @@ struct ModelMenuSheet: View {
         }
         if levelRow.shown {
             Section {
-                Button { panel = .reasoning } label: {
+                ComposerCascadeReasoning(reasoning: levelRow, automatic: mode == .auto, pickEffort: setEffort) {
                     HStack {
                         Text("Reasoning")
+                            .foregroundStyle(levelRow.disabled ? Theme.textTertiary : Theme.textPrimary)
                         Spacer()
                         Text(verbatim: levelRow.label(levelRow.value, automatic: mode == .auto))
-                        if !levelRow.disabled { Image(systemName: "chevron.right") }
+                            .foregroundStyle(levelRow.disabled ? Theme.textTertiary : Theme.textSecondary)
+                        if !levelRow.disabled {
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(Theme.textTertiary)
+                        }
                     }
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(levelRow.disabled ? Theme.textTertiary : Theme.textPrimary)
-                .disabled(levelRow.disabled)
-                .accessibilityIdentifier("model-mode-reasoning")
             }
         }
-        if !manual.providers.isEmpty || !manual.top.isEmpty {
+        if !manual.providers.isEmpty || !manual.top.isEmpty || !manual.favorites.isEmpty {
             Section {
                 let pinned = mode == nil ? sections.flatMap(\.rows).first { $0.kind == .model && $0.current }?.label ?? selection.model : nil
-                pageButton(String(localized: "All models"), id: "model-all", current: false, detail: pinned) { panel = .providers }
+                ComposerCascadeAllModels(
+                    list: manual,
+                    favoriteKeys: favorites.keys,
+                    onPick: pick,
+                    onStar: { favorites.toggle($0.key, session: session) }
+                ) {
+                    HStack(spacing: 0) {
+                        Text("All models").foregroundStyle(Theme.textPrimary)
+                        Spacer(minLength: 4)
+                        if let pinned {
+                            Text(verbatim: pinned).font(.footnote).foregroundStyle(Theme.textSecondary)
+                        }
+                        menuIcon {
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(Theme.textTertiary)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
             }
         }
     }

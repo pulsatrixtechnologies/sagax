@@ -43,21 +43,29 @@ final class ModelAccountsUITests: XCTestCase {
         let all = app.buttons["model-all"]
         XCTAssertTrue(all.waitForExistence(timeout: 5))
         all.tap()
-        app.buttons["model-provider.Claude"].tap()
-        let personal = app.buttons["model-account.preview"]
-        let team = app.buttons["model-account.preview-team"]
+        let claude = app.descendants(matching: .any)["model-provider.Claude"].firstMatch
+        XCTAssertTrue(claude.waitForExistence(timeout: 5))
+        claude.tap()
+        let personal = app.descendants(matching: .any)["model-account.preview"].firstMatch
+        let team = app.descendants(matching: .any)["model-account.preview-team"].firstMatch
         XCTAssertTrue(personal.waitForExistence(timeout: 5))
         XCTAssertTrue(personal.label.contains("ada@example.com"))
         XCTAssertTrue(team.label.contains("ada.admin@acme.test"))
         shot("model-accounts", app)
         personal.tap()
-        XCTAssertTrue(app.buttons["model-row.preview/claude-opus-4-5"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["model-row.preview/claude-mythos-5-2"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["model-row.preview/claude-opus-4-5"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.descendants(matching: .any)["model-row.preview/claude-mythos-5-2"].firstMatch.exists)
         shot("model-accounts-personal", app)
-        app.buttons["model-menu-back"].tap()
+        // #5338: reopen the cascade for the other account (no back row)
+        if !team.waitForExistence(timeout: 2) {
+            all.tap()
+            XCTAssertTrue(claude.waitForExistence(timeout: 5))
+            claude.tap()
+            XCTAssertTrue(team.waitForExistence(timeout: 5))
+        }
         team.tap()
-        XCTAssertTrue(app.buttons["model-row.preview-team/claude-mythos-5-2"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["model-row.preview-team/claude-opus-4-5"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["model-row.preview-team/claude-mythos-5-2"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["model-row.preview-team/claude-opus-4-5"].firstMatch.exists)
         shot("model-accounts-team", app)
     }
 

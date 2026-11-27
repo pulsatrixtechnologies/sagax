@@ -186,6 +186,7 @@ function Bar({
       <ComposerCustomizeChrome
         customizing={customizing}
         jiggleFrame={jiggleFrame}
+        globalChrome={false}
         onReset={() => undefined}
         onDone={() => undefined}
       >

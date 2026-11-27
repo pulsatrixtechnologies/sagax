@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 
-import { connectedPlanRows, type PlanRow, type PlanUsageReport } from "@/lib/plan-usage";
+import { connectedPlanRows, PLAN_USAGE_REFRESH_MS, type PlanRow, type PlanUsageReport } from "@/lib/plan-usage";
 import { rowsForEngine, weeklyLimitNotice } from "@/lib/usage-notices";
 import { api } from "@/state/store";
 
-const REFRESH_MS = 10 * 60_000;
 /** D-20261125-014: while a usage detail is open its figures are read again every minute. */
 export const OPEN_REFRESH_MS = 60_000;
 
@@ -19,7 +18,7 @@ export function useEnginePlanRows(engine?: string, driver?: string, detailOpen =
     let alive = true;
     const load = () => { void api<PlanUsageReport>("/api/plan-usage").then((report) => { if (alive) setRows(connectedPlanRows(report)); }, () => {}); };
     load();
-    const timer = window.setInterval(load, detailOpen ? OPEN_REFRESH_MS : REFRESH_MS);
+    const timer = window.setInterval(load, detailOpen ? OPEN_REFRESH_MS : PLAN_USAGE_REFRESH_MS);
     return () => { alive = false; window.clearInterval(timer); };
   }, [detailOpen]);
   // #2902: only the engine this bot runs on (Auto resolved); another

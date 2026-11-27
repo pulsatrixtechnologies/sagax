@@ -10,7 +10,7 @@ import path from "node:path";
 // the chords of electron/bot-roster.mjs HOTKEY_MODIFIERS
 const HOTKEY_MODIFIER_NAMES = ["cmd-shift", "cmd-alt", "ctrl-alt"];
 const FILE = "desktop-shell-preferences.json";
-export const DEFAULT_SHELL_PREFERENCES = Object.freeze({ hardwareAcceleration: true, spellcheck: true, botHotkeys: true, botHotkeyModifier: "cmd-shift" });
+export const DEFAULT_SHELL_PREFERENCES = Object.freeze({ hardwareAcceleration: true, spellcheck: true, botHotkeys: true, botHotkeyModifier: "cmd-shift", usageInMenuBar: true });
 
 /** Only booleans for the two known names; anything else is dropped. */
 export function normalizeShellPreferences(value) {
@@ -19,6 +19,8 @@ export function normalizeShellPreferences(value) {
     if (typeof value.hardwareAcceleration === "boolean") out.hardwareAcceleration = value.hardwareAcceleration;
     if (typeof value.spellcheck === "boolean") out.spellcheck = value.spellcheck;
     if (typeof value.botHotkeys === "boolean") out.botHotkeys = value.botHotkeys;
+    // the usage icon of the menu bar or of the notification area (usage-tray.mjs)
+    if (typeof value.usageInMenuBar === "boolean") out.usageInMenuBar = value.usageInMenuBar;
     if (HOTKEY_MODIFIER_NAMES.includes(value.botHotkeyModifier)) out.botHotkeyModifier = value.botHotkeyModifier;
   }
   return out;

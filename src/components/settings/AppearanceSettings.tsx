@@ -36,7 +36,7 @@ import { sidebarBotThreads, useSidebarBotThreads } from "@/lib/sidebar-bot-threa
 import { setSidebarPeopleApart, useSidebarPeopleApart } from "@/lib/sidebar-people-apart-preference";
 import { setShowRoutinesBadge, useShowRoutinesBadge } from "@/lib/routines-badge-preferences";
 import { contrastChoice, CONTRAST_CHOICES, MOTION_CHOICES, motionChoice, TEXT_SIZE_CHOICES, textSizeChoice } from "@/lib/accessibility-preferences";
-import { BOT_HOTKEY_MODIFIERS, botHotkeyModifierChoice, botHotkeysChoice, hardwareAccelerationChoice, hasDesktopShellPreferences, spellcheckChoice } from "@/lib/desktop-shell-preferences";
+import { BOT_HOTKEY_MODIFIERS, botHotkeyModifierChoice, botHotkeysChoice, hardwareAccelerationChoice, hasDesktopShellPreferences, spellcheckChoice, usageMenuBarChoice } from "@/lib/desktop-shell-preferences";
 import { CompactRow, DescribedRow, PillSelect, SettingsGroup, Switch } from "../SettingsPrimitives";
 import { SidebarHiddenSettings } from "../SidebarHiddenSettings";
 import { SkinPicker } from "../SkinPicker";
@@ -493,6 +493,20 @@ export function BotHotkeysRows() {
   );
 }
 
+/** Appearance > Usage (#5407): the usage icon of the macOS menu bar, or of
+ * the Windows notification area. Only where the desktop app can show one. */
+export function UsageMenuBarGroup() {
+  const shown = usageMenuBarChoice.use() === "true";
+  const platform = typeof window === "undefined" ? undefined : window.ogb?.platform;
+  if (!hasDesktopShellPreferences() || !window.ogb?.usageTray || (platform !== "darwin" && platform !== "win32")) return null;
+  const label = t(platform === "win32" ? "settings.usageMenuBar.titleWindows" : "settings.usageMenuBar.title");
+  return (
+    <SettingsGroup title={t("settings.section.usage")} groupId="usageDisplay">
+      <SwitchLine label={label} checked={shown} onChange={(on) => usageMenuBarChoice.set(on ? "true" : "false")} rowId="usageMenuBar" />
+    </SettingsGroup>
+  );
+}
+
 function ThemeCustomizeRows() {
   const [open, setOpen] = useState(false);
   return (
@@ -616,6 +630,7 @@ export function AppearanceSettings() {
         <SwitchLine label={t("settings.showPermissions.title")} ariaLabel={t("settings.showPermissions.show")} checked={permissions} onChange={setShowPermissions} rowId="showPermissions" />
         <SidebarHiddenFold />
       </SettingsGroup>
+      <UsageMenuBarGroup />
       <SettingsGroup title={[t("settings.sidebarLogo.title"), t("settings.routinesBadge.title")].join(", ")} groupId="sidebarAdvanced" advanced>
         <SwitchLine label={t("settings.sidebarLogo.title")} ariaLabel={t("settings.sidebarLogo.show")} checked={logo} onChange={setShowSidebarLogo} rowId="sidebarLogo" />
         <SwitchLine label={t("settings.routinesBadge.title")} ariaLabel={t("settings.routinesBadge.show")} checked={routinesBadge} onChange={setShowRoutinesBadge} rowId="routinesBadge" />

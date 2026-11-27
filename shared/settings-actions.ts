@@ -908,6 +908,7 @@ pref("appearance.hardwareAcceleration", "appearance", "sagax.hardwareAcceleratio
 pref("appearance.spellcheck", "appearance", "sagax.spellcheck.v1", "boolean", "Check spelling while typing (desktop app)", "Settings > General > Appearance > More appearance > Desktop");
 pref("appearance.botHotkeys", "appearance", "sagax.botHotkeys.v1", "boolean", "Global shortcuts that open a bot (macOS)", "Settings > General > Appearance > More appearance > Desktop");
 pref("appearance.botHotkeyChord", "appearance", "sagax.botHotkeyModifier.v1", "enum:cmd-shift|cmd-alt|ctrl-alt", "Chord of the bots' global shortcuts (Cmd+Shift, Cmd+Option, Ctrl+Option, then the slot number)", "Settings > General > Appearance > More appearance > Desktop");
+pref("appearance.usageMenuBar", "appearance", "sagax.usageMenuBar.v1", "boolean", "Usage in the menu bar (macOS) or the notification area (Windows), desktop app", "Settings > General > Appearance > Usage");
 pref("appearance.sendKey", "appearance", "omb-send-key", "enum:enter|mod-enter", "Send key", "Settings > General > Appearance");
 pref("appearance.runCard", "appearance", "omb-show-run-card", "boolean", "This run card", "Settings > General > Appearance");
 pref("appearance.sidebarLogo", "appearance", "sagax-show-sidebar-logo", "boolean", "Sidebar logo", "Settings > General > Appearance");

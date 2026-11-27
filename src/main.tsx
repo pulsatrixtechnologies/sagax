@@ -13,6 +13,7 @@ import { applySkin, applySkinDepth, applySkinTexture, installSkinAutoFollow, rea
 import { applyFont, readFont } from "./lib/fonts";
 import { applyAccessibility, installAccessibility } from "./lib/accessibility-preferences";
 import { installDesktopShellPreferences } from "./lib/desktop-shell-preferences";
+import { installMenuBarUsage } from "./lib/menu-bar-usage";
 import { migrateInterfaceModeToAdvancedOnce, retireLegacyInterfaceMode } from "./lib/interface-mode";
 import { BrowserSignInPage } from "./pair/BrowserSignInPage";
 import { PairPage } from "./pair/PairPage";
@@ -67,6 +68,7 @@ applyFont(readFont());
 installAccessibility();
 // Hardware acceleration and spell checking, handed to the desktop shell.
 installDesktopShellPreferences();
+installMenuBarUsage();
 
 /** A pairing link lands on /pair. A remote browser without a session lands
  * there too, because every API call would otherwise fail with "pair this

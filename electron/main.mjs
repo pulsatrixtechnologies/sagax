@@ -1,6 +1,6 @@
 // First: SAGAX_* settings onto the names the code reads (legacy-names.mjs).
 import "./legacy-env-boot.mjs";
-import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, Notification, WebContentsView, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, net, powerMonitor, powerSaveBlocker, safeStorage, screen, session, shell, systemPreferences, utilityProcess } from "electron";
+import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, Notification, Tray, WebContentsView, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, net, powerMonitor, powerSaveBlocker, safeStorage, screen, session, shell, systemPreferences, utilityProcess } from "electron";
 import { createRequire } from "node:module";
 import { randomBytes, randomUUID } from "node:crypto";
 import { createCompanionKeepAwake } from "./companion-keep-awake.mjs";
@@ -129,7 +129,7 @@ import { openFolderInObsidian } from "./obsidian-vault.mjs";
 import { createCompanyBackupSchedule } from "./company-backup-schedule.mjs";
 import { keepUserDataInPlace, RUNTIME_NAME } from "./user-data-location.mjs";
 import { migrateSafeStorageKeychain } from "./keychain-migration.mjs";
-import { FULL_NAME } from "./app-name.mjs";
+import { DISPLAY_NAME, FULL_NAME } from "./app-name.mjs";
 
 // Before anything reads userData: the folder is pinned (moved once from
 // "openmausbot" to "sagax"), never derived from the on-screen name, and the
@@ -1088,6 +1088,7 @@ import {
 import { createRoutineWakeHold, rememberRoutineWake, routineWakeSettings } from "./routine-wake.mjs";
 import { readDesktopLanguage, writeDesktopLanguage } from "./desktop-language.mjs";
 import { readShellPreferences, writeShellPreferences } from "./desktop-shell-preferences.mjs";
+import { createUsageTray } from "./usage-tray.mjs";
 import { systemIdleSnapshot } from "./system-idle.mjs";
 import { installFetchGuard, installSessionBlock } from "./upstream-hosts.mjs";
 import { reportOwnListeners, serverRequestRefusal } from "./server-session.mjs";
@@ -3057,6 +3058,8 @@ function navigateMainWindow(url, { reload = false, account = null } = {}) {
   }
   const shown = pageContexts.show(origin, url);
   if (!shown) return;
+  // the icon's figures are the account on screen's
+  if (otherAccount) usageTray.refresh();
   // A page kept open but showing this app's loading or error page (not its
   // account's address) loads the account now.
   let onItsAddress = false;
@@ -3931,7 +3934,7 @@ function createWindow({ deferNavigation = false } = {}) {
   for (const event of ["resize", "maximize", "unmaximize", "enter-full-screen", "leave-full-screen", "restore"]) {
     win.on(event, () => contexts.layout());
   }
-  win.on("focus", () => desktopAttention.settle());
+  win.on("focus", () => { desktopAttention.settle(); usageTray.refresh(); });
   win.on("close", (event) => {
     // macOS: the red button hides the window, as a chat app does, so its
     // page keeps the live stream and a nudge or a message still reaches
@@ -4539,9 +4542,53 @@ ipcMain.handle("desktop-shell-preferences:set", desktopUiOnly("desktop-shell-pre
   if (saved) {
     try { session.defaultSession.setSpellCheckerEnabled(saved.spellcheck); } catch { /* no spell checker here */ }
     if (patch && ("botHotkeys" in patch || "botHotkeyModifier" in patch)) applyBotHotkeyConfig();
+    if (patch && "usageInMenuBar" in patch) applyUsageTray();
   }
   return saved;
 }));
+// The usage icon of the menu bar (macOS) or of the notification area
+// (Windows), #5407: Settings > Appearance turns it on or off; the figures are
+// the page's own (the account on screen), never computed here.
+const usageTray = createUsageTray({
+  Tray,
+  nativeImage,
+  platform: process.platform,
+  appName: DISPLAY_NAME,
+  onClick: () => openUsageDetail(),
+  requestFigures: () => mainPage()?.send("usage-tray:refresh"),
+  displayScale: () => screen.getPrimaryDisplay().scaleFactor,
+  log: (line) => slog(line),
+});
+function applyUsageTray() {
+  // an automated launch (smoke test, bench) never puts an icon on the machine
+  if (process.env.SAGAX_SMOKE_TEST === "1" || PERF_BENCH) return;
+  let on = true;
+  try {
+    on = readShellPreferences(app.getPath("userData")).usageInMenuBar !== false;
+  } catch {
+    on = true;
+  }
+  usageTray.setEnabled(on);
+}
+/** The icon's click: the window comes forward on the usage detail. */
+function openUsageDetail() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    // no window left (closed for real): a new one, then the detail once it loaded
+    openWindowForLink?.();
+    const opened = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null;
+    opened?.once("did-finish-load", () => mainPage()?.send("app:open-settings", "usage"));
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+  mainPage()?.send("app:open-settings", "usage");
+}
+ipcMain.on("usage-tray:update", (event, values) => {
+  // only the page the person sees speaks for the icon
+  if (!isDesktopUiSender(event) || event.sender !== mainPage()) return;
+  usageTray.update(values);
+});
 ipcMain.handle("app-icon:get", desktopUiOnly("app-icon:get", () => {
   const saved = savedAppIcon();
   return { platform: process.platform, id: saved?.id ?? null, updatedAt: saved?.updatedAt ?? null };
@@ -6034,6 +6081,7 @@ app.whenReady().then(async () => {
   // by itself; only "Restart to update", the person's click, installs
   if (!PERF_BENCH) startUpdater();
   refreshApplicationMenu();
+  applyUsageTray();
   openWindowForLink = () => {
     if (!mainWindow || mainWindow.isDestroyed()) createWindow();
   };
@@ -6089,6 +6137,7 @@ app.on("before-quit", (e) => {
   mascotHotkey.dispose();
   botHotkeys.dispose();
   captureHotkey.dispose();
+  usageTray.dispose();
   companyBackupSchedule?.close();
   orgLibrary?.close();
   managedDesktop?.close();
@@ -6154,5 +6203,5 @@ function releaseDesktopDataDirLease() {
 // process hook covers app.exit()/fatal exits that bypass it.
 app.on("will-quit", releaseDesktopDataDirLease);
 // the global key goes with the app, whatever path the quit took
-app.on("will-quit", () => { mascotHotkey.dispose(); botHotkeys.dispose(); captureHotkey.dispose(); });
+app.on("will-quit", () => { mascotHotkey.dispose(); botHotkeys.dispose(); captureHotkey.dispose(); usageTray.dispose(); });
 process.once("exit", releaseDesktopDataDirLease);

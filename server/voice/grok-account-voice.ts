@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { VOICE_PROVIDER_LABELS, type VoiceProviderId } from "../../shared/voice-providers.ts";
 import { grokAccessFrom } from "../cloud-agents/subscription-access.ts";
 
 /** The solo server's own Grok sign-in (`GROK_HOME` or `~/.grok`), or
@@ -283,6 +284,110 @@ export function realtimeKeyRefusedCallReason(tried: readonly { source: string; f
   // "No call was placed: "), so its spacing is part of the rule
   const lead = language === "fr" ? "Aucun appel : " : "No call was placed: ";
   return `${lead}${who} ${refusedWords(dryOf(own), own.length > 1, language)}. ${ownAction(own, language)}`;
+}
+
+/** A row of a chain: the credential's source, its provider (xAI when absent)
+ * and what it was refused for. */
+interface ChainRow { source: string; failure: string; provider?: string }
+
+function providerLabel(row: { provider?: string }): string {
+  return VOICE_PROVIDER_LABELS[(row.provider ?? "xai") as VoiceProviderId] ?? "xAI";
+}
+
+/** Credits and a refused key: what another credential can fix. */
+const finalFailure = (failure: string): boolean => failure === "quota" || failure === "key";
+
+/** An account is "il" in French, a key "elle". */
+const isAccount = (source: string): boolean => source === "grok-account" || source === "org-account";
+
+/** One credential named as the settings name it, its provider in place of
+ * "xAI" when it is another one's key. */
+function chainName(row: ChainRow, language: NoCallLanguage): string {
+  const base = (OWN_KEY_NAME[row.source] ?? GIVEN_KEY_NAME[row.source])?.[language] ?? (language === "fr" ? "ta clé xAI" : "your xAI key");
+  return row.provider && row.provider !== "xai" ? base.replace("xAI", providerLabel(row)) : base;
+}
+
+/** Several credentials in one subject: the organization's keys of several
+ * providers as one ("les clés xAI et OpenAI de ton organisation"), the
+ * others each by name. */
+function chainNames(rows: readonly ChainRow[], language: NoCallLanguage): string {
+  const and = language === "fr" ? " et " : " and ";
+  const list = (items: string[]) => (items.length < 2 ? items[0] ?? "" : `${items.slice(0, -1).join(", ")}${and}${items[items.length - 1]}`);
+  const orgKeys = rows.filter((row) => row.source === "org-key");
+  const providers = [...new Set(orgKeys.map(providerLabel))];
+  const grouped = providers.length > 1
+    ? [language === "fr" ? `les clés ${list(providers)} de ton organisation` : `your organization's ${list(providers)} keys`]
+    : orgKeys.length ? [chainName(orgKeys[0]!, language)] : [];
+  const others = [...new Set(rows.filter((row) => row.source !== "org-key").map((row) => chainName(row, language)))];
+  // the organization's account before its keys, as the order tries them
+  return list(rows[0]?.source === "org-key" ? [...grouped, ...others] : [...others, ...grouped]);
+}
+
+/** What happened to a credential, as the verb of a clause. */
+function chainState(failure: string, many: boolean, masculine: boolean, language: NoCallLanguage): string {
+  if (failure === "quota") return language === "fr" ? (many ? "n'ont plus de crédits" : "n'a plus de crédits") : (many ? "are out of credits" : "is out of credits");
+  if (failure === "key") return refusedWords(false, many, language, masculine);
+  if (failure === "voice") return language === "fr" ? (many ? "ne connaissent pas cette voix" : "ne connaît pas cette voix") : (many ? "do not know that voice" : "does not know that voice");
+  return language === "fr" ? (many ? "n'ont pas répondu" : "n'a pas répondu") : "did not answer";
+}
+
+/** The first credential's own cause, and what to do about it. */
+function chainHead(row: ChainRow, language: NoCallLanguage): string {
+  const who = chainName(row, language);
+  const provider = providerLabel(row);
+  const lead = language === "fr" ? "Aucun appel : " : "No call was placed: ";
+  const given = keyOwner(row.source) === "given";
+  const askAdmin = language === "fr" ? "Demande à un administrateur de ton organisation." : "Ask an administrator of your organization.";
+  const later = language === "fr" ? "Réessaie dans un moment." : "Try again in a moment.";
+  if (row.failure === "quota" || row.failure === "key") {
+    const action = given ? askAdmin
+      : row.source === "grok-account" && row.failure === "key"
+        ? (language === "fr" ? `Vérifie ton compte Grok dans ${VOICE_SETTINGS.fr}.` : `Check your Grok account in ${VOICE_SETTINGS.en}.`)
+        : ownAction([row], language);
+    return `${lead}${who} ${chainState(row.failure, false, isAccount(row.source), language)}. ${action}`;
+  }
+  if (row.failure === "voice") {
+    return language === "fr"
+      ? `${lead}${provider} ne connaît pas la voix choisie pour ${who}. Recharge la liste des voix et choisis-en une autre.`
+      : `${lead}${provider} does not know the chosen voice for ${who}. Refresh the voice list and choose a voice again.`;
+  }
+  if (row.failure === "busy") {
+    return language === "fr" ? `${lead}${provider} limite ${who} pour l'instant. ${later}` : `${lead}${provider} is rate-limiting ${who} right now. ${later}`;
+  }
+  if (row.failure === "down") {
+    return language === "fr" ? `${lead}${provider} ne répond pas pour ${who}. ${later}` : `${lead}${provider} is not answering for ${who}. ${later}`;
+  }
+  return language === "fr" ? `${lead}la voix a échoué avec ${who}.` : `${lead}the voice failed with ${who}.`;
+}
+
+/** The credentials behind the first one, in one sentence: each state once,
+ * with the credentials it holds for. */
+function chainRest(rows: readonly ChainRow[], language: NoCallLanguage): string {
+  const kind = (failure: string) => (failure === "quota" || failure === "key" || failure === "voice" ? failure : "silent");
+  const kinds = [...new Set(rows.map((row) => kind(row.failure)))];
+  const clauses = kinds.map((state) => {
+    const held = rows.filter((row) => kind(row.failure) === state);
+    const names = chainNames(held, language);
+    const many = held.length > 1;
+    return `${names} ${chainState(state, many, held.some((row) => isAccount(row.source)), language)}`;
+  });
+  const sentence = clauseList(clauses, language);
+  return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`;
+}
+
+/** One plain sentence when the whole chain failed and its refusals are not
+ * all credits or keys of xAI (an unknown voice, a provider that did not
+ * answer, another provider's keys): the first real cause comes first, named
+ * with the credential closest to the person (`tried` in their order), then
+ * one line for every credential behind it (M-20261126-145). The person used
+ * to read only the last refusal ("no credits"). Null for a single refusal and
+ * for a chain of xAI credits and keys only, which the sentences above already
+ * say whole (noCallReason, realtimeKeyRefusedCallReason). */
+export function chainCallReason(tried: readonly ChainRow[], language: NoCallLanguage): string | null {
+  if (tried.length < 2) return null;
+  if (tried.every((row) => finalFailure(row.failure) && (row.provider ?? "xai") === "xai")) return null;
+  const [first, ...rest] = tried;
+  return `${chainHead(first!, language)} ${chainRest(rest, language)}`;
 }
 
 function english(account: Side, api: Side, org: "credits" | "refused" | null): string {

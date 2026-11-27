@@ -60,7 +60,9 @@ export class VoiceModeRefused extends Error {
  * (`down`), an unknown voice (`voice`), anything else (`other`). */
 export type { VoiceProviderFailure };
 const PROVIDER_FAILURES = new Set<VoiceProviderFailure>(["key", "quota", "busy", "down", "voice", "other"]);
-const KEY_SOURCES = new Set<VoiceKeyInfo["source"]>(["voice-key", "perspicax-key", "org-account", "org-key", "server"]);
+// the connected Grok account too: the server names it as a failed chain's
+// first cause, and the bar fell back on the last key without it (M-20261126-145)
+const KEY_SOURCES = new Set<VoiceKeyInfo["source"]>(["grok-account", "voice-key", "perspicax-key", "org-account", "org-key", "server"]);
 const PROVIDERS = new Set<VoiceProviderId>(VOICE_TTS_PROVIDERS);
 
 /** One key xAI refused on the way (server/voice/voice-keys.ts). */

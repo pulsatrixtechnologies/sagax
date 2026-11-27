@@ -24,9 +24,10 @@
 // Whatever the outcome, the person learns which key served or failed: its
 // source and its last four characters (as My voice keys shows them), never
 // more of it. Pure of HTTP: server/voice/voice-mode.ts wires it to the routes.
-import type { VoiceKeySource, VoiceModeRefusalCause, VoiceModeVia } from "../../shared/voice-mode.ts";
+import type { VoiceKeyInfo, VoiceKeySource, VoiceModeRefusalCause, VoiceModeVia } from "../../shared/voice-mode.ts";
 import { VOICE_PROVIDER_LABELS, type VoiceProviderId } from "../../shared/voice-providers.ts";
 import { grokVoiceFailure, type GrokVoiceFailure } from "../tts/grok.ts";
+import { chainCallReason, noCallReason, type NoCallLanguage } from "./grok-account-voice.ts";
 
 export interface VoiceKeyCandidate {
   key: string;
@@ -96,6 +97,9 @@ export function voiceKeyFailureIsFinal(failure: GrokVoiceFailure): boolean {
  * another key serves. Memory only, never a key, never written. */
 export class VoiceKeyRefusals {
   private readonly refused = new Map<string, { failure: GrokVoiceFailure; at: number; ttl: number }>();
+  /** Voice names a credential said it does not know, and when (#5179,
+   * M-20261126-145): the next sentence goes to its default voice at once. */
+  private readonly unknownVoices = new Map<string, number>();
   /** What a person was already told of a key of theirs (`untold`). */
   private readonly told = new Map<string, GrokVoiceFailure>();
   private readonly ttl: number;
@@ -147,6 +151,22 @@ export class VoiceKeyRefusals {
     return entry.failure;
   }
 
+  /** `candidate` said it does not know the voice `voice`. */
+  rememberUnknownVoice(who: string, candidate: VoiceKeyRef, voice: string): void {
+    if (this.unknownVoices.size >= 10_000) this.unknownVoices.clear();
+    this.unknownVoices.set(`${this.id(who, candidate)}\u0000${voice}`, this.now());
+  }
+
+  /** True while `candidate` is known not to have the voice `voice`. */
+  voiceUnknown(who: string, candidate: VoiceKeyRef, voice: string): boolean {
+    const id = `${this.id(who, candidate)}\u0000${voice}`;
+    const at = this.unknownVoices.get(id);
+    if (at === undefined) return false;
+    if (this.now() - at < this.ttl) return true;
+    this.unknownVoices.delete(id);
+    return false;
+  }
+
   /** The candidates in the order to try them: the ones refused lately
    * last (they are still tried when nothing else serves), each with what
    * it was refused for. */
@@ -165,6 +185,52 @@ export interface VoiceKeyAttempt<T, C extends VoiceKeyCandidate = VoiceKeyCandid
   /** the providers that failed before this one: a silent fallback, noted
    * in the thread's Events lens */
   fellBack: VoiceKeyRefusal[];
+}
+
+/** `tried` in the person's own order, the order of `keys` (their
+ * connected account first): the refusal memory may have tried the account
+ * last, and the first entry must stay the credential closest to the person
+ * (M-20261126-145). An entry `keys` does not hold keeps its place after them. */
+export function inPersonOrder<T extends VoiceKeyRef>(tried: readonly T[], keys: readonly VoiceKeyRef[]): T[] {
+  const same = (a: VoiceKeyRef, b: VoiceKeyRef) => a.source === b.source && a.last4 === b.last4 && candidateProvider(a) === candidateProvider(b);
+  const rank = (entry: T) => {
+    const at = keys.findIndex((key) => same(key, entry));
+    return at < 0 ? keys.length : at;
+  };
+  return tried.map((entry, at) => ({ entry, at, rank: rank(entry) })).sort((a, b) => a.rank - b.rank || a.at - b.at).map(({ entry }) => entry);
+}
+
+/** A voice the provider does not know is the name, never the credential
+ * (#5179): the same credential is asked once more on its own default voice
+ * (no name), for speech as for a call (M-20261126-145). */
+export function retriesOnDefaultVoice(failure: GrokVoiceFailure, asked: string | undefined): boolean {
+  return failure === "voice" && Boolean(asked);
+}
+
+/** Speak with the voice `asked` on `candidate`, or at once on the provider's
+ * own default voice when that credential said lately it does not know the
+ * name. A refusal of the name asks the same credential back on its default
+ * and is remembered for the next sentences; any other failure goes to the
+ * caller (withVoiceKeys moves on as before). */
+export async function speakOnKnownVoice<T>(
+  who: string,
+  candidate: VoiceKeyCandidate,
+  asked: string | undefined,
+  refusals: VoiceKeyRefusals,
+  speak: (voice: string | undefined) => Promise<T>,
+  log?: (line: string) => void,
+): Promise<T> {
+  const voice = asked && refusals.voiceUnknown(who, voiceKeyRef(candidate), asked) ? undefined : asked;
+  try {
+    return await speak(voice);
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    if (!voice || !retriesOnDefaultVoice(grokVoiceFailure(message), voice)) throw error;
+    refusals.rememberUnknownVoice(who, voiceKeyRef(candidate), voice);
+    log?.(`[voice-mode] the ${describeVoiceKey(candidate)} does not know the voice "${voice}": asking it back on its own default voice`);
+    return await speak(undefined);
+  }
 }
 
 /** The next credential when another one can fix `failure` (credits, the
@@ -197,8 +263,8 @@ export function nextCandidateIndex(ordered: readonly VoiceKeyCandidate[], i: num
  * refusals used to arrive in one fallback chain and the person heard one
  * generic "the voice service did not answer" for both.
  *
- * `tried` is in the order the keys were tried, so its first entry is the
- * credential closest to the person. */
+ * `tried` is in the person's own order (inPersonOrder), so its first entry
+ * is the credential closest to the person. */
 export type VoiceCallCause = "voice" | "credits" | "key" | "other";
 
 export function voiceFailureCause(tried: readonly VoiceKeyRefusal[]): VoiceCallCause {
@@ -212,9 +278,9 @@ export function voiceFailureCause(tried: readonly VoiceKeyRefusal[]): VoiceCallC
   return "other";
 }
 
-/** xAI failed the request on `used`, after `tried` (the keys refused
- * before it, then itself); `final` when another key could have fixed it
- * (credits, the key itself) and none was left. */
+/** xAI failed the request on `used`, after `tried` (every key refused on
+ * the way, `used` included, in the person's own order); `final` when another
+ * key could have fixed it (credits, the key itself) and none was left. */
 export class VoiceKeyFailure extends Error {
   readonly used: VoiceKeyCandidate;
   readonly failure: GrokVoiceFailure;
@@ -267,7 +333,7 @@ export async function withVoiceKeys<T, C extends VoiceKeyCandidate = VoiceKeyCan
       const next = (options.next ?? nextCandidateIndex)(ordered, i, failure);
       if (voiceKeyFailureIsFinal(failure)) refusals.remember(who, voiceKeyRef(candidate), failure);
       else if (next >= 0) refusals.remember(who, voiceKeyRef(candidate), failure, VOICE_PROVIDER_REFUSAL_TTL_MS);
-      if (next < 0) throw new VoiceKeyFailure(message, candidate, failure, [...skipped, refusal]);
+      if (next < 0) throw new VoiceKeyFailure(message, candidate, failure, inPersonOrder([...skipped, refusal], keys));
       skipped.push(refusal);
       if (candidateProvider(ordered[next]!) !== candidateProvider(candidate)) fellBack.push(refusal);
       options.log?.(`[voice-mode] ${providerName(candidate)} ${options.what ?? "request"} refused the ${describeVoiceKey(candidate)} (${failure}): trying the ${describeVoiceKey(ordered[next]!)}`);
@@ -275,6 +341,44 @@ export async function withVoiceKeys<T, C extends VoiceKeyCandidate = VoiceKeyCan
     }
   }
   throw new Error("no voice key");
+}
+
+/** What a provider failure says about the keys: the one it is about and
+ * every one tried (a refusal each), so the page can name them. */
+export interface VoiceProviderKeys {
+  key: VoiceKeyInfo;
+  tried?: VoiceKeyRefusal[];
+}
+
+/** xAI failed a voice request: the page gets the reason in this side's own
+ * words and its kind (`failure`: key, quota, busy, down, voice, other), so
+ * it can say what is wrong instead of "didn't come through", and which key
+ * it was (source and last four, never more; `tried` lists every key that
+ * was refused on the way). The server log keeps the line. */
+export function providerFailureBody(message: string, keys?: VoiceProviderKeys, plain?: string | null, lead?: VoiceKeyRefusal): { error: string; code: "voice_provider" | "out_of_credits"; failure: GrokVoiceFailure; out_of_credits?: true; key?: VoiceKeyInfo; tried?: VoiceKeyRefusal[] } {
+  // `lead`: the first real cause of a failed chain, which the card and the
+  // bar name instead of the last refusal (M-20261126-145)
+  const failure = lead?.failure ?? grokVoiceFailure(message);
+  const credits = failure === "quota";
+  return {
+    error: plain || message,
+    code: credits ? "out_of_credits" : "voice_provider",
+    failure,
+    ...(credits ? { out_of_credits: true as const } : {}),
+    ...(keys ? { key: lead ? voiceKeyRef(lead) : keys.key, ...(keys.tried && keys.tried.length > 1 ? { tried: keys.tried } : {}) } : {}),
+  };
+}
+
+/** A chain where no credential served, as the page gets it: when its
+ * refusals are not all xAI credits or keys, the first real cause (the
+ * credential closest to the person, `tried` in their order) leads the
+ * sentence, the key and the kind, and the others follow in one line
+ * (chainCallReason, M-20261126-145); otherwise the sentences of #4567 and
+ * the last refusal, as before. */
+export function chainFailureBody(message: string, used: VoiceKeyCandidate, tried: VoiceKeyRefusal[], words: NoCallLanguage) {
+  const chain = chainCallReason(tried, words);
+  const keys = { key: voiceKeyRef(used), tried };
+  return chain ? providerFailureBody(message, keys, chain, tried[0]) : providerFailureBody(message, keys, noCallReason(tried, words));
 }
 
 export function providerName(candidate: { provider?: VoiceProviderId }): string {

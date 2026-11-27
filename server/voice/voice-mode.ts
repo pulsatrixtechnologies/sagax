@@ -82,7 +82,7 @@ import { createListenSession } from "./voice-listen-session.ts";
 import { grokVoiceFailure, withVoiceAuth, type GrokVoiceFailure, type SpeechStream, type SpeechStreamHandlers, type SynthesizeOptions, type TranscriptionHandlers, type TranscriptionStream } from "../tts/grok.ts";
 import { paidApiKey, resolveCredential, type CredentialCandidate, type CredentialDecision, type CredentialForm, type CredentialPolicy } from "../../shared/credential-resolver.ts";
 import {
-  noCallReason, realtimeKeyRefusedCallReason, realtimeNotConfiguredCallReason, realtimeNotOnServerCallReason,
+  chainCallReason, noCallReason, realtimeKeyRefusedCallReason, realtimeNotConfiguredCallReason, realtimeNotOnServerCallReason,
   realtimeUnreachableCallReason, voiceNameCallReason, voiceSentenceLanguage, type NoCallLanguage,
 } from "./grok-account-voice.ts";
 import { createSpeechSession } from "./voice-speech-session.ts";
@@ -110,6 +110,7 @@ import { cleanVoiceModeSettings } from "../../shared/voice-mode.ts";
 import {
   candidateProvider,
   describeVoiceKey,
+  inPersonOrder,
   keyLast4,
   nextCandidateIndex,
   VoiceKeyFailure,
@@ -119,6 +120,10 @@ import {
   voiceKeyFailureIsFinal,
   voiceKeyRef,
   voiceFailureCause,
+  chainFailureBody,
+  providerFailureBody,
+  retriesOnDefaultVoice,
+  speakOnKnownVoice,
   withVoiceKeys,
   type VoiceKeyCandidate,
   type VoiceKeyRefusal,
@@ -539,30 +544,6 @@ export { listenTranscriptFrame } from "./voice-listen-session.ts";
  * fillers included, xAI's confidence and Smart Turn's end of turn
  * confidence when it gives them. */
 
-/** What a provider failure says about the keys: the one it is about and
- * every one tried (a refusal each), so the page can name them. */
-export interface VoiceProviderKeys {
-  key: VoiceKeyInfo;
-  tried?: VoiceKeyRefusal[];
-}
-
-/** xAI failed a voice request: the page gets the reason in this side's own
- * words and its kind (`failure`: key, quota, busy, down, voice, other), so
- * it can say what is wrong instead of "didn't come through", and which key
- * it was (source and last four, never more; `tried` lists every key that
- * was refused on the way). The server log keeps the line. */
-export function providerFailureBody(message: string, keys?: VoiceProviderKeys, plain?: string | null): { error: string; code: "voice_provider" | "out_of_credits"; failure: GrokVoiceFailure; out_of_credits?: true; key?: VoiceKeyInfo; tried?: VoiceKeyRefusal[] } {
-  const failure = grokVoiceFailure(message);
-  const credits = failure === "quota";
-  return {
-    error: plain || message,
-    code: credits ? "out_of_credits" : "voice_provider",
-    failure,
-    ...(credits ? { out_of_credits: true as const } : {}),
-    ...(keys ? { key: keys.key, ...(keys.tried && keys.tried.length > 1 ? { tried: keys.tried } : {}) } : {}),
-  };
-}
-
 /** A key as the page sees it in a response header: `source:last4`. */
 export function voiceKeyHeader(key: VoiceKeyInfo): string {
   return `${key.source}:${key.last4 ?? ""}`;
@@ -607,11 +588,15 @@ return async function speech(req: IncomingMessage, res: import("node:http").Serv
   const tried: VoiceKeyRefusal[] = [];
   const fellBack: VoiceKeyRefusal[] = [];
   const ordered = refusals.order(who, usable).map((entry) => entry.candidate);
+  // set while the current credential is asked back on its own default voice
+  let onDefault = false;
   for (let i = 0; i >= 0 && i < ordered.length;) {
     const candidate = ordered[i]!;
     const provider = candidateProvider(candidate);
     const adapter = adapterOf(provider)!;
-    const voice = voiceFor(provider);
+    const asked = voiceFor(provider);
+    // a name this credential said lately it does not know goes to its default (#5179, M-20261126-145)
+    const voice = onDefault || (asked && refusals.voiceUnknown(who, voiceKeyRef(candidate), asked)) ? undefined : asked;
     const options = { voice, speed, language: ttsLanguage(language) };
     const usage = usageFor(candidate);
     const session = createSpeechSession({
@@ -649,6 +634,14 @@ return async function speech(req: IncomingMessage, res: import("node:http").Serv
       if (socket.destroyed) return;
       const message = scrub(session.lastError ?? "", candidate.key);
       const failure = grokVoiceFailure(message || "not reachable");
+      if (session.lastError && voice && retriesOnDefaultVoice(failure, voice)) {
+        // the name, not the credential: the same one, on its own default voice
+        refusals.rememberUnknownVoice(who, voiceKeyRef(candidate), voice);
+        (deps.log ?? console.warn)(`[voice-mode] the ${describeVoiceKey(candidate)} does not know the voice "${voice}": asking it back on its own default voice`);
+        onDefault = true;
+        continue;
+      }
+      onDefault = false;
       const next = session.lastError ? nextCandidateIndex(ordered, i, failure) : -1;
       if (session.lastError && voiceKeyFailureIsFinal(failure)) refusals.remember(who, voiceKeyRef(candidate), failure);
       else if (next >= 0) refusals.remember(who, voiceKeyRef(candidate), failure, VOICE_PROVIDER_REFUSAL_TTL_MS);
@@ -660,7 +653,7 @@ return async function speech(req: IncomingMessage, res: import("node:http").Serv
         i = next;
         continue;
       }
-      json(res, 502, socketRefusal("speech", session.lastError ? message : undefined, `${VOICE_PROVIDER_LABELS[provider]} streaming speech is not reachable.`, candidate, tried, voiceSentenceLanguage(url.searchParams.get("locale") ?? acceptLanguage(req), language)));
+      json(res, 502, socketRefusal("speech", session.lastError ? message : undefined, `${VOICE_PROVIDER_LABELS[provider]} streaming speech is not reachable.`, candidate, [...fellBack, ...tried], voiceSentenceLanguage(url.searchParams.get("locale") ?? acceptLanguage(req), language), usable));
       return;
     }
     refusals.forget(who, voiceKeyRef(candidate));
@@ -771,7 +764,7 @@ return async function realtime(req: IncomingMessage, res: import("node:http").Se
         attempt.end("upstream");
         const message = scrub(attempt.lastError ?? "not reachable", candidate.key);
         const failure = grokVoiceFailure(message);
-        if (failure === "voice" && name && ask + 1 < names.length) {
+        if (name && retriesOnDefaultVoice(failure, name) && ask + 1 < names.length) {
           // the name, not the credential: ask it back on the provider's default
           voiceReset = { asked: name };
           (deps.log ?? console.warn)(`[voice-realtime] the ${describeVoiceKey(candidate)} does not know the voice "${name}": asking it back on its own default voice`);
@@ -802,19 +795,23 @@ return async function realtime(req: IncomingMessage, res: import("node:http").Se
   }
   // No credential took the call. The cause is named in one sentence, the one
   // that belongs to the credential closest to the person, and an unknown voice
-  // is never dressed up as credits or as a network (#5179, #5180).
-  const cause = voiceFailureCause(tried);
+  // is never dressed up as credits or as a network (#5179, #5180). The
+  // refusal memory may have tried that credential last: the person's own
+  // order decides, then the others follow in one line (M-20261126-145).
+  const inOrder = inPersonOrder(tried, keys.map(voiceKeyRef));
+  const cause = voiceFailureCause(inOrder);
+  const chain = chainCallReason(inOrder, words);
   if (cause === "voice") {
-    refuse("realtime_voice_unknown", voiceNameCallReason(words), { tried, ...(voiceReset ? { voiceReset } : {}) });
+    refuse("realtime_voice_unknown", chain ?? voiceNameCallReason(words), { tried: inOrder, ...(voiceReset ? { voiceReset } : {}) });
     return;
   }
   const keyRefused = cause === "key" || cause === "credits";
   // a connected Grok account was tried: its own sentence; otherwise the key
   // that failed is named with what to do about it, in the person's language
-  const plain = keyRefused ? (noCallReason(tried, words) ?? realtimeKeyRefusedCallReason(tried, words)) : null;
+  const plain = chain ?? (keyRefused ? (noCallReason(inOrder, words) ?? realtimeKeyRefusedCallReason(inOrder, words)) : null);
   refuse(keyRefused ? "realtime_key_refused" : "realtime_unreachable",
     plain ?? realtimeUnreachableCallReason(words),
-    { tried });
+    { tried: inOrder });
 }
 
 /** GET /voice/listen: one live call's streaming speech to text. The page
@@ -901,7 +898,7 @@ return async function listen(req: IncomingMessage, res: import("node:http").Serv
         i = next;
         continue;
       }
-      json(res, 502, socketRefusal("listen", ears.lastError, `${VOICE_PROVIDER_LABELS[provider]} speech to text is not reachable. Try again.`, candidate, tried, voiceSentenceLanguage(url.searchParams.get("locale") ?? acceptLanguage(req), language)));
+      json(res, 502, socketRefusal("listen", ears.lastError, `${VOICE_PROVIDER_LABELS[provider]} speech to text is not reachable. Try again.`, candidate, [...fellBack, ...tried], voiceSentenceLanguage(url.searchParams.get("locale") ?? acceptLanguage(req), language), usable));
       return;
     }
     refusals.forget(who, voiceKeyRef(candidate));
@@ -1143,7 +1140,7 @@ async function handleVoiceModeRequest(env: any, ctx: Parameters<RouteHandler>[0]
   const failed = (what: string, error: unknown) => {
     if (error instanceof VoiceKeyFailure) {
       (deps.log ?? console.warn)(`[voice-mode] ${VOICE_PROVIDER_LABELS[candidateProvider(error.used)]} ${what} failed (${error.used.via}, ${describeVoiceKey(error.used)}): ${error.message}`);
-      return withConfirm(providerFailureBody(error.message, { key: voiceKeyRef(error.used), tried: error.tried }, noCallReason(error.tried, words)));
+      return withConfirm(chainFailureBody(error.message, error.used, error.tried, words));
     }
     const message = scrubAll(error instanceof Error ? error.message : String(error));
     (deps.log ?? console.warn)(`[voice-mode] ${VOICE_PROVIDER_LABELS[candidateProvider(keys[0]!)]} ${what} failed (${keys[0]!.via}): ${message}`);
@@ -1246,7 +1243,7 @@ async function handleVoiceModeRequest(env: any, ctx: Parameters<RouteHandler>[0]
       try {
         ({ value: audio, used, skipped } = await tryKeys<{ body: ReadableStream<Uint8Array>; sampleRate: number }>(action, streaming, (candidate) => {
           const provider = candidateProvider(candidate);
-          return onThisKey(candidate, () => adapterOf(provider)!.synthesizeStream!(text, voiceFor(provider), candidate.key, options, controller.signal));
+          return speakOnKnownVoice(who, candidate, voiceFor(provider), refusals, (voice) => onThisKey(candidate, () => adapterOf(provider)!.synthesizeStream!(text, voice, candidate.key, options, controller.signal)), deps.log ?? console.warn);
         }));
       } catch (error) {
         if (controller.signal.aborted) { if (!res.destroyed) res.end(); return; }
@@ -1281,7 +1278,7 @@ async function handleVoiceModeRequest(env: any, ctx: Parameters<RouteHandler>[0]
     try {
       const { value: audio, used, skipped } = await tryKeys<Audio>(action, speaking, (candidate) => {
         const provider = candidateProvider(candidate);
-        return onThisKey(candidate, () => adapterOf(provider)!.synthesize!(text, voiceFor(provider), candidate.key, options));
+        return speakOnKnownVoice(who, candidate, voiceFor(provider), refusals, (voice) => onThisKey(candidate, () => adapterOf(provider)!.synthesize!(text, voice, candidate.key, options)), deps.log ?? console.warn);
       });
       usageFor(used)(usageModel(candidateProvider(used), "tts"), text.length);
       res.writeHead(200, { "content-type": audio.mime, "content-length": String(audio.bytes.byteLength), "cache-control": "no-store", ...keyHeaders(used, skipped) });
@@ -1352,11 +1349,13 @@ export function createVoiceModeRoutes(deps: VoiceModeDeps): VoiceModeRoutes {
   };
 
   /** A failed socket open as the page and the log get it. */
-  function socketRefusal(what: "speech" | "listen", lastError: string | undefined, fallback: string, used: VoiceKeyCandidate, tried: VoiceKeyRefusal[], words: NoCallLanguage = "en") {
+  function socketRefusal(what: "speech" | "listen", lastError: string | undefined, fallback: string, used: VoiceKeyCandidate, tried: VoiceKeyRefusal[], words: NoCallLanguage = "en", keys: readonly VoiceKeyCandidate[] = []) {
     const message = lastError ?? fallback;
-    const triedAll = [...tried, { ...voiceKeyRef(used), failure: grokVoiceFailure(message) }];
+    // every credential refused on the way, the other providers' too, in the
+    // person's own order (M-20261126-145)
+    const triedAll = inPersonOrder([...tried, { ...voiceKeyRef(used), failure: grokVoiceFailure(message) }], keys.map(voiceKeyRef));
     (deps.log ?? console.warn)(`[voice-mode] ${VOICE_PROVIDER_LABELS[candidateProvider(used)]} ${what} socket failed (${describeVoiceKey(used)}): ${message}`);
-    return providerFailureBody(message, { key: voiceKeyRef(used), tried: triedAll }, noCallReason(triedAll, words));
+    return chainFailureBody(message, used, triedAll, words);
   }
 
   /** GET /voice/speech: one live call's streaming voice

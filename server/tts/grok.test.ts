@@ -325,6 +325,8 @@ describe("xAI refusals say why (checked live 2026-10-28: an invalid key is a 400
     // xAI's own words naming a voice stay the voice
     expect(grok.grokVoiceFailure(grok.refusal(404, { error: "Voice zed not found" }))).toBe("voice");
     expect(grok.grokVoiceFailure(grok.refusal(404, {}))).toBe("key");
+    // a path that only contains "voices" is still the address
+    expect(grok.grokVoiceFailure(grok.refusal(404, { error: "Not found: /v1/tts/voices" }))).toBe("key");
     expect(grok.grokVoiceFailure(grok.refusal(404, {}, { voice: true }))).toBe("voice");
 
     const socketError = (open: (handlers: { onError(message: string): void; onClose(): void }) => void) => new Promise<string>((resolve) => {

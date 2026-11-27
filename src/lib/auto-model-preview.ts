@@ -10,7 +10,8 @@ import type { AutoModelRecord, AutoModelPreview } from "../../shared/auto-model"
  * `open` (M-20261126-101): the menu that shows the answer is open. Each
  * opening reads it again, so an account that reached its limit since the
  * last reading is gone from the modes' tooltips; the last answer of the same
- * scope stays on screen meanwhile, and a closing menu reads nothing. */
+ * scope stays on screen meanwhile, and a closing menu reads nothing. A read
+ * that fails keeps that answer too (#5421 review H2: the usage pill's pool). */
 export function useAutoModelStatus(botId: string, threadId: string | undefined, enabled: boolean, revision?: string, open = false): AutoModelPreview | null {
   const scope = JSON.stringify([botId, threadId, revision]);
   const [preview, setPreview] = useState<{ scope: string; status: AutoModelPreview } | null>(null);
@@ -28,7 +29,7 @@ export function useAutoModelStatus(botId: string, threadId: string | undefined, 
     const query = threadId ? `?threadId=${encodeURIComponent(threadId)}` : "";
     api<AutoModelPreview>(`/api/bots/${encodeURIComponent(botId)}/auto-model${query}`)
       .then((answer) => { if (asked.current.request === request) setPreview({ scope, status: answer }); })
-      .catch(() => { if (asked.current.request === request) setPreview(null); });
+      .catch(() => { if (asked.current.request === request) setPreview((last) => (last?.scope === scope ? last : null)); });
   }, [botId, threadId, enabled, revision, scope, open]);
   return enabled && preview?.scope === scope ? preview.status : null;
 }

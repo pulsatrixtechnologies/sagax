@@ -8,9 +8,11 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { Gauge } from "lucide-react";
 import { SidebarPopoverMenu, type SidebarMenuItem } from "../components/SidebarPopoverMenu";
-import { AccountLimits, PlanUsageView } from "../components/PlanUsage";
+import { PlanUsageView } from "../components/PlanUsage";
+import { UsageAccountsDetail } from "../components/UsageAccountsDetail";
+import { allAccounts } from "../lib/usage-pill";
 import { usageSummary } from "../lib/account-menu";
-import { accountRowName, connectedPlanRows, type PlanUsageReport } from "../lib/plan-usage";
+import { connectedPlanRows, type PlanUsageReport } from "../lib/plan-usage";
 import { toggleUsageFavorite, useUsageFavorite, writeUsageFavorite } from "../lib/usage-favorite";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -45,10 +47,10 @@ function Gallery() {
       ? t("sidebar.account.usageTooltip", { account: summary.account, percent: summary.percent })
       : t("sidebar.account.usageTooltipBare", { percent: summary.percent }),
     submenu: [
-      ...rows.filter((row) => row.state === "windows").map((row) => ({
-        key: row.id, label: accountRowName(row),
-        node: <AccountLimits provider={row} name={accountRowName(row)} favorite={{ id: favorite, onToggle: toggleUsageFavorite }} />,
-      })),
+      {
+        key: "accounts", label: t("usageDetail.aria"),
+        node: <UsageAccountsDetail accounts={allAccounts(rows)} favorite={{ id: favorite, onToggle: toggleUsageFavorite }} />,
+      },
       { key: "month-cost", label: t("sidebar.account.monthCost"), value: "5,26 $", info: true, foot: true },
       { key: "view-usage", label: t("sidebar.account.viewUsage"), separatorBefore: true, foot: true, onSelect: () => {} },
     ],

@@ -29,6 +29,7 @@ import { parseSidebarDensity, setSidebarDensity, SIDEBAR_DENSITIES, useSidebarDe
 import { setStreamReplies, useStreamReplies } from "@/lib/stream-replies-preference";
 import { CHAT_WIDTHS, parseChatWidth, setChatWidth, useChatWidth, type ChatWidth } from "@/lib/chat-width-preference";
 import { COMPOSER_BOTTOM_SPACES, parseComposerBottomSpace, setComposerBottomSpace, useComposerBottomSpace, type ComposerBottomSpace } from "@/lib/composer-bottom-space";
+import { contextIndicator, parseUsagePillShape, USAGE_PILL_SHAPES, usagePillInBar, usagePillShape, type UsagePillShape } from "@/lib/usage-pill-preferences";
 import { CONVERSATION_HEADERS, parseConversationHeader, setConversationHeader, useConversationHeader, type ConversationHeader } from "@/lib/conversation-header";
 import { parseSendKey, SEND_KEYS, sendKeyLabel, setSendKey, useSendKey } from "@/lib/send-key";
 import { setShowSidebarLogo, useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
@@ -195,6 +196,28 @@ function ComposerBottomSpaceRow() {
         }))}
       />
     </CompactRow>
+  );
+}
+
+/** The usage pill of the message bar (M-20261126-106, M-20261126-108, #5406):
+ * shown or not, its shape, and the conversation's context indicator. */
+function UsagePillRows() {
+  const inBar = usagePillInBar.use() === "on";
+  const shape = usagePillShape.use();
+  const context = contextIndicator.use() === "on";
+  return (
+    <>
+      <SwitchLine label={t("settings.usagePill.inBar.title")} ariaLabel={t("settings.usagePill.inBar.show")} checked={inBar} onChange={(on) => usagePillInBar.set(on ? "on" : "off")} rowId="usagePillInBar" />
+      <CompactRow label={t("settings.usagePill.shape.title")} rowId="usagePillShape">
+        <PillSelect<UsagePillShape>
+          value={shape}
+          ariaLabel={t("settings.usagePill.shape.chooseAria")}
+          onChange={(next) => usagePillShape.set(parseUsagePillShape(next))}
+          options={USAGE_PILL_SHAPES.map((option) => ({ value: option, label: t(`settings.usagePill.shape.${option}`) }))}
+        />
+      </CompactRow>
+      <SwitchLine label={t("settings.contextIndicator.title")} ariaLabel={t("settings.contextIndicator.show")} checked={context} onChange={(on) => contextIndicator.set(on ? "on" : "off")} rowId="contextIndicator" />
+    </>
   );
 }
 
@@ -613,6 +636,7 @@ export function AppearanceSettings() {
         <ChatWidthRow />
         <ComposerBottomSpaceRow />
         <ConversationHeaderRow />
+        <UsagePillRows />
         <SwitchLine label={t("settings.botReplyBubbles.title")} checked={replyBubbles} onChange={(on) => botReplyBubbles.set(on ? "on" : "off")} rowId="botReplyBubbles" />
         <SwitchLine label={t("settings.botBubbleAccent.title")} checked={bubbleAccent} onChange={(on) => botBubbleAccent.set(on ? "1" : "0")} rowId="botBubbleAccent" />
         <ThreadsViewRow />

@@ -55,6 +55,24 @@ export interface LimitCandidate extends LimitEngine {
   defaultModel?: string;
 }
 
+/** Every engine that may run a turn of this bot when a usage limit moves it
+ * (#5406, M-20261126-096): the pools pickLimitBackup picks from, read without
+ * the holds, so the chat bar's usage pill sums the accounts that can serve the
+ * bot and never the serving one alone. The same rule, never a second one: an
+ * engine with a model this payer may pick, and never a pay-per-use engine the
+ * person did not choose as a backup. Which of them is held is the limit
+ * report's answer (/api/limit-resets), not this list's. */
+export function limitServingPool(input: {
+  preferred: ReadonlyArray<{ instanceId: string }>;
+  candidates: readonly LimitCandidate[];
+  config: (instanceId: string) => { environment?: Record<string, string>; access?: string } | undefined;
+}): string[] {
+  const chosen = new Set(input.preferred.map((entry) => entry.instanceId));
+  return [...new Set(input.candidates
+    .filter((candidate) => candidate.models.length > 0 && (chosen.has(candidate.instanceId) || !billsEachUse(input.config(candidate.instanceId))))
+    .map((candidate) => candidate.instanceId))];
+}
+
 /** The engine that takes over, or null. Same-provider accounts first (#2192),
  * then the bot's own backups and the organization's default, then the catalog.
  * Within a pool, the person's account strategy ranks the same provider's

@@ -31,6 +31,7 @@ import { chatBarChipLabel, type ModelMode } from "../lib/model-mode";
 import { ComposerMeterView } from "../components/ComposerMeter";
 import { MENU_ROW } from "../components/menu-look";
 import type { PlanRow } from "../lib/plan-usage";
+import { servingAccounts } from "../lib/usage-pill";
 import { ComposerVoiceButton } from "../components/ComposerVoiceButton";
 import { ModesSettingsView, type ModeEngine } from "../components/settings/ModesSettings";
 import type { ModeModels } from "../../shared/mode-models";
@@ -182,7 +183,7 @@ function Gallery() {
                 initialOpen={meterOpen}
                 context={{ percent: 42, detail: t("chat.usage.contextOfWindow", { tokens: "84k", percent: "42", window: "200k" }) }}
                 usage={{
-                  percent: 89, tone: "warning", row: meterRow, favorite: { id: "claude", onToggle: () => undefined },
+                  accounts: servingAccounts({ rows: [meterRow], engine: meterRow.instanceId ?? undefined }), favorite: { id: "claude", onToggle: () => undefined },
                 }}
                 contextActions={<button type="button" className={MENU_ROW}>{t("contextWarning.compactNow")}</button>}
                 usageActions={() => (

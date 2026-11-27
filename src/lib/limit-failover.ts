@@ -5,7 +5,7 @@ import type { LocaleKey } from "@/locales";
 import { limitFailoverWords, limitLinePlainWords, resetClockText, type LimitFailoverLine } from "../../shared/limit-failover";
 
 /** The locale a clock is written in: Quebec French for the French UI. */
-function clockLocale(): string {
+export function clockLocale(): string {
   const active = activeLocale();
   return active === "fr" ? "fr-CA" : active;
 }

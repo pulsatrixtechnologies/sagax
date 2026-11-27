@@ -12,7 +12,7 @@ import { ENGINE_REFUSAL_TTL_MS, type EngineRefusal } from "../engines/engine-ref
 import type { RoutineUsageLimit } from "../routines/routine-limit-words.ts";
 import { classifyRoutineFailure } from "../routines/routine-recovery.ts";
 import { pickAccountByRule } from "./account-strategy.ts";
-import { billsEachUse, limitBackupAllowed, pickLimitBackup, sameProvider, type LimitCandidate, type LimitEngine, type LimitFailover, type LimitFailoverStore } from "./limit-failover.ts";
+import { billsEachUse, limitBackupAllowed, limitServingPool, pickLimitBackup, sameProvider, type LimitCandidate, type LimitEngine, type LimitFailover, type LimitFailoverStore } from "./limit-failover.ts";
 import { limitKindOf, limitResetFromText, limitResetOrEstimate, type LimitKind } from "./limit-reset-time.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
@@ -162,6 +162,11 @@ export interface LimitFailoverHost {
   dispatchOf(threadId: string): LimitDispatch | undefined;
   /** Readiness uses the same selection as beforeTurn without moving a thread. */
   backupFor(botId: string, threadId: string, speaker: unknown, from: string): Promise<ModelSelection | null>;
+  /** #5406: the engines that may run a turn of this conversation when a limit
+   * moves it (limitServingPool), from what is known now. With the takeover
+   * off, a model chosen by hand is served by its own engine alone (#5421).
+   * Empty when the candidates are not known. Never throws. */
+  servingPool(botId: string, threadId: string, speaker: unknown): string[];
   /** The engines Sagax must not pick for this payer now: one a refusal holds at its usage limit. Sibling accounts
    * of the same provider stay available for silent rotation (#2192). `pick` "quick" (a wake's or a call's fast
    * model) and "report" (a mode's or Auto's pick and the menu's preview, M-20261126-101) also skip an engine whose
@@ -789,6 +794,21 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       if (!deps.enabled()) return null;
       const engine = deps.engine(from);
       return engine ? pick(botId, threadId, speaker, engine, deps.payer(botId, speaker)) : null;
+    },
+    servingPool(botId, threadId, speaker) {
+      try {
+        const candidates = deps.candidatesNow?.(botId, threadId, speaker);
+        if (!candidates) return [];
+        // #5421 review H3: with the takeover off (SAGAX_LIMIT_FAILOVER=0) no
+        // limit moves a turn of a model chosen by hand (turnFailed,
+        // beforeTurn): its own engine is the only one that serves. Auto still
+        // skips a held engine on its own pick (autoPickForTurn, autoExcluded).
+        const selection = deps.enabled() ? null : deps.threadSelection(botId, threadId);
+        if (selection && selection.auto !== true) return [selection.instanceId];
+        return limitServingPool({ preferred: deps.preferred(botId, threadId), candidates, config: deps.config });
+      } catch {
+        return [];
+      }
     },
     autoExcluded(payer, engines, pick) {
       try {

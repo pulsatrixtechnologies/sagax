@@ -15,8 +15,6 @@ import {
 export const COMPOSER_BAR_LAYOUT_LEGACY_KEY = "sagax.composerBarLayout.v1";
 export const USAGE_PILL_PLACEMENT_LEGACY_KEY = "sagax.usagePillPlacement.v1";
 
-const EMPTY_ZONE = (): ZoneLayout => ({ order: [], hidden: [] });
-
 export function defaultUiLayout(): UiLayoutV1 {
   return {
     version: 1,
@@ -31,8 +29,14 @@ export function defaultUiLayout(): UiLayoutV1 {
         order: defaultZoneOrder("sidebar"),
         hidden: [],
       },
-      conversationHeader: EMPTY_ZONE(),
-      botPage: EMPTY_ZONE(),
+      conversationHeader: {
+        order: defaultZoneOrder("conversationHeader"),
+        hidden: [],
+      },
+      botPage: {
+        order: defaultZoneOrder("botPage"),
+        hidden: [],
+      },
     },
   };
 }

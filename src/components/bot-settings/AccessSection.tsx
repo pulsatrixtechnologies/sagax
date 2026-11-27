@@ -272,11 +272,11 @@ export function AccessSection({
   bot: Bot;
   derived: ReturnType<typeof useBotSettingsDerived>;
   /** One card alone (the bot creation wizard's Tools step, 2026-10-26).
-   * The bot page's V6 sub-pages (#2612): "brief" (the background brief,
-   * When it acts alone) and "advanced" (the worksite and the browser). The
-   * working folder, tools, webhooks and always-allowed list are on
-   * Settings > Developer since #2658; the editor dialogs (part "all") keep
-   * them folded. */
+   * The bot page's V6: "advanced" (the worksite and the browser). "brief"
+   * is kept as an accepted value for older callers and draws nothing
+   * (#5445: the brief is on General > Notifications). The working folder,
+   * tools, webhooks and always-allowed list are on Settings > Developer
+   * since #2658; the editor dialogs (part "all") keep them folded. */
   part?: "all" | "mcp" | "browser" | "brief" | "advanced";
 }) {
   const { draft, bulk, mixedFields } = useBotEditor();
@@ -351,7 +351,9 @@ export function AccessSection({
       )}
 
       {(part === "all" || part === "mcp") && <McpServersCard bot={bot} patch={patch} />}
-      {(part === "all" || part === "brief") && !draft && <BackgroundBriefCard botId={bot.id} />}
+      {/* #5445: on the bot profile, the brief lives in General > Notifications.
+          The full Access editor (part all) and other surfaces keep it here. */}
+      {(part === "all") && !draft && <BackgroundBriefCard botId={bot.id} />}
 
       {(part === "all" || part === "browser" || part === "advanced") && browserFeature && <PaneSection title={<>{t("botPanel.access.browser")}<ProposalStatus bot={bot} /></>}>
         <div className="flex items-center justify-between gap-4">

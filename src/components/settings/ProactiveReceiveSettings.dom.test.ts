@@ -28,14 +28,19 @@ vi.mock("@/state/store", () => ({
     return {};
   }),
   useStore: () => ({
-    state: { bots: [
-      { id: "main-7f3a", name: "Mélodie", chiefOfStaff: true, proactiveMode: "proactive" },
-      { id: "b1-9c2e", name: "Atlas", proactiveMode: "off" },
-    ], config: null },
+    state: {
+      bots: [
+        { id: "main-7f3a", name: "Mélodie", chiefOfStaff: true, proactiveMode: "proactive" },
+        { id: "b1-9c2e", name: "Atlas", proactiveMode: "off" },
+      ],
+      selectedId: "main-7f3a",
+      config: null,
+    },
     dispatch: vi.fn(),
   }),
 }));
 vi.mock("@/state/store-selector", () => ({ useStoreDispatch: () => (action: unknown) => fixture.dispatched.push(action) }));
+vi.mock("@/lib/open-bot-profile", () => ({ openBotProfile: (dispatch: (action: unknown) => void, botId: string) => dispatch({ type: "openPersonaEditor", botId }) }));
 
 import { setLocale } from "@/lib/i18n";
 import { BotFollowsRows } from "../bot-settings/BotFollowsRows";
@@ -93,9 +98,12 @@ describe("« Ce que je reçois » (#3432)", () => {
     // a domain refused for good can still be turned on, and says so
     expect(switchOf("receive.domain.backups")?.getAttribute("aria-checked")).toBe("false");
     expect(row("receive.domain.backups")?.textContent).toContain("Never suggest again");
-    // the brief, the screen and the checklist rows only where they work
-    expect(row("receive.brief.main-7f3a")).not.toBeNull();
-    expect(row("receive.brief.b1-9c2e")).not.toBeNull();
+    // #5445: per-bot brief and reviews left for the bot page; pointer stays
+    expect(row("receive.brief.main-7f3a")).toBeNull();
+    expect(row("receive.brief.b1-9c2e")).toBeNull();
+    expect(host.querySelector("[data-receive-bot-page-pointer]")).not.toBeNull();
+    expect(host.textContent).toContain("Each bot's daily brief and reviews are set on that bot's page");
+    // the screen and the checklist rows only where they work
     expect(row("receive.screen.b1-9c2e")).not.toBeNull();
     expect(row("receive.screen.main-7f3a")).toBeNull();
     expect(row("receive.checklist.main-7f3a")).not.toBeNull();
@@ -114,8 +122,6 @@ describe("« Ce que je reçois » (#3432)", () => {
     expect(switchOf("receive.domain.backups")?.getAttribute("aria-checked")).toBe("true");
     await act(async () => { switchOf("receive.watch.w-open-tickets")!.click(); });
     expect(fixture.calls.at(-1)).toMatchObject({ method: "PUT", body: { domain: "service", watch: "w-open-tickets", on: false } });
-    await act(async () => { switchOf("receive.brief.main-7f3a")!.click(); });
-    expect(fixture.calls.at(-1)).toMatchObject({ path: "/api/bots/main-7f3a/background-brief", method: "PUT", body: { enabled: false } });
     await act(async () => { switchOf("receive.checklist.main-7f3a")!.click(); });
     // #3432: a plain switch on the brief's PUT, never the wake feedback (it leaves a memory line)
     expect(fixture.calls.at(-1)).toEqual(expect.objectContaining({ path: "/api/bots/main-7f3a/background-brief", method: "PUT", body: { checklist: true } }));
@@ -125,30 +131,26 @@ describe("« Ce que je reçois » (#3432)", () => {
     expect(document.querySelector('[role="dialog"], [role="alertdialog"]')).toBeNull();
   });
 
-  it("#4250 S8: the two reviews are switches on the bot that holds them; a yes sends the routine's switch with the zone", async () => {
-    fixture.receive = { ...receive, bots: [{ ...receive.bots[0]!, endOfDay: false, weekly: true }, receive.bots[1]!] };
+  it("#5445: per-bot reviews leave More notifications; an orphan review stays", async () => {
+    fixture.receive = {
+      ...receive,
+      bots: [
+        { ...receive.bots[0]!, endOfDay: false, weekly: true },
+        receive.bots[1]!,
+        { id: "gone-bot", endOfDay: true, weekly: false, brief: false },
+      ],
+    };
     await render(createElement(ProactiveReceiveSettings));
+    // held by a living bot: not listed here (on the bot page instead)
+    expect(row("receive.endOfDay.main-7f3a")).toBeNull();
+    expect(row("receive.weekly.main-7f3a")).toBeNull();
+    expect(row("receive.brief.main-7f3a")).toBeNull();
+    // holder gone: still listed under Reviews
     expect(host.textContent).toContain("Reviews");
-    // each row is named by its review, the bot that holds it in its description
-    expect(row("receive.endOfDay.main-7f3a")?.textContent).toContain("End of day");
-    expect(row("receive.endOfDay.main-7f3a")?.textContent).toContain("Followed by Mélodie");
-    expect(row("receive.weekly.main-7f3a")?.textContent).toContain("Weekly review");
-    expect(switchOf("receive.endOfDay.main-7f3a")?.getAttribute("aria-checked")).toBe("false");
-    expect(switchOf("receive.weekly.main-7f3a")?.getAttribute("aria-checked")).toBe("true");
-    // each review switch has its own accessible name (settings.receive.<review>.switch)
-    expect(switchOf("receive.endOfDay.main-7f3a")?.getAttribute("aria-label")).toBe("End of day review from Mélodie");
-    expect(switchOf("receive.weekly.main-7f3a")?.getAttribute("aria-label")).toBe("Weekly review from Mélodie");
-    // the other bot draws none: one review per person
-    expect(row("receive.endOfDay.b1-9c2e")).toBeNull();
-    expect(row("receive.weekly.b1-9c2e")).toBeNull();
-    await act(async () => { switchOf("receive.endOfDay.main-7f3a")!.click(); });
-    const sent = fixture.calls.at(-1)!;
-    expect(sent).toMatchObject({ path: "/api/bots/main-7f3a/background-brief", method: "PUT", body: { reviews: { endOfDay: true } } });
-    expect(typeof (sent.body as { timeZone?: unknown }).timeZone).toBe("string");
-    expect(switchOf("receive.endOfDay.main-7f3a")?.getAttribute("aria-checked")).toBe("true");
-    await act(async () => { switchOf("receive.weekly.main-7f3a")!.click(); });
-    expect(fixture.calls.at(-1)).toMatchObject({ body: { reviews: { weekly: false } } });
-    expect(document.querySelector('[role="dialog"], [role="alertdialog"]')).toBeNull();
+    expect(row("receive.endOfDay.gone-bot")).not.toBeNull();
+    expect(switchOf("receive.endOfDay.gone-bot")?.getAttribute("aria-checked")).toBe("true");
+    await act(async () => { switchOf("receive.endOfDay.gone-bot")!.click(); });
+    expect(fixture.calls.at(-1)).toMatchObject({ path: "/api/bots/gone-bot/background-brief", method: "PUT", body: { reviews: { endOfDay: false } } });
   });
 
   it("no review row without the server's fields", async () => {

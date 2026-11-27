@@ -12,11 +12,17 @@
 // that can carry each, its watches and their last alert, and per bot the
 // ambient rows it can draw. The bot page draws the same domains for one
 // bot (src/components/bot-settings/BotFollowsRows.tsx).
+//
+// #5445 [M-20261127-070]: per-bot daily brief and reviews leave this page
+// for each bot's General > Notifications. Same storage keys; a short
+// pointer links to the selected bot's page. A review whose holder is no
+// longer among the person's bots stays listed here.
 import { useCallback, useEffect, useState } from "react";
 import { api, useStore, type Bot } from "@/state/store";
 import { useStoreDispatch } from "@/state/store-selector";
 import type { BotUpdatePatch } from "@/state/bot-patch-queue";
 import { activeLocale, t } from "@/lib/i18n";
+import { openBotProfile } from "@/lib/open-bot-profile";
 import { relativeTime } from "@/lib/memory";
 import { localTimeZone } from "@/lib/reach-me";
 import { proactiveModeFor } from "../../../shared/proactive-mode";
@@ -257,7 +263,7 @@ const SWITCH_LABEL_KEYS = {
   weekly: "settings.receive.weekly.switch",
 } as const satisfies Record<ReceiveSwitch, string>;
 
-function BotSwitchRows({ bots, rows, field, onChange, label }: {
+function BotSwitchRows({ bots, rows, field, onChange, label, allowMissingBot = false }: {
   bots: readonly Bot[];
   rows: readonly ReceiveBot[];
   field: ReceiveSwitch;
@@ -265,16 +271,20 @@ function BotSwitchRows({ bots, rows, field, onChange, label }: {
   /** #4250 (S8): a row of the person (a review) is named by what it is,
    * the bot that holds it in its description. Absent: named by the bot. */
   label?: string;
+  /** #5445: a review whose holder left the person's bots still draws. */
+  allowMissingBot?: boolean;
 }) {
   return (
     <>
       {rows.flatMap((row) => {
         const bot = bots.find((entry) => entry.id === row.id);
         const on = row[field];
-        if (!bot || on === undefined) return [];
+        if (on === undefined) return [];
+        if (!bot && !allowMissingBot) return [];
+        const name = bot?.name ?? t("settings.receive.aBot");
         return [(
-          <DescribedRow key={row.id} label={label ?? bot.name} description={label ? t("settings.receive.carriedBy", { name: bot.name }) : undefined} rowId={`receive.${field}.${row.id}`}>
-            <Switch checked={on} aria-label={t(SWITCH_LABEL_KEYS[field], { name: bot.name })} onClick={() => onChange(row.id, !on)} />
+          <DescribedRow key={row.id} label={label ?? name} description={label ? t("settings.receive.carriedBy", { name }) : undefined} rowId={`receive.${field}.${row.id}`}>
+            <Switch checked={on} aria-label={t(SWITCH_LABEL_KEYS[field], { name })} onClick={() => onChange(row.id, !on)} />
           </DescribedRow>
         )];
       })}
@@ -286,18 +296,58 @@ function Heading({ part }: { part: string }) {
   return <span className="min-w-0 truncate text-[13px] leading-[18px] text-ink-secondary">· {part}</span>;
 }
 
+/** #5445: orphan review rows (holder bot gone from the person's list). */
+function orphanReviewRows(state: ReceiveState, bots: readonly Bot[]): ReceiveBot[] {
+  const known = new Set(bots.map((bot) => bot.id));
+  return state.receive.bots.filter((row) => !known.has(row.id) && (row.endOfDay !== undefined || row.weekly !== undefined));
+}
+
+function BotPagePointer({ botId }: { botId: string | undefined }) {
+  const dispatch = useStoreDispatch();
+  return (
+    <div data-receive-bot-page-hint="" className="px-3.5 py-2.5 text-[12px] leading-4 text-ink-secondary">
+      <span>{t("settings.receive.botPageHint")}</span>
+      {botId ? (
+        <>
+          {" "}
+          <button
+            type="button"
+            data-receive-bot-page-link=""
+            className="text-accent underline"
+            onClick={() => {
+              dispatch({ type: "toggleAppSettings", open: false });
+              openBotProfile(dispatch, botId);
+            }}
+          >
+            {t("settings.receive.botPageLink")}
+          </button>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 export function ProactiveReceiveSettings() {
   const { state: store } = useStore();
   const dispatch = useStoreDispatch();
   const { state, setDomain, setWatch, setBot } = useProactiveReceive();
   if (!state) return null;
   const bots = store.bots ?? [];
-  const mine = state ? state.receive.bots.filter((row) => bots.some((bot) => bot.id === row.id)) : [];
-  const rows = state ? domainRows(state) : [];
+  const mine = state.receive.bots.filter((row) => bots.some((bot) => bot.id === row.id));
+  const orphans = orphanReviewRows(state, bots);
+  const rows = domainRows(state);
   const title = t("settings.receive.title");
   const has = (field: ReceiveSwitch) => mine.some((row) => row[field] !== undefined);
+  const linkBotId = store.selectedId && bots.some((bot) => bot.id === store.selectedId)
+    ? store.selectedId
+    : bots[0]?.id;
   return (
     <div data-settings-card="notifications.receive" className="flex flex-col gap-3">
+      {mine.length > 0 && (
+        <div data-receive-bot-page-pointer="" className="px-1">
+          <BotPagePointer botId={linkBotId} />
+        </div>
+      )}
       {rows.length > 0 && (
         <SettingsGroup title={title} groupId="receiveDomains" accessory={<Heading part={t("settings.receive.group.domains")} />}>
           {rows.map((row) => (
@@ -307,15 +357,10 @@ export function ProactiveReceiveSettings() {
           ))}
         </SettingsGroup>
       )}
-      {has("brief") && (
-        <SettingsGroup title={title} groupId="receiveBrief" accessory={<Heading part={t("settings.receive.group.brief")} />}>
-          <BotSwitchRows bots={bots} rows={mine} field="brief" onChange={(botId, on) => setBot(botId, { brief: on })} />
-        </SettingsGroup>
-      )}
-      {(has("endOfDay") || has("weekly")) && (
+      {orphans.length > 0 && (
         <SettingsGroup title={title} groupId="receiveReviews" accessory={<Heading part={t("settings.receive.group.reviews")} />}>
-          <BotSwitchRows bots={bots} rows={mine} field="endOfDay" label={t("review.endOfDay.title")} onChange={(botId, on) => setBot(botId, { endOfDay: on })} />
-          <BotSwitchRows bots={bots} rows={mine} field="weekly" label={t("review.weekly.title")} onChange={(botId, on) => setBot(botId, { weekly: on })} />
+          <BotSwitchRows bots={bots} rows={orphans} field="endOfDay" label={t("review.endOfDay.title")} allowMissingBot onChange={(botId, on) => setBot(botId, { endOfDay: on })} />
+          <BotSwitchRows bots={bots} rows={orphans} field="weekly" label={t("review.weekly.title")} allowMissingBot onChange={(botId, on) => setBot(botId, { weekly: on })} />
         </SettingsGroup>
       )}
       {has("screen") && (

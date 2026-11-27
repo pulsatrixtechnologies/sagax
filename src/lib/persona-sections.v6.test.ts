@@ -52,7 +52,7 @@ describe("V6 bot page map", () => {
   it("draws the channels and the accounts in place on General, with no Shared with row", () => {
     expect(BOT_PROFILE_SUBPAGES).not.toContain("channels");
     expect(BOT_PROFILE_SUBPAGES).not.toContain("accounts");
-    expect(BOT_PROFILE_TAB_GROUPS.general.map((group) => group.card ?? group.id)).toEqual(["settings", "channels", "accounts", "more"]);
+    expect(BOT_PROFILE_TAB_GROUPS.general.map((group) => group.card ?? group.id)).toEqual(["settings", "notifications", "channels", "accounts", "more"]);
     expect(BOT_PROFILE_TAB_GROUPS.general.flatMap((group) => group.pages)).not.toContain("sharing");
     expect((BOT_PROFILE_SUBPAGES as readonly string[]).includes("sharing")).toBe(false);
     for (const id of ["slack", "access"] as const) {

@@ -30,7 +30,7 @@
 // frame, and its fields are plain text (parseAnnotationMessage). Nothing
 // reaches a bot until the person presses Send.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { Check, Download, Ellipsis, Globe, Highlighter, History, Loader2, Maximize2, MessageSquare, Minimize2, Palette, PanelLeftClose, Pencil, Pin, Play, Save, Send, Share, Trash2, X, XCircle } from "lucide-react";
+import { Check, Download, Ellipsis, Globe, Highlighter, History, Loader2, Maximize2, MessageSquare, Minimize2, Palette, PanelLeftClose, Pencil, Pin, PinOff, Play, Save, Send, Share, Trash2, X, XCircle } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -38,6 +38,8 @@ import { relativeTime } from "@/lib/memory";
 import { useOsFullscreen } from "@/hooks/use-os-fullscreen";
 import { pagePlace, rememberPagePlace } from "@/lib/open-page";
 import { acceptPageOpen } from "@/lib/sandboxed-open";
+import { MAX_WEB_PANELS } from "@/lib/web-panels";
+import { usePagePin } from "@/lib/web-panel-preferences";
 import { api, useStore } from "@/state/store";
 import {
   annotationPrompt,
@@ -576,6 +578,12 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
     [previewPath, annotating, theme, skin, pageId, reloads],
   );
   const title = page?.title ?? initialTitle;
+  // Top-bar pin (#5463): separate from Library page.pinned.
+  const pin = usePagePin(
+    { pageId, botId: page?.botId ?? "", threadId: page?.threadId ?? "" },
+    title,
+  );
+  const canPin = Boolean(page?.botId && page?.threadId);
   const proposed = page && shown && shown.state === "proposed" && page.currentVersion !== shown.n;
 
   return (
@@ -636,6 +644,24 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
           >
             <Download size={17} />
           </button>
+          {canPin && (
+            <button
+              type="button"
+              data-page-pin-bar=""
+              aria-pressed={pin.pinned}
+              aria-label={t(pin.pinned ? "pages.unpinFromBar" : "pages.pinToBar")}
+              title={
+                pin.full
+                  ? t("pages.pinToBarFull", { max: String(MAX_WEB_PANELS) })
+                  : t(pin.pinned ? "pages.unpinFromBarHint" : "pages.pinToBarHint")
+              }
+              disabled={pin.full}
+              className={cn(ROUND, "window-no-drag disabled:opacity-40", pin.pinned && "bg-raised-hover")}
+              onClick={pin.toggle}
+            >
+              {pin.pinned ? <PinOff size={17} /> : <Pin size={17} />}
+            </button>
+          )}
           {page && (
             <PopoverMenu label={t("pages.more")} menuLabel={t("pages.more")} icon={<Ellipsis size={17} />} buttonClass={ROUND} data-page-more="">
               {(close) => (
@@ -646,6 +672,15 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
                   <MenuItem icon={<Pencil size={14} />} label={t("pages.edit")} onClick={() => { close(); toggle("edit"); }} />
                   {shown?.kind === "design" && <MenuItem icon={<Palette size={14} />} label={t("pages.designSystem")} data-page-design-system="" onClick={() => { close(); toggle("design"); }} />}
                   {shown && narrowBar(headerRef.current) && <MenuItem icon={<Download size={14} />} label={t("pages.download")} data-page-download-item="" onClick={() => { close(); void exportVersion(); }} />}
+                  {canPin && (
+                    <MenuItem
+                      icon={pin.pinned ? <PinOff size={14} /> : <Pin size={14} />}
+                      label={t(pin.pinned ? "pages.unpinFromBar" : "pages.pinToBar")}
+                      disabled={pin.full}
+                      data-page-pin-bar-item=""
+                      onClick={() => { close(); pin.toggle(); }}
+                    />
+                  )}
                   <MenuItem icon={<MessageSquare size={14} />} label={`${t("pages.comments.title")}${page.comments ? ` (${page.comments})` : ""}`} onClick={() => { close(); toggle("comments"); }} />
                   {proposed && (
                     <MenuItem icon={<XCircle size={14} />} label={t("pages.decline")} onClick={() => {

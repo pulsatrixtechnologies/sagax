@@ -301,7 +301,8 @@ describe("the fourteen moves play over the engine (#4145 regression: no move dra
 
   it("makes every size live while a move plays, and tells which", () => {
     const source = readFileSync(join(here, "ShapeMascot.tsx"), "utf8");
-    expect(source).toMatch(/const live = !reduced && \(shapeIsLive\(size, animated, detail, reduced\) \|\| playing !== null\)/);
+    // #5404: a mascot asked alive (the sidebar's) is live too, while it holds a seat
+    expect(source).toMatch(/const live = !reduced && \(seated \|\| shapeIsLive\(size, animated, detail, reduced\) \|\| playing !== null\)/);
     expect(source).toContain('"data-shape-move": playing.clip');
   });
 });

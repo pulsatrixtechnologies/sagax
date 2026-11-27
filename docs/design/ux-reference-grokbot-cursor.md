@@ -1901,6 +1901,18 @@ and `sidebar-logo-preferences.test.ts`:
   `data-section-chevron`); a click folds and `aria-expanded` says which way.
   The small capitals rule (`.sidebar-section-label` uppercase) is gone; the
   class stays as Hibou 98's hook.
+- Mascots (a shape in a row, on a pinned tile, in the rail; #5404): sharp and
+  alive. A shape fills its portrait by being laid out 1.6 times larger
+  (`avatarFillBox`), never by a CSS transform: a body in a material is a
+  canvas painted at its laid-out size times the device pixel ratio, and a
+  transform stretched it. It lives as the large mascot does (idle life, the
+  six states from the bot's activity), only while on screen, still under the
+  bot's Motion setting or `prefers-reduced-motion`; at most twenty live at
+  once, more than a window of the usual height shows (every mascot on screen
+  lives there, the pinned tile always), the others at rest taking turns
+  past that (`shape-alive.ts`, `docs/mascots.md` "Sharp and alive in the
+  sidebar"). A row's drawing stops 1px short of the name. Covered by
+  `scripts/testing/sidebar-mascot-quality.e2e.test.ts`.
 - Rows (comfortable): 54px tall, 8px padding, 12px corners, a 36px portrait
   10px before the text (#4093, the owner's configuration); the name 14px
   medium, then " · Title" on the same line, 14px regular

@@ -40,6 +40,7 @@ import { ShapeStageContext } from "./shape-stage";
 import { mixHex, MOVE_TIMING, ShapeEngine, stillFrame as restFrame, isShapeMove, rainbowStops, type ShapeFrame, type ShapeMove } from "./shape-engine";
 import { loadBakedStill, useBakedStill } from "./shape-stills";
 import { shapeSkinBase, shapeSkinLayers, type ShapeSkinBase, type ShapeSkinLayers } from "./skin-fx/shape-skins";
+import { useAliveSeat } from "./shape-alive";
 import { EquipFx, MoveFx } from "./skin-fx/SkinFx";
 import { fxDetail, fxPalette, useEquipBurst, useFxVisibility, useMoveBurst, useReducedMotion, useReplayMove, type FxDetail, type FxMoveRequest } from "./skin-fx/skin-fx";
 
@@ -61,6 +62,15 @@ export interface ShapeMascotProps {
   engineLook?: Partial<EngineLook>;
   /** Off draws the still (thumbnails, lists); a move still plays. */
   animated?: boolean;
+  /**
+   * Alive at any size, whatever `animated` says (the sidebar's rows and
+   * tiles, #5404): the idle life and the six states, as the large mascot,
+   * on the same loop; still under reduced motion, off screen, and while it
+   * waits for one of the page's seats (shape-alive.ts).
+   */
+  alive?: boolean | undefined;
+  /** The size the mascot is laid out and painted at when its holder draws it larger than `size` (BotAvatar fillBox); `size` keeps deciding what it is (still, live, a skin's detail). */
+  drawSize?: number | undefined;
   /** "static" forces the still at any size (pickers, thumbnails); "full" asks for the live mascot at any size (skin cards, the desktop mascot). */
   detail?: FxDetail;
   /** A one-shot move: one of the fourteen Shapes moves, or a skin's move (wave, dance...) that plays its effect. */
@@ -509,6 +519,8 @@ export function ShapeMascot({
   agentState = "idle",
   engineLook,
   animated = true,
+  alive = false,
+  drawSize,
   detail,
   move,
   moveBody = false,
@@ -566,6 +578,12 @@ export function ShapeMascot({
     timer.current = window.setTimeout(() => setPlaying(null), MOVE_TIMING[clip].duration * 1000 + 120);
   };
   useEffect(() => () => window.clearTimeout(timer.current), []);
+  // alive at any size (the sidebar, #5404): while on screen and holding one of the page's seats (shape-alive.ts)
+  const root = useRef<HTMLSpanElement>(null);
+  // the engine holds a body in a material still under the device's reduced motion, whatever the bot's Motion
+  // says: it would not move, so it takes no seat
+  const engineStill = material !== null && systemReduced;
+  const seated = useAliveSeat(root, alive && !reduced && !engineStill, pose.state !== "idle");
   const seen = useRef(0);
   useEffect(() => {
     if (!shapeMove || shapeMove.key === seen.current || reduced) return;
@@ -573,7 +591,7 @@ export function ShapeMascot({
     play(shapeMove.clip, shapeMove.key);
   }, [shapeMove?.key, shapeMove?.clip, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const live = !reduced && (shapeIsLive(size, animated, detail, reduced) || playing !== null);
+  const live = !reduced && (seated || shapeIsLive(size, animated, detail, reduced) || playing !== null);
   // the loop also runs for a reduced mascot on a stage: it turns and its eyes follow, with no idle life
   const looping = live || onStage;
   // the skin's full look (filters, its moving layers) when large or asked for; it moves only while live
@@ -582,7 +600,6 @@ export function ShapeMascot({
   const layers = useMemo(() => (faceD ? shapeSkinLayers(knownSkin, faceD, hex, uid, full) : null), [knownSkin, faceD, hex, uid, full]);
   const flatSkin = layers ? skinIsFlat(layers, paint) : knownSkin === "plain";
 
-  const root = useRef<HTMLSpanElement>(null);
   useFxVisibility(root, live);
   const equip = useEquipBurst(knownSkin, live);
   const burst = useMoveBurst(shapeMove ? null : move, live);
@@ -627,7 +644,7 @@ export function ShapeMascot({
     <span
       ref={root}
       className={cn("shape-mascot relative inline-flex shrink-0 items-center justify-center", live && full && "skin-fx-live", burst && moveBody && `fx-body-move fx-body-${burst.move}`, equip && "fx-equip-pop", className)}
-      style={{ width: size, height: size }}
+      style={{ width: drawSize ?? size, height: drawSize ?? size }}
       // a poke winks, on the click and never on the press (#4433): a move
       // turns a still image into the moving drawing, and doing it on
       // pointerdown took the pressed element off the page, so what holds the
@@ -638,6 +655,7 @@ export function ShapeMascot({
       data-skin-tier={paint.tier}
       data-mood={motion ?? pose.mood}
       data-agent-state={pose.state}
+      data-shape-alive={seated ? "" : undefined}
       data-shape-material={settings.material}
       data-fx={full ? "full" : "static"}
       data-shape-drawn={frame ? "" : undefined}

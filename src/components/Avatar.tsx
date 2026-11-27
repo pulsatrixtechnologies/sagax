@@ -204,6 +204,8 @@ export type BotAvatarProps = Omit<MausAvatarProps, "color"> & {
   primaryRingClassName?: string;
   /** Draw the mascot as large as its box, as the reference design's sidebar does (avatarFillScale). */
   fillBox?: boolean;
+  /** A shape lives at any size, as the large ones do (the sidebar's rows and tiles, #5404): idle life and the six states. */
+  shapeAlive?: boolean;
 };
 
 /** The Primary Bot mark: orange circle, white star, bottom-right. */
@@ -335,10 +337,15 @@ function CharacterAvatar({
   animated = true,
   label,
   move,
+  drawSize,
+  alive,
 }: {
   look: MascotLook;
   color: MausColor;
   size: number;
+  /** A shape drawn larger than its box (BotAvatar fillBox), and alive at any size (the sidebar). */
+  drawSize?: number | undefined;
+  alive?: boolean | undefined;
   state?: MausState;
   agentState?: AgentState;
   animated?: boolean;
@@ -361,6 +368,8 @@ function CharacterAvatar({
         moveBody
         avatarDef={full.avatarDef}
         label={label ?? null}
+        drawSize={drawSize}
+        alive={alive}
       />
     );
   }
@@ -426,11 +435,22 @@ export function resolveBotAvatarOutcome(params: {
  * The reference design's sidebar portrait fills its box (36px in a row, 60px on a pinned
  * tile). A shape mascot's body only uses about 62% of its frame, the rest is
  * room for its moves, so in the sidebar it is drawn 1.6 times larger to fill
- * the same box. Scaled about the point that puts the bodies' centre in the
- * box's centre; the box, its layout and the Primary Bot star do not change.
+ * the same box, about the point that puts the bodies' centre in the box's
+ * centre; the box, its layout and the Primary Bot star do not change.
+ *
+ * The mascot is laid out at that larger size, never enlarged with a CSS
+ * transform (#5404): a body in a material is a canvas the engine paints at
+ * its laid-out size times the device pixel ratio, and a transform the engine
+ * cannot see stretched that bitmap 1.6 times, blurry on every screen.
  */
 export const SHAPE_FILL_SCALE = 1.6;
-const SHAPE_FILL_ORIGIN = "50% 38%";
+/** The point the fill grows from, as shares of the box (across, down). */
+const SHAPE_FILL_ORIGIN = [0.5, 0.38] as const;
+
+/** Where a mascot that fills a box of `size` is laid out: its own size and its offset from the box's corner. */
+export function avatarFillBox(size: number, scale: number): { size: number; left: number; top: number } {
+  return { size: size * scale, left: size * SHAPE_FILL_ORIGIN[0] * (1 - scale), top: size * SHAPE_FILL_ORIGIN[1] * (1 - scale) };
+}
 
 /** How much larger a bot's avatar is drawn when it must fill its box. */
 export function avatarFillScale(bot: BotAvatarProps["bot"]): number {
@@ -442,11 +462,12 @@ export function BotAvatar({ primary, primaryRingClassName, fillBox, ...props }: 
   const scale = fillBox ? avatarFillScale(props.bot) : 1;
   if (!primary && scale === 1) return <BotAvatarImage {...props} />;
   const size = props.size ?? 44;
+  const fill = avatarFillBox(size, scale);
   return (
     <span className="relative inline-flex shrink-0" style={{ width: size, height: size }} data-primary-bot={primary ? "" : undefined}>
       {scale === 1 ? <BotAvatarImage {...props} /> : (
-        <span data-avatar-fill="" className="inline-flex" style={{ transform: `scale(${scale})`, transformOrigin: SHAPE_FILL_ORIGIN }}>
-          <BotAvatarImage {...props} />
+        <span data-avatar-fill="" className="absolute inline-flex" style={{ left: fill.left, top: fill.top, width: fill.size, height: fill.size }}>
+          <BotAvatarImage {...props} drawSize={fill.size} />
         </span>
       )}
       {primary && <PrimaryBotBadge size={size} ringClassName={primaryRingClassName} label={t("primaryBot.badge")} />}
@@ -462,8 +483,10 @@ function BotAvatarImage({
   sidebarAlive,
   mascotRef,
   agentState,
+  shapeAlive,
+  drawSize,
   ...mascotProps
-}: Omit<BotAvatarProps, "primary" | "primaryRingClassName">) {
+}: Omit<BotAvatarProps, "primary" | "primaryRingClassName" | "fillBox"> & { drawSize?: number }) {
   const profile = botAvatarProfile(bot);
   const [imageFailed, setImageFailed] = useState(false);
 
@@ -490,6 +513,8 @@ function BotAvatarImage({
         animated={mascotProps.animated}
         label={label ?? bot.name}
         move={characterMove}
+        drawSize={drawSize}
+        alive={shapeAlive}
       />
     );
   }

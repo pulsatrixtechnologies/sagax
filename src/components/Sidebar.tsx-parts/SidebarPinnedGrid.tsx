@@ -7,6 +7,7 @@ import { isViewersPrimaryBot } from "@/lib/primary-bot";
 import type { SidebarDensity } from "@/lib/sidebar-preferences";
 import { openBotConversationActions } from "../thread-home";
 import { SidebarMascotAvatar } from "../SidebarMascotAvatar";
+import { PINNED_TILE_SEAT } from "../shape-alive";
 import { BotRoleTag } from "../LabelTag";
 import { BotShareIcon, botShareLabel } from "../BotShareIcon";
 import { botShareState } from "@/lib/bot-share-state";
@@ -98,7 +99,7 @@ export function SidebarPinnedGrid({
         if (renaming) {
           return (
             <div key={bot.id} onContextMenu={onContextMenu} className={tileClass}>
-              <SidebarMascotAvatar botId={bot.id} bot={bot} primary={isViewersPrimaryBot(bot, viewerId)} primaryRingClassName={selected && density !== "icons" ? "ring-sidebar-card" : "ring-sidebar"} state="idle" size={density === "icons" ? 36 : 60} animated={false} />
+              <SidebarMascotAvatar botId={bot.id} bot={bot} primary={isViewersPrimaryBot(bot, viewerId)} primaryRingClassName={selected && density !== "icons" ? "ring-sidebar-card" : "ring-sidebar"} state="idle" size={density === "icons" ? 36 : 60} animated={false} seat={PINNED_TILE_SEAT} />
               {labels}
             </div>
           );
@@ -113,7 +114,7 @@ export function SidebarPinnedGrid({
             title={density === "icons" && share ? [bot.name, botShareLabel(share)].join("\n") : undefined}
             className={tileClass}
           >
-            <SidebarMascotAvatar botId={bot.id} bot={bot} primary={isViewersPrimaryBot(bot, viewerId)} primaryRingClassName={selected && density !== "icons" ? "ring-sidebar-card" : "ring-sidebar"} state="idle" size={density === "icons" ? 36 : 60} animated={false} />
+            <SidebarMascotAvatar botId={bot.id} bot={bot} primary={isViewersPrimaryBot(bot, viewerId)} primaryRingClassName={selected && density !== "icons" ? "ring-sidebar-card" : "ring-sidebar"} state="idle" size={density === "icons" ? 36 : 60} animated={false} seat={PINNED_TILE_SEAT} />
             {labels}
           </button>
         );

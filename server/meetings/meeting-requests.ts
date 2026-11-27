@@ -1,7 +1,8 @@
 // join_meeting: a bot asks to join a meeting as a notetaker. The request is
-// a consent card the person answers; nothing joins before their tap, and no
-// standing permission (Full access, an always-allow rule, a Live call's yes)
-// ever answers it: each meeting is its own outward action.
+// a consent card the person answers. Full access never joins on its own
+// (isolation hold: other people are in the meeting). Always allow for that
+// provider (#3367) does: the person saved it on a prior card (ownerRule /
+// keptRule). The consent announcement in the meeting chat still runs.
 //
 // Once approved, a MeetingSession runs in a private browser of the bot's.
 // The card shows its live state. The transcript lives in memory only, for
@@ -67,8 +68,8 @@ export interface MeetingServiceDeps {
   enabled?: () => boolean;
   /** Test hook: the session factory. */
   session?(options: ConstructorParameters<typeof MeetingSession>[0]): Pick<MeetingSession, "run" | "requestLeave">;
-  /** #2091 (decided 2026-11-05): the Always allow the person kept for meetings of
-   * this provider (index.ts keptCardRule); kept, the bot joins at once as them. */
+  /** #3367 / #2091: Always allow the person kept for meetings of this
+   * provider (index.ts keptCardRule); kept, the bot joins at once as them. */
   keptRule?(botId: string, threadId: string, candidate: { tool: string; scope: Record<string, string>; description: string }): { id: string; ownerId: string; behavior: "allow" | "ask" | "deny"; description: string } | undefined;
 }
 

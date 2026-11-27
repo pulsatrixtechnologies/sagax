@@ -65,10 +65,38 @@ describe("meeting requests", () => {
     expect(card.tool).toBe("join_meeting");
     expect(card.meetingRequest).toMatchObject({ status: "pending", displayName: "Ada (transcription)", supported: true, reason: "Weekly sync" });
     expect(card.options).toEqual(["Rejoindre et prendre des notes", "Pas cette fois"]);
+    // #3367: Always allow keeps this provider for the bot
+    expect(card.ownerRule).toEqual({
+      tool: "sagax:meeting",
+      scope: { provider: "google-meet" },
+      description: "Join Google Meet meetings as a notetaker",
+    });
     // #1286: a meeting proposal is decided by voice through its own resolver, never handed to the engine
     expect(liveProposal(card)).toBe(true);
     expect(liveCardKind(card)).toBe("approval");
     expect(liveDecisionRefusal(card)).toBeNull();
+  });
+
+  it("joins at once when Always allow was kept for that provider (#3367)", async () => {
+    const t = setup({
+      keptRule: () => ({
+        id: "rule-meet",
+        ownerId: "owner-1",
+        behavior: "allow",
+        description: "Join Google Meet meetings as a notetaker",
+      }),
+    });
+    cleanups.push(t.cleanup);
+    t.service.submit({ botId: "bot-1", threadId: "t1", url: "https://meet.google.com/abc-defg-hij", reason: "Weekly sync" });
+    await flush();
+    expect(t.card().ruleSaved).toEqual({
+      id: "rule-meet",
+      behavior: "allow",
+      description: "Join Google Meet meetings as a notetaker",
+    });
+    expect(t.card().answered).toBe("allow");
+    expect(t.card().meetingRequest.status).toBe("joining");
+    expect(t.runs).toHaveLength(1);
   });
 
   it("says Zoom and Teams are not supported yet, and never joins them", async () => {

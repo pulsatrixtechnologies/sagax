@@ -148,10 +148,12 @@ covered by `server/meetings/*.test.ts` and `server/routes/meetings.test.ts`:
   and the card's answer refuse with 403 `meetings_disabled`. Turning it (or
   the built-in browser) off makes every running meeting leave.
 
-- Every join is the person's own tap on its consent card. Nothing applies it
-  for them: no Full access path, no always-allow rule, no Live call answer
-  (`liveCardKind` is `review`), not the composer's approval stepper. Direct
-  conversations only.
+- Every join starts from the consent card in the chat (not the composer's
+  approval stepper). Full access never joins on its own (isolation hold).
+  Always allow for that provider (#3367) does, once the person saved it on
+  a prior card. A Live call may answer the open card (`liveCardKind` is
+  `approval`). Direct conversations only. The consent announcement in the
+  meeting chat still runs.
 - Nothing is recorded before the consent announcement ("<bot> (transcription)",
   for whom, xAI outside Québec, audio not kept, type "stop") is visible in
   the meeting chat and the chat can be read; otherwise the bot leaves without

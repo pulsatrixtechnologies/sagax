@@ -184,7 +184,9 @@ describe("sagax_settings", () => {
     await h.call({ action: "set", key: "bot.approvalMode", target: "b2", value: "auto" });
     expect(h.planned[0]!.effect).toBe("hold");
     expect(h.planned[0]!.noRule).toBeUndefined();
-    expect(h.planned[0]!.rule?.scope).toMatchObject({ setting: "bot.approvalMode", target: "b2", value: expect.any(String) });
+    // #5364: Always allow for a bot setting covers every bot of the person
+    expect(h.planned[0]!.rule?.scope).toEqual({ setting: "bot.approvalMode", value: expect.any(String) });
+    expect(h.planned[0]!.rule?.description).toContain("all your bots");
   });
 
   it("relays the route's own refusal: a member does not do by bot what they cannot do by hand", async () => {

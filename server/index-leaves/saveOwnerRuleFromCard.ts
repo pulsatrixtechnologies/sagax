@@ -51,10 +51,12 @@ function saveOwnerRuleFromCard(auth: RequestAuth, threadId: string, requestId: s
   const candidate: NonNullable<typeof card.ownerRule> = wholeFolder ? card.ownerRuleFolder! : card.ownerRule;
   // #2091 (decided 2026-11-05): whatever the card offers is saved, the whole
   // tool included; no "cannot be remembered" refusal by caution
+  // #5364: a sagax_settings Always allow without a bot target is person-wide
+  const savedBotId = candidate.tool === "sagax_settings" && !candidate.scope?.target ? null : bot.id;
   let saved: OwnerRule;
   try {
     saved = host.ownerApprovals.add({
-      ownerId, botId: bot.id, tool: candidate.tool, scope: candidate.scope,
+      ownerId, botId: savedBotId, tool: candidate.tool, scope: candidate.scope,
       ...(candidate.destructive ? { destructive: candidate.destructive } : {}),
       ...(candidate.from ? { from: candidate.from } : {}),
       behavior: rule, description: candidate.description

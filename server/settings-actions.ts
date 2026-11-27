@@ -774,15 +774,21 @@ export function createSettingsActions(deps: SettingsActionDeps) {
     // secret's value never
     const summary = `${spec.label} (${spec.key}${where ? `, ${where}` : ""})${secret ? `: ${Object.keys(value && typeof value === "object" ? value : {}).join(", ")}` : `: ${describe(value)}`}`;
     // 2026-10-19 ("Toujours permettre" on every card): what Always allow
-    // keeps: this setting of this target, and its exact value when the
-    // change is more than a simple one
+    // keeps: this setting, and its exact value when the change is more than
+    // a simple one. #5364 (owner 2026-11-26): a bot setting is remembered
+    // for every bot of the person (no target), so setting up several bots
+    // does not flood them with one card per bot.
     // 2026-10-27 (#1098): a change to rules or permissions is always bound
     // to its exact value
     const exactValue = classes.some((name) => name !== "own") || spec.family === "rules";
+    // bot.* settings of one bot: Always allow covers that key on every bot
+    const personWide = Boolean(ids.target) && spec.family === "bot" && spec.target === "bot";
+    // keep a non-bot target (routine, credential, …) in the scope
+    const keepTarget = ids.target && !personWide ? { target: ids.target } : {};
     const rule: ActRuleCandidate = {
       tool: "sagax_settings",
-      scope: { setting: spec.key, ...(ids.target ? { target: ids.target } : {}), ...(exactValue ? { value: valueDigest(value) } : {}) },
-      description: `${spec.label}${where ? ` (${where})` : ""}${exactValue ? (secret ? ", this exact value" : `: ${describe(value)}`) : ""}`.slice(0, 500),
+      scope: { setting: spec.key, ...keepTarget, ...(exactValue ? { value: valueDigest(value) } : {}) },
+      description: `${spec.label}${personWide ? " (all your bots)" : where ? ` (${where})` : ""}${exactValue ? (secret ? ", this exact value" : `: ${describe(value)}`) : ""}`.slice(0, 500),
     };
     const result = await deps.acts().handlePlanned({
       facts,

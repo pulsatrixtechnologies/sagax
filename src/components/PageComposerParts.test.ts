@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { t } from "@/lib/i18n";
-import { pageBotStatusLine, PageSelectionQuote } from "./PageComposerParts";
+import { ComposerPageCiteStrip, pageBotStatusLine, PageSelectionQuote } from "./PageComposerParts";
 
 const bot = (text: string, at: number) => ({ role: "bot" as const, kind: "text" as const, text, at });
 const user = (text: string, at: number) => ({ role: "user" as const, kind: "text" as const, text, at });
@@ -42,5 +42,18 @@ describe("the passage a message is about (#4099)", () => {
   it("a part of the page without words is named by its tag", () => {
     const html = renderToStaticMarkup(createElement(PageSelectionQuote, { selection: { kind: "element", quote: " ", prefix: "", suffix: "", path: "body > table", tag: "table" } }));
     expect(html).toContain("&lt;table&gt;");
+  });
+});
+
+describe("composer page cite strip (#5464)", () => {
+  it("shows the parked passage above the message field", () => {
+    const html = renderToStaticMarkup(createElement(ComposerPageCiteStrip, {
+      cite: { pageId: "p1", title: "Rapport Q3", selection: { kind: "text", quote: "Le volume\n a augmente", prefix: "", suffix: "", path: "body > p", tag: "p" } },
+      onClear: () => {},
+    }));
+    expect(html).toContain("data-composer-page-cite");
+    expect(html).toContain("Le volume a augmente");
+    expect(html).toContain(t("pages.selection.citeStrip", { title: "Rapport Q3" }));
+    expect(html).toContain(t("pages.selection.clearCite"));
   });
 });

@@ -135,6 +135,7 @@ export function ChatViewPagePanel({
             avatar: <BotAvatar bot={bot} primary={isViewersPrimaryBot(bot, viewerActorId(state.config))} state={stateForBot({ ...bot, messages })} agentState={agentStateForBot({ ...bot, messages })} size={28} />,
             botName: bot.name,
             working: bot.busy === true,
+            threadId: bot.threadId,
             onSend: (text: string, page: PageContextRef) => dispatch(pageAskSend(bot.id, text, page)),
           },
         } : {})}

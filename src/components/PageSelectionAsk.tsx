@@ -16,11 +16,18 @@
 // elsewhere, puts it away; the docked composer of the page stays as it is.
 // A selection made with the keyboard (Shift and the arrows, Select all) opens
 // it too: the frame reports it once the keys rest.
+//
+// #5464 R4: the same selection is also parked on the main composer as a cite
+// chip (src/lib/page-cite-draft.ts), so the person can write there instead of
+// in this mini composer. Ask-in-place stays for a quick send on the page;
+// cite-then-compose is for a longer message in the existing message field.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { ArrowUp, Loader2 } from "lucide-react";
+import { ArrowUp, Loader2, MessageSquareQuote } from "lucide-react";
 
 import { cn } from "@/lib/cn";
+import { focusComposer } from "@/lib/composer-focus";
 import { t } from "@/lib/i18n";
+import { clearPageCiteDraft, setPageCiteDraft } from "@/lib/page-cite-draft";
 import { pageSelectionRequest, parsePageSelectionMessage, type PageSelectionRect } from "../../shared/page-selection";
 import type { PageQuote } from "../../shared/page-threads";
 
@@ -40,6 +47,11 @@ export interface PageSelectionAskProps {
   onSend(text: string, selection: PageQuote): void;
   /** Room kept clear at the page's bottom (its docked composer). */
   bottomInset?: number;
+  /** Conversation that receives the cite chip on the main composer (#5464). */
+  threadId?: string;
+  pageId?: string;
+  pageTitle?: string;
+  pageVersion?: number | null;
 }
 
 /** The reference's measures (its note editor, roomy): room kept around the
@@ -74,7 +86,10 @@ export function selectionComposerPlace(rect: PageSelectionRect, width: number, h
   return { left, width: composerWidth, bottom: height - rect.y + GAP };
 }
 
-export function PageSelectionAsk({ frame, frameElement, drawn, avatar, botName, working, onSend, bottomInset = COMPOSER_BOTTOM_INSET }: PageSelectionAskProps) {
+export function PageSelectionAsk({
+  frame, frameElement, drawn, avatar, botName, working, onSend, bottomInset = COMPOSER_BOTTOM_INSET,
+  threadId, pageId, pageTitle, pageVersion,
+}: PageSelectionAskProps) {
   const [selection, setSelection] = useState<{ anchor: PageQuote; rect: PageSelectionRect } | null>(null);
   // the passage last asked about: followed into the bot's new version
   const [asked, setAsked] = useState<PageQuote | null>(null);
@@ -82,24 +97,40 @@ export function PageSelectionAsk({ frame, frameElement, drawn, avatar, botName, 
   const [offset, setOffset] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const rootRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+  const citeRef = useRef({ threadId, pageId, pageTitle, pageVersion });
+  citeRef.current = { threadId, pageId, pageTitle, pageVersion };
+
+  const parkCite = useCallback((anchor: PageQuote) => {
+    const cite = citeRef.current;
+    if (!cite.threadId || !cite.pageId) return;
+    setPageCiteDraft(cite.threadId, {
+      pageId: cite.pageId,
+      title: cite.pageTitle ?? "",
+      ...(cite.pageVersion != null ? { version: cite.pageVersion } : {}),
+      selection: anchor,
+    });
+  }, []);
 
   // the frame's messages: a selection with its box, or a clear
   useEffect(() => {
     const listen = (event: MessageEvent) => {
       const source = frame();
+      // Security: only this page's own frame window may report a selection.
       if (!source || event.source !== source) return;
       const update = parsePageSelectionMessage(event.data);
       if (!update) return;
       if (update.anchor === null) {
         setSelection(null);
         setAsked(null);
+        // the composer cite chip stays until Send, its x, or a new passage
         return;
       }
       setSelection({ anchor: update.anchor, rect: update.rect });
+      parkCite(update.anchor);
     };
     window.addEventListener("message", listen);
     return () => window.removeEventListener("message", listen);
-  }, [frame]);
+  }, [frame, parkCite]);
 
   // a new version drawn: the frame is asked to find the passage again (its
   // load waits for the page's own frame, whose bridge then listens)
@@ -133,18 +164,21 @@ export function PageSelectionAsk({ frame, frameElement, drawn, avatar, botName, 
     setSelection(null);
     setAsked(null);
     setText("");
+    // keep the cite chip on the main composer (#5464); only its x or a send drops it
     frame()?.postMessage(pageSelectionRequest(null), "*");
   }, [frame]);
 
   // a click elsewhere in the app puts it away (a click in the page clears
   // the selection there, and the frame says so); so does Escape anywhere in
-  // the app (in the page itself, the frame says so)
+  // the app (in the page itself, the frame says so). A click in the main
+  // composer keeps the parked cite chip so cite-then-compose works.
   useEffect(() => {
     if (!selection) return;
     const onDown = (event: PointerEvent) => {
       const target = event.target;
       if (target instanceof Node && boxRef.current?.contains(target)) return;
       if (target === frameElement.current) return;
+      if (target instanceof Element && target.closest('[data-surface="composer"]')) return;
       dismiss();
     };
     const onKey = (event: KeyboardEvent) => {
@@ -176,6 +210,13 @@ export function PageSelectionAsk({ frame, frameElement, drawn, avatar, botName, 
     onSend(words, selection.anchor);
     setAsked(selection.anchor);
     setText("");
+    // ask-in-place already carries the passage; drop the composer chip
+    if (citeRef.current.threadId) clearPageCiteDraft(citeRef.current.threadId);
+  };
+  const citeInComposer = () => {
+    parkCite(selection.anchor);
+    // keep the outline; the person writes in the main message field
+    requestAnimationFrame(() => focusComposer());
   };
   // the composer grows from the point it is anchored to
   const anchorX = Math.max(0, Math.min(rect.x - place.left, place.width));
@@ -227,6 +268,13 @@ export function PageSelectionAsk({ frame, frameElement, drawn, avatar, botName, 
                   }
                 }}
               />
+              {threadId && pageId ? (
+                <button type="button" data-page-selection-cite="" aria-label={t("pages.selection.cite")} title={t("pages.selection.cite")}
+                  onClick={citeInComposer}
+                  className="flex size-7 shrink-0 items-center justify-center rounded-full text-accent-text hover:bg-accent/15">
+                  <MessageSquareQuote size={15} aria-hidden="true" />
+                </button>
+              ) : null}
               <button type="button" data-page-selection-send="" aria-label={t("chat.send")} title={t("chat.send")}
                 disabled={!text.trim()}
                 onClick={send}

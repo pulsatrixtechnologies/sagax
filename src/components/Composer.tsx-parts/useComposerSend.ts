@@ -2,6 +2,7 @@ import { sendBlockStops } from "@/lib/send-state";
 import { useCallback, useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
 import { track } from "@/lib/analytics";
 import { currentOpenPage } from "@/lib/open-page";
+import { takePageCiteDraft } from "@/lib/page-cite-draft";
 import type { Action, AppState, Bot, Group, Message } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { consumeRetroCommand, retroSignal } from "@/lib/retro98";
@@ -302,10 +303,30 @@ export function useComposerSend({
     // and never ahead of an opening command the server parses first.
     // A page open over this conversation (src/lib/open-page.ts): the message
     // is about it; the chip shows on the message and the bot gets the page.
+    // A selected passage parked on the composer (#5464) rides as
+    // dataContext.page.selection with that page.
+    const openPage = currentOpenPage();
+    const takenCite = !group ? takePageCiteDraft(threadId) : null;
+    const pageForContext = openPage
+      ? {
+          ...openPage,
+          ...(takenCite && takenCite.draft.pageId === openPage.pageId
+            ? { selection: takenCite.draft.selection }
+            : {}),
+        }
+      : takenCite
+        ? {
+            pageId: takenCite.draft.pageId,
+            botId: bot?.id ?? "",
+            title: takenCite.draft.title,
+            ...(takenCite.draft.version !== undefined ? { version: takenCite.draft.version } : {}),
+            selection: takenCite.draft.selection,
+          }
+        : null;
     const dataContext = withPageContext(
       dataContextFor(body, dataWindowEnabled(config) ? getState().dataView : null, !group && bot ? { botId: bot.id, threadId } : undefined),
       body,
-      currentOpenPage(),
+      pageForContext,
       !group && bot ? { botId: bot.id } : undefined,
     );
     const sentDraft: ComposerDraftSnapshot = {
@@ -321,6 +342,10 @@ export function useComposerSend({
       channelMode: group ? effectiveChannelMode : undefined,
     };
     const onSent = () => forgetAttachmentUploads(sentDraft.attachments.map((attachment) => attachment.id));
+    const onError = () => {
+      takenCite?.restore();
+      restoreDraft(sentDraft);
+    };
     if (group) {
       dispatch({
         type: "sendGroup",
@@ -347,9 +372,11 @@ export function useComposerSend({
         ...(busyMode ? { busyMode } : {}),
         dataContext,
         onSent,
-        onError: () => restoreDraft(sentDraft),
+        onError,
       });
       track("message_sent", { driver: bot.modelSelection?.instanceId, queued: busy && !canSteer });
+    } else {
+      takenCite?.restore();
     }
     retroSignal("send");
     setText("");

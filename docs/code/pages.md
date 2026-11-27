@@ -99,7 +99,8 @@ the passage, 1.5 stroke, 8 radius, the accent at 90 and 12 %), a "Selected text"
 tag pinned on its top left edge, and the reference's roomy composer 10 under the
 passage (over it, growing upward, when there is no room under; 96 kept clear for
 the docked composer): 360 wide, 18 radius, the bot's avatar, a field that grows
-(Enter sends, Shift+Enter breaks the line) and a round send button. The frame
+(Enter sends, Shift+Enter breaks the line), a Cite in message button (#5464) and
+a round send button. The frame
 reports a keyboard selection (Shift and the arrows, Select all) once the keys rest, and
 Escape in the page (`SELECTION_BRIDGE_SOURCE`). Send is the person's ordinary message in the bot's conversation with
 the page and `selection` (`withPageContext`); the message shows the page chip
@@ -111,7 +112,12 @@ place; when its new version is
 drawn the app asks the frame for the passage again on load, and the outline
 follows it or goes. Escape (in the field, in the page, or anywhere in the app)
 or a click elsewhere puts it away (the page stays open); annotation mode keeps
-the selection for its own notes. The bot's answer is its new version, drawn in
+the selection for its own notes. The same selection is also parked on the main
+composer as a cite strip (`src/lib/page-cite-draft.ts`, `ComposerPageCiteStrip`):
+ask-in-place stays for a quick send on the page; cite-then-compose uses the
+existing message field (`[data-tour=composer]`) and the next send carries
+`dataContext.page.selection` the same way. Cite in message focuses that field
+without dismissing the outline. The bot's answer is its new version, drawn in
 place as soon as it lands, with one line over the page ("{bot} edited this
 passage", Undo; `src/components/PageEditUndo.tsx`): Undo draws the version the
 person asked about again, publishing it again when the bot's version was the

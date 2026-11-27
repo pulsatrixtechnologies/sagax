@@ -59,8 +59,13 @@ function basename(path: string): string {
   return path.split("/").filter(Boolean).at(-1) ?? path;
 }
 
-/** Absolute path on this computer (#5393): `/…`, `~/…`, a Windows drive, or
- * `file://…`. Spaces are allowed (folder names often have them). */
+/** Home or drive root on this computer (not an API path like `/api/bots`). */
+function looksLikeHomeOrDrivePath(path: string): boolean {
+  return /^(?:~[\\/]|\/(?:Users|home)(?:[\\/]|$)|[a-zA-Z]:[\\/])/i.test(path);
+}
+
+/** Absolute path on this computer (#5393): home/drive prefix, or another
+ * absolute path with a file extension. Spaces are allowed. */
 export function looksLikeAbsoluteLocalPath(text: string): boolean {
   const value = text.trim();
   if (!value || value.length > 1024) return false;
@@ -68,7 +73,10 @@ export function looksLikeAbsoluteLocalPath(text: string): boolean {
   if (/^[a-z][a-z\d+.-]*:\/\//i.test(value) && !/^file:\/\//i.test(value)) return false;
   if (!/^(?:\/(?!\/)|~[\\/]|[a-zA-Z]:[\\/]|file:\/\/)/i.test(value)) return false;
   const path = normalize(value);
-  return /[\\/]/.test(path.slice(1)) || /\.[A-Za-z0-9]{1,8}$/.test(path);
+  const hasSlash = /[\\/]/.test(path.slice(1));
+  const hasExt = /\.[A-Za-z0-9]{1,8}$/.test(path);
+  if (looksLikeHomeOrDrivePath(path)) return hasSlash || hasExt;
+  return hasSlash && hasExt;
 }
 
 /** A word the bot could mean as a file: one token with an extension, or a

@@ -66,6 +66,18 @@ describe("artifactsKeptForThreads (#5396)", () => {
     ], new Set(["open"]));
     expect(kept.map((item) => item.id)).toEqual(["art_fav0001", "art_pop0001", "art_live001", "art_bot0001"]);
   });
+
+  it("for a group library, keeps favorites and popped only for the group's bots", () => {
+    const kept = artifactsKeptForThreads([
+      artifact("art_in00001", "In group", 1, true, { botId: "member", threadId: "gone" }),
+      artifact("art_out0001", "Other bot", 1, true, { botId: "outsider", threadId: "gone" }),
+      artifact("art_popout1", "Other popped", 1, false, { botId: "outsider", threadId: "gone", popped: true }),
+      artifact("art_liveout", "Other live thread", 1, false, { botId: "outsider", threadId: "open" }),
+      artifact("art_botscope", "Bot scoped outsider", 1, true, { botId: "outsider" }),
+      artifact("art_membot1", "Member scoped", 1, false, { botId: "member" }),
+    ], new Set(["open"]), new Set(["member"]));
+    expect(kept.map((item) => item.id)).toEqual(["art_in00001", "art_liveout", "art_membot1"]);
+  });
 });
 
 describe("Library groups with Today (2026-10-28)", () => {

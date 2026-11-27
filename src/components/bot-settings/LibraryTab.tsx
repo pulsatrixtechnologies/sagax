@@ -78,14 +78,16 @@ export function LibraryTab({ bot }: { bot: Bot }) {
 export function GroupLibraryTab({ group }: { group: Group }) {
   const threads = groupThreadIds(group);
   const threadKey = [...threads].sort().join(",");
+  const memberKey = [...group.memberIds].sort().join(",");
   const all = useAllArtifacts();
   const list = useMemo<ArtifactList>(() => {
     const keep = new Set(threadKey.split(",").filter(Boolean));
+    const bots = new Set(memberKey.split(",").filter(Boolean));
     return {
       ...all,
-      artifacts: all.artifacts ? artifactsKeptForThreads(all.artifacts, keep) : null,
+      artifacts: all.artifacts ? artifactsKeptForThreads(all.artifacts, keep, bots) : null,
     };
-  }, [all, threadKey]);
+  }, [all, threadKey, memberKey]);
   const pages = usePagesWhere(`group:${group.id}:${threadKey}`, (page) => threads.has(page.threadId));
   const files = useThreadFiles(group);
   return <LibraryTabView list={list} pages={pages} files={files} />;

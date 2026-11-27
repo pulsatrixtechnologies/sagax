@@ -151,6 +151,12 @@ describe("matching a name to the thread's files", () => {
     expect(looksLikeFileName(spaced)).toBe(true);
     expect(looksLikeFileName("Grains EPJ inc")).toBe(false);
   });
+
+  it("rejects API-style absolute paths without a home or drive prefix", () => {
+    expect(looksLikeAbsoluteLocalPath("/api/bots")).toBe(false);
+    expect(looksLikeAbsoluteLocalPath("/tmp/report.pdf")).toBe(true);
+    expect(looksLikeAbsoluteLocalPath("~/Desktop/note.md")).toBe(true);
+  });
 });
 
 describe("absolute local paths in inline code (#5393)", () => {

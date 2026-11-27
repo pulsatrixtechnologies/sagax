@@ -3694,3 +3694,32 @@ followed and on Auto, a chosen model with no account or pill, a long name,
 and the right column zoomed with its guides). Tests:
 `src/components/ModelPanel.test.ts` ("the menu's layout"),
 `src/components/SegmentedChoice.test.ts`.
+
+### 8.14 The docked screen panel: the app's sizes (owner, 2026-11-27, M-20261127-179)
+
+The browser, VM and remote panel beside the chat (and the artifact panel in
+the same column) keeps its compact two rows (M-20261127-064), but every
+control is the size of the app's own, never a smaller copy:
+
+- Round controls (+, Mark up, Detach, Expand, Close, Back, Forward, Reload,
+  Give back, profiles, the menu): the chat header's `CIRCLE_BUTTON` (36px)
+  with its `CIRCLE_ICON` glyph (18px, 1.75), 8px apart in the top row.
+- The top row is the frame's header height (`--app-topbar-height`), so its
+  circles sit on the chat header's centre line; the address row holds the
+  same circles.
+- Type: 13px, the app's control type. Page tabs, the holder chip and Take
+  control are the 36px labelled chip (`CIRCLE_LABEL`, `CIRCLE_LABEL_BUTTON`);
+  a tab's own close is the app's icon button (`ui-icon-button`). The places
+  are the app's tabs (`PillTabs`), each with its place's icon. A docked
+  panel's title is 13.5px medium.
+- The address is the app's field (`PLAIN_FIELD`).
+- A narrow panel folds labels, never sizes (container `@container/screenbar`):
+  the place tabs keep their icons first, then Take control folds to its
+  circle and the holder chip goes (Take control and Give back still say who
+  drives).
+
+Captures: `node scripts/capture/browser-panel-sizes.mjs --out DIR` (the
+panel beside the real chat header, light and dark, fr and en). Tests:
+`src/components/BrowserPanel.compact.test.ts`,
+`src/components/ScreenPanel.dom.test.ts`,
+`src/components/artifacts/ArtifactSidePanel.dom.test.ts`.

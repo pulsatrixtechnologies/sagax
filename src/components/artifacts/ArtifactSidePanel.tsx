@@ -1,15 +1,17 @@
 // Docked right panel for one artifact beside the chat: same shell as person
 // / settings (`app-docked-panel`, shared width key). Detach opens the system
 // window and closes the panel; Agrandir uses the existing full-screen layer.
+// Its round controls draw the chat header's glyph (CIRCLE_ICON, M-20261127-179).
 import { useState } from "react";
 import { AppWindow, LoaderCircle, Maximize2, RefreshCw, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
-import { CIRCLE_BUTTON } from "@/lib/circle-button";
+import { CIRCLE_BUTTON, CIRCLE_ICON } from "@/lib/circle-button";
 import { t } from "@/lib/i18n";
 import { refreshArtifact, useArtifact, useArtifactWatch } from "@/lib/artifacts";
 import { useStore } from "@/state/store";
 import { DockedPanelResizeHandle, useDockedPanelWidth } from "../DockedPanelResize";
+import { SCREEN_PANEL_TITLE } from "../ScreenPanelChrome";
 import { ArtifactFrame, openArtifactFullscreen } from "./ArtifactFrame";
 import { ArtifactStatusLine } from "./ArtifactsSection";
 import { canOpenArtifactInOwnWindow, openArtifactInOwnWindow } from "./artifact-windows";
@@ -52,7 +54,7 @@ export function ArtifactSidePanel({ botId, artifactId, title }: { botId: string;
     >
       <DockedPanelResizeHandle label={t("computer.resizeAria")} panel={dockedPanel} />
       <div data-artifact-side-panel-header="" className="flex min-h-[52px] shrink-0 items-center gap-2 px-3 py-2.5">
-        <span dir="auto" className="min-w-0 flex-1 truncate text-[13.5px] font-medium leading-5 text-ink">{shownTitle}</span>
+        <span dir="auto" className={SCREEN_PANEL_TITLE}>{shownTitle}</span>
         {artifact?.source && (
           <button
             type="button"
@@ -65,7 +67,7 @@ export function ArtifactSidePanel({ botId, artifactId, title }: { botId: string;
               void refreshArtifact(botId, artifactId).catch(() => {}).finally(() => setRefreshing(false));
             }}
           >
-            <RefreshCw size={15} strokeWidth={1.75} aria-hidden="true" className={cn(refreshing && "animate-spin motion-reduce:animate-none")} />
+            <RefreshCw {...CIRCLE_ICON} aria-hidden="true" className={cn(refreshing && "animate-spin motion-reduce:animate-none")} />
           </button>
         )}
         {canOpenArtifactInOwnWindow() && (
@@ -77,7 +79,7 @@ export function ArtifactSidePanel({ botId, artifactId, title }: { botId: string;
             title={t("artifacts.detach")}
             className={CIRCLE_BUTTON}
           >
-            <AppWindow size={16} strokeWidth={1.75} aria-hidden="true" />
+            <AppWindow {...CIRCLE_ICON} aria-hidden="true" />
           </button>
         )}
         <button
@@ -89,7 +91,7 @@ export function ArtifactSidePanel({ botId, artifactId, title }: { botId: string;
           title={t("artifact.fullscreen")}
           className={CIRCLE_BUTTON}
         >
-          <Maximize2 size={15} strokeWidth={1.75} aria-hidden="true" />
+          <Maximize2 {...CIRCLE_ICON} aria-hidden="true" />
         </button>
         <button
           type="button"
@@ -99,7 +101,7 @@ export function ArtifactSidePanel({ botId, artifactId, title }: { botId: string;
           title={t("artifacts.closePanel")}
           className={CIRCLE_BUTTON}
         >
-          <X size={17} strokeWidth={1.75} aria-hidden="true" />
+          <X {...CIRCLE_ICON} aria-hidden="true" />
         </button>
       </div>
       {artifact && (

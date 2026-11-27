@@ -10,6 +10,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot } from "@/state/store";
 import { isScreenPanelOpen, setScreenPanelOpen } from "@/lib/screen-panel";
 import { openScreenPanelWindow } from "@/lib/screen-panel-window";
+import { CIRCLE_BUTTON, CIRCLE_ICON, CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
+import { renderToStaticMarkup } from "react-dom/server";
+import { SCREEN_PANEL_TOP_ROW } from "./ScreenPanelChrome";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const seen = vi.hoisted(() => ({ live: undefined as boolean | undefined, botId: "", docked: false }));
@@ -129,6 +132,37 @@ describe("ScreenPanel", () => {
     expect(host.querySelector("[data-pane=remote]")).not.toBeNull();
     expect(host.textContent).toContain("Ada’s remote computer");
     expect(host.querySelector("[data-screen-marks-bar]")).toBeNull();
+  });
+
+  it("draws the chat header's round controls, the app's tabs and the frame's header height (M-20261127-179)", () => {
+    const classes = (element: Element) => (element.getAttribute("class") ?? "").split(/\s+/);
+    for (const selector of ["[data-screen-panel-marks]", "[data-screen-panel-detach]", "[data-screen-panel-expand]", "[data-screen-panel-close]"]) {
+      const button = host.querySelector(selector)!;
+      expect(classes(button), selector).toEqual(expect.arrayContaining(CIRCLE_BUTTON.split(/\s+/)));
+      const svg = button.querySelector("svg")!;
+      expect({ size: Number(svg.getAttribute("width")), strokeWidth: Number(svg.getAttribute("stroke-width")) }, selector).toEqual(CIRCLE_ICON);
+    }
+    found.places = ["browser", "vm"]; found.vm = "server";
+    act(() => root.render(createElement(ScreenPanel, { bot })));
+    const tabs = [...host.querySelectorAll("[data-screen-place-select] [role=tab]")];
+    expect(tabs).toHaveLength(2);
+    for (const tab of tabs) {
+      expect(classes(tab)).toEqual(expect.arrayContaining(["rounded-full", "text-[13px]", "leading-[18px]"]));
+      expect(tab.querySelector("svg")!.getAttribute("width")).toBe("16");
+    }
+    act(() => { (host.querySelector("[data-screen-tab=vm]") as HTMLElement).click(); });
+    expect(classes(host.querySelector("[data-screen-panel-tabs]")!)).toEqual(expect.arrayContaining([...SCREEN_PANEL_TOP_ROW.split(/\s+/), "@container/screenbar"]));
+  });
+
+  it("gives the VM's Take control the top bar's 36px labelled button", async () => {
+    const { ControlSwitch } = await vi.importActual<typeof import("./ScreenPlaces")>("./ScreenPlaces");
+    for (const control of [false, true]) {
+      const html = renderToStaticMarkup(createElement(ControlSwitch, { control, onChange: () => {} }));
+      const list = /class="([^"]+)"/.exec(html)![1]!.split(/\s+/);
+      expect(list).toEqual(expect.arrayContaining(["h-9", "rounded-full", "text-[13px]", "leading-[18px]"]));
+      expect(CIRCLE_LABEL_BUTTON.split(/\s+/).every((name) => list.includes(name) || /^(bg|text|border|hover:bg)-/.test(name))).toBe(true);
+      expect(html).toMatch(/aria-label="[^"]+"/);
+    }
   });
 
   it("falls back to the first place when the picked one goes away", () => {

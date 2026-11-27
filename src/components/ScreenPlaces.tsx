@@ -9,6 +9,8 @@ import { useEffect, useState, type RefObject } from "react";
 import { Hand } from "lucide-react";
 import { t, activeLocale } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
+import { CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
+import { FOLD_CHIP, FOLD_CHIP_LABEL } from "./ScreenPanelChrome";
 import { frameTime, screenPlaces, type ScreenPlaces, type VmSource } from "@/lib/screen-places";
 import { loadServerEnvironment, type ServerEnvironmentStatus } from "@/lib/server-environment";
 import { useDesktopBridgeStatus } from "@/lib/desktop-bridge";
@@ -44,13 +46,18 @@ export function placeControllable(place: "vm" | "remote", vm: VmSource | null, r
 }
 
 /** Watching | Take control: the one switch of the VM and the remote computer. */
+/** Take or give back the VM and the remote computer, in the panel's top row:
+ * the top bar's 36px labelled button (M-20261127-179), in the accent while
+ * the person drives; a narrow panel folds it to its circle. */
 export function ControlSwitch({ control, onChange }: { control: boolean; onChange: (next: boolean) => void }) {
+  const label = t(control ? "sandboxDesktop.releaseControl" : "sandboxDesktop.takeControl");
   return (
     <button type="button" data-screen-control={control ? "driving" : "watching"} aria-pressed={control} onClick={() => onChange(!control)}
-      title={control ? t("sandboxDesktop.controlHint") : undefined}
-      className={cn("flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium leading-4 transition-colors", control ? "bg-accent text-accent-ink" : "bg-inset text-ink-secondary hover:text-ink")}>
-      <Hand size={12} strokeWidth={1.75} aria-hidden="true" />
-      {t(control ? "sandboxDesktop.releaseControl" : "sandboxDesktop.takeControl")}
+      aria-label={label}
+      title={control ? t("sandboxDesktop.controlHint") : label}
+      className={cn(CIRCLE_LABEL_BUTTON, FOLD_CHIP, control ? "border-transparent bg-accent text-accent-ink hover:bg-accent hover:brightness-110" : "text-ink-secondary hover:text-ink")}>
+      <Hand size={16} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+      <span className={cn("truncate", FOLD_CHIP_LABEL)}>{label}</span>
     </button>
   );
 }

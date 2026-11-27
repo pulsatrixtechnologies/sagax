@@ -182,7 +182,20 @@ async function runHeavyTeam(state: any): Promise<void> {
     reportBackgroundError(error);
   } finally {
     clearInterval(watch);
-    for (const threadId of threads) heavyAgentThreads.delete(threadId);
+    // #5425: close the hidden plan and expert warm engines; they are never
+    // reused (up to 9 CLI processes per Heavy turn at 8 experts). Same path
+    // as releaseBootEngineSlot(..., true): drop the idle entry, then release
+    // the adapter. Experts run as person-like turns, so they often hold no
+    // boot slot; releaseBootEngineSlot alone would be a no-op for them.
+    for (const threadId of threads) {
+      heavyAgentThreads.delete(threadId);
+      host.releaseBootEngineSlot(threadId, true);
+      setImmediate(() => {
+        host.idleEngines.forget(threadId);
+        host.releaseThreadEngines(threadId);
+        host.perspicaxMcp?.noteEngineCold(threadId);
+      });
+    }
   }
 }
   return runHeavyTeam;

@@ -46,9 +46,22 @@ describe("a person's preferences on an organization server", () => {
     const sync = await startPreferenceSync({ fetch: remote.fetch, storage, setInterval: noTimer });
     expect(sync).not.toBeNull();
     expect(storage.values.get("omb-skin")).toBe("midnight");
-    expect(storage.values.has("omb-language")).toBe(false);
+    // a key the server never stored stays local and is saved next (#5365)
+    expect(storage.values.get("omb-language")).toBe("en");
     expect(storage.values.get("omb-drafts")).toBe("kept");
     expect(remote.puts).toEqual([]);
+    await sync!.check();
+    expect(remote.patches).toEqual([{ set: { "omb-language": "en" }, remove: [] }]);
+  });
+
+  it("keeps Show Bot threads on across a restart when the server had not stored it yet (#5365)", async () => {
+    const key = "sagax.sidebarBotThreads.v1";
+    const storage = memory({ [key]: "on" });
+    const remote = server({ stored: true, preferences: { "omb-skin": "midnight" } });
+    const sync = (await startPreferenceSync({ fetch: remote.fetch, storage, setInterval: noTimer }))!;
+    expect(storage.values.get(key)).toBe("on");
+    await sync.check();
+    expect(remote.patches).toEqual([{ set: { [key]: "on" }, remove: [] }]);
   });
 
   it("the first time, saves what this computer's solo app had, without asking and without touching it", async () => {

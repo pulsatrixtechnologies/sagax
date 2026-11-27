@@ -8,8 +8,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import type { EngineLook, ShapeSkin } from "../../shared/mascot-look";
 import { ShapeMascot } from "./ShapeMascot";
+import { lookDefinition, moodFrame, runtimeStill } from "./shape-avatar";
 import { shapeLook } from "./shape-look";
-import { loadAllBakedStills } from "./shape-stills";
+import { bakedStill, loadAllBakedStills } from "./shape-stills";
 
 beforeAll(async () => {
   await loadAllBakedStills();
@@ -38,6 +39,21 @@ describe("a shape's look, as ShapeMascot paints it", () => {
     expect(html).toMatch(new RegExp(`(fill|stroke)="${look.ink}"`));
     expect(html).toContain(`data-mood="${look.pose.motion ?? look.pose.mood}"`);
     expect(html).toContain(`data-shape-skin="${look.skin}"`);
+  });
+
+  it.each([
+    { name: "the natural depth", skin: "plain" as ShapeSkin, engineLook: undefined },
+    { name: "a chosen depth", skin: "plain" as ShapeSkin, engineLook: { depth: 3 } },
+    { name: "the Outline skin, flat", skin: "outline" as ShapeSkin, engineLook: undefined },
+  ])("draws the still ShapeMascot draws: $name (baked, or inferred at that depth)", ({ skin, engineLook }) => {
+    const look = shapeLook({ shape: "cat", skin, color: "blue", engineLook, material: false });
+    const still = look.bakedId ? bakedStill(look.bakedId)! : runtimeStill(lookDefinition("cat"), look.depth);
+    const frame = moodFrame(still, look.pose.motion ?? "idle");
+    const markup = renderToStaticMarkup(createElement(ShapeMascot, { shape: "cat", skin, color: "blue", size: 22, animated: false, engineLook }));
+    const image = /src="data:image\/svg\+xml;charset=utf-8,([^"]+)"/.exec(markup)?.[1];
+    const html = markup + (image ? decodeURIComponent(image.replace(/&amp;/g, "&")) : "");
+    expect(frame.paths.length).toBeGreaterThan(0);
+    for (const [, d] of frame.paths) expect(html).toContain(d);
   });
 
   it("draws the Outline skin flat, and a material in the bot's own colour with its own eyes", () => {

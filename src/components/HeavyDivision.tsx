@@ -12,7 +12,10 @@
 // bot in a material (Fluffy, Glass) wears it in its cells: one still per
 // colour, painted once by the engine on the context the material already
 // shares across the page (shape-material-still.ts). Where the page cannot
-// paint it, the cells are flat with the mock-up's simple volume. The motion
+// paint it, the cells are flat with the mock-up's simple volume. A bot whose
+// mascot is a character or a photo divides too (D-20261126-037): a round in
+// its colour, whose cells become the bot's own character again once the pile
+// has closed up (HeavyTeamRow.tsx draws that pile). The motion
 // is src/lib/heavy-division.ts; this file draws its cells and runs its
 // clock, which stops when the row leaves the screen, when the page is hidden
 // and once nothing moves any more. A run that is over, read back from
@@ -23,23 +26,21 @@ import type { AvatarDefinition, AvatarMood, AvatarState, Matrix } from "open-bot
 import type { CanvasMaterial } from "open-bot-avatar/dom";
 
 import { t } from "@/lib/i18n";
-import { AGENT_COLORS } from "@/lib/heavy-team";
+import { AGENT_COLORS, HEAVY_FAILED_OPACITY } from "@/lib/heavy-team";
 import { HeavyDivisionSim, type DivisionCell } from "@/lib/heavy-division";
-import { mascotHex } from "@/lib/mascot";
 import { botAvatarProfile } from "../../shared/bot-avatar";
-import { completeMascotLook, engineLookOf, type MascotAvatarDef, type MascotShape, type ShapeMotion } from "../../shared/mascot-look";
+import { completeMascotLook, DEFAULT_ENGINE_LOOK, engineLookOf, type MascotAvatarDef, type MascotShape, type ShapeMotion } from "../../shared/mascot-look";
 import type { BotAvatarProps } from "./Avatar";
 import { eyeMarkup, lookDefinition, moodFrame, runtimeStill, stateStill, type StillFrame } from "./shape-avatar";
 import { shapeLook } from "./shape-look";
 import { useShapeMaterial } from "./shape-material";
 import { materialStill, type MaterialStill } from "./shape-material-still";
-import { shapeSkinPaint, skinFace } from "./ShapeMascot";
+import { skinFace } from "./ShapeMascot";
 import { useBakedStill } from "./shape-stills";
 import { useReducedMotionPreference } from "./TabIndicator";
 
 type DivisionBot = BotAvatarProps["bot"];
 
-const HEX = /^#[0-9a-fA-F]{6}$/;
 const SVG = "http://www.w3.org/2000/svg";
 /** The ring that cuts an expert out of its neighbour, in pixels: the pile's own (`ring-2`). */
 const RING = 2;
@@ -47,8 +48,7 @@ const RING = 2;
 const GOO = 0.21;
 /** While nothing divides the cells only breathe: redrawn at 30 frames a second, as the small live avatars are. */
 const IDLE_FRAME_MS = 1000 / 30 - 4;
-/** An expert that failed mid-run is dimmed, as the orbit dimmed it. */
-const FAILED_OPACITY = 0.45;
+const FAILED_OPACITY = HEAVY_FAILED_OPACITY;
 
 const matrixAttr = (m: Matrix) => `matrix(${m.join(" ")})`;
 const f2 = (n: number) => String(Math.round(n * 100) / 100);
@@ -66,6 +66,8 @@ export interface DivisionArt {
   material: { definition: AvatarDefinition; finish: CanvasMaterial; depth: number | undefined; state: AvatarState; mood: AvatarMood } | null;
   /** The look asks for a material the page cannot paint (or has not yet): flat cells with a simple volume. */
   shaded: boolean;
+  /** The bot's mascot is a character or a photo: a round in its colour divides, and the pile is the bot's own character (D-20261126-037). */
+  character: boolean;
 }
 
 /** The bot's shape when its mascot is one (a character, or a picture of its own, divides into nothing: the row keeps its pile of avatars). */
@@ -92,18 +94,30 @@ function definitionOf(shape: MascotShape, avatarDef: MascotAvatarDef | undefined
 }
 
 /**
- * The bot's mascot as the division draws it: undefined for a bot whose
- * mascot is no shape, null while a shape's still loads. The body, its
- * colour, its eyes and its material follow ShapeMascot's own rules
- * (shape-look.ts); a skin's layers are not carried into the cells.
+ * The bot's mascot as the division draws it: undefined without a bot, null
+ * while a shape's still loads. The body, its colour, its eyes and its
+ * material follow ShapeMascot's own rules (shape-look.ts); a skin's layers
+ * are not carried into the cells. A character or a photo divides as a
+ * plain round in the bot's colour (D-20261126-037).
  */
 export function useDivisionArt(bot: DivisionBot | null | undefined): DivisionArt | null | undefined {
-  const shape = divisionShape(bot);
+  const own = divisionShape(bot);
+  const character = Boolean(bot) && own === null;
+  const shape = own ?? (character ? "circle" : null);
   const full = completeMascotLook(bot?.mascotLook);
-  const settings = engineLookOf(bot?.mascotLook);
+  const lookSettings = engineLookOf(bot?.mascotLook);
+  // a character's round wears none of a shape's settings (a material, a depth, a mood left from an earlier shape), only the motion the person chose
+  const settings = character ? { ...DEFAULT_ENGINE_LOOK, motion: lookSettings.motion } : lookSettings;
   const finish = useShapeMaterial(settings.material);
-  const look = shapeLook({ shape: shape ?? "circle", skin: full.skins.shape, color: settings.bodyColor ?? bot?.color ?? "green", engineLook: settings, avatarDef: full.avatarDef, material: finish !== null });
-  const definition = shape ? definitionOf(look.shape, full.avatarDef) : null;
+  const look = shapeLook({
+    shape: shape ?? "circle",
+    skin: character ? "plain" : full.skins.shape,
+    color: lookSettings.bodyColor ?? bot?.color ?? "green",
+    engineLook: settings,
+    avatarDef: character ? undefined : full.avatarDef,
+    material: finish !== null,
+  });
+  const definition = shape ? definitionOf(look.shape, character ? undefined : full.avatarDef) : null;
   const baked = useBakedStill(shape ? look.bakedId : null);
   const { depth, pose } = look;
   const frame = useMemo(() => {
@@ -119,19 +133,23 @@ export function useDivisionArt(bot: DivisionBot | null | undefined): DivisionArt
   return useMemo(() => {
     if (!shape) return undefined;
     if (!frame) return null;
-    return { shape: look.shape, frame, color: look.body, ink: look.ink, motion: settings.motion, material, shaded };
-  }, [shape, look.shape, frame, look.body, look.ink, settings.motion, material, shaded]);
+    return { shape: look.shape, frame, color: look.body, ink: look.ink, motion: settings.motion, material, shaded, character };
+  }, [shape, look.shape, frame, look.body, look.ink, settings.motion, material, shaded, character]);
 }
 
-/** An expert's colour and the ink of its eyes: the pile's plumages, in the order of the experts. */
+/** An expert's colour and the ink of its eyes: the pile's plumages, in the order of the experts, as a plain shape paints them. */
 export function expertPaint(index: number): { color: string; ink: string } {
-  const color = mascotHex(AGENT_COLORS[index % AGENT_COLORS.length]!).toLowerCase();
-  const eyes = shapeSkinPaint("plain", color).eyes;
-  return { color, ink: HEX.test(eyes) ? eyes.toLowerCase() : "#151515" };
+  const look = shapeLook({ shape: "circle", skin: "plain", color: AGENT_COLORS[index % AGENT_COLORS.length]!, material: false });
+  return { color: look.body, ink: look.ink };
 }
 
 /** The runs whose division this window already showed to its end: scrolling a row away and back never plays it again. */
 const played = new Set<string>();
+
+/** Whether this window already showed a run's division to its end. */
+export function divisionPlayed(runId: string): boolean {
+  return played.has(runId);
+}
 
 interface CellNodes {
   /** The cell in the bot's colour, under the membrane's filter: the bot's own body, which stretches and pinches with its sister. */
@@ -182,6 +200,8 @@ export interface HeavyDivisionProps {
   settled?: boolean;
   /** The experts that failed mid-run, by their place in the pile: their cells are dimmed. */
   failed?: readonly boolean[];
+  /** Called once the run's division has reached its pile (a character's row then draws its own pile). */
+  onRest?: () => void;
   size?: number;
 }
 
@@ -195,7 +215,7 @@ interface Live {
   repaint: () => void;
 }
 
-export function HeavyDivision({ art, count, running, runId, settled = false, failed, size = 22 }: HeavyDivisionProps) {
+export function HeavyDivision({ art, count, running, runId, settled = false, failed, onRest, size = 22 }: HeavyDivisionProps) {
   const uid = `division-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const svg = useRef<SVGSVGElement>(null);
   const goo = useRef<SVGGElement>(null);
@@ -210,9 +230,10 @@ export function HeavyDivision({ art, count, running, runId, settled = false, fai
   const reduced = art.motion === "reduced" || (art.motion === "system" && systemReduced);
   // what the cells are painted with: read on every draw, so a change repaints them and never restarts the division
   const failedKey = (failed ?? []).map((value) => (value ? "1" : "0")).join("");
-  const stills = useRef<{ own: MaterialStill | null; experts: Array<MaterialStill | null> } | null>(null);
-  const paint = useRef({ art, failed: failedKey });
-  paint.current = { art, failed: failedKey };
+  // the stills worn now; `version` changes each time they are replaced, so the cells take new ones of the same count too
+  const stills = useRef<{ own: MaterialStill | null; experts: Array<MaterialStill | null>; version: number } | null>(null);
+  const paint = useRef({ art, failed: failedKey, onRest });
+  paint.current = { art, failed: failedKey, onRest };
 
   // the bot's body and its eyes, each once in the defs: every cell is a <use> of them
   const defs = useMemo(() => {
@@ -291,6 +312,7 @@ export function HeavyDivision({ art, count, running, runId, settled = false, fai
     let order = "";
     let blurred = -1;
     let painted = "";
+    let rested = false;
     const draw = (seconds: number) => {
       const alive = state.running && !sim.reduced;
       const cells = sim.ordered();
@@ -316,7 +338,7 @@ export function HeavyDivision({ art, count, running, runId, settled = false, fai
       const { art: look, failed: dim } = paint.current;
       const worn = stills.current;
       // a colour, a still or a failure changed: every cell is painted again
-      const paintKey = `${look.color}|${look.ink}|${look.shaded}|${dim}|${worn ? worn.experts.length : -1}|${worn?.own ? 1 : 0}`;
+      const paintKey = `${look.color}|${look.ink}|${look.shaded}|${dim}|${worn ? worn.version : -1}`;
       if (paintKey !== painted) {
         painted = paintKey;
         for (const made of nodes.values()) made.expert = -2;
@@ -403,7 +425,13 @@ export function HeavyDivision({ art, count, running, runId, settled = false, fai
       }
       root.setAttribute("data-heavy-division", sim.busy ? "dividing" : alive ? "live" : "rest");
       // shown to its end: this run's division is not played a second time
-      if (state.running && !sim.busy && cells.some((cell) => cell.expert >= 0)) played.add(runId);
+      if (!sim.busy && cells.some((cell) => cell.expert >= 0)) {
+        if (state.running) played.add(runId);
+        if (!rested) {
+          rested = true;
+          paint.current.onRest?.();
+        }
+      } else if (sim.busy) rested = false;
     };
 
     let frame = 0;
@@ -505,7 +533,7 @@ export function HeavyDivision({ art, count, running, runId, settled = false, fai
     void Promise.all(wanted.map((colours) => materialStill({ definition: material.definition, material: material.finish, color: colours.color, ink: colours.ink, depth: material.depth, state: material.state, mood: material.mood, px })))
       .then(([own, ...painted]) => {
         if (!alive) return;
-        stills.current = { own: own ?? null, experts: painted };
+        stills.current = { own: own ?? null, experts: painted, version: (stills.current?.version ?? 0) + 1 };
         live.current?.repaint();
       });
     return () => {
@@ -515,7 +543,7 @@ export function HeavyDivision({ art, count, running, runId, settled = false, fai
 
   // the width and the view box follow the cells: the drawing writes them, so the text stays against the pile
   return (
-    <svg ref={svg} data-heavy-division="rest" data-heavy-avatars="" data-shape={art.shape} data-heavy-material={material ? material.finish.id : undefined}
+    <svg ref={svg} data-heavy-division="rest" data-heavy-avatars="" data-shape={art.shape} data-heavy-material={material ? material.finish.id : undefined} data-heavy-character={art.character ? "" : undefined}
       role="img" aria-label={count > 0 ? t("heavy.avatars", { count }) : undefined} aria-hidden={count > 0 ? undefined : true}
       className="block shrink-0 overflow-visible" height={size}>
       <defs>

@@ -5,12 +5,13 @@
 // drawing that paints a bot's shape outside ShapeMascot (the Heavy row's
 // cell division, HeavyDivision.tsx); shape-look.test.ts holds the two
 // together, so they never drift apart.
-import { mascotHex } from "@/lib/mascot";
+import { isHexColor, mascotHex } from "@/lib/mascot";
 import { DEFAULT_ENGINE_LOOK, MASCOT_SHAPES, SHAPE_DEPTH, SHAPE_SKINS, type EngineLook, type MascotAvatarDef, type MascotShape, type ShapeSkin } from "../../shared/mascot-look";
 import { bakedShapeFor, enginePose, type EnginePose, type ShapeMood } from "./shape-avatar";
 import { shapeSkinPaint } from "./ShapeMascot";
 
-const HEX = /^#[0-9a-fA-F]{6}$/;
+/** The eyes' ink when neither the person nor the skin gives one (a material's eyes). */
+export const FALLBACK_INK = "#151515";
 
 export interface ShapeLookInput {
   shape: MascotShape;
@@ -51,8 +52,8 @@ export function shapeLook({ shape, skin, color, engineLook, avatarDef, material,
   const hex = mascotHex(color);
   const paint = shapeSkinPaint(knownSkin, hex);
   const settings: EngineLook = { ...DEFAULT_ENGINE_LOOK, ...engineLook };
-  const body = (material ? hex : HEX.test(paint.fill) ? paint.fill : hex).toLowerCase();
-  const ink = (settings.eyeColor && HEX.test(settings.eyeColor) ? settings.eyeColor : !material && HEX.test(paint.eyes) ? paint.eyes : "#151515").toLowerCase();
+  const body = (material ? hex : isHexColor(paint.fill) ? paint.fill : hex).toLowerCase();
+  const ink = (isHexColor(settings.eyeColor) ? settings.eyeColor : !material && isHexColor(paint.eyes) ? paint.eyes : FALLBACK_INK).toLowerCase();
   const chosenDepth = settings.depth === null || settings.depth === SHAPE_DEPTH.natural ? undefined : Math.min(SHAPE_DEPTH.max, Math.max(SHAPE_DEPTH.min, settings.depth));
   const depth = knownSkin === "outline" && !material ? 0 : chosenDepth;
   return {

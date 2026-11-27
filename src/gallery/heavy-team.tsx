@@ -7,6 +7,7 @@
  * &shape=<shape id, or owl for a character>&color=<bot colour>&n=<experts, 2 to 8>
  * &def=own (the bot's shape is its own drawing: a copy of the cup under an id of its own, read at run time)
  * &material=fluffy|glass&mascotSkin=<a shape skin>&fail=<the expert that fails mid-run>
+ * &character=<shiba, grump, trombi... in place of a shape>&photo=1 (the bot's own picture, /api/attachments/demo-photo.png: the capture serves it)
  * &zoom=<magnify the row>&rows=<that many rows, for the cost measure>&motion=reduced
  * case=division is a live run: the leader picks its team, then `n` experts appear (and `fail` fails 3 s later). */
 import { StrictMode, useEffect, useState } from "react";
@@ -38,11 +39,12 @@ const zoom = Number(params.get("zoom")) || 1;
 const rowCount = Math.max(1, Number(params.get("rows")) || 1);
 if (params.get("motion") === "reduced") document.documentElement.dataset.reducedMotion = "true";
 const failing = Number(params.get("fail")) || 0;
-/** The conversation's bot: a shape in its colour (its own drawing, a material, a skin), or the owl (a character, which divides into nothing). */
+/** The conversation's bot: a shape in its colour (its own drawing, a material, a skin), the owl, another character or a picture (a round in its colour divides, then its characters). */
 const BOT = {
   name: "Nimbus",
   color: params.get("color") ?? "grey",
-  ...(shape === "owl" ? {} : {
+  ...(params.get("photo") ? { avatarUrl: "/api/attachments/demo-photo.png", avatarCrop: "circle" } : {}),
+  ...(params.get("character") ? { mascotLook: { character: params.get("character") } } : shape === "owl" ? {} : {
     mascotLook: {
       character: "shape",
       shape,

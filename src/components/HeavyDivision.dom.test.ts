@@ -36,9 +36,24 @@ const shapeBot = (shape: string, over: object = {}): Bot => ({ name: "Nimbus", c
 
 let host: HTMLDivElement;
 let root: Root;
-/** The frames the page was asked for and has not drawn yet. */
+/** The frames the page was asked for and has not drawn yet, each cancelled by its own id as a browser does. */
 let frames: FrameRequestCallback[] = [];
+let frameIds: number[] = [];
+let lastFrameId = 0;
 let clock = 0;
+function stubFrames() {
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    frames.push(callback);
+    frameIds.push(++lastFrameId);
+    return lastFrameId;
+  });
+  vi.stubGlobal("cancelAnimationFrame", (id: number) => {
+    const at = frameIds.indexOf(id);
+    if (at < 0) return;
+    frames.splice(at, 1);
+    frameIds.splice(at, 1);
+  });
+}
 const row = (bot: Bot | null, line: HeavyTeamLine, busy: boolean, id = "m1") =>
   act(() => root.render(createElement(HeavyLeaderContext, { value: bot }, createElement(HeavyTeamRow, { message: message(line, id), busy }))));
 const $ = (selector: string) => host.querySelector<HTMLElement>(selector);
@@ -49,6 +64,7 @@ function pump(seconds: number): void {
     clock += 1000 / 60;
     const due = frames;
     frames = [];
+    frameIds = [];
     for (const callback of due) callback(clock);
   }
 }
@@ -59,9 +75,9 @@ beforeAll(async () => {
 beforeEach(() => {
   setLocale("en");
   frames = [];
+  frameIds = [];
   clock = 10_000;
-  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
-  vi.stubGlobal("cancelAnimationFrame", () => { frames = []; });
+  stubFrames();
   vi.spyOn(performance, "now").mockImplementation(() => clock);
   host = document.createElement("div");
   document.body.append(host);
@@ -255,28 +271,59 @@ describe("the division in the chat's row", () => {
     expect(cells()).toHaveLength(4);
     expect(frames).toHaveLength(0);
     vi.unstubAllGlobals();
-    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
+    stubFrames();
     await row(shapeBot("cat", { motion: "reduced" }), team(4), true, "mascot");
     expect(cells()).toHaveLength(4);
     expect(frames).toHaveLength(0);
   });
 
-  it("a bot whose mascot is a character, or its own picture, keeps the pile of owls and divides into nothing", async () => {
+  it("a bot whose mascot is a character, or its own picture, has no shape of its own: it divides as a round (D-20261126-037)", () => {
     expect(divisionShape({ color: "blue" } as Bot)).toBeNull();
     expect(divisionShape({ color: "blue", mascotLook: { character: "shiba" } } as Bot)).toBeNull();
     expect(divisionShape({ color: "blue", avatarUrl: "/api/attachments/a.png", avatarCrop: "circle", mascotLook: { character: "shape", shape: "cat" } } as Bot)).toBeNull();
     expect(divisionShape(shapeBot("cat"))).toBe("cat");
-    await row({ color: "blue" } as Bot, team(3), true);
-    expect($("[data-heavy-division]")).toBeNull();
-    expect(host.querySelectorAll("[data-heavy-avatars] > span")).toHaveLength(3);
   });
 
-  it("a bot whose mascot is a character shows itself while its leader picks the team, as the orbit's centre did", async () => {
-    await row({ name: "Nimbus", color: "blue" } as Bot, team(0), true, "owl-planning");
+  it("a character bot: the bot while its leader picks, then a round in its colour divides, then each cell is the bot's own character again", async () => {
+    const owl = { name: "Nimbus", color: "blue" } as Bot;
+    await row(owl, team(0), true, "owl-run");
     expect($("[data-heavy-leader-avatar] [data-owl]")).not.toBeNull();
     expect($("[data-heavy-leader-avatar]")!.nextElementSibling).toBe($("[data-heavy-header]"));
-    await row({ name: "Nimbus", color: "blue" } as Bot, team(3), true, "owl-planning");
-    expect($("[data-heavy-leader-avatar]")).toBeNull();
-    expect(host.querySelectorAll("[data-heavy-owl]")).toHaveLength(3);
+    await row(owl, team(3), true, "owl-run");
+    // the round, in the bot's own colour, divides
+    const svg = $("[data-heavy-division]")!;
+    expect(svg.dataset.shape).toBe("circle");
+    expect(svg.hasAttribute("data-heavy-character")).toBe(true);
+    expect($("[data-heavy-division] > g")!.getAttribute("fill")).toBe("#377fe6");
+    pump(1);
+    expect(svg.dataset.heavyDivision).toBe("dividing");
+    pump(30);
+    // the division tells the row it reached its pile (from its clock, outside React): the row draws again
+    await act(async () => { await Promise.resolve(); });
+    // the pile closed up: each cell is the bot's own character in its expert's colour, stacked as the pile is
+    const pile = $("[data-heavy-character-pile]")!;
+    expect(pile.querySelectorAll("[data-heavy-owl]")).toHaveLength(3);
+    expect(pile.querySelectorAll("[data-heavy-owl] [data-owl]")).toHaveLength(3);
+    expect(pile.querySelector("[data-heavy-avatars]")!.getAttribute("aria-label")).toBe("3 experts");
+  });
+
+  it("a character bot's run read back from history is its pile at once, never divided", async () => {
+    await row({ name: "Nimbus", color: "blue", mascotLook: { character: "shiba" } } as Bot, done(4), false, "shiba-done");
+    expect($("[data-heavy-division]")).toBeNull();
+    expect(host.querySelectorAll("[data-heavy-character-pile] [data-heavy-owl]")).toHaveLength(4);
+    expect(host.querySelectorAll("[data-heavy-owl] [data-shiba-skin]")).toHaveLength(4);
+    expect(frames).toHaveLength(0);
+  });
+
+  it("a bot whose avatar is its own picture divides as a round too, and its experts are its picture", async () => {
+    const photo = { name: "Nimbus", color: "teal", avatarUrl: "/api/attachments/a.png", avatarCrop: "circle" } as Bot;
+    await row(photo, team(0), true, "photo-run");
+    await row(photo, team(2), true, "photo-run");
+    expect($("[data-heavy-division]")!.dataset.shape).toBe("circle");
+    pump(30);
+    await act(async () => { await Promise.resolve(); });
+    const pictures = [...host.querySelectorAll("[data-heavy-character-pile] [data-heavy-owl] img")];
+    expect(pictures).toHaveLength(2);
+    for (const picture of pictures) expect(picture.getAttribute("src")).toBe("/api/attachments/a.png");
   });
 });

@@ -10,6 +10,9 @@ import {
 
 export { heavyIsRunning, heavyThoughtMs };
 
+/** An expert that failed mid-run is dimmed in the row's pile, as the orbit dimmed it. */
+export const HEAVY_FAILED_OPACITY = 0.45;
+
 /** The experts' colours, one each: eight, the most the row's division draws apart (M-20261126-120), in the mock-up's order (its seventh is lime). */
 export const AGENT_COLORS = ["blue", "green", "orange", "purple", "pink", "teal", "lime", "coral"] as const;
 

@@ -280,9 +280,13 @@ called from `startTurn` before the leader's prompt is built.
     dimmed, as the orbit dimmed it, and its line in the preview reads "Did
     not finish · ..." in the tertiary ink.
   - A bot whose mascot is a character (the owl, Shiba...) or its own picture
-    divides into nothing: while its leader picks the team the row shows the
-    bot itself, then the pile of owls, alive while the run goes (the one
-    speaking at work, as the orbit drew them) and still after.
+    divides too (D-20261126-037): while its leader picks the team the row
+    shows the bot itself, then a round in the bot's colour divides, and once
+    the pile has closed up each cell becomes the bot's own character again
+    (its look in the expert's colour; a picture as it is), stacked as the
+    pile is, the round fading out over them. The pile is alive while the run
+    goes (the one speaking at work, as the orbit drew them) and still after;
+    a run read back from history is that pile at once.
   - A run that is over, or read back from history, is drawn finished and
     never replayed; so is a row that first shows once the experts are past
     their first round or the leader writes; a division shown to its end is
@@ -309,8 +313,8 @@ called from `startTurn` before the leader's prompt is built.
   `src/components/shape-look.test.ts`,
   `src/components/HeavyTeamRow.dom.test.ts`; captures:
   `scripts/capture/heavy-division.mjs` (frame by frame, beside the mock-up
-  with `--mockup`; `--look` for an own drawing, a material, a failure, the
-  owl), `scripts/capture/heavy-team.mjs`.
+  with `--mockup`; `--look` for an own drawing, a material, a failure, a
+  character, a picture; `--shape owl`), `scripts/capture/heavy-team.mjs`.
 
 Tests: `server/heavy-team.test.ts` (an expert's write is refused by the server;
 the leader stops at 5 rounds at most; agreement stops early; the plan, the

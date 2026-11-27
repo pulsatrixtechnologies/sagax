@@ -14,7 +14,7 @@
  *   [--look "material=glass"] [--tag glass] [--skins dark,light] [--measure]
  */
 import { spawn } from "node:child_process";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -65,16 +65,22 @@ const base = `http://127.0.0.1:${port}/src/gallery/heavy-team.html`;
 const rounds = (n) => Math.ceil(Math.log2(n));
 const frameTimes = (n) => Array.from({ length: FRAMES }, (_, index) => Math.round(((rounds(n) * ROUND_MS + CLOSE_MS) * index) / (FRAMES - 1)));
 const dataUrl = (buffer) => `data:image/png;base64,${buffer.toString("base64")}`;
+/** The gallery's `photo=1` bot wears the app's icon as its own picture (an attachment the dev server does not have). */
+const servePhoto = async (page) => {
+  const body = await readFile(join(root, "public", "app-icon-192.png"));
+  await page.route("**/api/attachments/demo-photo.png", (route) => route.fulfill({ status: 200, contentType: "image/png", body }));
+};
 
 /** The app's row, stepped from the moment its team arrives. */
 async function appFrames(browser, skin, n) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 520 }, deviceScaleFactor: 2 });
+  await servePhoto(page);
   // a clock only the script moves: both pages are read at the same instants
   await page.clock.install({ time: 0 });
   await page.clock.pauseAt(1000);
   await page.goto(`${base}?lang=en&skin=${skin}&case=division&shape=${shape}&n=${n}&zoom=${ZOOM}${extra}`, { waitUntil: "load" });
   for (let step = 0; step < 400 && !(await page.$("[data-gallery-planned]")); step += 1) await page.clock.runFor(25);
-  await page.waitForSelector(shape === "owl" ? "[data-gallery-planned] [data-heavy-avatars]" : "[data-gallery-planned] [data-heavy-division]");
+  await page.waitForSelector("[data-gallery-planned] [data-heavy-avatars]");
   const frames = [];
   let at = 0;
   for (const time of frameTimes(n)) {
@@ -83,8 +89,8 @@ async function appFrames(browser, skin, n) {
     const box = await page.locator("[data-heavy-open]").boundingBox();
     frames.push(await page.screenshot({ clip: { x: Math.max(0, box.x - 12), y: box.y - 10, width: 1100, height: box.height + 20 } }));
   }
-  // a character divides into nothing: its pile of owls is the row
-  const cells = shape === "owl" ? String(await page.locator("[data-heavy-owl]").count()) : await page.getAttribute("[data-heavy-division]", "data-heavy-cells");
+  // a character or a photo ends as its own pile (D-20261126-037), a shape as its cells
+  const cells = (await page.$("[data-heavy-character-pile]")) ? String(await page.locator("[data-heavy-character-pile] [data-heavy-owl]").count()) : await page.getAttribute("[data-heavy-division]", "data-heavy-cells");
   if (Number(cells) !== n) throw new Error(`${n} experts (${skin}): the row ends with ${cells} cells`);
   await page.close();
   return frames;
@@ -120,11 +126,12 @@ async function mockupFrames(browser, scheme, n) {
 /** The finished row at its real size, as the chat shows it. */
 async function restRow(browser, skin, n) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 520 }, deviceScaleFactor: 2 });
+  await servePhoto(page);
   // the dev server sometimes drops the shape's still on a first load: one more load then
   for (let attempt = 0; ; attempt += 1) {
     await page.goto(`${base}?lang=en&skin=${skin}&case=done&shape=${shape}&n=${n}${extra}`, { waitUntil: "networkidle" });
     try {
-      await page.waitForSelector(shape === "owl" ? "[data-heavy-owl]" : "[data-heavy-division][data-heavy-cells]", { timeout: 10_000 });
+      await page.waitForSelector("[data-heavy-owl], [data-heavy-division][data-heavy-cells]", { timeout: 10_000 });
       // a material's stills come in a few frames after the cells
       if (look.includes("material=")) await page.waitForSelector("[data-heavy-cell] image", { timeout: 10_000 });
       break;

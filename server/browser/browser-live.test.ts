@@ -660,6 +660,18 @@ describe("authenticated browser viewer relay", () => {
       { action: "input_keyboard", type: "keyUp", key: "A", code: "KeyA" },
     ]);
   });
+  it("#5021: mouse moves and wheel scrolls return without waiting for the daemon", async () => {
+    const a = await open(); await a.action({ type: "take" });
+    let finish!: (value: Response) => void;
+    nativeInput.mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; }));
+    const started = Date.now();
+    await a.action({ type: "input_mouse", eventType: "mouseMoved", x: 40, y: 50, button: "none" });
+    expect(Date.now() - started).toBeLessThan(200);
+    expect(nativeInput).toHaveBeenCalled();
+    finish(Response.json({ success: true }));
+    nativeInput.mockImplementationOnce(() => new Promise<Response>(() => {}));
+    await a.action({ type: "input_mouse", eventType: "mouseWheel", x: 40, y: 50, button: "none", deltaX: 0, deltaY: 120 });
+  });
   it.each(["release", "disconnect"])("requires restart if %s leaves a native key or button held", async (ending) => {
     runtime = new BrowserRuntime(); live = new BrowserLive({ runtime });
     const a = await open(); await a.action({ type: "take" });

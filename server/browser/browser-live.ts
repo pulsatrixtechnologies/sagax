@@ -516,6 +516,16 @@ export class BrowserLive {
     }
     if (type === "input_mouse" && eventType === "mousePressed") viewer.pressedButtons.add(String(fields.button));
     const origin = `http://127.0.0.1:${viewer.port}`;
+    // #5021: cursor moves and wheel scrolls need no hand-back barrier; awaiting
+    // the daemon's CDP reply made every nudge wait 2 to 3 seconds. Fire them
+    // and return; clicks and keys still wait so release and hand-back stay exact.
+    const movement = type === "input_mouse" && (eventType === "mouseMoved" || eventType === "mouseWheel");
+    if (movement) {
+      void fetch(`${origin}/api/command`, { method: "POST", redirect: "error",
+        headers: { "Content-Type": "application/json", Origin: origin }, body: JSON.stringify(command),
+        signal: AbortSignal.timeout(5_000) }).then((response) => response.body?.cancel()).catch(() => {});
+      return;
+    }
     try {
       // The native command relay awaits the daemon's CDP reply. A WS send is
       // only an enqueue, so it cannot serve as the human hand-back barrier.

@@ -1,26 +1,126 @@
 // The detail of a ticket card: the client of GET and POST
 // /api/me/records/:product/:kind/:id/detail (server/routes/record-cards.ts).
-// It reads the related tabs (counts, pages, attachments), the images a note
-// names, the choices of an editable field and writes one field (the title as
-// text). The server reads the ticket under the person before every access;
-// this module only asks and parses.
+// It reads the sections of the record window (counts, pages, attachments),
+// the images a note names, the choices of an editable field or of a form,
+// writes one field (the title as text) and one action of the record window
+// (shared/record-actions.ts: a note, a time entry, an expense, a planned
+// entry, a configuration, an attachment). The server reads the ticket under
+// the person before every access; this module only asks and parses.
 //
 // A server without the route answers 404 (or 405) with no code of the
 // console: `RecordDetailMissing`, and the card stays the original one. A 404
 // that carries the console's code (a section the product refused, a record
 // it does not know) is that section's failure only: it never takes the
 // card's tabs and fields away (M-20261119-084).
+//
+// A row carries what the window shows and, when the console sends them, what
+// it changes: the entry's id (edit, remove, mark done), a person's or a
+// configuration's record (a click opens it in the window), a time entry's
+// billing (B, NC, DNB) and work type, an instant for the day it is grouped
+// under. A console that sends none of them shows its rows as before.
 import { api, ApiError } from "@/state/store";
-import { activeLocale } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
 import { downloadBlob } from "@/lib/diagram-view";
 import { recordCardLanguage } from "@/lib/record-cards";
-import { RELATED_TABS, type RelatedPage, type RelatedTab } from "@/components/RecordRelatedTabs";
-import type { RecordChoice } from "@/components/RecordFieldSelect";
-import { RECORD_TITLE_FIELD } from "../../shared/record-cards";
+import { RECORD_TITLE_FIELD, validRecordRef } from "../../shared/record-cards";
 import type { RecordRef } from "../../shared/record-cards";
+import { RECORD_BILLING, RECORD_FILE_MAX, parseRecordActions, type RecordAction, type RecordActionChoice, type RecordActionName, type RecordBilling } from "../../shared/record-actions";
+
+export interface RecordChoice {
+  value: string;
+  label: string;
+}
+
+/** The sections the record window reads: each is one console section. */
+export const DETAIL_SECTIONS = ["notes", "schedule", "activities", "time", "expenses", "configurations", "attachments"] as const;
+export type DetailSection = (typeof DETAIL_SECTIONS)[number];
+
+export interface TicketNote {
+  id?: string;
+  author: string;
+  authorRef?: RecordRef;
+  date: string;
+  timestamp: string;
+  kind: string;
+  body: string;
+}
+export interface ScheduleRow {
+  id?: string;
+  /** a meeting or a resource (an activity comes from its own section) */
+  kind: "meeting" | "resource";
+  resource: string;
+  resourceRef?: RecordRef;
+  start: string;
+  end: string;
+  /** the start's and the end's instants, for the order and a range said once */
+  at?: string;
+  endAt?: string;
+  where: string;
+  done?: boolean;
+  subject?: string;
+}
+export interface ActivityRow {
+  id?: string;
+  subject: string;
+  type: string;
+  date: string;
+  at?: string;
+  assigned: string;
+  assignedRef?: RecordRef;
+  done?: boolean;
+}
+export interface TimeRow {
+  id?: string;
+  date: string;
+  /** the start's instant: the day it is listed under */
+  at?: string;
+  member: string;
+  memberRef?: RecordRef;
+  hours: string;
+  /** the hours as a number, for the totals of a console that sends none */
+  value?: number;
+  workType?: string;
+  billing?: RecordBilling;
+  note: string;
+}
+export interface ExpenseRow {
+  id?: string;
+  date: string;
+  at?: string;
+  member: string;
+  memberRef?: RecordRef;
+  type: string;
+  amount: string;
+  value?: number;
+  billing?: RecordBilling;
+  note?: string;
+}
+export interface ConfigurationRow { id?: string; name: string; type: string; status: string; ref?: RecordRef }
+export interface AttachmentRow { id: string; name: string; size: string; date: string; download: () => void }
+/** The time tab's totals as the console wrote them (never added up here when it sends them). */
+export interface TimeTotals {
+  hours?: string;
+  billable?: string;
+  expenses?: string;
+  parts?: Partial<Record<RecordBilling, { text?: string; share?: number }>>;
+}
+
+type Lines = {
+  notes: TicketNote[];
+  schedule: ScheduleRow[];
+  activities: ActivityRow[];
+  time: TimeRow[];
+  expenses: ExpenseRow[];
+  configurations: ConfigurationRow[];
+  attachments: AttachmentRow[];
+};
+export type DetailPage = {
+  [K in DetailSection]: { tab: K; lines: Lines[K]; totalHours?: string; totals?: TimeTotals }
+}[DetailSection];
+export type DetailPageOf<K extends DetailSection> = Extract<DetailPage, { tab: K }>;
 
 /** The fields a person may change on a ticket by a choice. */
-export const RECORD_EDIT_FIELDS = ["status", "priority", "board", "type", "subtype", "item", "owner", "team", "agreement", "contact"] as const;
+export const RECORD_EDIT_FIELDS = ["status", "priority", "board", "type", "subtype", "item", "owner", "team", "agreement", "contact", "location", "site"] as const;
 export type RecordEditField = (typeof RECORD_EDIT_FIELDS)[number];
 /** The field a person writes as text, the title, and its one rule (M-20261119-084): shared with the route. */
 export { RECORD_TITLE_FIELD, RECORD_TITLE_MAX, recordTitleValue as titleValue } from "../../shared/record-cards";
@@ -28,15 +128,22 @@ export { RECORD_TITLE_FIELD, RECORD_TITLE_MAX, recordTitleValue as titleValue } 
 /** Raised when the server has no detail route: the original card is shown. */
 export class RecordDetailMissing extends Error {}
 
+/** A write the console does not take (yet): its words say so. */
+export class RecordActionRefused extends Error {
+  override name = "RecordActionRefused";
+}
+
 export interface RecordDetailCounts {
-  counts: Partial<Record<RelatedTab, number>>;
+  counts: Partial<Record<DetailSection, number>>;
   fields: RecordEditField[];
   /** the console lists the title as editable */
   title: boolean;
+  /** the actions the console takes for this record; null: it lists none (any is tried) */
+  actions: ReadonlySet<RecordActionName> | null;
 }
 
 export interface RecordDetailPage {
-  page: RelatedPage;
+  page: DetailPage;
   next: number | null;
 }
 
@@ -74,15 +181,15 @@ const rowsOf = (raw: unknown): Raw[] => isObject(raw) && Array.isArray(raw.lines
 
 /** Parse the counts answer; unknown tabs and fields are dropped. */
 export function parseDetailCounts(raw: unknown): RecordDetailCounts {
-  const counts: Partial<Record<RelatedTab, number>> = {};
+  const counts: Partial<Record<DetailSection, number>> = {};
   const source = isObject(raw) && isObject(raw.counts) ? raw.counts : {};
-  for (const tab of RELATED_TABS) {
+  for (const tab of DETAIL_SECTIONS) {
     const value = source[tab];
     if (typeof value === "number" && Number.isInteger(value) && value >= 0) counts[tab] = value;
   }
   const asked = isObject(raw) && Array.isArray(raw.fields) ? raw.fields : [];
   const fields = RECORD_EDIT_FIELDS.filter((field) => asked.includes(field));
-  return { counts, fields, title: asked.includes(RECORD_TITLE_FIELD) };
+  return { counts, fields, title: asked.includes(RECORD_TITLE_FIELD), actions: parseRecordActions(isObject(raw) ? raw.actions : undefined) };
 }
 
 /** Newer consoles include instants. Older ones already formatted the person's local time. */
@@ -94,25 +201,70 @@ function localMoment(instant: unknown, fallback: unknown): string {
   return new Intl.DateTimeFormat(activeLocale(), { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
-/** Parse one page of a tab, a line's columns being the English keys. */
-export function parseDetailPage(tab: RelatedPage["tab"], raw: unknown, download: (id: string, name: string) => () => void): RecordDetailPage {
+const idOf = (value: unknown): string | undefined => {
+  const id = text(value);
+  return /^[A-Za-z0-9._:-]{1,64}$/.test(id) ? id : undefined;
+};
+const refOf = (value: unknown): RecordRef | undefined => isObject(value) && validRecordRef(value as { product?: unknown; kind?: unknown; id?: unknown }) ? { product: String(value.product), kind: String(value.kind), id: String(value.id) } : undefined;
+const numberOf = (value: unknown): number | undefined => typeof value === "number" && Number.isFinite(value) ? value : undefined;
+const billingOf = (value: unknown): RecordBilling | undefined => (RECORD_BILLING as readonly string[]).includes(text(value)) ? text(value) as RecordBilling : undefined;
+const instantOf = (value: unknown): string | undefined => {
+  const raw = text(value);
+  return raw && Number.isFinite(Date.parse(raw)) ? raw : undefined;
+};
+const doneOf = (r: Raw): boolean | undefined => typeof r.doneFlag === "boolean" ? r.doneFlag : typeof r.done === "boolean" ? r.done
+  : ["Yes", "Oui"].includes(text(r.done)) ? true : ["No", "Non"].includes(text(r.done)) ? false : undefined;
+const optional = <T extends object>(value: T): T => Object.fromEntries(Object.entries(value).filter(([, one]) => one !== undefined && one !== "")) as T;
+
+function totalsOf(raw: unknown): TimeTotals | undefined {
+  if (!isObject(raw)) return undefined;
+  const parts: TimeTotals["parts"] = {};
+  if (isObject(raw.parts)) {
+    for (const billing of RECORD_BILLING) {
+      const part = raw.parts[billing];
+      if (!isObject(part)) continue;
+      const share = numberOf(part.share);
+      parts[billing] = optional({ text: text(part.text) || undefined, share: share !== undefined && share >= 0 && share <= 100 ? share : undefined });
+    }
+  }
+  const out = optional({ hours: text(raw.hours) || undefined, billable: text(raw.billable) || undefined, expenses: text(raw.expenses) || undefined });
+  return Object.keys(parts).length || Object.keys(out).length ? { ...out, ...(Object.keys(parts).length ? { parts } : {}) } : undefined;
+}
+
+/** Parse one page of a section, a line's columns being the English keys (the optional ones only when the console sends them). */
+export function parseDetailPage(tab: DetailSection, raw: unknown, download: (id: string, name: string) => () => void): RecordDetailPage {
   const rows = rowsOf(raw);
   const next = isObject(raw) ? nextPage(raw.next) : null;
   const totalHours = isObject(raw) && typeof raw.totalHours === "string" && raw.totalHours ? { totalHours: raw.totalHours } : {};
   switch (tab) {
     case "schedule": return { next, page: { tab, lines: rows.map(r => ({
+      ...optional({ id: idOf(r.id), resourceRef: refOf(r.member_ref), at: instantOf(r.startTimestamp), endAt: instantOf(r.endTimestamp), subject: text(r.subject) || undefined }),
+      kind: text(r.kind) === "meeting" ? "meeting" as const : "resource" as const,
       resource: text(r.member), start: localMoment(r.startTimestamp, r.date), end: localMoment(r.endTimestamp, r.end),
-      where: text(r.where), done: typeof r.doneFlag === "boolean" ? r.doneFlag :
-        ["Yes", "Oui"].includes(text(r.done)) ? true : ["No", "Non"].includes(text(r.done)) ? false : undefined,
+      where: text(r.where), ...(doneOf(r) !== undefined ? { done: doneOf(r) } : {}),
     })) } };
     case "notes": return { next, page: { tab, lines: rows.map(r => ({
+      ...optional({ id: idOf(r.id), authorRef: refOf(r.author_ref) }),
       author: text(r.author), date: localMoment(r.timestamp, r.date), timestamp: text(r.timestamp), kind: text(r.kind), body: text(r.text),
     })) } };
-    case "time": return { next, page: { tab, ...totalHours, lines: rows.map((r) => ({ date: text(r.date), member: text(r.member), hours: text(r.hours), note: text(r.note) })) } };
-    case "configurations": return { next, page: { tab, lines: rows.map((r) => ({ name: text(r.name), type: text(r.type), status: text(r.status) })) } };
-    case "expenses": return { next, page: { tab, lines: rows.map((r) => ({ date: text(r.date), member: text(r.member), type: text(r.type), amount: text(r.amount) })) } };
-    case "activities": return { next, page: { tab, lines: rows.map((r) => ({ subject: text(r.subject), type: text(r.type), date: text(r.date), assigned: text(r.assigned) })) } };
-    case "attachments": return { next, page: { tab, lines: rows.map((r) => ({ name: text(r.name), size: text(r.size), date: text(r.date), download: download(text(r.id), text(r.name)) })) } };
+    case "time": {
+      const totals = totalsOf(isObject(raw) ? raw.totals : undefined);
+      return { next, page: { tab, ...totalHours, ...(totals ? { totals } : {}), lines: rows.map((r) => ({
+        ...optional({ id: idOf(r.id), at: instantOf(r.start), memberRef: refOf(r.member_ref), value: numberOf(r.hours_value), workType: text(r.work_type) || undefined, billing: billingOf(r.billing) }),
+        date: text(r.date), member: text(r.member), hours: text(r.hours), note: text(r.note),
+      })) } };
+    }
+    case "configurations": return { next, page: { tab, lines: rows.map((r) => ({ ...optional({ id: idOf(r.id), ref: refOf(r.ref) }), name: text(r.name), type: text(r.type), status: text(r.status) })) } };
+    case "expenses": return { next, page: { tab, lines: rows.map((r) => ({
+      ...optional({ id: idOf(r.id), at: instantOf(r.start), memberRef: refOf(r.member_ref), value: numberOf(r.amount_value), billing: billingOf(r.billing), note: text(r.note) || undefined }),
+      date: text(r.date), member: text(r.member), type: text(r.type), amount: text(r.amount),
+    })) } };
+    case "activities": return { next, page: { tab, lines: rows.map((r) => ({
+      ...optional({ id: idOf(r.id), at: instantOf(r.dateStart), assignedRef: refOf(r.assigned_ref) }),
+      ...(doneOf(r) !== undefined ? { done: doneOf(r) } : {}),
+      subject: text(r.subject), type: text(r.type), date: text(r.date), assigned: text(r.assigned),
+    })) } };
+    case "attachments": return { next, page: { tab, lines: rows.map((r) => ({ id: text(r.id), name: text(r.name), size: text(r.size), date: text(r.date), download: download(text(r.id), text(r.name)) })) } };
   }
 }
 
@@ -135,12 +287,12 @@ export async function downloadAttachment(ref: RecordRef, id: string, name: strin
   downloadBlob(new Blob([bytes], { type: text(body.contentType) }), text(body.name) || name);
 }
 
-export async function readDetailPage(ref: RecordRef, tab: RelatedPage["tab"], page: number, fresh: boolean, onDownloadError: () => void): Promise<RecordDetailPage> {
+export async function readDetailPage(ref: RecordRef, tab: DetailSection, page: number, fresh: boolean, onDownloadError: () => void): Promise<RecordDetailPage> {
   const raw = await call(recordDetailPath(ref, { section: tab, page, fresh: fresh ? 1 : undefined }));
   return parseDetailPage(tab, raw, (id, name) => () => { void downloadAttachment(ref, id, name).catch(onDownloadError); });
 }
 
-export async function readFieldChoices(ref: RecordRef, field: RecordEditField, fresh: boolean): Promise<RecordChoice[]> {
+export async function readFieldChoices(ref: RecordRef, field: RecordEditField | RecordActionChoice, fresh: boolean): Promise<RecordChoice[]> {
   const all: RecordChoice[] = [];
   let page: number | null = 1;
   while (page !== null) {
@@ -166,4 +318,30 @@ export async function readNoteImage(ref: RecordRef, src: string): Promise<Blob> 
 export async function writeField(ref: RecordRef, field: RecordEditField | typeof RECORD_TITLE_FIELD, value: string): Promise<void> {
   const answer = await call<unknown>(recordDetailPath(ref, {}), { method: "POST", body: JSON.stringify({ field, value }) });
   if (!isObject(answer) || answer.updated !== true) throw new Error("not updated");
+}
+
+/** The console's code of a write it does not take: the window says so in words, never as a failure of the network. */
+const NOT_TAKEN = new Set(["action_unknown", "detail_invalid", "field_unknown"]);
+
+/** One action of the record window, written as the person (shared/record-actions.ts). */
+export async function writeAction(ref: RecordRef, action: RecordAction): Promise<void> {
+  let answer: unknown;
+  try {
+    answer = await call<unknown>(recordDetailPath(ref, {}), { method: "POST", body: JSON.stringify(action) });
+  } catch (error) {
+    const code = error instanceof ApiError ? (error.body as { code?: unknown } | undefined)?.code : undefined;
+    if (error instanceof RecordDetailMissing || (typeof code === "string" && NOT_TAKEN.has(code))) throw new RecordActionRefused(t("recordWindow.notTaken"));
+    if (error instanceof ApiError && error.status === 403 && (error.body as { state?: unknown } | undefined)?.state === "org_refused") throw new RecordActionRefused(t("recordCard.state.orgRefused"));
+    throw error;
+  }
+  if (!isObject(answer) || answer.updated !== true) throw new Error("not updated");
+}
+
+/** A file read for an attachment: its name, type and base64; too large a file is refused before anything is sent. */
+export async function attachmentOf(file: File): Promise<{ name: string; content_type: string; base64: string }> {
+  if (file.size > RECORD_FILE_MAX) throw new RecordActionRefused(t("recordWindow.fileTooLarge", { size: Math.round(RECORD_FILE_MAX / 1024 / 1024) }));
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  return { name: file.name.slice(0, 255) || "file", content_type: (file.type || "application/octet-stream").slice(0, 100), base64: btoa(binary) };
 }

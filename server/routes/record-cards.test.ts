@@ -10,7 +10,7 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import type { CustomRule } from "../../shared/custom-rules.ts";
 import type { PersonProductsCall } from "../perspicax/person-products.ts";
 import { createRecordCardsClient, recordCardPath } from "../perspicax/record-cards.ts";
-import { createRecordCardsRoutes, fieldChange, recordReadOrgRule, type RecordCardsRouteDeps, type RecordReadRule } from "./record-cards.ts";
+import { createRecordCardsRoutes, fieldChange, recordReadOrgRule, recordWrite, type RecordCardsRouteDeps, type RecordReadRule } from "./record-cards.ts";
 import { PASS } from "./table.ts";
 
 const REF = { product: "nimbus_desk", kind: "ticket", id: "481516" };
@@ -204,6 +204,85 @@ describe("record card route", () => {
     expect(first.body.card).toMatchObject({ id: "481516" });
     expect(h.calls).toHaveLength(1);
     expect((await h.request(`${PATH}?confirm=1`)).body.card).toMatchObject({ id: "481516" });
+  });
+});
+
+// M-20261127-101: the record window writes a note, a time entry, an expense, a planned entry, a configuration
+// or an attachment as the person, one action at a time, through the same rules and the same console call
+describe("the record window's actions", () => {
+  it("sends one checked action to the console as the person, and its answer back", async () => {
+    const h = harness({ answer: () => ({ ok: true, status: 200, body: { updated: true } }) });
+    const asks = [
+      { action: "note.add", set: { kind: "internal", text: "  Rouleau remplacé  " } },
+      { action: "time.add", set: { hours: "0.5", note: "Diagnostic", billing: "NC", work_type: "7", start: "2026-11-27T13:05" } },
+      { action: "time.update", id: "88", set: { billing: "DNB" } },
+      { action: "expense.add", set: { amount: 12.5, note: "Taxi", billing: "B", date: "2026-11-27" } },
+      { action: "schedule.add", set: { kind: "meeting", member: "13", start: "2026-12-14T14:30", end: "2026-12-14T15:30" } },
+      { action: "schedule.done", id: "501", set: { kind: "activity", done: true } },
+      { action: "configuration.add", set: { configuration: "900" } },
+      { action: "attachment.add", set: { name: "test.txt", content_type: "text/plain", base64: "UHJpbnQ=" } },
+      { action: "note.remove", id: "77" },
+    ];
+    for (const ask of asks) expect((await h.request(PATH + "/detail", ADA, "POST", ask)).status, ask.action).toBe(200);
+    expect(h.calls.map((call) => call.body)).toEqual([
+      { action: "note.add", set: { kind: "internal", text: "Rouleau remplacé" } },
+      { action: "time.add", set: { hours: 0.5, note: "Diagnostic", billing: "NC", work_type: "7", start: "2026-11-27T13:05" } },
+      { action: "time.update", id: "88", set: { billing: "DNB" } },
+      { action: "expense.add", set: { amount: 12.5, note: "Taxi", billing: "B", date: "2026-11-27" } },
+      { action: "schedule.add", set: { kind: "meeting", member: "13", start: "2026-12-14T14:30", end: "2026-12-14T15:30" } },
+      { action: "schedule.done", id: "501", set: { kind: "activity", done: true } },
+      { action: "configuration.add", set: { configuration: "900" } },
+      { action: "attachment.add", set: { name: "test.txt", content_type: "text/plain", base64: "UHJpbnQ=" } },
+      { action: "note.remove", id: "77", set: {} },
+    ]);
+    expect(new Set(h.calls.map((call) => `${call.method} ${call.token}`))).toEqual(new Set(["POST token-of-p-ada"]));
+  });
+
+  it("refuses an unknown action, a field of another action, a value out of its bounds and a missing entry, with no call", async () => {
+    const h = harness({ answer: () => ({ ok: true, status: 200, body: { updated: true } }) });
+    const bad = [
+      { action: "ticket.close", set: {} },
+      { action: "note.add", set: { kind: "internal" } },
+      { action: "note.add", set: { kind: "secret", text: "x" } },
+      { action: "note.add", set: { kind: "internal", text: "x", hours: 1 } },
+      { action: "note.update", set: { text: "x" } },
+      { action: "note.update", id: "77", set: {} },
+      { action: "note.remove", set: {} },
+      { action: "time.add", set: { hours: 25 } },
+      { action: "time.add", set: { hours: "une heure" } },
+      { action: "time.update", id: "88", set: { billing: "X" } },
+      { action: "expense.add", set: { amount: -3 } },
+      { action: "schedule.add", set: { kind: "meeting", start: "2026-12-14T15:30", end: "2026-12-14T14:30" } },
+      { action: "schedule.done", id: "501", set: { kind: "activity", done: "yes" } },
+      { action: "configuration.add", set: { configuration: "abc" } },
+      { action: "attachment.add", set: { name: "a.txt", base64: "not base64!" } },
+      { action: "note.remove", id: "../77" },
+    ];
+    for (const ask of bad) {
+      expect(recordWrite(ask), JSON.stringify(ask)).toBeNull();
+      expect((await h.request(PATH + "/detail", ADA, "POST", ask)).status).toBe(400);
+    }
+    expect(h.calls).toEqual([]);
+  });
+
+  it("holds an action to the organization's Refuse rules on writing that product, a file by its size, never its bytes", async () => {
+    const rule: CustomRule = { id: "o1", ownerId: "p-admin", botId: null, when: "modifier Nimbus Desk", behavior: "deny", riskScope: [], enabled: true, createdAt: 1, updatedAt: 1, org: true, products: ["nimbus_desk"] };
+    const note = recordWrite({ action: "note.add", set: { kind: "discussion", text: "Bonjour" } })!;
+    expect(recordReadOrgRule([rule], REF, "Nimbus Desk", undefined, note).kind).toBe("deny");
+    const reading = { ...rule, when: "lire Nimbus Desk" };
+    expect(recordReadOrgRule([reading], REF, "Nimbus Desk", undefined, note).kind).toBe("none");
+    const denied = harness({ rule: { kind: "deny", rule: { id: "o1", text: "rule" } } });
+    const answer = await denied.request(PATH + "/detail", ADA, "POST", { action: "time.remove", id: "88" });
+    expect(answer.status).toBe(403);
+    expect(answer.body).toEqual({ state: "org_refused", rule: { id: "o1", text: "rule" } });
+    expect(denied.calls).toEqual([]);
+  });
+
+  it("passes the console's code on when it refuses an action it does not take", async () => {
+    const h = harness({ answer: () => ({ ok: false, status: 400, body: { code: "action_unknown", message: "m", details: {} } }) });
+    const answer = await h.request(PATH + "/detail", ADA, "POST", { action: "expense.remove", id: "4" });
+    expect(answer.status).toBe(400);
+    expect(answer.body).toEqual({ state: "unavailable", code: "action_unknown" });
   });
 });
 

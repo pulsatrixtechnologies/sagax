@@ -27,6 +27,7 @@ import type { LinkPostResult } from "./perspicax-link.ts";
 import type { PersonProductsCall } from "./person-products.ts";
 import { PERSON_PRODUCTS_PATH } from "./person-products.ts";
 import { parseRecordCard, recordKey, type RecordCard, type RecordCardMiss, type RecordRef } from "../../shared/record-cards.ts";
+import type { RecordAction } from "../../shared/record-actions.ts";
 
 export const RECORD_CARD_TIMEOUT_MS = 15_000;
 export const RECORD_CARD_MAX_BYTES = 64 * 1024;
@@ -38,7 +39,8 @@ export type RecordCardLanguage = "fr" | "en";
 export type RecordCardRead = { ok: true; card: RecordCard } | ({ ok: false } & RecordCardMiss);
 
 export interface RecordCardsClient {
-  detail(subjectToken: string, ref: RecordRef, query: URLSearchParams, change?: { field: string; value: string }): Promise<LinkPostResult>;
+  /** The detail route: a section read, or a write (a field change or a record window's action, shared/record-actions.ts). */
+  detail(subjectToken: string, ref: RecordRef, query: URLSearchParams, change?: { field: string; value: string } | RecordAction): Promise<LinkPostResult>;
   /** One card for the person; `fresh` skips the console's cache. */
   get(principalId: string, subjectToken: string, ref: RecordRef, lang: RecordCardLanguage, fresh?: boolean): Promise<RecordCardRead>;
 }
@@ -99,8 +101,8 @@ export function createRecordCardsClient(deps: { call: PersonProductsCall }): Rec
     detail(subjectToken, ref, query, change) {
       const [base] = recordCardPath(ref, "en").split("?");
       return deps.call(change ? "POST" : "GET", `${base}/detail?${query}`, change, {
-        // a file or a note's image comes back whole, as base64
-        subjectToken, timeoutMs: 30_000, maxBytes: query.get("section") === "download" || query.get("section") === "image" ? RECORD_DOWNLOAD_RESPONSE_BYTES : 4 * 1024 * 1024,
+        // a file or a note's image comes back whole, as base64; a file sent takes longer
+        subjectToken, timeoutMs: change && "action" in change && change.action === "attachment.add" ? 120_000 : 30_000, maxBytes: query.get("section") === "download" || query.get("section") === "image" ? RECORD_DOWNLOAD_RESPONSE_BYTES : 4 * 1024 * 1024,
       });
     },
     get(principalId, subjectToken, ref, lang, fresh = false) {

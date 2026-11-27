@@ -167,6 +167,10 @@ export const USER_PREFERENCE_KEYS = [
   // Tools > Memory > Map > Graph: its settings panel, per person
   // (src/lib/memory-graph-settings.ts)
   "sagax.memoryGraph.v1",
+  // a record window's size and place, per person and per type of window, with
+  // its split and its tables' columns (src/lib/record-window-layout.ts,
+  // M-20261127-147): the one window size that follows the person
+  "sagax.recordWindows.v1",
 ] as const;
 
 export type UserPreferenceKey = (typeof USER_PREFERENCE_KEYS)[number];

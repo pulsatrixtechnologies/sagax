@@ -6386,10 +6386,10 @@
       "model.settings.aria": "20c0c0912fa697bfb47e8d39f2b72f000d49dbe23993d59fe6d4e0fb7ea76968",
       "model.fastTag": "6c582b62e0e5aa05647388bd045f2e3e5e7f51f479d00d9df592634c8088a22b",
       "model.effort": "4387e5d3966fc436532792769763cd1ab7cccd6464d4c01c2b91261894e96b77",
-      "model.effort.aria": "3236aeec43e563ca9ea03a7d0c077021021a3e36b4a0648ea5539d07d9e0f379",
+      "model.effort.aria": "4387e5d3966fc436532792769763cd1ab7cccd6464d4c01c2b91261894e96b77",
       "model.effort.defaultTitle": "8619e981c1e4ac91d77a963625fd26d3b28a97954be4912580e04850c8e4138f",
       "model.effort.defaultWith": "a2efc4503b5141a203075cad108b5ebc803e141e3395e43a01411c8d118b168d",
-      "model.effort.levelTitle": "cdb7d9fdc00183298f05d147fd234ec33db9aea890f50f344b6e71fa04532e57",
+      "model.effort.levelTitle": "a5d6380b5955143ca10704e7af4eb806ce5d1e83e86f7c460562cef981116686",
       "model.effort.summary": "b237dbb30a9bd498d08ee3828f5e48bfac2a2452f0767bd15bf131058922ae8b",
       "model.effortLevel.high": "c4ebc6d4a5832cd9415f906ad03661110c705a72381c8b8b145761d02e2dd23a",
       "model.effortLevel.low": "f793de205ead5ac302c4a1627829dea41f176b1068b993a32373fc869918374b",
@@ -11540,7 +11540,6 @@
       "composer.meter.aria": "7aec4c698d4449f4304bc1016c2fcff6acc1c5dc845805dca4a77dbd616e6908",
       "composer.meter.percent": "02a35530e04af183a0107910fdd7a9931e94f0502cb5231402eeea14543f1e9f",
       "composer.meter.contextAria": "7415b85918a0ec252ea814cb45c31bf54ef6924965a67b89d516fd3f0b7977e6",
-      "composer.meter.usageAria": "11768aacf8ae06dafa5461733f686dd7771397af06240438875fdd7a51713e80",
       "composer.voice.dictation": "25ce1a09ddc1f2f0a517cb9766b51000267e959c8928b05608387e2f15398559",
       "composer.voice.conversation": "399d0f64b21089fb14ed8f5af74fe34b95240318195989599461cfddfc8e8111",
       "composer.voice.menu": "811b8b955556caa0699e4b1063a51c96b9901cdfc59ce04d5dec71bd9e9b9a7b",
@@ -19494,9 +19493,6 @@
       "model.effort.explain": "066dfb150d4d4f0a1c602642a7a8804184fa658b7789e3a18b8106fce64705de",
       "model.effort.recommended": "d70604e8430461372849bbd123d85771e11423870a507e8fa4650a7e9a5a50ef",
       "model.effort.maxHint": "d4b85e33ae52f19bcf9d8c4c42b5465446bb75d1a4f4fe8dff19a34a76f35ca1",
-      "model.reasoning": "d8211e24e83d1600a1b0cfe2f7baa68e4d4eb71131a0b2b1b2050cba111ea481",
-      "model.simple.reasoning": "d8211e24e83d1600a1b0cfe2f7baa68e4d4eb71131a0b2b1b2050cba111ea481",
-      "model.mode.reasoning.imposed": "8982f4bcdaf4cbd2bdc80000312b1777bb3882033808a61f5c3f9043ab76a198",
       "usagePill.week": "01628599aa1a66f9963be84dce0ad6bcdce3bd106cd50291b2b4b50991b4fbc7",
       "usagePill.session": "dd541932c4d81c7cd22245e1d4d7f5f828129dc63585d08f6e096b84742d6d8d",
       "usagePill.context": "afa4ed2e37637550c718a7a654c08e0edcd10ccd87f74434f5b7d61c768ffc27",
@@ -24888,8 +24884,7 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
-      "model.simple.reasoning": "d8211e24e83d1600a1b0cfe2f7baa68e4d4eb71131a0b2b1b2050cba111ea481"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
     },
     "pt-br": {
       "achievements.panel.all": "e2adb0c3b5f28a7c9d5bdac240382201b39376dd11671aedc93e8a73b6468f19",
@@ -35696,8 +35691,7 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
-      "model.simple.reasoning": "d8211e24e83d1600a1b0cfe2f7baa68e4d4eb71131a0b2b1b2050cba111ea481"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
     }
   }
 }

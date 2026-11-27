@@ -211,6 +211,9 @@ export interface Routine {
   /** 2026-10-28 (shared/routine-folders.ts): the folder of its bot it sits
    * in. Absent: no folder. */
   folder?: string;
+  /** #4098 (shared/outcomes.ts): the stored outcome of its bot it serves.
+   * Absent: it is an outcome of its own. */
+  outcome?: string;
   /** Delete this routine once its schedule has no more runs and the last
    * run has settled (completed, failed, cancelled or missed). Only for a
    * schedule with a known end (once, or interval with endsAt). Off by
@@ -435,6 +438,9 @@ export interface RoutineInput {
   /** 2026-10-28: the bot's folder to put it in; null takes it out of its
    * folder, omission preserves it. */
   folder?: string | null;
+  /** #4098: the bot's outcome to put it in; null takes it out (it is its
+   * own again), omission preserves it. */
+  outcome?: string | null;
   /** Delete once the schedule ends and the last run settles. Off unless true. */
   deleteWhenFinished?: boolean;
   /** `null` clears confined access; omission preserves it on updates. */

@@ -595,6 +595,9 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   // same rights as changing a routine of that bot, so a member arranges
   // their own bot's folders without an admin (2026-10-28)
   { methods: ["POST"], path: /^\/api\/routines\/folders$/ },
+  // Routine outcomes (#4098): group routines under a named result; the
+  // handler applies the same right as changing the bot's routines
+  { methods: ["POST"], path: /^\/api\/routines\/outcomes$/ },
   // Several routines of one bot on, off or deleted at once (server/routine-bulk.ts,
   // 2026-10-29): each one with the same rights as its own PATCH or DELETE
   { methods: ["POST"], path: /^\/api\/routines\/bulk$/ },

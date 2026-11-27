@@ -1302,6 +1302,7 @@ import { historyWriterOf } from "./history-writer.ts";
 import { createRoutineAwayRoutes } from "./routes/routine-away.ts";
 import { createRoutineAlwaysChoicesRoutes } from "./routes/routine-always-choices.ts";
 import { createRoutineFolderRoutes } from "./routes/routine-folders.ts";
+import { createRoutineOutcomeRoutes } from "./routes/routine-outcomes.ts";
 import { createRoutineBulkRoutes } from "./routes/routine-bulk.ts";
 import { createMeetingRoutes } from "./routes/meetings.ts";
 import { approvalTypeOf } from "./approvals/approval-type.ts";
@@ -4502,6 +4503,7 @@ bindLeafHost({
   get createRoutineEffortForTurn() { return createRoutineEffortForTurn; },
   get createRoutineEngineForBot() { return createRoutineEngineForBot; },
   get createRoutineFolderRoutes() { return createRoutineFolderRoutes; },
+  get createRoutineOutcomeRoutes() { return createRoutineOutcomeRoutes; },
   get createRoutineFullReport() { return createRoutineFullReport; },
   get createRoutineMemoryHint() { return createRoutineMemoryHint; },
   get createRoutineModelForTurn() { return createRoutineModelForTurn; },
@@ -31257,6 +31259,17 @@ ROUTES.push(createRoutineFolderRoutes<Routine>({
   manager: () => routines ?? null,
   onWire: (routine) => routineOnWire(routine)
 }));
+// Routine outcomes (#4098, server/routes/routine-outcomes.ts): group routines
+// under a named result; same right as changing the bot's routines.
+ROUTES.push(createRoutineOutcomeRoutes<Routine>({
+  access: (auth, botId) => {
+    const visible = visibleTo(viewerFor(auth, "/api/routines/outcomes"));
+    if (!store.bot(botId) || hiddenRoutineTarget({ botId }, visible)) return "hidden";
+    return routineNeedsRun(auth, botId) ? "needs_run" : "ok";
+  },
+  manager: () => routines ?? null,
+  onWire: (routine) => routineOnWire(routine)
+}));
 // The person's web search provider and key (server/routes/web-search.ts):
 // their own, no admin right, on a solo or an organization server.
 ROUTES.push(createWebSearchRoutes({
@@ -36456,6 +36469,7 @@ ROUTES.push(createRoutinesHttpRoutes({
   // Serialize immediately; skip the cloneRun pass listRuns() does for mutable callers.
   listRuns: (from, to) => [...routines!.listRunsRaw(from, to)] as ReturnType<NonNullable<typeof routines>["listRuns"]>,
   listFolders: () => routines!.listFolders(),
+  listOutcomes: () => routines!.listOutcomes(),
   fullReport: (run) => routineFullReport(run),
   normalizeBody: normalizeRoutineBody,
   create: (body, request, opts) => routines!.create(body as never, request, opts as never),

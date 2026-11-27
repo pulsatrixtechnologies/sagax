@@ -7,8 +7,8 @@
  * the same cases (shared/outcomes.vectors.json).
  *
  * Every routine is an outcome of its own until a stored outcome groups it
- * (`records` and `outcome` on a routine, a later lot; absent today, each
- * routine stands alone). A routine with a goal is named by its goal.
+ * (`records` and `outcome` on a routine, from POST /api/routines/outcomes;
+ * absent, each routine stands alone). A routine with a goal is named by its goal.
  *
  * Words are left to the apps: this returns kinds, numbers and the bot's own
  * sentences, never a translated label.
@@ -23,7 +23,7 @@ import { isRoutineProblemRun, type Routine, type RoutineNeedsPerson, type Routin
  * as is; from an older server it is read from what the wire carries. */
 export type OutcomeNeed = RoutineNeedsPerson;
 
-/** A stored outcome (a later lot): its name, an optional note, its order. */
+/** A stored outcome (#4098): its name, an optional note, its order. */
 export interface OutcomeRecord {
   id: string;
   name: string;

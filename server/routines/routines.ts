@@ -78,6 +78,15 @@ import {
   ROUTINE_FOLDERS_PER_BOT,
   type RoutineFolderUndo,
 } from "../../shared/routine-folders.ts";
+import {
+  cleanOutcomeId,
+  cleanOutcomeName,
+  cleanOutcomeNote,
+  loadOutcomeRecords,
+  orderedOutcomeRecords,
+  OUTCOMES_PER_BOT,
+  type OutcomeRecord,
+} from "../../shared/outcome-records.ts";
 import { ROUTINE_PARTS, type PartPair, type RoutinePart } from "../packages/package-parts.ts";
 import {
   engineNeedsReconnecting,
@@ -226,6 +235,9 @@ export interface Routine {
   /** 2026-10-28 (shared/routine-folders.ts): the folder of its bot it sits
    * in, as the person named it. Absent: no folder. Never part of what runs. */
   folder?: string;
+  /** #4098 (shared/outcomes.ts): the stored outcome of its bot it serves.
+   * Absent: it is an outcome of its own. Never part of what runs. */
+  outcome?: string;
   /** Delete once the schedule ends and the last run settles (#1648). */
   deleteWhenFinished?: boolean;
   /** 2026-11-04 (shared/routine-model.ts): the model its runs use, on the
@@ -541,6 +553,9 @@ export interface RoutineInput {
   /** 2026-10-28: the bot's folder to put it in; null takes it out of its
    * folder, omission preserves it. */
   folder?: string | null;
+  /** #4098: the bot's outcome to put it in; null takes it out (it is its
+   * own again), omission preserves it. */
+  outcome?: string | null;
   /** Delete once the schedule ends and the last run settles. Off unless true. */
   deleteWhenFinished?: boolean;
   /** `null` clears confined access; omission preserves it on updates. */
@@ -583,6 +598,9 @@ interface RoutineFile {
   /** 2026-10-28: each bot's routine folders in the person's order (bot id
    * -> names). Absent on an older file: folders come from the routines. */
   folders?: Record<string, string[]>;
+  /** #4098: each bot's stored outcomes in the person's order (bot id ->
+   * records). Absent on an older file: every routine is an outcome of its own. */
+  outcomes?: Record<string, import("../../shared/outcomes.ts").OutcomeRecord[]>;
   /** #4233: the people already told their login engine expired
    * (`person\0Engine`), so a restart does not ring again.
    * #4250: kept in the signal ledger; still written here, from it, for the previous version for one release. */
@@ -1981,6 +1999,7 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
   const mailAlias = parseMailAlias(input.mailAlias);
   if (!mailAlias.ok) throw new RoutineInputError(mailAlias.error);
   const folder = cleanRoutineFolder(input.folder);
+  const outcome = cleanOutcomeId(input.outcome);
   const effort = parseRoutineEffort(input.effort);
   if (!effort.ok) throw new RoutineInputError(effort.error);
   if (effort.effort && target === "room-goal") throw new RoutineInputError("Choose the effort on a bot routine; room goals follow each bot.");
@@ -2018,6 +2037,7 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
     ...(requires ? { requires } : {}),
     ...(autoPauseAfter === undefined ? {} : { autoPauseAfter }),
     ...(folder ? { folder } : {}),
+    ...(outcome ? { outcome } : {}),
     // Only meaningful on a schedule with a known end; ignore otherwise.
     ...(input.deleteWhenFinished === true && scheduleHasKnownEnd(input.schedule) ? { deleteWhenFinished: true } : {}),
     ...(input.access === "read-and-draft" ? { access: "read-and-draft" as const } : {}),
@@ -2139,6 +2159,8 @@ export class RoutineManager {
   private postResultsPending = false;
   /** 2026-10-28: bot id -> its routine folders in the person's order. */
   private folderOrder = new Map<string, string[]>();
+  /** #4098: bot id -> its stored outcomes in the person's order. */
+  private outcomesByBot = new Map<string, OutcomeRecord[]>();
 
   constructor(options: RoutineManagerOptions) {
     this.options = options;
@@ -2194,6 +2216,7 @@ export class RoutineManager {
               autoPaused: routine.enabled ? undefined : loadAutoPaused(routine.autoPaused),
               failuresClearedAt: Number.isSafeInteger(routine.failuresClearedAt) && routine.failuresClearedAt! >= 0 && routine.failuresClearedAt! <= MAX_DATE_MS ? routine.failuresClearedAt : undefined,
               folder: cleanRoutineFolder(routine.folder),
+              outcome: cleanOutcomeId(routine.outcome),
               deleteWhenFinished: routine.deleteWhenFinished === true && scheduleHasKnownEnd(schedule) ? true : undefined,
               access: routine.access === "read-and-draft" ? "read-and-draft" as const : undefined,
               model: loadRoutineModel(routine.model),
@@ -2297,6 +2320,7 @@ export class RoutineManager {
         if (!this.signals.find(notice.botId, ownerNoticeKey(notice.cause))) this.tellOwnerNotice(notice.botId, notice.cause, undefined, notice.at);
       }
       this.folderOrder = loadFolderOrder(disk.folders);
+      this.outcomesByBot = loadOutcomeRecords(disk.outcomes);
       if (Array.isArray(disk.engineReconnectNotified)) {
         for (const key of disk.engineReconnectNotified.slice(0, 2_000)) {
           if (typeof key !== "string" || key.length > 400) continue;
@@ -2338,6 +2362,7 @@ export class RoutineManager {
       this.routines = [];
       this.unloadedRoutines = [];
       this.folderOrder = new Map();
+      this.outcomesByBot = new Map();
       this.runs = [];
       this.routineRequestReceipts = [];
       this.webhookRunReceipts = [];
@@ -3117,6 +3142,7 @@ export class RoutineManager {
     this.assertModel({ botId: clean.botId, model: clean.subagentModel });
     this.assertEffort(clean);
     if (clean.folder) clean.folder = this.admitFolder(clean.botId, clean.folder);
+    if (clean.outcome) clean.outcome = this.admitOutcome(clean.botId, clean.outcome);
     const id = randomUUID();
     const placed = clean.enabled ? this.placeInitial(id, clean.schedule, at, clean) : { start: null as number | null };
     if (clean.schedule.type === "interval" && clean.enabled && placed.start === null) {
@@ -3188,6 +3214,8 @@ export class RoutineManager {
       autoPauseAfter: Object.hasOwn(patch, "autoPauseAfter") ? patch.autoPauseAfter : routine.autoPauseAfter,
       // null takes it out of its folder; omission keeps it where it is.
       folder: Object.hasOwn(patch, "folder") ? patch.folder : routine.folder,
+      // null takes it out of its outcome; omission keeps it where it is.
+      outcome: Object.hasOwn(patch, "outcome") ? patch.outcome : routine.outcome,
       deleteWhenFinished: Object.hasOwn(patch, "deleteWhenFinished")
         ? patch.deleteWhenFinished === true
         : routine.deleteWhenFinished === true,
@@ -3214,6 +3242,7 @@ export class RoutineManager {
     }
     if (clean.effort !== routine.effort || clean.botId !== routine.botId) this.assertEffort(clean);
     if (clean.folder) clean.folder = this.admitFolder(clean.botId, clean.folder);
+    if (clean.outcome) clean.outcome = this.admitOutcome(clean.botId, clean.outcome);
     const previousBotId = routine.botId;
     const scheduleChanged = JSON.stringify(clean.schedule) !== JSON.stringify(routine.schedule);
     // A finished (or paused) one-time routine given a future time runs again,
@@ -3289,6 +3318,7 @@ export class RoutineManager {
       if (!clean.requires) delete routine.requires;
       if (clean.autoPauseAfter === undefined) delete routine.autoPauseAfter;
       if (clean.folder === undefined) delete routine.folder;
+      if (clean.outcome === undefined) delete routine.outcome;
       if (!clean.deleteWhenFinished) delete routine.deleteWhenFinished;
       if (!clean.access) delete routine.access;
       if (!clean.model) delete routine.model;
@@ -6347,6 +6377,151 @@ export class RoutineManager {
     });
   }
 
+  // ── routine outcomes (#4098, shared/outcome-records.ts) ─────────────────
+
+  /** A bot's stored outcomes in the person's order. */
+  outcomesOf(botId: string): OutcomeRecord[] {
+    return orderedOutcomeRecords(this.outcomesByBot.get(botId) ?? [], this.botRoutines(botId), this.now());
+  }
+
+  /** Every bot's outcomes in order, for the listing. */
+  listOutcomes(): Record<string, OutcomeRecord[]> {
+    const botIds = new Set([
+      ...this.outcomesByBot.keys(),
+      ...this.routines.flatMap((routine) => routine.outcome ? [routine.botId] : []),
+    ]);
+    const out: Record<string, OutcomeRecord[]> = {};
+    for (const botId of botIds) {
+      const outcomes = this.outcomesOf(botId);
+      if (outcomes.length) out[botId] = outcomes;
+    }
+    return out;
+  }
+
+  private admitOutcome(botId: string, id: string): string {
+    const clean = cleanOutcomeId(id);
+    if (!clean) throw new RoutineInputError("Give the outcome an id");
+    const known = this.outcomesOf(botId).find((record) => record.id === clean);
+    if (!known) throw new RoutineInputError("no such outcome");
+    return known.id;
+  }
+
+  private emitOutcomes(botId: string) {
+    this.options.emit?.({ kind: "routine.outcomes", botId, outcomes: this.outcomesOf(botId) });
+  }
+
+  private outcomeChange(botId: string, mutate: () => Routine[]): { outcomes: OutcomeRecord[]; routines: Routine[] } {
+    this.assertWritable();
+    let changed: Routine[] = [];
+    this.commitMutation(() => {
+      changed = mutate();
+      const saved = this.outcomesByBot.get(botId) ?? [];
+      if (saved.length) this.outcomesByBot.set(botId, saved);
+      else this.outcomesByBot.delete(botId);
+    });
+    for (const routine of changed) this.emitRoutine(routine);
+    this.emitOutcomes(botId);
+    return { outcomes: this.outcomesOf(botId), routines: changed.map((routine) => this.routineWithHealth(routine)) };
+  }
+
+  createOutcome(botId: string, name: string, note?: string): { outcomes: OutcomeRecord[]; routines: Routine[] } {
+    const clean = cleanOutcomeName(name);
+    if (!clean) throw new RoutineInputError("Give the outcome a name");
+    const cleanedNote = cleanOutcomeNote(note);
+    if ((this.outcomesByBot.get(botId) ?? []).length >= OUTCOMES_PER_BOT) {
+      throw new RoutineInputError(`A bot keeps at most ${OUTCOMES_PER_BOT} outcomes`);
+    }
+    const at = this.now();
+    const record: OutcomeRecord = {
+      id: randomUUID(),
+      name: clean,
+      ...(cleanedNote ? { note: cleanedNote } : {}),
+      createdAt: at,
+      updatedAt: at,
+    };
+    return this.outcomeChange(botId, () => {
+      this.outcomesByBot.set(botId, [...(this.outcomesByBot.get(botId) ?? []), record]);
+      return [];
+    });
+  }
+
+  renameOutcome(botId: string, id: string, name: string): { outcomes: OutcomeRecord[]; routines: Routine[] } | null {
+    const current = this.outcomesOf(botId).find((record) => record.id === id);
+    if (!current || !(this.outcomesByBot.get(botId) ?? []).some((record) => record.id === id)) return null;
+    const clean = cleanOutcomeName(name);
+    if (!clean) throw new RoutineInputError("Give the outcome a name");
+    const at = this.now();
+    return this.outcomeChange(botId, () => {
+      this.outcomesByBot.set(botId, (this.outcomesByBot.get(botId) ?? []).map((record) =>
+        record.id === id ? { ...record, name: clean, updatedAt: at } : record));
+      return [];
+    });
+  }
+
+  noteOutcome(botId: string, id: string, note: string | null): { outcomes: OutcomeRecord[]; routines: Routine[] } | null {
+    if (!(this.outcomesByBot.get(botId) ?? []).some((record) => record.id === id)) return null;
+    const cleaned = note === null ? undefined : cleanOutcomeNote(note);
+    if (note !== null && !cleaned) throw new RoutineInputError("Give the outcome a note, or clear it");
+    const at = this.now();
+    return this.outcomeChange(botId, () => {
+      this.outcomesByBot.set(botId, (this.outcomesByBot.get(botId) ?? []).map((record) => {
+        if (record.id !== id) return record;
+        const next = { ...record, updatedAt: at };
+        if (cleaned) next.note = cleaned;
+        else delete next.note;
+        return next;
+      }));
+      return [];
+    });
+  }
+
+  reorderOutcomes(botId: string, order: readonly string[]): { outcomes: OutcomeRecord[]; routines: Routine[] } {
+    return this.outcomeChange(botId, () => {
+      const saved = this.outcomesByBot.get(botId) ?? [];
+      const byId = new Map(saved.map((record) => [record.id, record]));
+      const named = order.flatMap((id) => {
+        const found = byId.get(id);
+        if (!found) return [];
+        byId.delete(id);
+        return [found];
+      });
+      this.outcomesByBot.set(botId, [...named, ...byId.values()]);
+      return [];
+    });
+  }
+
+  moveToOutcome(botId: string, routineIds: readonly string[], outcome: string | null): { outcomes: OutcomeRecord[]; routines: Routine[] } {
+    const routines = routineIds.map((id) => this.routines.find((candidate) => candidate.id === id && candidate.botId === botId));
+    if (routines.some((routine) => !routine)) throw Object.assign(new RoutineInputError("no such routine"), { status: 404 });
+    const target = outcome === null ? undefined : this.admitOutcome(botId, outcome);
+    const at = this.now();
+    return this.outcomeChange(botId, () => {
+      const changed: Routine[] = [];
+      for (const routine of routines) {
+        if (!routine) continue;
+        if (target) routine.outcome = target;
+        else delete routine.outcome;
+        routine.updatedAt = Math.max(at, routine.updatedAt + 1);
+        changed.push(routine);
+      }
+      return changed;
+    });
+  }
+
+  deleteOutcome(botId: string, id: string): { outcomes: OutcomeRecord[]; routines: Routine[] } | null {
+    if (!(this.outcomesByBot.get(botId) ?? []).some((record) => record.id === id)) return null;
+    const at = this.now();
+    return this.outcomeChange(botId, () => {
+      const moved = this.botRoutines(botId).filter((routine) => routine.outcome === id);
+      for (const routine of moved) {
+        delete routine.outcome;
+        routine.updatedAt = Math.max(at, routine.updatedAt + 1);
+      }
+      this.outcomesByBot.set(botId, (this.outcomesByBot.get(botId) ?? []).filter((record) => record.id !== id));
+      return moved;
+    });
+  }
+
   private emitRoutine(routine: Routine) {
     this.options.emit?.({ kind: "routine", routine: this.routineWithHealth(routine) });
   }
@@ -6481,6 +6656,7 @@ export class RoutineManager {
       stored: [...this.storedRuns],
       receipts: this.routineRequestReceipts.map((receipt) => ({ ...receipt })),
       folders: new Map([...this.folderOrder].map(([botId, names]) => [botId, [...names]])),
+      outcomes: new Map([...this.outcomesByBot].map(([botId, rows]) => [botId, rows.map((row) => ({ ...row }))])),
     };
     try {
       mutate();
@@ -6493,6 +6669,7 @@ export class RoutineManager {
       for (const run of before.stored) this.storedRuns.add(run);
       this.routineRequestReceipts = before.receipts;
       this.folderOrder = before.folders;
+      this.outcomesByBot = before.outcomes;
       try {
         rollback?.();
       } catch (cleanupError) {
@@ -6541,6 +6718,7 @@ export class RoutineManager {
       // #4250: the signal ledger's copy, for the previous version (one release)
       ...this.legacyToldFields(),
       ...(this.folderOrder.size ? { folders: Object.fromEntries(this.folderOrder) } : {}),
+      ...(this.outcomesByBot.size ? { outcomes: Object.fromEntries(this.outcomesByBot) } : {}),
     } satisfies RoutineFile));
   }
 }

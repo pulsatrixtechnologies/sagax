@@ -489,7 +489,10 @@ describe("host-level agents tools in the member's own environment", () => {
     expect(gate("mcp__agents__attach_file", { path: "/home/cua/workspace/out.png" }, place({ ownLocalVm: true }))).toBe(false);
     expect(gate("mcp__agents__attach_file", { path: "/home/cua/workspace/../../etc/passwd" }, place({ ownLocalVm: true }))).toBe(true);
     expect(gate("mcp__agents__attach_file", { path: "/home/cua/workspace/out.png" }, place())).toBe(true);
-    expect(gate("mcp__agents__attach_file", { path: "relative.txt" }, place())).toBe(true);
+    // #5358: a relative path the bot just created in its workspace is theirs
+    writeFileSync(join(workspace, "relative.txt"), "x");
+    expect(gate("mcp__agents__attach_file", { path: "relative.txt" }, place())).toBe(false);
+    expect(gate("mcp__agents__attach_file", { path: "../other.txt" }, place())).toBe(true);
   });
 
   it("never the Perspicax admin tools, a shell command or a lookalike server", () => {

@@ -852,9 +852,9 @@ describe("voice mode uses the key that has funds (2026-10-28)", () => {
       "Aucun appel : ton compte Grok connecté a été refusé. Vérifie ton compte Grok dans Réglages > Fournisseurs. Les clés xAI et OpenAI de ton organisation n'ont plus de crédits, et la clé ElevenLabs de ton organisation a été refusée.",
     );
     // the sentence leads with the first cause; `key` and `failure` stay the
-    // last refusal, which an installed phone names by its source (its own
-    // labels have no connected account: second review of #5427)
-    expect(out.body).toMatchObject({ code: "voice_provider", failure: "key", key: { source: "org-key", last4: "702e", provider: "elevenlabs" } });
+    // last refusal (here the account, tried last by the memory), as before:
+    // an installed phone builds its own line from them (second review of #5427)
+    expect(out.body).toMatchObject({ code: "voice_provider", failure: "key", key: { source: "grok-account", last4: "c4Dd" } });
     expect(out.body.out_of_credits).toBeUndefined();
     expect(out.body.tried.map((entry: { source: string; failure: string; provider?: string }) => [entry.source, entry.provider ?? "xai", entry.failure])).toEqual([
       ["grok-account", "xai", "key"], ["org-key", "xai", "quota"], ["org-key", "openai", "quota"], ["org-key", "elevenlabs", "key"],

@@ -27,7 +27,7 @@
 import type { VoiceKeyInfo, VoiceKeySource, VoiceModeRefusalCause, VoiceModeVia } from "../../shared/voice-mode.ts";
 import { VOICE_PROVIDER_LABELS, type VoiceProviderId } from "../../shared/voice-providers.ts";
 import { grokVoiceFailure, type GrokVoiceFailure } from "../tts/grok.ts";
-import { chainCallReason, noCallReason, type NoCallLanguage } from "./grok-account-voice.ts";
+import { failedChainReason, type NoCallLanguage } from "./grok-account-voice.ts";
 
 export interface VoiceKeyCandidate {
   key: string;
@@ -362,30 +362,26 @@ export interface VoiceProviderKeys {
  * it can say what is wrong instead of "didn't come through", and which key
  * it was (source and last four, never more; `tried` lists every key that
  * was refused on the way). The server log keeps the line. */
-export function providerFailureBody(message: string, keys?: VoiceProviderKeys, plain?: string | null, lead?: VoiceKeyRefusal): { error: string; code: "voice_provider" | "out_of_credits"; failure: GrokVoiceFailure; out_of_credits?: true; key?: VoiceKeyInfo; tried?: VoiceKeyRefusal[] } {
-  // `lead`: the first real cause of a failed chain, which the card and the
-  // bar name instead of the last refusal (M-20261126-145)
-  const failure = lead?.failure ?? grokVoiceFailure(message);
+export function providerFailureBody(message: string, keys?: VoiceProviderKeys, plain?: string | null): { error: string; code: "voice_provider" | "out_of_credits"; failure: GrokVoiceFailure; out_of_credits?: true; key?: VoiceKeyInfo; tried?: VoiceKeyRefusal[] } {
+  const failure = grokVoiceFailure(message);
   const credits = failure === "quota";
   return {
     error: plain || message,
     code: credits ? "out_of_credits" : "voice_provider",
     failure,
     ...(credits ? { out_of_credits: true as const } : {}),
-    ...(keys ? { key: lead ? voiceKeyRef(lead) : keys.key, ...(keys.tried && keys.tried.length > 1 ? { tried: keys.tried } : {}) } : {}),
+    ...(keys ? { key: keys.key, ...(keys.tried && keys.tried.length > 1 ? { tried: keys.tried } : {}) } : {}),
   };
 }
 
-/** A chain where no credential served, as the page gets it: when its
- * refusals are not all xAI credits or keys, the first real cause (the
- * credential closest to the person, `tried` in their order) leads the
- * sentence, the key and the kind, and the others follow in one line
- * (chainCallReason, M-20261126-145); otherwise the sentences of #4567 and
- * the last refusal, as before. */
+/** A chain where no credential served, as the page gets it: the one
+ * sentence of the chain (failedChainReason, the call's too) leads with the
+ * first real cause, the credential closest to the person (`tried` in their
+ * order), and says the others in one line (M-20261126-145). `key` and
+ * `failure` stay the last refusal: an installed phone builds its own line from
+ * them and has no label for a connected account (second review of #5427). */
 export function chainFailureBody(message: string, used: VoiceKeyCandidate, tried: VoiceKeyRefusal[], words: NoCallLanguage) {
-  const chain = chainCallReason(tried, words);
-  const keys = { key: voiceKeyRef(used), tried };
-  return chain ? providerFailureBody(message, keys, chain, tried[0]) : providerFailureBody(message, keys, noCallReason(tried, words));
+  return providerFailureBody(message, { key: voiceKeyRef(used), tried }, failedChainReason(tried, words));
 }
 
 export function providerName(candidate: { provider?: VoiceProviderId }): string {

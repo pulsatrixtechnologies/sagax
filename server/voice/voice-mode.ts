@@ -82,7 +82,7 @@ import { createListenSession } from "./voice-listen-session.ts";
 import { grokVoiceFailure, withVoiceAuth, type GrokVoiceFailure, type SpeechStream, type SpeechStreamHandlers, type SynthesizeOptions, type TranscriptionHandlers, type TranscriptionStream } from "../tts/grok.ts";
 import { paidApiKey, resolveCredential, type CredentialCandidate, type CredentialDecision, type CredentialForm, type CredentialPolicy } from "../../shared/credential-resolver.ts";
 import {
-  chainCallReason, noCallReason, realtimeKeyRefusedCallReason, realtimeNotConfiguredCallReason, realtimeNotOnServerCallReason,
+  failedChainReason, realtimeKeyRefusedCallReason, realtimeNotConfiguredCallReason, realtimeNotOnServerCallReason,
   realtimeUnreachableCallReason, voiceNameCallReason, voiceSentenceLanguage, type NoCallLanguage,
 } from "./grok-account-voice.ts";
 import { createSpeechSession } from "./voice-speech-session.ts";
@@ -800,7 +800,7 @@ return async function realtime(req: IncomingMessage, res: import("node:http").Se
   // person's own order, then the others in one line (M-20261126-145).
   const inOrder = inPersonOrder(tried, keys.map(voiceKeyRef));
   const cause = voiceFailureCause(inOrder);
-  const chain = chainCallReason(inOrder, words);
+  const chain = failedChainReason(inOrder, words);
   if (cause === "voice") {
     refuse("realtime_voice_unknown", chain ?? voiceNameCallReason(words), { tried: inOrder, ...(voiceReset ? { voiceReset } : {}) });
     return;
@@ -808,7 +808,7 @@ return async function realtime(req: IncomingMessage, res: import("node:http").Se
   const keyRefused = cause === "key" || cause === "credits";
   // a connected Grok account was tried: its own sentence; otherwise the key
   // that failed is named with what to do about it, in the person's language
-  const plain = chain ?? (keyRefused ? (noCallReason(inOrder, words) ?? realtimeKeyRefusedCallReason(inOrder, words)) : null);
+  const plain = chain ?? (keyRefused ? realtimeKeyRefusedCallReason(inOrder, words) : null);
   refuse(keyRefused ? "realtime_key_refused" : "realtime_unreachable",
     plain ?? realtimeUnreachableCallReason(words),
     { tried: inOrder });

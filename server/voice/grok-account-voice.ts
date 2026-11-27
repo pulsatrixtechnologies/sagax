@@ -395,13 +395,25 @@ function chainRest(rows: readonly ChainRow[], language: NoCallLanguage): string 
  * person (`tried` in their order), then one line for every credential behind
  * it (M-20261126-145). The person used to read only the last refusal ("no
  * credits"). Null for a single refusal and for a chain of xAI credits and keys
- * with no connected account, which realtimeKeyRefusedCallReason says whole. */
+ * with no connected account (failedChainReason gives those to
+ * realtimeKeyRefusedCallReason). */
 export function chainCallReason(tried: readonly ChainRow[], language: NoCallLanguage): string | null {
   if (tried.length < 2) return null;
-  // xAI credits and keys with no connected account: realtimeKeyRefusedCallReason
-  // names each credential with who fixes it
+  // xAI credits and keys with no connected account: failedChainReason gives
+  // them realtimeKeyRefusedCallReason, which names who fixes each
   const xaiFinal = tried.every((row) => finalFailure(row.failure) && (row.provider ?? "xai") === "xai");
   if (xaiFinal && !tried.some((row) => row.source === "grok-account")) return null;
   const [first, ...rest] = tried;
   return `${chainHead(first!, language)} ${chainRest(rest, language)}`;
+}
+
+/** The one sentence of a chain where no credential served, for a call and
+ * for every other voice request alike (M-20261126-145, second review of
+ * #5427): the chain's own sentence, else the connected account alone, else
+ * a chain of xAI credits and keys, each named with who fixes it. Null for a
+ * single refusal of anything but the connected account, which keeps its own
+ * words. `tried` is in the person's order. */
+export function failedChainReason(tried: readonly ChainRow[], language: NoCallLanguage): string | null {
+  return chainCallReason(tried, language) ?? noCallReason(tried, language)
+    ?? (tried.length > 1 && tried.every((row) => finalFailure(row.failure)) ? realtimeKeyRefusedCallReason(tried, language) : null);
 }

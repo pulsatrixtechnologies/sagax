@@ -10,7 +10,7 @@
 // (src/components/AppMessage.tsx -> src/lib/rich-blocks.ts), an opaque-origin
 // iframe with "allow-scripts" only and a no-network CSP. This module adds no
 // bridge and no network egress, so the sandbox is reused as-is, never widened.
-import { APP_VERSION, appToText, parseAppInput, type AppPayload } from "../../shared/app.ts";
+import { APP_VERSION, appToText, parseAppInput, pushAppHistory, type AppPayload } from "../../shared/app.ts";
 import { redactSecretsInText } from "../redact.ts";
 import type { AgentCardResult, AgentCardStore } from "./chat-card-types.ts";
 
@@ -68,8 +68,15 @@ export function createAppCard(args: {
   if (!app.ok) return { ok: false, status: 400, error: app.error };
   // A new page is a new revision: a renderer remounts the frame on it, so a
   // live update is a clean replace, never mistaken for the page navigating.
+  // Earlier pages stay on history (capped) for the chat version stepper.
   const rev = (existing.app.rev ?? 0) + 1;
-  const patched = store.patchMessage(threadId, existing.id, { text: app.text, app: { ...app.payload, rev } });
+  const history = pushAppHistory(existing.app, app.payload.html, app.payload.title);
+  const next: AppPayload = {
+    ...app.payload,
+    rev,
+    ...(history.length > 0 ? { history } : {}),
+  };
+  const patched = store.patchMessage(threadId, existing.id, { text: app.text, app: next });
   if (!patched) return { ok: false, status: 404, error: NO_SUCH_APP };
   args.authored?.(patched.id);
   return { ok: true, messageId: patched.id, ...(app.masked ? { masked: true as const } : {}) };

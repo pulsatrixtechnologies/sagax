@@ -118,11 +118,20 @@ describe("update_html", () => {
     const result = updateHtml(fake, { app_id: "m1", html: "<p>50%</p>" });
     expect(result).toEqual({ ok: true, messageId: "m1" });
     const message = rowOf(fake, "m1");
-    expect(message.app).toEqual({ v: 1, html: "<p>50%</p>", rev: 1 });
+    expect(message.app).toEqual({
+      v: 1,
+      html: "<p>50%</p>",
+      rev: 1,
+      history: [{ html: "<p>0%</p>", title: "Progress" }],
+    });
     expect(message.text).toBe("[app] 50%");
-    // a second update keeps counting
+    // a second update keeps counting and grows history
     updateHtml(fake, { app_id: "m1", html: "<p>100%</p>" });
     expect(rowOf(fake, "m1").app!.rev).toBe(2);
+    expect(rowOf(fake, "m1").app!.history).toEqual([
+      { html: "<p>0%</p>", title: "Progress" },
+      { html: "<p>50%</p>" },
+    ]);
     // one row only: the surface was replaced, not appended
     expect(fake.rows(THREAD).filter((m) => m.kind === "app")).toHaveLength(1);
   });

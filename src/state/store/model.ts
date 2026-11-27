@@ -73,7 +73,7 @@ export type RoutineRunCardReport = { text: string; at: number };
 export type { OptionCardData, SecretRequestCardData } from "./model-cards";
 import type { OptionCardData, SecretRequestCardData } from "./model-cards";
 
-export interface Message extends Pick<import("../../../shared/wire").WireMessage, "widget" | "app" | "routineToggle" | "pagePublish" | "requested" | "outbound" | "dataContext" | "roster" | "signIn" | "relayVia" | "relayOf" | "relayTrace" | "relayAsk" | "relayGroup" | "recordText"> {
+export interface Message extends Pick<import("../../../shared/wire").WireMessage, "widget" | "app" | "routineToggle" | "pagePublish" | "artifactCard" | "requested" | "outbound" | "dataContext" | "roster" | "signIn" | "relayVia" | "relayOf" | "relayTrace" | "relayAsk" | "relayGroup" | "recordText"> {
   id: string;
   role: "bot" | "user";
   kind: "text" | "options" | "activity" | "screen" | "video" | "secret" | "productKey" | "signin" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "app" | "routines" | "roster";

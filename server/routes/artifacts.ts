@@ -17,6 +17,7 @@
 // The bot is always the capability's, never the body's.
 import { z } from "zod";
 
+import { placeArtifactChatCard, type ArtifactChatCardStore } from "../artifacts/artifact-chat-card.ts";
 import type { ArtifactStore } from "../artifacts/artifacts.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { isArtifactId, sortArtifacts, summarizeArtifact, type Artifact } from "../../shared/artifacts.ts";
@@ -136,6 +137,8 @@ export function createArtifactInternalRoutes(deps: {
   ownsThread(botId: string, threadId: string): boolean;
   /** Who is speaking in this conversation: the artifact's owner on a shared server. */
   speaker?(threadId: string): string | undefined;
+  /** Place or patch the chat card after save_artifact / update_artifact. */
+  chat?: ArtifactChatCardStore;
 }): InternalRouteHandler {
   return async ({ res, path, method, json, capability, readBody }) => {
     if (path !== "/api/internal/artifacts") return PASS;
@@ -153,6 +156,7 @@ export function createArtifactInternalRoutes(deps: {
       const owner = deps.speaker?.(capability.threadId);
       const result = store.create(botId, capability.threadId, args, owner);
       if (!result.ok) return json(res, result.status, { error: result.error });
+      if (deps.chat) placeArtifactChatCard(deps.chat, capability.threadId, result.artifact, true);
       return json(res, 201, { artifact: forBot(result.artifact) });
     }
     const id = typeof args.artifact_id === "string" ? args.artifact_id.trim() : "";
@@ -163,6 +167,7 @@ export function createArtifactInternalRoutes(deps: {
     const { artifact_id: _id, ...fields } = args;
     const result = store.update(botId, id, fields);
     if (!result.ok) return json(res, result.status, { error: result.error });
+    if (deps.chat) placeArtifactChatCard(deps.chat, capability.threadId, result.artifact, false);
     return json(res, 200, { artifact: forBot(result.artifact) });
   };
 }

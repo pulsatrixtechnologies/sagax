@@ -1366,6 +1366,9 @@ export interface WireMessage extends WaitLineField {
   /** A bot's page proposal (shared/published-pages.ts): the card the person
    * reviews and publishes it from. `text` is the fallback line. */
   pagePublish?: { pageId: string; version: number; title: string };
+  /** A saved artifact in this conversation (save_artifact / update_artifact):
+   * one card per artifact id; later updates patch title and rev in place. */
+  artifactCard?: { artifactId: string; title: string; rev: number };
   /** An outward action that costs money or reaches a real person, on its
    * approval card (parité the reference design V4, 59, 83): a phone call
    * (server/outbound/outbound-calls.ts) or a purchase (server/vault/credential-vault.ts).

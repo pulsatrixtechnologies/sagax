@@ -25067,7 +25067,12 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
   createArtifactInternalRoutes({
     artifacts: () => artifactStore,
     ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
-    speaker: (threadId) => safetyPrincipal(threadId).principalId
+    speaker: (threadId) => safetyPrincipal(threadId).principalId,
+    chat: {
+      messagesFor: (threadId) => store.messagesFor(threadId),
+      appendMessage: (threadId, message) => store.appendMessage(threadId, message),
+      patchMessage: (threadId, messageId, patch) => store.patchMessage(threadId, messageId, patch),
+    },
   }),
   createBotTaskInternalRoutes({
     tasks: () => botTaskStore,

@@ -7,6 +7,7 @@ import { PASS, type RouteContext } from "../routes/table.ts";
 import type { SessionRecord } from "../auth/sessions.ts";
 import { refusal } from "../tts/grok.ts";
 import { VOICE_KEY_REFUSAL_TTL_MS } from "./voice-keys.ts";
+import { realtimeKeyRefusedCallReason } from "./grok-account-voice.ts";
 import { audioMime, createVoiceModeRoutes, listenTranscriptFrame, resolveVoiceKey, resolveVoiceKeys, VOICE_MODE_RATE, type VoiceModeDeps, type VoiceSpeaker, type VoiceUsage } from "./voice-mode.ts";
 
 // Fake keys only. Long and distinct so a fragment would be caught too.
@@ -587,19 +588,34 @@ describe("voice mode uses the key that has funds (2026-10-28)", () => {
     expect(leaks(out.body)).toBe(false);
   });
 
-  it("answers the last refusal with every key tried when none has funds", async () => {
+  // M-20261126-145 (second review of #5427): a chain says every key, the
+  // closest to the person first, as a call does; `key` and `failure` stay the
+  // last refusal, the one an installed phone names
+  it("answers the last refusal with every key tried when none has funds, and says each in one sentence", async () => {
     const lines: string[] = [];
     const { call, xai } = harness({ log: (line) => lines.push(line), ownKeys: { "sub-ada": OWN_KEY } });
     xai.synthesize.mockRejectedValue(new Error(CREDITS));
     const out = await call({ method: "POST", path: "/api/bots/b-quasar/voice/speak", body: { text: "Bonjour." } });
     expect(out.status).toBe(502);
+    const tried = [{ source: "perspicax-key", last4: "c0Je", failure: "quota" }, { source: "org-key", last4: "t6Yb", failure: "quota" }];
     expect(out.body).toEqual({
-      error: CREDITS, code: "out_of_credits", failure: "quota", out_of_credits: true, key: { source: "org-key", last4: "t6Yb" },
-      tried: [{ source: "perspicax-key", last4: "c0Je", failure: "quota" }, { source: "org-key", last4: "t6Yb", failure: "quota" }],
+      error: realtimeKeyRefusedCallReason(tried, "en"), code: "out_of_credits", failure: "quota", out_of_credits: true, key: { source: "org-key", last4: "t6Yb" },
+      tried,
     });
+    expect(out.body.error).toMatch(/^No call was placed: your xAI key in Perspicax is out of credits, and your organization's xAI key is out of credits\. /);
     expect(xai.synthesize).toHaveBeenCalledTimes(2);
     expect(lines.some((line) => line.includes("xAI speak failed (org-key, organization's key ···t6Yb)"))).toBe(true);
     expect(leaks(out.body) || leaks(lines)).toBe(false);
+  });
+
+  it("names the person's own refused key first, never only the organization's dry one", async () => {
+    const { call, xai } = harness({ ownKeys: { "sub-ada": OWN_KEY } });
+    xai.synthesize.mockImplementation(async (_text, _voice, key) => { throw new Error(key === OWN_KEY ? refusal(401) : CREDITS); });
+    const out = await call({ method: "POST", path: "/api/bots/b-quasar/voice/speak?locale=fr-CA", body: { text: "Bonjour." } });
+    expect(out.status).toBe(502);
+    const tried = [{ source: "perspicax-key", last4: "c0Je", failure: "key" }, { source: "org-key", last4: "t6Yb", failure: "quota" }];
+    expect(out.body).toMatchObject({ error: realtimeKeyRefusedCallReason(tried, "fr"), failure: "quota", key: { source: "org-key", last4: "t6Yb" }, tried });
+    expect(out.body.error).toMatch(/^Aucun appel : ta clé xAI dans Perspicax a été refusée, et la clé xAI de ton organisation n'a plus de crédits\. /);
   });
 
   it("stays on the key that is rate limited or down: another key would not help", async () => {
@@ -718,7 +734,7 @@ describe("voice mode uses the key that has funds (2026-10-28)", () => {
     });
     const out = await call({ method: "POST", path: "/api/bots/b-quasar/voice/speak?locale=en", body: { text: "Hello." } });
     expect(out.status).toBe(502);
-    expect(out.body).toMatchObject({ failure: "key", key: { source: "grok-account", last4: "c4Dd" }, confirm: { to: "org-key", aspect: "voice" } });
+    expect(out.body).toMatchObject({ failure: "quota", key: { source: "org-account", last4: null }, confirm: { to: "org-key", aspect: "voice" } });
     expect(out.body.error).toMatch(/^No call was placed: your connected Grok account was refused\. /);
   });
 
@@ -835,8 +851,10 @@ describe("voice mode uses the key that has funds (2026-10-28)", () => {
     expect(out.body.error).toBe(
       "Aucun appel : ton compte Grok connecté a été refusé. Vérifie ton compte Grok dans Réglages > Fournisseurs. Les clés xAI et OpenAI de ton organisation n'ont plus de crédits, et la clé ElevenLabs de ton organisation a été refusée.",
     );
-    // the card and the bar are about the first cause, never the last refusal
-    expect(out.body).toMatchObject({ code: "voice_provider", failure: "key", key: { source: "grok-account", last4: "c4Dd" } });
+    // the sentence leads with the first cause; `key` and `failure` stay the
+    // last refusal, which an installed phone names by its source (its own
+    // labels have no connected account: second review of #5427)
+    expect(out.body).toMatchObject({ code: "voice_provider", failure: "key", key: { source: "org-key", last4: "702e", provider: "elevenlabs" } });
     expect(out.body.out_of_credits).toBeUndefined();
     expect(out.body.tried.map((entry: { source: string; failure: string; provider?: string }) => [entry.source, entry.provider ?? "xai", entry.failure])).toEqual([
       ["grok-account", "xai", "key"], ["org-key", "xai", "quota"], ["org-key", "openai", "quota"], ["org-key", "elevenlabs", "key"],

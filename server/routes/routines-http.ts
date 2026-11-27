@@ -44,6 +44,8 @@ export interface RoutinesHttpDeps {
    * the run's record keeps only its start. */
   fullReport?(run: RoutineRun): string | undefined;
   listFolders(): Record<string, string[]>;
+  /** #4098: each bot's stored outcomes in order. Absent on older managers. */
+  listOutcomes?(): Record<string, import("../../shared/outcomes.ts").OutcomeRecord[]>;
   normalizeBody?(body: unknown, routine: { id: string; botId: string; runAs?: string }): Promise<unknown>;
   create(
     body: unknown,
@@ -115,8 +117,8 @@ export function createRoutinesHttpRoutes(deps: RoutinesHttpDeps): RouteHandler {
     ) {
       return PASS;
     }
-    // /api/routines/bulk and /api/routines/folders live in their own modules.
-    if (path === "/api/routines/bulk" || path.startsWith("/api/routines/folders")) {
+    // /api/routines/bulk, /folders and /outcomes live in their own modules.
+    if (path === "/api/routines/bulk" || path.startsWith("/api/routines/folders") || path.startsWith("/api/routines/outcomes")) {
       return PASS;
     }
 
@@ -152,7 +154,9 @@ export function createRoutinesHttpRoutes(deps: RoutinesHttpDeps): RouteHandler {
       const listedBots = new Set(listing.routines.map((row) => row.bot.id));
       const folders = Object.fromEntries(Object.entries(deps.listFolders()).filter(([botId]) =>
         (visible.everything || visible.bot(botId)) && (listedBots.has(botId) || !deps.needsRun(auth, botId))));
-      return json(res, 200, { ...listing, folders });
+      const outcomes = Object.fromEntries(Object.entries(deps.listOutcomes?.() ?? {}).filter(([botId]) =>
+        (visible.everything || visible.bot(botId)) && (listedBots.has(botId) || !deps.needsRun(auth, botId))));
+      return json(res, 200, { ...listing, folders, ...(Object.keys(outcomes).length ? { outcomes } : {}) });
     }
 
     if (path === "/api/routines" && method === "POST") {

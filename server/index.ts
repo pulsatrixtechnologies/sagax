@@ -1262,6 +1262,7 @@ import { PageDataApprovals } from "./pages/page-data-approvals.ts";
 import { pageActVerdict } from "./pages/page-act-verdict.ts";
 import { PageLinkApprovals } from "./pages/page-link-approvals.ts";
 import { createTeamBoardSource } from "./pages/sources/team-board.ts";
+import { createTeamBoardRoutes } from "./routes/team-board.ts";
 import { TEAM_BOARD_ENTRIES_PER_BOT, TEAM_BOARD_WORK_WINDOW_MS, waitingCardOf } from "./team-board/board.ts";
 import { createGithubBoardReader, ghGraphqlVia, ghRestVia } from "./team-board/github-board.ts";
 import { createBotCodeBranchRoutes } from "./routes/bot-code-branches.ts";
@@ -1302,6 +1303,7 @@ import { historyWriterOf } from "./history-writer.ts";
 import { createRoutineAwayRoutes } from "./routes/routine-away.ts";
 import { createRoutineAlwaysChoicesRoutes } from "./routes/routine-always-choices.ts";
 import { createRoutineFolderRoutes } from "./routes/routine-folders.ts";
+import { createRoutineOutcomeRoutes } from "./routes/routine-outcomes.ts";
 import { createRoutineBulkRoutes } from "./routes/routine-bulk.ts";
 import { createMeetingRoutes } from "./routes/meetings.ts";
 import { approvalTypeOf } from "./approvals/approval-type.ts";
@@ -4507,6 +4509,7 @@ bindLeafHost({
   get createRoutineEffortForTurn() { return createRoutineEffortForTurn; },
   get createRoutineEngineForBot() { return createRoutineEngineForBot; },
   get createRoutineFolderRoutes() { return createRoutineFolderRoutes; },
+  get createRoutineOutcomeRoutes() { return createRoutineOutcomeRoutes; },
   get createRoutineFullReport() { return createRoutineFullReport; },
   get createRoutineMemoryHint() { return createRoutineMemoryHint; },
   get createRoutineModelForTurn() { return createRoutineModelForTurn; },
@@ -4695,6 +4698,7 @@ bindLeafHost({
   get createTeamExportImportRoutes() { return createTeamExportImportRoutes; },
   get createTeamLibraryGrokRoutes() { return createTeamLibraryGrokRoutes; },
   get createTeamLibraryRoutes() { return createTeamLibraryRoutes; },
+  get createTeamBoardRoutes() { return createTeamBoardRoutes; },
   get createTeamMapRoutes() { return createTeamMapRoutes; },
   get createTeamMemoryHttpRoutes() { return createTeamMemoryHttpRoutes; },
   get createTeamMemoryMemberMayAnswer() { return createTeamMemoryMemberMayAnswer; },
@@ -28413,9 +28417,10 @@ const botActivityDeps: BotActivityRouteDeps = {
 };
 ROUTES.push(createBotActivityRoutes(botActivityDeps));
 // The Team board (#3409), the `team-board` page source (#3413,
-// server/pages/sources/team-board.ts): the reader's own teams and bots,
-// their code work as the reader may read it, and GitHub read with the
-// reader's own account. Computed on demand, read only.
+// server/pages/sources/team-board.ts) and GET /api/team-board for the
+// native Tools page: the reader's own teams and bots, their code work as
+// the reader may read it, and GitHub read with the reader's own account.
+// Computed on demand, read only.
 const teamBoardActivity = createBotActivityReader(botActivityDeps);
 const teamBoardGithub = createGithubBoardReader({
   token: (person) => githubAccountToken(person),
@@ -28432,10 +28437,10 @@ function teamBoardBots(auth: RequestAuth): BotRecord[] {
   return store.bots.filter((bot) => !bot.hidden && visible.bot(bot.id)
     && (IDENTITY.kind !== "perspicax" || effectiveBotOwner(bot).trim().toLowerCase() === person.trim().toLowerCase()));
 }
-pageSources.register(createTeamBoardSource({
-  person: (auth) => actorPrincipalId(auth) || undefined,
-  viewerId: (auth) => channelFilterViewerId(auth),
-  teams: (auth) => {
+const teamBoardDeps = {
+  person: (auth: RequestAuth) => actorPrincipalId(auth) || undefined,
+  viewerId: (auth: RequestAuth) => channelFilterViewerId(auth),
+  teams: (auth: RequestAuth) => {
     const person = actorPrincipalId(auth);
     const bots = teamBoardBots(auth);
     const names = sectionChannels ? orgVisibleSections(orgSectionNames(), person || undefined) : store.sections;
@@ -28445,8 +28450,8 @@ pageSources.register(createTeamBoardSource({
       bots: bots.filter((bot) => sectionKey(bot.section) === sectionKey(name)).map((bot) => ({ id: bot.id, name: bot.name })),
     })).filter((team) => team.bots.length > 0);
   },
-  bots: (auth) => teamBoardBots(auth).map((bot) => ({ id: bot.id, name: bot.name, ...(bot.managedSections ? { managedSections: bot.managedSections } : {}) })),
-  entries: (board, viewerId) => {
+  bots: (auth: RequestAuth) => teamBoardBots(auth).map((bot) => ({ id: bot.id, name: bot.name, ...(bot.managedSections ? { managedSections: bot.managedSections } : {}) })),
+  entries: (board: { id: string }, viewerId: string | undefined) => {
     const bot = store.bot(board.id);
     if (!bot) return [];
     return teamBoardActivity.list(bot, viewerId, TEAM_BOARD_ENTRIES_PER_BOT, TEAM_BOARD_WORK_WINDOW_MS, { archived: true })
@@ -28460,7 +28465,9 @@ pageSources.register(createTeamBoardSource({
   },
   queued: () => coordinator.liveEdges().filter((edge) => edge.state === "queued").map((edge) => edge.threadId),
   github: teamBoardGithub
-}));
+};
+pageSources.register(createTeamBoardSource(teamBoardDeps));
+ROUTES.push(createTeamBoardRoutes({ board: teamBoardDeps }));
 // The work an orchestrator bot runs through its team (#3461, lot 1 of
 // #3451): GET /api/bots/:id/team-work for the Coding section of its panel,
 // the ids-only `team.work` frame when one of its hand-overs changes state,
@@ -31271,6 +31278,17 @@ ROUTES.push(createRoutineBulkRoutes({
 ROUTES.push(createRoutineFolderRoutes<Routine>({
   access: (auth, botId) => {
     const visible = visibleTo(viewerFor(auth, "/api/routines/folders"));
+    if (!store.bot(botId) || hiddenRoutineTarget({ botId }, visible)) return "hidden";
+    return routineNeedsRun(auth, botId) ? "needs_run" : "ok";
+  },
+  manager: () => routines ?? null,
+  onWire: (routine) => routineOnWire(routine)
+}));
+// Routine outcomes (#4098, server/routes/routine-outcomes.ts): group routines
+// under a named result; same right as changing the bot's routines.
+ROUTES.push(createRoutineOutcomeRoutes<Routine>({
+  access: (auth, botId) => {
+    const visible = visibleTo(viewerFor(auth, "/api/routines/outcomes"));
     if (!store.bot(botId) || hiddenRoutineTarget({ botId }, visible)) return "hidden";
     return routineNeedsRun(auth, botId) ? "needs_run" : "ok";
   },
@@ -36555,6 +36573,7 @@ ROUTES.push(createRoutinesHttpRoutes({
   // Serialize immediately; skip the cloneRun pass listRuns() does for mutable callers.
   listRuns: (from, to) => [...routines!.listRunsRaw(from, to)] as ReturnType<NonNullable<typeof routines>["listRuns"]>,
   listFolders: () => routines!.listFolders(),
+  listOutcomes: () => routines!.listOutcomes(),
   fullReport: (run) => routineFullReport(run),
   normalizeBody: normalizeRoutineBody,
   create: (body, request, opts) => routines!.create(body as never, request, opts as never),

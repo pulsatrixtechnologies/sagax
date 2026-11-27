@@ -364,7 +364,8 @@ export function HeavyDivision({ art, count, running, runId, settled = false, fai
         const lost = cell.expert >= 0 && dim[cell.expert] === "1" ? FAILED_OPACITY : 1;
         const pictured = made.picture !== null && made.picture.getAttribute("display") !== "none";
         // how much of the cell a material still covers: the expert's as it takes its colour, the bot's while nothing divides
-        const own = made.own ? (1 - sim.melt) * (1 - cell.tint) : 0;
+        // (the bot's only on a cell that is still the bot: an expert crosses from the flat membrane straight to its own)
+        const own = made.own && cell.expert < 0 ? (1 - sim.melt) * (1 - cell.tint) : 0;
         const cover = Math.min(1, (pictured ? cell.tint : 0) + own);
         made.body.setAttribute("transform", at);
         made.body.setAttribute("opacity", f2((1 - cell.tint) * (1 - own)));

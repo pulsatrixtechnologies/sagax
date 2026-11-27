@@ -9,7 +9,7 @@ import { Copy, Download, ExternalLink, FileText, FolderOpen } from "lucide-react
 
 import { t } from "@/lib/i18n";
 import { copyText } from "@/lib/copy-text";
-import { useThreadFileLink, type ThreadFileLink } from "@/lib/thread-file-links";
+import { useLocalAbsoluteFileLink, useThreadFileLink, type ThreadFileLink } from "@/lib/thread-file-links";
 import { wrapCodeChildren } from "@/lib/code-wrap";
 import { copyablePath, downloadThreadFile } from "./bot-settings/FilesSection";
 import { HtmlFileDialog, isHtmlFile } from "./HtmlFilePreview";
@@ -124,10 +124,14 @@ function plainText(node: ReactNode): string {
 }
 
 /** Inline code in a bot message: a link when it names a file the
- * conversation touched, the usual code chip otherwise (no dead links). */
+ * conversation touched, or an absolute local path the desktop app can open
+ * (#5393, spaces included); the usual code chip otherwise. */
 export function ChatCodeSpan({ threadId, children }: { threadId?: string; children?: ReactNode }) {
-  const link = useThreadFileLink(threadId, plainText(children));
+  const text = plainText(children);
+  const link = useThreadFileLink(threadId, text);
+  const absolute = useLocalAbsoluteFileLink(text);
   if (link) return <ChatFileLink link={link}>{wrapCodeChildren(children)}</ChatFileLink>;
+  if (absolute) return <ChatFileLink link={absolute}>{wrapCodeChildren(children)}</ChatFileLink>;
   return <code dir="ltr" className="ui-code-chip break-words [unicode-bidi:isolate]">{wrapCodeChildren(children)}</code>;
 }
 

@@ -7,13 +7,14 @@ export const APP_TOOL_DEFINITIONS = [
   {
     name: "show_html",
     description:
-      "Show a live interactive app in this chat: a small HTML page that runs on its own and that you can update live. Use it for a dashboard, a live status, a data view, a calculator or a small interactive tool when show_widget is not enough because you need your own layout, styling or scripted behaviour. The page runs in a locked sandbox: scripts run, but with an opaque origin, no network, and no access to this app, its storage or any secret. Put every value inline; never fetch, never include a password, token or key. `html` is a complete fragment: your markup, with optional <style> and <script>; the chat wraps it in the current theme with the widget kit (use its classes and variables, not your own colors or fonts) and keep it to the chat column's width. Replace it in place with update_html for new data. No shared state (use propose_page). Not available in rooms.",
+      "Show a live interactive app in this chat: a small HTML page that runs on its own and that you can update live. Use it for a dashboard, a live status, a data view, a calculator or a small interactive tool when show_widget is not enough because you need your own layout, styling or scripted behaviour. The page runs in a locked sandbox: scripts run, but with an opaque origin, no network, and no access to this app, its storage or any secret. Put every value inline; never fetch, never include a password, token or key. `html` is a complete fragment: your markup, with optional <style> and <script>; the chat wraps it in the current theme with the widget kit (use its classes and variables, not your own colors or fonts) and keep it to the chat column's width. To call a connector, include one script type=\"application/sagax-capabilities+json\" with connectors (and data), like a published page. Calls use the viewer's connection and the same approvals as the bot. Optional uses: bot, state, or connector:tool, compiled into that block when the HTML has none. Replace it in place with update_html for new data. No shared state (use propose_page). Not available in rooms.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
       properties: {
-        html: { type: "string", description: "The app's complete HTML fragment, with optional <style> and <script>. Self-contained: no network requests, no secrets." },
+        html: { type: "string", description: "The app's complete HTML fragment, with optional <style> and <script>. Self-contained: no network requests, no secrets. May include one script type=\"application/sagax-capabilities+json\" with connectors." },
         title: { type: "string", description: "Optional short human title for the app's header (plain words, no id)." },
+        uses: { type: "array", items: { type: "string" }, description: "Optional. bot, state, or connector:tool. Compiled into the capabilities block when the HTML has none." },
       },
       required: ["html"],
     },
@@ -21,14 +22,15 @@ export const APP_TOOL_DEFINITIONS = [
   {
     name: "update_html",
     description:
-      "Replace a live app you showed earlier in this chat, in place, so it shows new data: a number moving, new rows, a finished state. `app_id` is the id show_html returned. Send the whole page again; it replaces what was there without adding a new row.",
+      "Replace a live app you showed earlier in this chat, in place, so it shows new data: a number moving, new rows, a finished state. `app_id` is the id show_html returned. Send the whole page again, including its capabilities block when it calls connectors. Calls use the viewer's connection and the same approvals as the bot. It replaces what was there without adding a new row.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
       properties: {
         app_id: { type: "string", description: "The id show_html returned." },
-        html: { type: "string", description: "The app's new complete HTML fragment. Self-contained: no network requests, no secrets." },
+        html: { type: "string", description: "The app's new complete HTML fragment. Self-contained: no network requests, no secrets. May include the capabilities block." },
         title: { type: "string", description: "Optional short human title for the app's header." },
+        uses: { type: "array", items: { type: "string" }, description: "Optional. bot, state, or connector:tool. Compiled into the capabilities block when the HTML has none." },
       },
       required: ["app_id", "html"],
     },

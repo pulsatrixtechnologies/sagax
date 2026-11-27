@@ -229,9 +229,10 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
     if (updating && (typeof args.app_id !== "string" || !args.app_id.trim())) {
       return { text: "app_id: is required, the id show_html returned.", isError: true };
     }
+    const uses = args.uses !== undefined ? { uses: args.uses } : {};
     const payload = updating
-      ? { tool: "update_html", app_id: args.app_id, html: args.html, ...(typeof args.title === "string" ? { title: args.title } : {}) }
-      : { tool: "show_html", html: args.html, ...(typeof args.title === "string" ? { title: args.title } : {}) };
+      ? { tool: "update_html", app_id: args.app_id, html: args.html, ...(typeof args.title === "string" ? { title: args.title } : {}), ...uses }
+      : { tool: "show_html", html: args.html, ...(typeof args.title === "string" ? { title: args.title } : {}), ...uses };
     const { ok, body } = await apiResponse(CARD_ROUTE, { method: "POST", body: JSON.stringify(payload) });
     if (!ok) return { text: String(body.error ?? (updating ? "Could not update that app." : "Could not show that app.")), isError: true };
     const messageId = String(body.messageId ?? "");

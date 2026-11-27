@@ -467,7 +467,7 @@ export function MessagesListItem({
         return <MessageBoundary fallbackText={m.text ?? ""}><WidgetMessage botId={botId} threadId={threadId} message={m} /></MessageBoundary>;
       case "app":
         // a bot-authored live HTML surface, drawn in the sandboxed app frame
-        return <MessageBoundary fallbackText={m.text ?? ""}><AppMessage message={m} /></MessageBoundary>;
+        return <MessageBoundary fallbackText={m.text ?? ""}><AppMessage message={m} botId={botId} threadId={threadId} /></MessageBoundary>;
       case "routine.run":
         // #4234: its widget, from the transcript the list hid it from
         return <RunRowWithHeldWidget message={m} botId={botId} threadId={threadId} widget={routineRunWidgetRow(transcript, m)} />;

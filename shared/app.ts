@@ -10,10 +10,17 @@
 // an opaque-origin iframe sandboxed to "allow-scripts" only, with a Content
 // Security Policy that forbids every network request, so the HTML is treated
 // as untrusted content and can reach neither the app, its storage, its
-// tokens, nor the network. This path adds no bridge and no egress; it only
-// reuses that frame, and it must never weaken it.
+// tokens, nor the network. A page that declares capabilities gets the same
+// postMessage bridge as a published page (window.sagax.connector.call). The
+// frame still has no network: the host calls the server with the viewer's
+// session. This path must never weaken that sandbox.
+
+import { PAGE_CAPABILITIES_TYPE } from "./page-capabilities.ts";
 
 export const APP_VERSION = 1;
+
+/** How many `uses` entries one call may name. */
+const APP_USES_MAX = 40;
 
 /** Model input past any of these is refused with one sentence naming the
  * field. `html` is held well under the widget sandbox's comfortable size so
@@ -54,27 +61,75 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+const CAPABILITIES_BLOCK = /<script\b[^>]*\btype\s*=\s*["']?application\/sagax-capabilities\+json["']?[^>]*>[\s\S]*?<\/script\s*>/i;
+
+/** `uses` on show_html, compiled into the capabilities block when the HTML
+ * has none. `"bot"` is data, `"state"` is the page state that already
+ * exists (nothing is added), `"connector:tool"` is one connector tool.
+ * The HTML block stays the source of truth when it is already there. */
+function applyAppUses(html: string, uses: unknown): { ok: true; html: string } | { ok: false; error: string } {
+  if (uses === undefined || uses === null || CAPABILITIES_BLOCK.test(html)) return { ok: true, html };
+  if (!Array.isArray(uses) || uses.length > APP_USES_MAX) return { ok: false, error: "uses: must be a short list of strings (bot, state, or connector:tool)." };
+  const data: string[] = [];
+  const connectors: Record<string, string[]> = {};
+  for (const entry of uses) {
+    if (typeof entry !== "string") return { ok: false, error: "uses: each entry must be a string." };
+    const token = entry.trim();
+    if (!token) return { ok: false, error: "uses: each entry must be a string." };
+    if (token === "bot") {
+      if (!data.includes("bot")) data.push("bot");
+      continue;
+    }
+    if (token === "state") continue;
+    const split = token.indexOf(":");
+    if (split <= 0 || split === token.length - 1) return { ok: false, error: "uses: each entry is bot, state, or connector:tool." };
+    const connector = token.slice(0, split);
+    const tool = token.slice(split + 1);
+    if (connector.length > 200 || tool.length > 300 || connector.includes("*") || tool.includes("*") || connector.trim() !== connector || tool.trim() !== tool) {
+      return { ok: false, error: "uses: connector and tool names are exact, with no wildcard." };
+    }
+    const list = connectors[connector] ?? [];
+    if (!list.includes(tool)) list.push(tool);
+    connectors[connector] = list;
+  }
+  if (!data.length && !Object.keys(connectors).length) return { ok: true, html };
+  const declared: { data?: string[]; connectors?: Record<string, string[]> } = {};
+  if (data.length) declared.data = data;
+  if (Object.keys(connectors).length) declared.connectors = connectors;
+  const block = `<script type="${PAGE_CAPABILITIES_TYPE}">${JSON.stringify(declared)}</script>\n`;
+  const next = `${block}${html}`;
+  if (byteLength(next) > APP_LIMITS.htmlBytes) {
+    return { ok: false, error: `html: too large (over ${Math.floor(APP_LIMITS.htmlBytes / 1024)} KB). Send a smaller page.` };
+  }
+  return { ok: true, html: next };
+}
+
 /** Validate and normalise the `html` and optional `title` of a show_html or
  * update_html call. Empty or malformed input is refused here, before anything
- * is stored or drawn, so the renderer only ever receives a non-empty string. */
+ * is stored or drawn, so the renderer only ever receives a non-empty string.
+ * Optional `uses` is compiled into the capabilities block when the HTML has
+ * none. The stored HTML stays the one declaration. */
 export function parseAppInput(input: unknown): ParsedApp {
   if (!isRecord(input)) return { ok: false, error: "show_html needs an object with an html string." };
-  const { html, title } = input;
+  const { html, title, uses } = input;
   if (typeof html !== "string") return { ok: false, error: "html: must be a string of HTML." };
   const trimmed = html.trim();
   if (trimmed.length === 0) return { ok: false, error: "html: must not be empty." };
   if (byteLength(trimmed) > APP_LIMITS.htmlBytes) {
     return { ok: false, error: `html: too large (over ${Math.floor(APP_LIMITS.htmlBytes / 1024)} KB). Send a smaller page.` };
   }
+  const applied = applyAppUses(trimmed, uses);
+  if (!applied.ok) return applied;
+  let kept: string | undefined;
   if (title !== undefined && title !== null) {
     if (typeof title !== "string") return { ok: false, error: "title: must be a string." };
     const trimmedTitle = title.trim();
     if (trimmedTitle.length > APP_LIMITS.title) {
       return { ok: false, error: `title: too long (over ${APP_LIMITS.title} characters).` };
     }
-    if (trimmedTitle.length > 0) return { ok: true, html: trimmed, title: trimmedTitle };
+    if (trimmedTitle.length > 0) kept = trimmedTitle;
   }
-  return { ok: true, html: trimmed };
+  return { ok: true, html: applied.html, ...(kept ? { title: kept } : {}) };
 }
 
 /** Rough visible-text of a page, for the fallback line clients that cannot

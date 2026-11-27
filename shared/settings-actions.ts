@@ -1017,7 +1017,7 @@ config("server.newBotDefaults", "server", "newBotDefaults", "object", "New bot d
   (v, ctx) => /"(approvalMode|alwaysAllow|routines|toolScope|mcpServers|fullAccess)"/.test(JSON.stringify(v ?? null)) ? ["rule-change"] : serverWide(v, ctx));
 config("server.threads", "server", "threads", "object", "Conversation cleanup", "Settings > General > Advanced > Threads");
 config("server.showToolCalls", "server", "features.showToolCalls", "boolean", "Show tool calls", "Settings > General > Appearance");
-config("server.feature", "server", "features", "object", "Experimental features ({skillAuthoring, browser, connectedApps, decisionModel, dataWindow, meetingNotetaker, llmThreadTitles})", "Settings > Updates > Advanced > Experimental");
+config("server.feature", "server", "features", "object", "Experimental features ({skillAuthoring, browser, connectedApps, decisionModel, dataWindow, meetingNotetaker, llmThreadTitles})", "Settings > General > Advanced > Experimental");
 config("server.routinesInConversation", "server", "features.routinesInConversation", "boolean", "Routines in conversation", "Settings > Organization > Bots");
 config("server.roomTurnTimeout", "server", "rooms.turnTimeoutMinutes", "number", "Room turn limit", "Settings > Organization > Rooms");
 config("server.mcpCallTimeout", "server", "mcp.callTimeoutMinutes", "number", "MCP call time limit", "Settings > Organization");
@@ -1574,7 +1574,7 @@ add({
 });
 // experimental: an organization member's own switches
 add({
-  key: "account.experimental", family: "account", target: "none", value: "object", label: "Your own experiments and tool calls shown ({features: {<key>: true|false|null}})", where: "Settings > Updates > Advanced > Experimental; Settings > General > Appearance > More appearance > Show tool calls",
+  key: "account.experimental", family: "account", target: "none", value: "object", label: "Your own experiments and tool calls shown ({features: {<key>: true|false|null}})", where: "Settings > General > Advanced > Experimental; Settings > General > Appearance > More appearance > Show tool calls",
   read: () => ({ path: "/api/me/experimental" }),
   write: (_ids, v) => ({ method: "PATCH", path: "/api/me/experimental", body: v }),
 });

@@ -118,10 +118,10 @@ describe("Settings search", () => {
     }
     // #2080 (L0): one word, one page; a password is found on the Vault
     expect(sectionMatches(section("credentials"), "mot de passe")).toBe(true);
-    // #2636: logs, diagnostics and cleanup are found on Developer only (Updates > Advanced since #4457)
+    // #2636 / M-20261127-068: logs, diagnostics and cleanup are on General > Advanced
     for (const query of ["journaux", "diagnostic", "nettoyage"]) {
-      expect(sectionMatches(section("updates"), query), query).toBe(true);
-      expect(sectionMatches(section("general"), query), query).toBe(false);
+      expect(sectionMatches(section("general"), query), query).toBe(true);
+      expect(sectionMatches(section("updates"), query), query).toBe(false);
     }
     // 2026-10-26: no Full access card any more
     expect(cardsMatching("accès complet")).not.toContain("organization.fullAccess");

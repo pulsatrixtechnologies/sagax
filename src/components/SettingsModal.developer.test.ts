@@ -63,11 +63,11 @@ afterEach(() => {
 });
 
 describe("Settings > Developer (#2636)", () => {
-  it("is Updates > Advanced (#4457), with no admin gate", () => {
+  it("is General > Advanced (M-20261127-068), with no admin gate", () => {
     expect(SECTIONS.find((section) => section.id === "developer")).toBeUndefined();
-    expect(currentSettingsSection("developer")).toBe("updates");
+    expect(currentSettingsSection("developer")).toBe("general");
     const html = render();
-    expect(html).toContain('data-settings-subpage="updates.advanced"');
+    expect(html).toContain('data-settings-subpage="general.advanced"');
   });
 
   it("holds every technical option in its own card, with a heading each", () => {
@@ -101,7 +101,7 @@ describe("Settings > Developer (#2636)", () => {
     expect(html).not.toContain('data-settings-card="organization.mcpCalls"');
   });
 
-  it("removes each option from its origin page; Usage keeps one discreet link to Updates > Advanced", () => {
+  it("removes each option from its origin page; Usage keeps one discreet link to General > Advanced", () => {
     const origins: Array<[AppSettingsSection, string[]]> = [
       ["appearance", ['data-settings-group="conversationAdvanced"', 'data-settings-row="runCard"', "Inspector button", "Turn timing"]],
       ["general", ['data-settings-card="general.loopGuard"', 'data-settings-card="general.telemetry"', 'data-settings-card="organization.mcpCalls"']],
@@ -113,7 +113,7 @@ describe("Settings > Developer (#2636)", () => {
       fixture.section = section;
       const html = render();
       for (const text of gone) expect(html, `${section}: ${text}`).not.toContain(text);
-      // #4457: Advanced sits one page further on Updates, beside About: only Usage keeps the link
+      // M-20261127-068: Advanced sits at the end of General; only Usage keeps the link
       expect(html.match(/data-developer-link=""/g)?.length ?? 0, section).toBe(section === "usage" ? 1 : 0);
     }
     // Send feedback stays on About; Routines in conversation stays with the bot rules
@@ -124,8 +124,8 @@ describe("Settings > Developer (#2636)", () => {
   it("sends the old card ids, deep links and search words to Developer, and nowhere else", () => {
     for (const card of ["general.loopGuard", "general.telemetry", "general.usage", "general.threadCleanup", "general.diagnostics", "general.logs", "experimental.developer", "organization.mcpCalls", "organization.roomTurns"]) {
       expect(CARD_HOME[card], card).toBe("developer");
-      // #4457: Developer is Updates > Advanced
-      expect(currentSettingsSection("general", card), card).toBe("updates");
+      // M-20261127-068: Developer is General > Advanced
+      expect(currentSettingsSection("general", card), card).toBe("general");
     }
     for (const card of ["developer.bot", "developer.claudeCode"]) {
       expect(CARD_HOME[card], card).toBe("developer");
@@ -134,7 +134,7 @@ describe("Settings > Developer (#2636)", () => {
       // #2658: the bot page's technical cards and the Claude Code switches
       "webhooks", "export zip", "embeddings", "skills folder", "working folder", "daily logs", "always allowed", "tool selection"]) {
       const found = SECTIONS.filter((entry) => sectionMatches(entry, query)).map((entry) => entry.id);
-      expect(found, query).toEqual(["updates"]);
+      expect(found, query).toEqual(["general"]);
     }
     // Send feedback is found on Updates (its About sub-page) only
     expect(SECTIONS.filter((entry) => sectionMatches(entry, "send feedback")).map((entry) => entry.id)).toEqual(["updates"]);
@@ -143,7 +143,7 @@ describe("Settings > Developer (#2636)", () => {
   it("reads in French", () => {
     setLocale("fr");
     const html = render();
-    expect(html).toContain('<option value="updates" selected="">Mises à jour</option>');
+    expect(html).toContain('<option value="general" selected="">Général</option>');
     expect(html).toContain(">Avancé</li>");
     expect(html).toContain(">Garde-fou de boucle</h3>");
     expect(html).toContain(">Par bot</h3>");

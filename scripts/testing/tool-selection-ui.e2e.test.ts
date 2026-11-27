@@ -47,7 +47,7 @@ interface SavedBot { id: string; name: string; toolScope?: { allow?: string[]; d
     };
     const openTools = async (name: string) => {
       await click("Open app settings");
-      await expect.poll(() => evaluate(openSettingsSubPageJs("Updates", "updates.advanced"))).toBe(true);
+      await expect.poll(() => evaluate(openSettingsSubPageJs("General", "general.advanced"))).toBe(true);
       await expect.poll(() => evaluate("Boolean(document.querySelector('[data-developer-bot-picker] button'))")).toBe(true);
       await evaluate("document.querySelector('[data-developer-bot-picker] button').click(); true");
       await expect.poll(() => evaluate(`[...document.querySelectorAll('[role=option]')].some(option => option.textContent.trim() === ${JSON.stringify(name)})`)).toBe(true);

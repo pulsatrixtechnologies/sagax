@@ -118,7 +118,7 @@ describe("Settings > General, the reference design's layout", () => {
     const general = render();
     expect(general).toContain('data-settings-card="general.system"');
     expect(general).toContain('data-settings-card="general.input"');
-    // #2636: the loop guard is on Developer (Updates > Advanced)
+    // #2636: the loop guard is on Developer (General > Advanced)
     expect(general).not.toContain('data-settings-card="general.loopGuard"');
   });
 
@@ -140,27 +140,38 @@ describe("Settings > General, the reference design's layout", () => {
 describe("Settings search after the move", () => {
   const section = (id: AppSettingsSection) => SECTIONS.find((entry) => entry.id === id)!;
   it("finds updates and pre-releases on Updates, not on General", () => {
-    for (const query of ["update", "prerelease", "pre-release", "beta", "mise à jour"]) {
+    // "update" / "mise à jour" also hit General via "scheduled update" / "mise à jour planifiée"
+    for (const query of ["prerelease", "pre-release", "beta", "what's new", "release notes"]) {
       expect(sectionMatches(section("updates"), query), query).toBe(true);
       expect(sectionMatches(section("general"), query), query).toBe(false);
+    }
+    for (const query of ["update", "mise à jour"]) {
+      expect(sectionMatches(section("updates"), query), query).toBe(true);
     }
   });
   it("finds About on Updates (its About sub-page), not on General", () => {
     for (const query of ["about", "à propos", "license", "licence", "github", "documentation"]) {
       expect(sectionMatches(section("updates"), query), query).toBe(true);
     }
-    for (const query of ["license", "licence", "github", "documentation"]) {
+    // "github" also hits General via "github oauth" on Advanced
+    for (const query of ["license", "licence", "documentation"]) {
       expect(sectionMatches(section("general"), query), query).toBe(false);
     }
   });
-  it("finds the rows General and Updates hold now (#4457)", () => {
+  it("finds the rows General and Updates hold now (#4457 / M-20261127-068)", () => {
     for (const query of ["theme", "thème", "dark", "sombre", "variante", "language", "langue", "account", "copy email", "open at login", "hotkey", "send key", "spellcheck", "hardware acceleration", "app icon"]) {
       expect(sectionMatches(section("general"), query), query).toBe(true);
       expect(sectionMatches(section("updates"), query), query).toBe(false);
     }
-    for (const query of ["tour", "feedback", "diagnostic", "logs", "advanced mode"]) {
+    // What's new / About stay on Updates; Advanced (diagnostics, logs, advanced mode) is on General
+    // "tour" alone also hits General via "timeout"; use words unique to Updates
+    for (const query of ["tours", "send feedback", "what's new"]) {
       expect(sectionMatches(section("updates"), query), query).toBe(true);
       expect(sectionMatches(section("general"), query), query).toBe(false);
+    }
+    for (const query of ["diagnostic", "logs", "advanced mode"]) {
+      expect(sectionMatches(section("general"), query), query).toBe(true);
+      expect(sectionMatches(section("updates"), query), query).toBe(false);
     }
   });
 });

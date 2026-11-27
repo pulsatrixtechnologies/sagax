@@ -127,12 +127,12 @@ describe("Settings search keywords", () => {
     const { SECTIONS, sectionMatches } = await import("./settings-nav");
     const { CARD_HOME, settingsTarget } = await import("@/lib/settings-sections");
     const home: Record<string, string[]> = {
-      general: ["open at login", "app icon", "hotkey", "hardware acceleration", "send key", "spellcheck", "stockage"],
-      security: ["people's tool access"],
-      // #2636: every technical option is on Developer, Updates > Advanced since #4457; About beside it
-      updates: ["licence", "release notes", "tours", "send feedback", "advanced mode", "scheduled update", "loop guard", "diagnostics", "download logs", "cleanup", "retention", "event log", "usage meter",
+      // #2636 / M-20261127-068: technical options on General > Advanced; About stays on Updates
+      general: ["open at login", "app icon", "hotkey", "hardware acceleration", "send key", "spellcheck", "stockage", "advanced mode", "scheduled update", "loop guard", "diagnostics", "download logs", "cleanup", "retention", "event log", "usage meter",
         // #2658: the bot page's technical cards and the Claude Code switches
         "webhooks", "export zip", "embeddings", "skills folder", "always allowed", "daily logs"],
+      security: ["people's tool access"],
+      updates: ["licence", "release notes", "tours", "send feedback"],
     };
     for (const [page, queries] of Object.entries(home)) {
       for (const query of queries) {
@@ -152,8 +152,8 @@ describe("Settings search keywords", () => {
       "about.startup": "general", "about.input": "general", "about.holding": "general",
     };
     for (const [card, page] of Object.entries(cards)) expect(CARD_HOME[card], card).toBe(page);
-    // and where they open now (#4457)
-    expect(settingsTarget("general", "general.loopGuard")).toEqual({ section: "updates", subPage: "updates.advanced" });
+    // and where they open now (M-20261127-068: Advanced on General)
+    expect(settingsTarget("general", "general.loopGuard")).toEqual({ section: "general", subPage: "general.advanced" });
     expect(settingsTarget("general", "about.help")).toEqual({ section: "updates", subPage: "updates.about" });
     expect(settingsTarget("general", "general.peopleToolAccess")).toEqual({ section: "security", subPage: "security.peopleToolAccess" });
   });

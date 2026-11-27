@@ -554,8 +554,8 @@ describe("control-omb ui drives the real renderer", () => {
     await openFixtureAccountMenu(info.ui);
     await ui("click", info.ui, "--name", "Settings");
     // The Inspector button's switch sits in Developer's options since 0.8.64,
-    // which are Updates > Advanced since #4457 (seven pages).
-    await expect.poll(async () => (await ui("eval", info.ui, "--js", openSettingsSubPageJs("Updates", "updates.advanced"))).result, { timeout: 10_000 }).toBe(true);
+    // which are General > Advanced since M-20261127-068 (seven pages).
+    await expect.poll(async () => (await ui("eval", info.ui, "--js", openSettingsSubPageJs("General", "general.advanced"))).result, { timeout: 10_000 }).toBe(true);
     await expect.poll(async () => (await ui("eval", info.ui, "--js", `Boolean(document.querySelector('[aria-label="Show the Inspector button"]'))`)).result, { timeout: 10_000 }).toBe(true);
     await ui("eval", info.ui, "--js", `(() => {
       const sw = document.querySelector('[aria-label="Show the Inspector button"]');

@@ -399,7 +399,8 @@ export function SettingsModal() {
               </div>
             )}
 
-            {/* Updates (#4457): the version card with What's new, then About and Advanced one page further */}
+            {/* Updates (#4457): the version card with What's new, then About one page further.
+                Advanced moved to General (M-20261127-068). */}
             {section === "updates" && (
               <>
                 <div data-settings-card="updates">
@@ -414,7 +415,6 @@ export function SettingsModal() {
                 </div>
                 <SettingsGroup groupId="updatesMore">
                   <SubPageEntry id="updates.about" summary={t("settings.sub.about.summary")} />
-                  <SubPageEntry id="updates.advanced" summary={t("settings.sub.advanced.summary")} />
                 </SettingsGroup>
               </>
             )}
@@ -431,7 +431,7 @@ export function SettingsModal() {
             {section === "usage" && (
               <>
                 <UsageSection />
-                {/* the usage meter in the chat is on Updates > Advanced (#2636) */}
+                {/* the usage meter in the chat is on General > Advanced (#2636, M-20261127-068) */}
                 <DeveloperLink />
               </>
             )}

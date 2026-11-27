@@ -375,8 +375,10 @@ describe("Settings → Appearance", () => {
     fixture.section = "account";
     const html = render();
     expect(html).toContain('aria-label="App language"');
-    // technical cards left Account for App (#2080 L2); #4457 Language sits on General's Appearance
-    expect(html).not.toContain('data-settings-card="general.advanced"');
+    // technical cards left Account (#2080 L2); #4457 Language sits on General's Appearance;
+    // M-20261127-068: Advanced is a ▸ row on General, its cards one page further
+    expect(html).toContain('data-settings-card="general.advanced"');
+    expect(html).not.toContain('data-settings-card="general.loopGuard"');
     expect(html).toContain('data-settings-group="generalAppearance"');
     expect(html).not.toContain("Maximum running threads per bot");
     expect(html).not.toContain("Automatic recovery");

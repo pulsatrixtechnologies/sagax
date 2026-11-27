@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { AppSettingsSection } from "@/state/store";
 import { t } from "@/lib/i18n";
-import { SETTINGS_SUB_PAGES, type SettingsSubPageId } from "@/lib/settings-sections";
+import { canonicalSubPageId, SETTINGS_SUB_PAGES, type SettingsSubPageId } from "@/lib/settings-sections";
 import { AvatarCropPage } from "./OwnAvatarField";
 import { UsageTraces } from "../usage/UsageTraces";
 import { fetchMyTraces } from "@/lib/usage-trace";
@@ -81,15 +81,16 @@ const SUB_PAGE_CONTENT: Record<SettingsSubPageId, { render: (scope: SettingsPage
   "providers.voice": { render: () => <VoiceSettingsPage /> },
   "usage.traces": { render: () => <UsageTraces load={fetchMyTraces} />, inline: false },
   "updates.about": { render: (scope) => <AboutPage remoteActive={scope.remoteActive} openAbout={scope.openAbout} /> },
-  "updates.advanced": { render: (scope) => <DeveloperSettings remoteActive={scope.remoteActive} /> },
+  "general.advanced": { render: (scope) => <DeveloperSettings remoteActive={scope.remoteActive} /> },
 };
 
 /** A sub-page by its id: a page of SETTINGS_SUB_PAGES, or one provider's
  * page of Settings > Providers ("providers.provider:<id>", #4329 lot 1). */
 export function resolveSubPage(id: string | null | undefined, scope: () => SettingsPageScope = () => DEFAULT_PAGE_SCOPE): SettingsSubPageEntry | null {
   if (!id) return null;
-  if (Object.hasOwn(SETTINGS_SUB_PAGES, id)) {
-    const key = id as SettingsSubPageId;
+  const canonical = canonicalSubPageId(id);
+  if (Object.hasOwn(SETTINGS_SUB_PAGES, canonical)) {
+    const key = canonical as SettingsSubPageId;
     const info = SETTINGS_SUB_PAGES[key];
     return { section: info.section, gate: info.gate, title: () => t(info.titleKey), render: () => SUB_PAGE_CONTENT[key].render(scope()) };
   }

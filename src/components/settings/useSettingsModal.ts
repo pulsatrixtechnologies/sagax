@@ -7,7 +7,7 @@ import { navigate } from "@/lib/view-transitions";
 import { peopleListServed, readMembership } from "@/lib/membership";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { canEditConfig, canManageBackups, canManageComputers, canManageExperimental, viewerCan } from "@/lib/viewer";
-import { currentSettingsSection, isMovedOrganizationCard, settingsTarget } from "@/lib/settings-sections";
+import { canonicalSubPageId, currentSettingsSection, isMovedOrganizationCard, settingsTarget } from "@/lib/settings-sections";
 import { requestAbout } from "@/lib/about-ui";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { simpleHidesSettingsSection } from "@/lib/interface-visibility";
@@ -146,8 +146,12 @@ export function useSettingsModal() {
   const sectionIntroKey = sections.find((entry) => entry.id === section)?.introKey;
   // A former page id kept in the state (a saved section, an older link)
   // opens its sub-page, as the reducer does for a new one (#4457).
-  const subPageId = state.appSettingsSubPage ?? settingsTarget(state.appSettingsSection).subPage ?? null;
-  const openSubPage = (id: string) => { const page = resolveSubPage(id, () => pageScope); if (page) dispatch({ type: "toggleAppSettings", open: true, section: page.section, subPage: id }); };
+  const rawSubPageId = state.appSettingsSubPage ?? settingsTarget(state.appSettingsSection).subPage ?? null;
+  const subPageId = rawSubPageId ? canonicalSubPageId(rawSubPageId) : null;
+  const openSubPage = (id: string) => {
+    const page = resolveSubPage(id, () => pageScope);
+    if (page) dispatch({ type: "toggleAppSettings", open: true, section: page.section, subPage: canonicalSubPageId(id) });
+  };
   // What the pages need to draw their "▸" rows (#4457), and the sub-pages
   // to draw their content: the former pages' rules, kept.
   const pageScope: SettingsPageScope = { allowed, openSubPage, organization, editConfig, remoteActive, openAbout };

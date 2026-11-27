@@ -991,17 +991,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/bots/bot-visibility.e2e.test.ts",
-      "test": "per-bot visibility on a shared workspace > keeps bots with different audiences from reaching each other",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/threads/thread-prewarm.e2e.test.ts",
       "test": "warms the conversation, the first message reuses that process, and an unused warm is closed",
       "platforms": [

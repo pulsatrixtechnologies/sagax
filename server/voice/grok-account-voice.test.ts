@@ -126,6 +126,20 @@ describe("every refusal reason the server computes is said in the person's langu
     );
   });
 
+  // third review of #5427: two keys of the person's own in two states are
+  // each said with their own, never both "out of credits"
+  it("two keys of the person's own in two states: each with its own, in one list with a single \"et\"", () => {
+    expect(realtimeKeyRefusedCallReason([TRIED("voice-key", "key"), TRIED("perspicax-key", "quota")], "fr")).toMatch(
+      /^Aucun appel : ta clé vocale a été refusée, et ta clé xAI dans Perspicax n'a plus de crédits\. /,
+    );
+    expect(realtimeKeyRefusedCallReason([TRIED("voice-key", "key"), TRIED("perspicax-key", "quota"), TRIED("org-key", "quota")], "en")).toMatch(
+      /^No call was placed: your voice key was refused, your xAI key in Perspicax is out of credits, and your organization's xAI key is out of credits\. /,
+    );
+    expect(realtimeKeyRefusedCallReason([TRIED("voice-key", "quota"), TRIED("perspicax-key", "key"), TRIED("org-account", "quota")], "fr")).toMatch(
+      /^Aucun appel : ta clé vocale n'a plus de crédits, ta clé xAI dans Perspicax a été refusée, et le compte Grok de ton organisation n'a plus de crédits\. /,
+    );
+  });
+
   it("a solo person's own installation key is theirs to fix, never sent to an administrator they do not have", () => {
     // solo server, no organization: the key they are told about is `server`
     expect(realtimeKeyRefusedCallReason([TRIED("server", "key")], "fr")).toBe(

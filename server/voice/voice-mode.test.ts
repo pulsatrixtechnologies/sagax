@@ -618,6 +618,15 @@ describe("voice mode uses the key that has funds (2026-10-28)", () => {
     expect(out.body.error).toMatch(/^Aucun appel : ta clé xAI dans Perspicax a été refusée, et la clé xAI de ton organisation n'a plus de crédits\. /);
   });
 
+  it("says each of the person's own keys with its own state over HTTP, never both out of credits", async () => {
+    const { call, xai } = harness({ ownKeys: { "sub-ada": OWN_KEY }, personalKey: () => MINE_KEY });
+    xai.synthesize.mockImplementation(async (_text, _voice, key) => { throw new Error(key === MINE_KEY ? refusal(401) : CREDITS); });
+    const out = await call({ method: "POST", path: "/api/bots/b-quasar/voice/speak?locale=en", body: { text: "Hello." } });
+    expect(out.status).toBe(502);
+    expect(out.body.tried.map((entry: { source: string; failure: string }) => [entry.source, entry.failure])).toEqual([["voice-key", "key"], ["perspicax-key", "quota"], ["org-key", "quota"]]);
+    expect(out.body.error).toMatch(/^No call was placed: your voice key was refused, your xAI key in Perspicax is out of credits, and your organization's xAI key is out of credits\. /);
+  });
+
   it("stays on the key that is rate limited or down: another key would not help", async () => {
     const { call, xai } = harness({ ownKeys: { "sub-ada": OWN_KEY } });
     xai.synthesize.mockRejectedValue(new Error("xAI is rate-limiting speech. Wait a moment and try again."));

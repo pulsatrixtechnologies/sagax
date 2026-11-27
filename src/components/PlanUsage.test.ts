@@ -53,8 +53,9 @@ describe("Usage limits: each signed-in account's short window and week (#4418)",
       ],
     });
     expect(html.match(/data-plan-row=/g)).toHaveLength(3);
-    expect(html).toContain(">Personal<");
-    expect(html).toContain(">Work plan<");
+    // #5342: each account names its provider with the address (or given name)
+    expect(html).toContain(">Claude · Personal<");
+    expect(html).toContain(">Claude · Work plan<");
     expect(html).toContain(">Max<");
     expect(html).toContain("5-hour session");
     expect(html).toContain("4-hour session");
@@ -257,6 +258,30 @@ describe("Plan usage stars (2026-11-03)", () => {
 
   it("draws no star without a favorite store", () => {
     expect(render(report)).not.toContain("data-usage-favorite");
+  });
+});
+
+// #5342 [D-20261125-015]: Settings > Usage > Usage limits names each account's provider.
+describe("Usage limits: each account row names its provider (#5342)", () => {
+  const week = { available: true, remainingPercent: 60, usedPercent: 40, resetsAt: null };
+  const shared: PlanUsageReport = {
+    providers: [
+      row({ id: "claude", name: "ada@acme.example", state: "windows", ok: true, plan: "max_20x", weekly: week }),
+      row({ id: "codex", name: "ada@acme.example", driver: "codex", instanceId: "codex", state: "windows", ok: true, plan: "self_serve_business", weekly: { ...week, usedPercent: 20 } }),
+      row({ id: "nimbus", name: "ada@nimbus.example", driver: "nimbus", instanceId: "nimbus", state: "windows", ok: true, weekly: { ...week, usedPercent: 10 } }),
+    ],
+  };
+  const names = (html: string) => [...html.matchAll(/data-plan-name="">([^<]*)</g)].map((match) => match[1]);
+
+  it("one address at two providers is two named rows, in the same order; an unknown provider keeps its name", () => {
+    expect(names(render(shared))).toEqual(["Claude · ada@acme.example", "Codex · ada@acme.example", "ada@nimbus.example"]);
+  });
+
+  it("the star says which provider's account it shows", () => {
+    const html = render(shared, { favorite: { id: "codex", onToggle: () => {} } });
+    expect(html).toContain("Stop showing Codex · ada@acme.example Business in the Usage menu");
+    expect(html).toContain("Show Claude · ada@acme.example Max 20x in the Usage menu");
+    expect(html).toContain("Show ada@nimbus.example in the Usage menu");
   });
 });
 

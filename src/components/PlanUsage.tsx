@@ -19,7 +19,7 @@ import { Loader2, RefreshCw, RotateCw, Star } from "lucide-react";
 import { api } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
-import { accountLimitRows, planRows, type PlanProvider, type PlanRow, type PlanUsageReport } from "@/lib/plan-usage";
+import { accountLimitRows, accountRowName, planRows, type PlanProvider, type PlanRow, type PlanUsageReport } from "@/lib/plan-usage";
 import { usageLocale } from "@/lib/usage-personal";
 import { toggleUsageFavorite, useUsageFavorite } from "@/lib/usage-favorite";
 import { SettingsGroup } from "./SettingsPrimitives";
@@ -106,7 +106,8 @@ export interface PlanUsageViewProps {
 export function FavoriteStar({ provider, favorite }: { provider: PlanRow; favorite: NonNullable<PlanUsageViewProps["favorite"]> }) {
   const on = favorite.id !== null && (provider.aliasIds ?? [provider.id]).includes(favorite.id);
   if (!on && provider.state !== "windows") return null;
-  const name = provider.plan ? `${provider.name} ${provider.plan}` : provider.name;
+  const account = accountRowName(provider);
+  const name = provider.plan ? `${account} ${provider.plan}` : account;
   const label = t(on ? "usage.favorite.remove" : "usage.favorite.add", { name });
   return (
     <button
@@ -256,7 +257,7 @@ function Meter({ provider, meter }: { provider: PlanRow; meter: PlanMeter }) {
       label={meter.label}
       percent={used}
       tone={usageTone(used)}
-      ariaLabel={`${provider.name} · ${meter.label}`}
+      ariaLabel={`${accountRowName(provider)} · ${meter.label}`}
       foot={renews ? <RenewalFoot date={renews} /> : null}
     />
   );
@@ -315,7 +316,7 @@ export function AccountLimits({ provider, name, favorite, loading, onRefresh }: 
   return (
     <LimitRow
       data-plan-row={provider.id}
-      name={name ?? provider.name}
+      name={name ?? accountRowName(provider)}
       detail={provider.plan}
       accessory={favorite ? <FavoriteStar provider={provider} favorite={favorite} /> : null}
     >

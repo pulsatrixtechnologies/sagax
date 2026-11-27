@@ -407,6 +407,18 @@ describe("2026-10-19: Toujours permettre on every card", () => {
     expect(ruleCoversExactScope({ ...act, behavior: "deny" }, "sagax_settings", { setting: "bot.theme", target: "b1" })).toBe(false);
     expect(ruleCoversExactScope(act, "sagax_act", { setting: "bot.theme", target: "b1" })).toBe(false);
   });
+
+  // #5364 (owner 2026-11-26): Always allow for a setting covers every bot.
+  it("a sagax_settings rule without a bot target covers that setting on every bot (#5364)", () => {
+    const personWide = { ...rule(), tool: "sagax_settings", scope: { setting: "bot.approvalMode" }, botId: null };
+    expect(ruleCoversExactScope(personWide, "sagax_settings", { setting: "bot.approvalMode", target: "b1" })).toBe(true);
+    expect(ruleCoversExactScope(personWide, "sagax_settings", { setting: "bot.approvalMode", target: "b2" })).toBe(true);
+    expect(ruleCoversExactScope(personWide, "sagax_settings", { setting: "bot.proactiveMode", target: "b1" })).toBe(false);
+    expect(ruleCoversExactScope(personWide, "sagax_settings", { setting: "bot.approvalMode", target: "b1", value: "abc" })).toBe(false);
+    const withValue = { ...personWide, scope: { setting: "bot.approvalMode", value: "digest" } };
+    expect(ruleCoversExactScope(withValue, "sagax_settings", { setting: "bot.approvalMode", target: "b9", value: "digest" })).toBe(true);
+    expect(ruleCoversExactScope(withValue, "sagax_settings", { setting: "bot.approvalMode", target: "b9", value: "other" })).toBe(false);
+  });
 });
 
 describe("the store", () => {

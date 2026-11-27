@@ -307,12 +307,13 @@ describe("Activity, live only", () => {
   });
 
   it("is not drawn when nothing runs, title included", () => {
-    const sections = (list: Parameters<typeof PanelSections>[0]["list"]) => renderToStaticMarkup(createElement(PanelSections, { list, live: liveOf(list?.items ?? []), actions: { onOpen: () => {}, now: NOW }, onOpenHistory: () => {} }));
+    const sections = (list: Parameters<typeof PanelSections>[0]["list"], openThreadId?: string) => renderToStaticMarkup(createElement(PanelSections, { list, live: liveOf(list?.items ?? []), actions: { onOpen: () => {}, now: NOW }, onOpenHistory: () => {}, openThreadId }));
     // not loaded yet, then loaded with nothing running
     expect(sections(null)).toBe("");
-    const chat = job("thread:chat", { status: "running", endedAt: undefined });
+    const chat = job("thread:chat", { status: "running", endedAt: undefined, threadId: "chat" });
     // a coding job that ended more than 24 h ago has left the list (#2148)
     const old = job("thread:old", { coding: true, endedAt: NOW - CODING_RETAIN_MS - 1, updatedAt: NOW - CODING_RETAIN_MS - 1 });
+    // without the open thread: a busy chat turn alone is not Task (#5356 needs openThreadId)
     const idle = sections({ items: [old, chat, parallel], subagents: [] });
     expect(idle).not.toContain("data-bot-settings-section");
     expect(idle).not.toContain("Nothing running.");
@@ -324,6 +325,22 @@ describe("Activity, live only", () => {
     const busy = sections({ items: [routine, chat], subagents: [] });
     expect(busy).not.toContain('data-bot-settings-section="activity"');
     expect(busy).not.toContain("data-activity-card");
+  });
+
+  // #5356 (owner 2026-11-26): Task shows the open conversation's own turn.
+  it("draws Task for the open chat's own running turn (#5356)", () => {
+    const chat = job("thread:chat", { status: "running", endedAt: undefined, updatedAt: NOW - 1_000, threadId: "chat", title: "Thinking" });
+    const html = renderToStaticMarkup(createElement(PanelSections, {
+      list: { items: [chat, routine], subagents: [] },
+      live: liveOf([chat, routine]),
+      actions: { onOpen: () => {}, now: NOW },
+      onOpenHistory: () => {},
+      openThreadId: "chat",
+    }));
+    expect(html).toContain('data-bot-settings-section="coding"');
+    expect(html).toContain('data-activity-card="thread:chat"');
+    expect(html).toContain("Thinking");
+    expect(html).not.toContain('data-activity-card="run:r1"');
   });
 
   it("draws no Ongoing activities section, Coding alone", () => {

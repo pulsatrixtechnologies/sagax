@@ -164,6 +164,20 @@ export function isParallelWork(item: BotActivityItem): boolean {
   return Boolean(item.parallel) || item.startedBy?.kind === "bot";
 }
 
+/** #5356: the open conversation's own running turn belongs in Task
+ * (formerly Coding). An ordinary chat turn is never `coding`, so without
+ * this the panel showed no Task while the chat said Working. */
+export function currentChatTask(items: readonly BotActivityItem[], threadId: string | undefined, live: LiveView = SHOW_ALL): BotActivityItem[] {
+  if (!threadId) return [];
+  return items
+    .filter((item) => {
+      if (item.coding || isParallelWork(item)) return false;
+      if (item.threadId !== threadId && item.id !== `thread:${threadId}`) return false;
+      return live.visible(item) && activityStatusActive(item.status);
+    })
+    .sort(newestRunningFirst);
+}
+
 /** Details > Activity: parallel work only (isParallelWork) that is not a
  * coding job, plus the sub-agents this bot's threads started (coding or
  * not); running entries and those that just finished while they leave.

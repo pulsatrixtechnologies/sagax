@@ -30,7 +30,7 @@
 // // item in the menu carries no dot (2026-10-18): a failed run not seen
 // yet shows on the Automations page (the problem runs pill in its header,
 // a dot on the run in Logs) and in the routines count's label.
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowDownToLine,
   ArrowLeftRight,
@@ -525,11 +525,14 @@ export function profileMenuItems(input: {
   ];
 }
 
-/** Calls onOpen once the menu it sits in is open. */
-function WhenOpen({ open, onOpen }: { open: boolean; onOpen: () => void }) {
-  useEffect(() => { if (open) onOpen(); }, [open, onOpen]);
+/** Tells whether the menu it sits in is open, each time that changes. */
+function WhenOpen({ open, onChange }: { open: boolean; onChange: (open: boolean) => void }) {
+  useEffect(() => { onChange(open); }, [open, onChange]);
   return null;
 }
+
+/** #5342: the Usage figures are read again every minute while the menu is open. */
+const USAGE_REFRESH_MS = 60_000;
 
 interface AccountMenuData {
   percent: number | null;
@@ -555,9 +558,12 @@ export function AccountMenuUsage({ rows, favorite }: { rows: PlanRow[]; favorite
 
 /** Usage ›'s plan windows (GET /api/plan-usage) and this month's cost (GET
  * /api/me/usage, or /api/usage?mine=1 on an older server), the same reads
- * as Settings > Usage; and Switch organization ›'s saved servers. Read once
- * the menu first opens; each part stays empty when it cannot be read. */
-function useAccountMenuData(enabled: boolean, refresh = 0): AccountMenuData {
+ * as Settings > Usage; and Switch organization ›'s saved servers.
+ * #5342: the Usage figures (the plan windows and the month's cost) are read
+ * again each time the menu opens (`open`), then every minute while it stays
+ * open. The plain read, never the forced one: the server's own cache of the
+ * providers' answers (45 seconds) is what answers it. */
+function useAccountMenuData(enabled: boolean, refresh = 0, open = false): AccountMenuData {
   const config = useStoreSelector((current) => current.config);
   const favorite = useUsageFavorite();
   const org = usePerspicaxOrg();
@@ -565,19 +571,32 @@ function useAccountMenuData(enabled: boolean, refresh = 0): AccountMenuData {
   const [rows, setRows] = useState<PlanRow[]>([]);
   const [monthCost, setMonthCost] = useState<string | null>(null);
   const [environments, setEnvironments] = useState<Parameters<typeof listSwitchTargets>[0]>(null);
+  // one more at each opening and at each minute the menu stays open; 0: never opened
+  const [figuresTick, setFiguresTick] = useState(0);
   useEffect(() => {
-    if (!plans) return;
+    if (!open) return;
+    setFiguresTick((tick) => tick + 1);
+    const timer = window.setInterval(() => setFiguresTick((tick) => tick + 1), USAGE_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [open]);
+  useEffect(() => {
+    if (!plans || figuresTick === 0) return;
     let alive = true;
     void api<PlanUsageReport>("/api/plan-usage").then((report) => { if (alive) setRows(connectedPlanRows(report)); }, () => {});
     return () => { alive = false; };
-  }, [plans]);
+  }, [plans, figuresTick]);
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || figuresTick === 0) return;
     let alive = true;
     const month = personalUsagePeriods().month;
     void api<PersonalUsageSummary>(usageQuery(month, "day"))
       .catch(() => api<PersonalUsageSummary>(usageQuery(month, "day", true)))
       .then((summary) => { if (alive) setMonthCost(formatCost(costOf(summary))); }, () => {});
+    return () => { alive = false; };
+  }, [enabled, figuresTick]);
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
     // #5353: asked again when this page comes on screen (account-menu.ts)
     const unwatch = watchSavedServers(window.ogb?.environments, (next) => { if (alive) setEnvironments(next); });
     return () => { alive = false; unwatch(); };
@@ -622,6 +641,12 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   useEffect(() => {
     if (withName && menuAbove) setMenuOpened(true);
   }, [withName, menuAbove]);
+  // open right now (#5342): the Usage figures are read again at each opening
+  const [menuOpen, setMenuOpen] = useState(false);
+  const onMenuOpenChange = useCallback((open: boolean) => {
+    setMenuOpen(open);
+    if (open) setMenuOpened(true);
+  }, []);
   const triggerRef = useRef<HTMLSpanElement>(null);
   const achievements = useAchievements();
   // conversations waiting on the person's answer (a plain count, no hook)
@@ -661,7 +686,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   const [namesTick, setNamesTick] = useState(0);
   // Lot 6: rename stays in the Switch account row (no window on the menu).
   const [renaming, setRenaming] = useState<{ id: string; name: string; defaultName: string; draft: string } | null>(null);
-  const account = useAccountMenuData(menuOpened, namesTick);
+  const account = useAccountMenuData(menuOpened, namesTick, menuOpen);
   const usageFavorite = useUsageFavorite();
   const serverMode = useServerMode(namesTick);
   // The desktop opens on an organization server (server mode) and this is
@@ -849,7 +874,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
               />
             )}
           </span>
-          <WhenOpen open={open} onOpen={() => setMenuOpened(true)} />
+          <WhenOpen open={open} onChange={onMenuOpenChange} />
           {showLine ? (
             // name on top, then the viewer's title and points (the same line
             // as the account row); the row's custom property grows both foot
@@ -882,7 +907,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
           )}
         >
           {avatar(36)}
-          <WhenOpen open={open} onOpen={() => setMenuOpened(true)} />
+          <WhenOpen open={open} onChange={onMenuOpenChange} />
           {/* the wide pill's place-attention dot, on the rail's avatar */}
           {placeAttention && !open && !noteworthy && (
             <span data-testid="footer-attention" aria-hidden="true" className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-sidebar bg-danger" />
@@ -907,7 +932,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
           className="flex w-full min-w-0 items-center gap-2.5 text-left"
         >
           {avatar(40)}
-          <WhenOpen open={open} onOpen={() => setMenuOpened(true)} />
+          <WhenOpen open={open} onChange={onMenuOpenChange} />
           <span
             data-account-name=""
             className={cn(

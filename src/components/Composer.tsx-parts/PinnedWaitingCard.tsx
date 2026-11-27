@@ -59,8 +59,12 @@ export function usePinnedWaiting(served: readonly ServedWaitingItem[], threadId 
   // is read again, even when its card lives where the store has not loaded
   // it; the list dropping it forgets it, a failed answer brings it back
   const [answeredHere, setAnsweredHere] = useState<ReadonlySet<string>>(() => new Set());
+  // #5357: an admin-approval card the person hid with X; the request keeps
+  // waiting for an admin and stays reachable from the conversation
+  const [hiddenHere, setHiddenHere] = useState<ReadonlySet<string>>(() => new Set());
   const answered = stillListed(answeredHere, served);
-  const items = pinnedItemsFrom(served, threadId, fresh, approvals, answered);
+  const hidden = stillListed(hiddenHere, served);
+  const items = pinnedItemsFrom(served, threadId, fresh, approvals, answered).filter((item) => !hidden.has(item.key));
   // the item is remembered by key, not by position: one answered ahead of
   // it must not move the person to another request
   const [place, setPlace] = useState<{ key: string; at: number } | undefined>(undefined);
@@ -86,6 +90,7 @@ export function usePinnedWaiting(served: readonly ServedWaitingItem[], threadId 
       next.delete(key);
       return next;
     }),
+    hide: (key: string) => setHiddenHere((before) => new Set([...stillListed(before, served), key])),
   };
 }
 
@@ -190,9 +195,13 @@ export function PinnedWaitingCard({
     </button>
   ) : null;
   // #3471: one quiet skip at the end of the top row, for every kind
+  // #5357: an admin-approval card's X only hides the pin; the request keeps waiting
   const cardBotId = current.kind === "question" ? bot?.id ?? current.item.botId : current.item.botId;
-  const skip = pinnedItemSkip(current, askedIn, cardBotId, dispatch, groupId);
-  const skipButton = skip ? <CardCloseButton label={t("waitingCard.skipAria")} onClick={skip} className="ms-0" /> : null;
+  const adminPin = current.kind === "approval" && Boolean(current.pending.message.card?.adminApproval);
+  const skip = adminPin
+    ? () => pinned.hide(current.key)
+    : pinnedItemSkip(current, askedIn, cardBotId, dispatch, groupId);
+  const skipButton = skip ? <CardCloseButton label={t(adminPin ? "common.close" : "waitingCard.skipAria")} onClick={skip} className="ms-0" /> : null;
   const controls = <>{jumpButton}{stepper}{foldButton}{skipButton}</>;
   // the chat's ask surface (AskCard): no outline, no shadow at rest
   const frame = "mb-2 overflow-hidden rounded-3xl menu-edge bg-composer";

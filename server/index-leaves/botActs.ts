@@ -80,16 +80,21 @@ function botActs() {
       const owner = person ?? host.localPrincipalId();
       const protectedBy = classes.filter((name): name is StepUpClass => (STEP_UP_CLASSES as readonly string[]).includes(name));
       if (protectedBy.length && host.securityKeys.required(owner, protectedBy, owner).length) return null;
-      const rule = host.ownerApprovals.rulesOf(owner, botId).find((row) => row.botId === botId && ruleCoversExactScope(row, candidate.tool, candidate.scope));
+      // #5364: rulesOf already returns person-wide (botId null) rules; do not
+      // require row.botId === botId or those never match.
+      const rule = host.ownerApprovals.rulesOf(owner, botId).find((row) => ruleCoversExactScope(row, candidate.tool, candidate.scope));
       return rule ? { id: rule.id } : null;
     },
     saveActRule: ({ person, botId, candidate }) => {
       const owner = person ?? host.localPrincipalId();
+      // #5364: a sagax_settings Always allow without a bot target is the
+      // person's rule for every bot.
+      const savedBotId = candidate.tool === "sagax_settings" && !candidate.scope.target ? null : botId;
       try {
-        const saved = host.ownerApprovals.add({ ownerId: owner, botId, tool: candidate.tool, scope: candidate.scope, behavior: "allow", description: candidate.description });
+        const saved = host.ownerApprovals.add({ ownerId: owner, botId: savedBotId, tool: candidate.tool, scope: candidate.scope, behavior: "allow", description: candidate.description });
         host.orgAudit({
           category: "approval", action: "approval.rule.save", target: host.auditBotTarget(botId),
-          after: { rule: saved.id, behavior: saved.behavior, tool: saved.tool },
+          after: { rule: saved.id, behavior: saved.behavior, tool: saved.tool, ...(savedBotId === null ? { personWide: true } : {}) },
           actor: host.IDENTITY.kind === "perspicax" && person ? { kind: "person", principalId: person, via: "sagax" } : { kind: "loopback" }
         });
         return null;

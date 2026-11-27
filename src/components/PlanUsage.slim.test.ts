@@ -65,7 +65,7 @@ describe("Usage limits: one slim row per account (#4445)", () => {
   it("a row holds the name and plan, then both windows on one line, each a label, a percent, a thin bar and its renewal; no large figure", () => {
     const page = view([account("personal", open(34, "2026-11-16T17:00:00Z", 5), open(46))]);
     const row = page.querySelector('[data-plan-row="personal"]')!;
-    expect(row.querySelector("[data-plan-name]")?.textContent).toBe("Personal");
+    expect(row.querySelector("[data-plan-name]")?.textContent).toBe("Claude · Personal");
     const meters = row.querySelectorAll("[data-plan-meters] > [data-plan-col]");
     expect(meters).toHaveLength(2);
     const [short, week] = [...meters];

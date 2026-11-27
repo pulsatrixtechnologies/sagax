@@ -3,9 +3,31 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { setLocale } from "@/lib/i18n";
-import { humanPlanName, planRows } from "./plan-usage";
+import { accountRowName, humanPlanName, planRows } from "./plan-usage";
 
 beforeEach(() => setLocale("en"));
+
+// #5342 [D-20261125-015]: an account row names its provider with the address,
+// so the same address signed in at two providers reads as two accounts.
+describe("accountRowName", () => {
+  it("puts the provider before the name the account goes by", () => {
+    expect(accountRowName({ driver: "claude", name: "ada@acme.example" })).toBe("Claude · ada@acme.example");
+    expect(accountRowName({ driver: "codex", name: "ada@acme.example" })).toBe("Codex · ada@acme.example");
+    expect(accountRowName({ driver: "grok", name: "Work" })).toBe("Grok · Work");
+  });
+
+  it("leaves a name that already starts with its provider as it is", () => {
+    expect(accountRowName({ driver: "claude", name: "Claude" })).toBe("Claude");
+    expect(accountRowName({ driver: "claude", name: "Claude (API key)" })).toBe("Claude (API key)");
+    expect(accountRowName({ driver: "codex", name: "codex work" })).toBe("codex work");
+    expect(accountRowName({ driver: "codex", name: "codex-team@acme.example" })).toBe("Codex · codex-team@acme.example");
+  });
+
+  it("leaves a row of an unknown provider as it is", () => {
+    expect(accountRowName({ driver: "nimbus", name: "ada@acme.example" })).toBe("ada@acme.example");
+    expect(accountRowName({ driver: "", name: "ada@acme.example" })).toBe("ada@acme.example");
+  });
+});
 
 describe("humanPlanName", () => {
   it("maps the known plan ids to their names", () => {

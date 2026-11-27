@@ -75,8 +75,15 @@ describe("owner rule buttons", () => {
     const result = view();
     click(result, "Always allow");
     expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: "allow", rule: "allow", alwaysAllow: undefined }));
+    // #5363: the optimistic receipt says Always allowed, never Allowed once
+    expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({
+      settle: expect.objectContaining({ answered: "allow", ruleSaved: expect.objectContaining({ behavior: "allow", description: ownerRule.description }) }),
+    }));
+    expect(approvalPill(fixture.dispatch.mock.calls.at(-1)![0].settle)?.label).toBe("Always allowed");
     click(result, "Allow once");
     expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: "allow", rule: undefined }));
+    expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ settle: { answered: "allow" } }));
+    expect(approvalPill(fixture.dispatch.mock.calls.at(-1)![0].settle)?.label).toBe("Allowed once");
     click(result, "Deny");
     expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: "deny", rule: undefined }));
   });

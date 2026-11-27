@@ -10,8 +10,9 @@ import { botActClasses } from "../../shared/step-up.ts";
 import { BOT_PLUGIN_READ_MAX, pluginAnswerKind, shapePluginAnswer } from "./bot-plugins-answer.ts";
 
 /** 2026-10-19 ("Toujours permettre" on every card): what "Always allow"
- * on an act card keeps, as the person's own rule for this bot
- * (server/approvals/owner-approval.ts OwnerRule): a setting (its key and target) or a
+ * on an act card keeps, as the person's own rule
+ * (server/approvals/owner-approval.ts OwnerRule): a setting (its key; #5364:
+ * a bot setting with no target covers every bot of the person) or a
  * route (method and exact path), and the exact value when the change is
  * more than a simple one (a secret, another person, a deletion, a widening,
  * the organization). Never "anything this bot does". */

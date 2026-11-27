@@ -56,10 +56,12 @@ if (Object.values(RELEASES).some((release) => expectedVersion !== release.versio
 async function binaryVersion(candidate) {
   if (!candidate || !existsSync(candidate)) return null;
   try {
-    const { stdout } = await run(candidate, ["--version"], { timeout: 5000, windowsHide: true });
-    return stdout.match(/cua-driver\s+([\d.]+)/)?.[1] ?? null;
-  } catch {
-    return null;
+    const { stdout, stderr } = await run(candidate, ["--version"], { timeout: 5000, windowsHide: true });
+    // Some runner images print the banner on stderr (#5321).
+    return `${stdout}\n${stderr}`.match(/cua-driver\s+([\d.]+)/)?.[1] ?? null;
+  } catch (error) {
+    const mixed = `${error?.stdout ?? ""}\n${error?.stderr ?? ""}`;
+    return mixed.match(/cua-driver\s+([\d.]+)/)?.[1] ?? null;
   }
 }
 
@@ -74,12 +76,20 @@ function peMachine(bytes) {
 /** Whether `candidate` is cua-driver at the SDK's version for `arch`. A
  * binary this host can run reports its version; one it cannot run (arm64 on
  * an x64 host) is accepted only by its PE machine type, and only when it
- * comes from the pinned release archive (`pinned`). */
+ * comes from the pinned release archive (`pinned`). #5321: a pinned official
+ * archive whose `--version` probe fails on the runner (empty output, crash)
+ * is still accepted after the archive digest and PE machine type match. */
 async function acceptable(candidate, arch, pinned) {
   if (!candidate || !existsSync(candidate)) return false;
   if (peMachine(await readFile(candidate)) !== RELEASES[arch].machine) return false;
-  if (runsHere(arch)) return (await binaryVersion(candidate)) === expectedVersion;
-  return pinned;
+  if (!runsHere(arch)) return pinned;
+  const version = await binaryVersion(candidate);
+  if (version === expectedVersion) return true;
+  if (pinned && version === null) {
+    console.warn(`CUA Driver ${expectedVersion} for win32-${arch}: --version probe failed; accepting the pinned release archive`);
+    return true;
+  }
+  return false;
 }
 
 async function officialBinary(arch) {

@@ -3203,6 +3203,19 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
   .overlay-scrollbar-thumb::before { background: CanvasText; }
 }
 
+/* Message bar customize mode (D-20261126-014): movable controls jiggle. */
+@keyframes composer-movable-jiggle {
+  0%, 100% { transform: rotate(-1.2deg); }
+  50% { transform: rotate(1.2deg); }
+}
+[data-composer-customize="1"] .composer-movable {
+  animation: composer-movable-jiggle 0.28s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-composer-customize="1"] .composer-movable { animation: none; }
+}
+:root[data-reduced-motion="true"] [data-composer-customize="1"] .composer-movable { animation: none; }
+
 @keyframes panel-in {
   from { transform: translateX(28px); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }

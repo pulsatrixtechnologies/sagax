@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 import { ArrowUp, Clock, Square } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { sendBlockStops, type SendBlock } from "@/lib/send-state";
@@ -18,6 +18,8 @@ import {
   VoiceNoteChip,
 } from "../ComposerControls";
 import type { botCtaColors } from "@/lib/voice-cta";
+import type { ComposerBarItem } from "@/lib/composer-bar-layout";
+import { ComposerMovable, type ComposerCustomizeApi } from "./ComposerCustomize";
 
 type CtaTone = ReturnType<typeof botCtaColors> | null;
 type DictationEngine = "native" | "xai" | null;
@@ -54,6 +56,10 @@ export function ComposerActionBar({
   sendTitleFor,
   nudgePeer,
   nudgeGroup,
+  meter,
+  trailingOrder = ["model", "usage", "voice"],
+  plusSlot,
+  customize,
 }: {
   bot?: Bot;
   group?: Group;
@@ -99,11 +105,80 @@ export function ComposerActionBar({
   sendTitleFor: () => string;
   nudgePeer?: { id: string; name: string; threadId?: string } | null;
   nudgeGroup?: { id: string; name: string } | null;
+  /** Usage pill when placement is inBar (D-20261127-001). */
+  meter?: ReactNode;
+  /** Right-of-field movable items in order (D-20261126-014). */
+  trailingOrder?: readonly ComposerBarItem[];
+  /** The + cluster when the layout puts it right of the field. */
+  plusSlot?: ReactNode;
+  customize?: ComposerCustomizeApi;
 }) {
+  const customizing = Boolean(customize?.customizing);
+  const wrap = (id: ComposerBarItem, node: ReactNode) => {
+    if (!node) return null;
+    if (!customize) return node;
+    return (
+      <ComposerMovable id={id} customizing={customizing} api={customize}>
+        {node}
+      </ComposerMovable>
+    );
+  };
+
+  const modelChip = bot && !group && !remoteClient ? (
+    // M-20261126-104: the model chip sits inside the message box again.
+    // #2106: picking writes the bot's model for every thread. #4093: a narrow
+    // box folds the chip away; the + menu's Model row opens the same menu
+    // through menuControl.
+    <span data-composer-model-chip="" className={COMPOSER_WIDE_ONLY}>
+      <ModelPicker inComposer key={bot.threadId} bot={bot} threadId={threadId}
+        menuControl={modelMenu}
+        fallbackAnchor={() => composerRowRef.current?.querySelector<HTMLElement>("[data-composer-plus]") ?? null} />
+    </span>
+  ) : null;
+
+  const usage = meter ? <span data-composer-meter-slot="">{meter}</span> : null;
+
+  const sendButton = !retroSkin && !locked ? (
+    <ComposerSendButton
+      onClick={() => send()}
+      disabled={attachmentPending || !hasContent || sendBlockStops(sendBlock as SendBlock | null)}
+      tone={ctaTone}
+      queued={busy && !canSteer}
+      label={sendLabelFor()}
+      title={sendTitleFor()}
+    />
+  ) : null;
+  const typed = Boolean(sendButton && hasContent);
+  const voiceControl = locked || dictating || voiceNoting ? null : (
+    <ComposerVoiceButton
+      engine={engine}
+      dictation={<ComposerMicButton onClick={clickMic} onPress={pressMic} onRelease={releaseMic} needsSetup={!engine} engine={engine} shortcut={dictationShortcut} />}
+      conversation={bot && !group ? <CallButton bot={bot} tone={ctaTone} onStart={() => noteVoiceModeUsed("conversation")} /> : undefined}
+    />
+  );
+  // Send stays fixed at the end of the bar (D-20261126-014). Voice moves with
+  // the order; when it is the last trailing item it still shares the CTA seat
+  // with Send (the default look).
+  const voiceOnTrailing = trailingOrder.includes("voice");
+  const voiceIsLast = voiceOnTrailing && trailingOrder[trailingOrder.length - 1] === "voice";
+
+  const slot = (id: ComposerBarItem): ReactNode => {
+    switch (id) {
+      case "plus": return wrap("plus", plusSlot ?? null);
+      case "model": return wrap("model", modelChip);
+      case "usage": return wrap("usage", usage);
+      case "voice":
+        if (!voiceControl) return null;
+        if (voiceIsLast) {
+          return <ComposerCtaSeat typed={typed} send={sendButton} voice={wrap("voice", voiceControl)} />;
+        }
+        return wrap("voice", voiceControl);
+      default: return null;
+    }
+  };
+
   return (
     <div data-composer-actions className="composer-band flex items-center gap-2 @max-[30rem]/composer:ml-auto">
-    {/* Stop while the turn runs. Escape in an empty field, or a message that
-        only says "stop" / "arrête", still ends it the same way (#2042). */}
     {busy && !locked && !dictating && !voiceNoting && (
       <button
         type="button"
@@ -116,18 +191,7 @@ export function ComposerActionBar({
         <Square size={14} className="fill-current" aria-hidden="true" />
       </button>
     )}
-    {bot && !group && !remoteClient && (
-      // M-20261126-104: the model chip sits inside the message box again, just
-      // before the voice button (the Stop of a running turn comes before it).
-      // #2106: picking writes the bot's model for every thread. #4093: a narrow
-      // box folds the chip away; the + menu's Model row opens the same menu
-      // through menuControl.
-      <span data-composer-model-chip="" className={COMPOSER_WIDE_ONLY}>
-        <ModelPicker inComposer key={bot.threadId} bot={bot} threadId={threadId}
-          menuControl={modelMenu}
-          fallbackAnchor={() => composerRowRef.current?.querySelector<HTMLElement>("[data-composer-plus]") ?? null} />
-      </span>
-    )}
+    {trailingOrder.map((id) => <span key={id} className="contents">{slot(id)}</span>)}
   {!locked && dictating && (
     <DictationChip
       seconds={dictation.seconds}
@@ -152,7 +216,6 @@ export function ComposerActionBar({
       sendTone={ctaTone}
     />
   )}
-  {/* Hibou 98 draws Send as a labelled push button, always there */}
   {retroSkin && !locked && (
     <button
       onClick={() => send()}
@@ -166,33 +229,8 @@ export function ComposerActionBar({
       <span className="r98-send-label">{t("chat.send")}</span>
     </button>
   )}
-  {/* No Send button: Enter sends. The seat holds the one voice button
-      (M-20261125-072: the mic for dictation or the waves for the voice
-      conversation, and its arrow), and the send arrow beside it once
-      something is typed (M-20261125-071: the voice button stays usable). */}
-  {!dictating && !voiceNoting && (() => {
-    const sendButton = !retroSkin && !locked ? (
-      <ComposerSendButton
-        onClick={() => send()}
-        disabled={attachmentPending || !hasContent || sendBlockStops(sendBlock as SendBlock | null)}
-        tone={ctaTone}
-        queued={busy && !canSteer}
-        label={sendLabelFor()}
-        title={sendTitleFor()}
-      />
-    ) : null;
-    const typed = Boolean(sendButton && hasContent);
-    const voice = locked ? null : (
-      <ComposerVoiceButton
-        engine={engine}
-        dictation={<ComposerMicButton onClick={clickMic} onPress={pressMic} onRelease={releaseMic} needsSetup={!engine} engine={engine} shortcut={dictationShortcut} />}
-        // voice mode cannot start in a group chat: no conversation there
-        conversation={bot && !group ? <CallButton bot={bot} tone={ctaTone} onStart={() => noteVoiceModeUsed("conversation")} /> : undefined}
-      />
-    );
-    if (!voice) return typed ? sendButton : null;
-    return <ComposerCtaSeat typed={typed} send={sendButton} voice={voice} />;
-  })()}
+  {/* Send fixed at the end when voice is absent from this side or not last. */}
+  {!dictating && !voiceNoting && !retroSkin && !voiceIsLast ? sendButton : null}
     {nudgePeer && <NudgeButton principalId={nudgePeer.id} name={nudgePeer.name} threadId={nudgePeer.threadId} />}
     {!nudgePeer && nudgeGroup && <NudgeButton groupId={nudgeGroup.id} name={nudgeGroup.name} />}
     </div>

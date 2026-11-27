@@ -37061,7 +37061,22 @@ ROUTES.push(createBotsCoreRoutes({
   rejectDeletedThreadSkillStages,
   threadTitleGate,
   titleRegenerations,
-  generateThreadTitle: (instance, excerpt, kind, bot) => generateThreadTitle((bot ? botTitleEngine(bot as BotRecord, instance as ProviderInstance) : instance) as never, excerpt, kind as never)
+  generateThreadTitle: (instance, excerpt, kind, bot) => generateThreadTitle((bot ? botTitleEngine(bot as BotRecord, instance as ProviderInstance) : instance) as never, excerpt, kind as never),
+  // #5367: sagax_settings thread.compact
+  compactThread: async (botId, threadId) => {
+    const bot = store.bot(botId);
+    if (!bot) return { ok: false, status: 404, error: "no such bot" };
+    const task = store.taskByThread(botId, threadId);
+    if (!task) return { ok: false, status: 404, error: "no such task" };
+    const selection = task.modelSelection ?? bot.modelSelection;
+    const instance = registry.get(selection.instanceId);
+    if (!instance) return { ok: false, status: 409, error: "this conversation has no engine to compact with" };
+    await compactConversation({
+      bot, threadId, generation: directTurnGenerationByThread.get(threadId) ?? "manual-compact",
+      instance, model: selection.model, excludedIds: new Set(), manual: true,
+    });
+    return { ok: true };
+  },
 }));
 ROUTES.push(createComputersRoutes({
   listBoxes: () => boat.listManagedBoats(cfg, managedBoatOwners()),

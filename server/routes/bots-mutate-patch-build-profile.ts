@@ -177,6 +177,16 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
       return true;
     }
   }
+  // #5367: fold point for this bot's threads (0-1 share or token count); null clears.
+  if (Object.prototype.hasOwnProperty.call(body, "compactAt")) {
+    const at = (body as Record<string, unknown>).compactAt;
+    if (at === null) patch.compactAt = undefined;
+    else if (typeof at === "number" && Number.isFinite(at) && at > 0 && at <= 10_000_000) patch.compactAt = at;
+    else {
+      env.json(env.res, 400, { error: "compactAt must be a share of the window (0 to 1, e.g. 0.75) or a token count, or null to follow the server" });
+      return true;
+    }
+  }
   // one pinned message per thread; null/"" clears. The id is not
   // validated against the transcript here — a pin whose message was
   // edited to another branch or deleted simply resolves to nothing.

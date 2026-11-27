@@ -43,6 +43,21 @@ export function shouldCompact(input: { contextTokens?: number; estimatedBytes: n
   return size >= threshold;
 }
 
+/** #5367: how full the last measured context is, as a percent of its window.
+ * Undefined when the turn has not reported tokens or a window yet. */
+export function contextUsagePercent(context: { tokens?: number; window?: number } | null | undefined): number | undefined {
+  if (!positive(context?.tokens) || !positive(context?.window)) return undefined;
+  return Math.min(100, Math.round((100 * context.tokens) / context.window));
+}
+
+/** #5367: fold point for a bot: its own compactAt (0-1 or tokens), else the
+ * server's, else the engine default. Absent bot value means follow the server. */
+export function compactAtFor(botCompactAt: number | undefined, serverCompactAt: number | undefined, driverKind: string): number | undefined {
+  if (positive(botCompactAt)) return botCompactAt;
+  if (positive(serverCompactAt)) return serverCompactAt;
+  return defaultCompactAt(driverKind);
+}
+
 /** Where an engine starts compacting its own session, in tokens, when Sagax
  * can know it. Sagax folds the thread itself below this point (compactBudget
  * keeps 10% under it), so the engine's own summarizer, which drops what it

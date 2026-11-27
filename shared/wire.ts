@@ -554,6 +554,9 @@ export interface WireBot {
    * kept when its model offers more than one. Absent: the person's default
    * for the model's provider, else the model's own size. */
   contextWindow?: number;
+  /** #5367: fold this bot's threads when context passes this share of the
+   * window (0-1) or this many tokens. Absent: follow the server compactAt. */
+  compactAt?: number;
   /** where the bot works ("Works on"). Unset = auto. */
   computer?: Surface | "off";
   /** Enrolled unattended hosts (`h_` + 32 hex) attached from the Computer

@@ -479,6 +479,14 @@ export function FieldValue({ field, label, now, lang, tz }: { field: RecordField
   }
 }
 
+/** How late a record is past its due date: never once it is done or closed,
+ * else formatLateness. One rule for the card's due row and a kind's own window
+ * (an invoice's balance, M-20261127-140). */
+export function recordLateness(card: { state?: { tone: string }; dates?: { due?: string; closed?: string } }, now: number, lang: string, tz?: string, due = card.dates?.due): string | null {
+  if (!due || card.state?.tone === "done" || card.dates?.closed) return null;
+  return formatLateness(due, now, lang, tz);
+}
+
 type FactRow = { label: string; value: ReactNode; gap?: boolean; key: string };
 
 /** The dates and key fields as one description list. In the opened card the
@@ -498,7 +506,7 @@ function Facts({ card, now, lang, part = "all", chipRows = [], lead = [], pairs 
   if (dates.opened) rows.push({ key: "opened", label: t("recordCard.date.opened"), value: time(dates.opened, "relative") });
   if (dates.updated) rows.push({ key: "updated", label: t("recordCard.date.updated"), value: time(dates.updated, "relative") });
   if (dates.due) {
-    const late = card.state?.tone === "done" || dates.closed ? null : formatLateness(dates.due, now, lang, tz);
+    const late = recordLateness(card, now, lang, tz);
     rows.push({
       key: "due",
       label: t("recordCard.date.due"),

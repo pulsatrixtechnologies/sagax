@@ -1,7 +1,8 @@
 // What a person writes from a record window (M-20261127-101): a note, a time
 // entry, an expense, a planned entry, a configuration, an attachment, a
-// company's contact or site, each added, changed or removed, and a planned
-// entry marked done. The app sends
+// company's contact or site, each added, changed or removed, a planned
+// entry marked done, and a payment recorded on an invoice (M-20261127-140).
+// The app sends
 // one action through the record's detail route
 // (`POST /api/me/records/:product/:kind/:id/detail { action, id?, set }`),
 // the server checks it here, applies the organization's rules to it as a
@@ -22,6 +23,7 @@ export const RECORD_ACTIONS = [
   "attachment.add", "attachment.remove",
   "contact.add", "contact.update", "contact.remove",
   "site.add", "site.update", "site.remove",
+  "payment.add",
 ] as const;
 export type RecordActionName = (typeof RECORD_ACTIONS)[number];
 
@@ -111,6 +113,8 @@ const SHAPES: Record<RecordActionName, { id: boolean; fields: Record<string, Rul
   "site.add": { id: false, fields: SITE_FIELDS, required: ["name"] },
   "site.update": { id: true, fields: SITE_FIELDS, some: true },
   "site.remove": { id: true, fields: {} },
+  // ConnectWise has no reference or note on a payment; the console drops them (perspicax#2474, M-20261127-101).
+  "payment.add": { id: false, fields: { amount: AMOUNT, date: DAY }, required: ["amount", "date"] },
 };
 
 const ENTRY_ID = /^[A-Za-z0-9._:-]{1,64}$/;

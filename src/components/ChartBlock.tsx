@@ -160,21 +160,17 @@ function ChartSourceLine({ spec }: { spec: ChartSpec }) {
   return <p className="px-2 pb-1.5 text-[11.5px] text-ink-tertiary" data-chart-sources="">{text}</p>;
 }
 
-function ChartBlockComponent({ code, pending = false }: { code: string; pending?: boolean }) {
-  const frameRef = useRef<HTMLDivElement>(null);
-  const scheme = useSkinScheme(frameRef);
-  const parsed = useMemo(() => (pending ? null : parseChartSpec(code)), [code, pending]);
-  const [view, setView] = useState<"chart" | "table" | "source">("chart");
+/** The chart itself: the plot, its hover and keyboard tooltip, its legend and
+ * its sources. The chart block draws it, and a record window's figures too
+ * (a board's tickets opened and closed by week, M-20261127-140). */
+export function ChartPlot({ spec, colors, title }: { spec: ChartSpec; colors: readonly string[]; title: string }) {
   const [active, setActive] = useState<number | null>(null);
-  const colors = CHART_PALETTE[scheme];
-  const spec = parsed && !("error" in parsed) ? parsed : null;
-  const title = spec?.title ?? t("rich.chart.title");
-  const pie = spec?.type === "pie";
-  const legend = spec ? (pie ? spec.labels : spec.series.map((series) => series.name)) : [];
-  const count = spec ? spec.labels.length : 0;
+  const pie = spec.type === "pie";
+  const legend = pie ? spec.labels : spec.series.map((series) => series.name);
+  const count = spec.labels.length;
 
   const move = (key: string) => {
-    if (!spec || !count) return false;
+    if (!count) return false;
     if (key === "ArrowRight" || key === "ArrowDown") setActive((value) => (value === null ? 0 : Math.min(count - 1, value + 1)));
     else if (key === "ArrowLeft" || key === "ArrowUp") setActive((value) => (value === null ? count - 1 : Math.max(0, value - 1)));
     else if (key === "Home") setActive(0);
@@ -183,6 +179,70 @@ function ChartBlockComponent({ code, pending = false }: { code: string; pending?
     else return false;
     return true;
   };
+
+  return (
+    <div className="relative px-2 pt-2 pb-1 text-ink" onMouseLeave={() => setActive(null)}>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        tabIndex={0}
+        aria-label={t("rich.chart.aria", { title, count })}
+        onKeyDown={(event) => { if (move(event.key)) event.preventDefault(); }}
+        onBlur={() => setActive(null)}
+        className="block h-auto w-full rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+      >
+        {pie
+          ? <DonutChart spec={spec} colors={colors} active={active} setActive={setActive} />
+          : <CartesianChart spec={spec} colors={colors} active={active} setActive={setActive} />}
+      </svg>
+      {active !== null && spec.labels[active] !== undefined && (
+        <div
+          role="status"
+          className="pointer-events-none absolute top-2 z-[2] min-w-32 max-w-60 rounded-lg border border-hairline/50 popover-surface bg-menu px-2.5 py-1.5 text-[11.5px] shadow-lg"
+          style={pie ? { left: "50%", transform: "translateX(-50%)" } : {
+            left: `${Math.min(78, Math.max(4, ((M.left + (PLOT_W / count) * (active + 0.5)) / W) * 100))}%`,
+            transform: "translateX(-50%)",
+          }}
+        >
+          <div className="mb-0.5 font-medium text-ink">{spec.labels[active]}</div>
+          {pie ? (
+            <div className="flex items-center gap-1.5 text-ink-secondary">
+              <span className="size-2 shrink-0 rounded-sm" style={{ background: colors[active % colors.length] }} />
+              <span className="ms-auto tabular-nums text-ink">{formatValue(spec.series[0]!.values[active] ?? null)}</span>
+            </div>
+          ) : spec.series.map((series, index) => (
+            <div key={index} className="flex items-center gap-1.5 text-ink-secondary">
+              <span className="size-2 shrink-0 rounded-sm" style={{ background: colors[index % colors.length] }} />
+              <span className="min-w-0 truncate">{series.name}</span>
+              <span className="ms-auto ps-2 tabular-nums text-ink">{formatValue(series.values[active] ?? null)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {(legend.length > 1) && (
+        <ul className="flex flex-wrap gap-x-3 gap-y-1 px-2 pb-1.5 text-[11.5px] text-ink-secondary" aria-label={t("rich.chart.legend")}>
+          {legend.slice(0, pie ? 24 : 8).map((name, index) => (
+            <li key={index} className="flex items-center gap-1.5">
+              <span className="size-2.5 rounded-sm" style={{ background: colors[index % colors.length] }} aria-hidden="true" />
+              {name}
+            </li>
+          ))}
+        </ul>
+      )}
+      {spec.truncatedSeries > 0 && <p className="px-2 pb-1.5 text-[11px] text-ink-secondary">{t("rich.chart.truncated", { count: spec.truncatedSeries })}</p>}
+      <ChartSourceLine spec={spec} />
+    </div>
+  );
+}
+
+function ChartBlockComponent({ code, pending = false }: { code: string; pending?: boolean }) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const scheme = useSkinScheme(frameRef);
+  const parsed = useMemo(() => (pending ? null : parseChartSpec(code)), [code, pending]);
+  const [view, setView] = useState<"chart" | "table" | "source">("chart");
+  const colors = CHART_PALETTE[scheme];
+  const spec = parsed && !("error" in parsed) ? parsed : null;
+  const title = spec?.title ?? t("rich.chart.title");
 
   return (
     <BlockFrame frameRef={frameRef} label={title}>
@@ -202,57 +262,7 @@ function ChartBlockComponent({ code, pending = false }: { code: string; pending?
       ) : view === "table" ? (
         <div className="p-2"><RichTable model={chartTableModel(spec)} caption={title} /><ChartSourceLine spec={spec} /></div>
       ) : view === "chart" ? (
-        <div className="relative px-2 pt-2 pb-1 text-ink" onMouseLeave={() => setActive(null)}>
-          <svg
-            viewBox={`0 0 ${W} ${H}`}
-            role="img"
-            tabIndex={0}
-            aria-label={t("rich.chart.aria", { title, count })}
-            onKeyDown={(event) => { if (move(event.key)) event.preventDefault(); }}
-            onBlur={() => setActive(null)}
-            className="block h-auto w-full rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-          >
-            {pie
-              ? <DonutChart spec={spec} colors={colors} active={active} setActive={setActive} />
-              : <CartesianChart spec={spec} colors={colors} active={active} setActive={setActive} />}
-          </svg>
-          {active !== null && spec.labels[active] !== undefined && (
-            <div
-              role="status"
-              className="pointer-events-none absolute top-2 z-[2] min-w-32 max-w-60 rounded-lg border border-hairline/50 popover-surface bg-menu px-2.5 py-1.5 text-[11.5px] shadow-lg"
-              style={pie ? { left: "50%", transform: "translateX(-50%)" } : {
-                left: `${Math.min(78, Math.max(4, ((M.left + (PLOT_W / count) * (active + 0.5)) / W) * 100))}%`,
-                transform: "translateX(-50%)",
-              }}
-            >
-              <div className="mb-0.5 font-medium text-ink">{spec.labels[active]}</div>
-              {pie ? (
-                <div className="flex items-center gap-1.5 text-ink-secondary">
-                  <span className="size-2 shrink-0 rounded-sm" style={{ background: colors[active % colors.length] }} />
-                  <span className="ms-auto tabular-nums text-ink">{formatValue(spec.series[0]!.values[active] ?? null)}</span>
-                </div>
-              ) : spec.series.map((series, index) => (
-                <div key={index} className="flex items-center gap-1.5 text-ink-secondary">
-                  <span className="size-2 shrink-0 rounded-sm" style={{ background: colors[index % colors.length] }} />
-                  <span className="min-w-0 truncate">{series.name}</span>
-                  <span className="ms-auto ps-2 tabular-nums text-ink">{formatValue(series.values[active] ?? null)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {(legend.length > 1) && (
-            <ul className="flex flex-wrap gap-x-3 gap-y-1 px-2 pb-1.5 text-[11.5px] text-ink-secondary" aria-label={t("rich.chart.legend")}>
-              {legend.slice(0, pie ? 24 : 8).map((name, index) => (
-                <li key={index} className="flex items-center gap-1.5">
-                  <span className="size-2.5 rounded-sm" style={{ background: colors[index % colors.length] }} aria-hidden="true" />
-                  {name}
-                </li>
-              ))}
-            </ul>
-          )}
-          {spec.truncatedSeries > 0 && <p className="px-2 pb-1.5 text-[11px] text-ink-secondary">{t("rich.chart.truncated", { count: spec.truncatedSeries })}</p>}
-          <ChartSourceLine spec={spec} />
-        </div>
+        <ChartPlot spec={spec} colors={colors} title={title} />
       ) : null}
       {(view === "source" || (!spec && !pending)) && (
         <pre className="max-h-80 overflow-auto border-t border-hairline/30 p-3 text-[12px] leading-[18px] text-ink">{code}</pre>

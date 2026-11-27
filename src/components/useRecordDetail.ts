@@ -37,6 +37,7 @@ const CHANGES: Record<string, DetailSection[]> = {
   attachment: ["attachments", "sheet"],
   contact: ["contacts", "sheet"],
   site: ["sites", "sheet"],
+  payment: ["payments", "document", "history"],
 };
 
 /** The title written in place: the console listed it as editable. */

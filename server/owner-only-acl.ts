@@ -94,7 +94,7 @@ export function aclOutputIsOwnerOnly(output: string): boolean {
   // Drop the path-only first token line when icacls prints "path ACE" on one line
   // or "path\n ACE" on two. Keep every ACE-looking fragment.
   const aces = lines.flatMap((line) => {
-    const match = line.match(/^(?:.+?:\s+)?(.+?:\([^\)]+\).*)$/i) ?? line.match(/^(.+?:\([^\)]+\).*)$/);
+    const match = line.match(/^(?:.+?:\s+)?(.+?:\([^)]+\).*)$/i) ?? line.match(/^(.+?:\([^)]+\).*)$/);
     if (match) return [match[1]!.trim()];
     // "PATH BUILTIN\Administrators:(F)" on one line
     const inline = [...line.matchAll(/((?:[\w.\\*-]+|\*S-1-[\d-]+):\([A-Z0-9(),]+\))/gi)];

@@ -48,7 +48,7 @@ describe("a saved permission is used once (#4528)", () => {
 
 describe("a saved permission survives a restart (#4528)", () => {
   it("is still used once after a restart, and the file keeps no words of the step", async () => {
-    const { mkdtempSync, readFileSync, rmSync, statSync } = await import("node:fs");
+    const { mkdtempSync, readFileSync, rmSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
     const dir = mkdtempSync(join(tmpdir(), "saved-permission-"));

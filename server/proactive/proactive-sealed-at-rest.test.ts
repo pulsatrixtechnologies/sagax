@@ -2,7 +2,7 @@
 // (proactive-sealed/) are content at rest, sealed under the bot's key like
 // held steers (server/turns/held-steers.ts), and read back through the
 // at-rest reader.
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { isOwnerOnlyProtected } from "../owner-only-acl.ts";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";

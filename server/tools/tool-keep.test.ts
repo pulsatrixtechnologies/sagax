@@ -1,6 +1,6 @@
 // #4527 lot B: the rule that leaves a bot's unused tools out of its next
 // conversations, and its small store per bot and person.
-import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { isOwnerOnlyProtected } from "../owner-only-acl.ts";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";

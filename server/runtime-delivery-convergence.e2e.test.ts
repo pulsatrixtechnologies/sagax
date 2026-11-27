@@ -8,7 +8,7 @@
 // No provider is called and no user data is read.
 import { spawn, type ChildProcess } from "node:child_process";
 import { isOwnerOnlyProtected } from "./owner-only-acl.ts";
-import { closeSync, existsSync, openSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";

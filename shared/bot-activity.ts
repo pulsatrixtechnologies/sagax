@@ -181,7 +181,7 @@ export interface BotActivityText {
 export interface BotActivityDetail extends BotActivityItem {
   engine?: { instanceId: string; model: string };
   /** Whose credentials the newest turn ran with (TurnDigest.access). */
-  via?: "subscription" | "owner-key" | "speaker-key" | "server" | "org-key";
+  via?: "subscription" | "owner-key" | "speaker-key" | "server" | "org-key" | "org-account";
   payer?: "speaker" | "owner" | "organization";
   /** The newest turn's tool calls (an earlier turn's stay in the
    * conversation). */

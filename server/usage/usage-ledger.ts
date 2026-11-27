@@ -574,7 +574,7 @@ export function aggregateOrgUsage(
       group = {
         day, botId: row.botId, botName: row.botName || row.botId, engine, model, payerPrincipalId, ownerPrincipalId, speaker,
         turns: 0, input: 0, output: 0, cachedInput: 0, costUsd: null, estimatedUsd: null,
-        access: { subscription: 0, "owner-key": 0, "speaker-key": 0, "org-key": 0, server: 0, unknown: 0 },
+        access: { subscription: 0, "owner-key": 0, "speaker-key": 0, "org-key": 0, "org-account": 0, server: 0, unknown: 0 },
       };
       groups.set(key, group);
     }

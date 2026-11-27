@@ -144,14 +144,16 @@ describe("chatImageCredential (#2954)", () => {
     expect(JSON.stringify(calls)).not.toMatch(/bob-/);
   });
 
-  it("the whole chain, in order: account, the person's keys, then the organization's (D-20261123-053)", async () => {
+  it("the whole chain, in order: account, the person's keys, org account, then the organization's key (#5200, D-20261123-053)", async () => {
     const chain = await chatImageCredentials({
       ...base, organization: true, account: async () => "acct-token-0001",
+      orgAccount: async () => "org-acct-token05",
       personal: async (p) => ({ ok: true, key: p === "xai" ? "person-xai-0002" : "person-oai-0003", fingerprint: "f" } as never),
       organizationXaiAllowed: () => true, organizationXaiKey: () => "org-key-00000004",
     });
     expect(Array.isArray(chain) && chain.map((entry) => [entry.source, entry.credential.provider, entry.last4])).toEqual([
-      ["grok-account", "xai", "0001"], ["perspicax-key", "xai", "0002"], ["perspicax-key", "openai", "0003"], ["org-key", "xai", "0004"],
+      ["grok-account", "xai", "0001"], ["perspicax-key", "xai", "0002"], ["perspicax-key", "openai", "0003"],
+      ["org-account", "xai", "en05"], ["org-key", "xai", "0004"],
     ]);
   });
 

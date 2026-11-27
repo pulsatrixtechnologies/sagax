@@ -200,7 +200,9 @@ describe("avatar image generation", () => {
   it("a person turned off gets the voice's refusal for their avatar, and no provider is asked (#5231)", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     await expect(generateAvatarImage({ imageGen: { provider: "xai" }, credentials: { refused: "payer_disabled" }, refusalText: (cause) => `refused: ${cause}` }, BOT, "owl", fetchMock))
-      .rejects.toMatchObject({ status: 403, code: "payer_disabled", message: "refused: payer_disabled" });
+      .rejects.toMatchObject({ status: 403, code: "payer_disabled", message: "Your access is turned off in your organization." });
+    await expect(generateAvatarImage({ imageGen: { provider: "xai" }, credentials: { refused: "payer_disabled" }, language: "fr" }, BOT, "owl", fetchMock))
+      .rejects.toMatchObject({ status: 403, code: "payer_disabled", message: "Ton accès est coupé dans ton organisation." });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

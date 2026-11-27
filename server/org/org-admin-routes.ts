@@ -118,7 +118,7 @@ export interface AdminPerson {
   name: string;
 }
 
-export type AccessKind = "subscription" | "owner-key" | "speaker-key" | "org-key" | "server" | "none";
+export type AccessKind = "subscription" | "owner-key" | "speaker-key" | "org-key" | "org-account" | "server" | "none";
 
 export interface AdminBot {
   id: string;

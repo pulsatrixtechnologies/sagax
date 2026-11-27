@@ -12,7 +12,7 @@ export type ImageWord =
   | "genTimeout" | "editTimeout" | "genUnreachable" | "editUnreachable"
   | "credits" | "accountRefused" | "keyRefused" | "genFailed" | "editFailed"
   | "noImage" | "needsBase64" | "invalidData" | "tooLarge" | "unreadable"
-  | "noProvider" | "notSaved" | "noOwner"
+  | "noProvider" | "notSaved" | "noOwner" | "payerDisabled" | "orgXaiNotGiven"
   | "avatarRealPerson" | "avatarNeedsOpenai" | "avatarNeedsXai" | "avatarNeedsCustom"
   | "avatarTimeout" | "avatarTooLarge" | "avatarUnreadable" | "avatarInvalidResponse"
   | "avatarNeedsBase64" | "avatarInvalidData" | "avatarOversized";

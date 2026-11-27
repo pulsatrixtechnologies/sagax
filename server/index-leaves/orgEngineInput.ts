@@ -31,7 +31,15 @@ function orgEngineInput(bot: BotRecord, instance: { instanceId: string; driverKi
     payerMode: host.speakerPayerMode(bot, speaker),
     orgEngineAllowed: host.consoleEngineAllowed(instance.instanceId),
     // #4410: whether the organization's pi keys already pay Claude models
-    ...(instance.driverKind === "piAgent" ? { orgKeyProviders: piOrgKeyProviders(host.cfg) } : {})
+    ...(instance.driverKind === "piAgent" ? { orgKeyProviders: piOrgKeyProviders(host.cfg) } : {}),
+    // #5200: the organization's Grok account on the Grok CLI, after the
+    // person's forms and before the organization's key
+    ...(instance.driverKind === "grokAgent" && host.orgGrokAccountHolder
+      ? (() => {
+        const holder = host.orgGrokAccountHolder();
+        return holder ? { orgAccountAvailable: true, orgAccountPrincipalId: holder } : {};
+      })()
+      : {}),
   };
 }
   return orgEngineInput;

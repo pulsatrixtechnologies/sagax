@@ -5510,6 +5510,7 @@
   "triggers.tokenEnding": "Jeton bearer se terminant par {last4}. Le jeton complet a été affiché une fois; régénère-le pour en obtenir un nouveau (l’actuel cesse de fonctionner immédiatement).",
   "triggers.tokenOnce": "Copie-le maintenant. Le jeton complet n’est affiché qu’une seule fois.",
   "triggers.tokenPendingBanner": "Ce webhook exige maintenant un jeton bearer; copie-le ici. Son ancienne URL ne fonctionne plus.",
+  "turnAccess.orgAccount": "Compte Grok de l'organisation",
   "turnAccess.orgKey": "Clé de l'organisation",
   "turnAccess.ownerCredentials": "Identifiants du propriétaire",
   "turnAccess.server": "Accès du serveur",
@@ -15930,5 +15931,7 @@
   "voiceMode.provider.quota.namedOther": "{provider} n'a plus de crédits pour {key}. {action} Les réponses restent dans le chat.",
   "voiceMode.provider.key.namedOther": "{provider} a refusé {key} : invalide, révoquée ou sans permission pour la voix. {action} Les réponses restent dans le chat.",
   "voiceMode.provider.busy.namedOther": "{provider} limite le débit de {key}. Ça revient tout seul; les réponses restent dans le chat.",
-  "listening.otherProvider": "Une clé {providers} transcrit aussi : ajoutes-en une dans Réglages > Fournisseurs et l'écoute continue avec elle d'elle-même."
+  "listening.otherProvider": "Une clé {providers} transcrit aussi : ajoutes-en une dans Réglages > Fournisseurs et l'écoute continue avec elle d'elle-même.",
+  "image.error.payerDisabled": "Ton accès est coupé dans ton organisation.",
+  "image.error.orgXaiNotGiven": "Ton organisation ne t'a pas donné la génération d'images et de vidéos sur sa clé xAI. Demande à un admin de te la donner dans Perspicax."
 }

@@ -128,6 +128,7 @@ export function personalKeysEnabled(policy: CredentialPolicy | undefined): boole
 export function formOfAccessVia(via: string | undefined): CredentialForm | null {
   if (via === "subscription") return "personal-account";
   if (via === "owner-key" || via === "speaker-key") return "personal-key";
+  if (via === "org-account") return "org-account";
   if (via === "org-key") return "org-key";
   return null;
 }

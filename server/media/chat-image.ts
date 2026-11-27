@@ -122,11 +122,11 @@ export function imageChainWithAccount(keys: readonly ImageKeyCandidate[], accoun
 /** Every credential that may make this person's image, in the order to try
  * them; empty when none is connected. Solo: this computer's connected Grok
  * account, then its keys. Organization: the person's own connected Grok
- * account, then their own keys, the shared keys only as the organization
- * allows. The order is decided [D-20261120-012, M-20261122-023]: an account
- * beats a key at each level, the organization's account is the next lot
- * (#5200). The order, a chosen provider included, is `imageChainWithAccount`. A credential
- * refused for credits or for itself gives way to the next one
+ * account, then their own keys, the organization's Grok account (#5200),
+ * then the shared keys only as the organization allows. The order is
+ * decided [D-20261120-012, M-20261122-023]: an account beats a key at each
+ * level. The order, a chosen provider included, is `imageChainWithAccount`.
+ * A credential refused for credits or for itself gives way to the next one
  * (`withImageCredentials`, D-20261123-053). */
 export async function chatImageCredentials(input: {
   organization: boolean;
@@ -135,6 +135,9 @@ export async function chatImageCredentials(input: {
   /** The person's own connected Grok account token, or undefined. xAI only:
    * it reaches the image API on the CLI host, on no OpenAI provider. */
   account?(): Promise<string | undefined>;
+  /** The organization's Grok account token (#5200), when the person was
+   * given it. Same host as a personal account. Absent: that form is skipped. */
+  orgAccount?(): Promise<string | undefined>;
   imageGen?: ImageGenerationConfig;
   organizationXaiAllowed(): boolean;
   organizationXaiKey(): string | undefined;
@@ -145,30 +148,41 @@ export async function chatImageCredentials(input: {
   // an organization serves a person it turned off, account or key
   if (input.organization && input.disabled) return { refused: "payer_disabled" };
   const shared: VoiceKeySource = input.organization ? "org-key" : "server";
-  const keys: ImageKeyCandidate[] = [];
+  const personalKeys: ImageKeyCandidate[] = [];
+  const orgKeys: ImageKeyCandidate[] = [];
   for (const provider of ["xai", "openai"] as const) {
     const build = provider === "xai" ? xaiKeyImage : openaiKeyImage;
     if (input.organization) {
       const personal = await input.personal(provider).catch(() => null);
-      if (personal?.ok && personal.key.trim()) keys.push(imageKeyCandidate(build(personal.key.trim()), "perspicax-key"));
+      if (personal?.ok && personal.key.trim()) personalKeys.push(imageKeyCandidate(build(personal.key.trim()), "perspicax-key"));
     } else {
       const key = (await input.solo(provider).catch(() => undefined))?.trim();
-      if (key) keys.push(imageKeyCandidate(build(key), "server"));
+      if (key) personalKeys.push(imageKeyCandidate(build(key), "server"));
     }
   }
   const gen = input.imageGen;
-  if ((gen?.provider ?? "openai") === "openai" && gen?.key?.trim()) keys.push(imageKeyCandidate(openaiKeyImage(gen.key.trim()), shared));
+  if ((gen?.provider ?? "openai") === "openai" && gen?.key?.trim()) orgKeys.push(imageKeyCandidate(openaiKeyImage(gen.key.trim()), shared));
   if (gen?.provider === "custom" && gen.customUrl?.trim() && gen.customModel?.trim()) {
     try {
-      keys.push(imageKeyCandidate({ provider: "custom", baseUrl: normalizeImageGenerationUrl(gen.customUrl), model: gen.customModel.trim(), ...(gen.customApiKey?.trim() ? { key: gen.customApiKey.trim() } : {}) }, shared));
+      orgKeys.push(imageKeyCandidate({ provider: "custom", baseUrl: normalizeImageGenerationUrl(gen.customUrl), model: gen.customModel.trim(), ...(gen.customApiKey?.trim() ? { key: gen.customApiKey.trim() } : {}) }, shared));
     } catch { /* an invalid URL never becomes an outbound request */ }
   }
-  if (!input.organization || input.organizationXaiAllowed()) {
+  const orgGiven = !input.organization || input.organizationXaiAllowed();
+  if (orgGiven) {
     const key = input.organizationXaiKey()?.trim();
-    if (key) keys.push(imageKeyCandidate(xaiKeyImage(key), shared));
+    if (key) orgKeys.push(imageKeyCandidate(xaiKeyImage(key), shared));
   }
+  // #5200: organization account after the person's keys, before org keys
+  const orgAccountToken = orgGiven
+    ? (await (input.orgAccount?.() ?? Promise.resolve(undefined)).catch(() => undefined))?.trim()
+    : undefined;
+  const mid = [
+    ...personalKeys,
+    ...(orgAccountToken ? [imageKeyCandidate(xaiAccountImage(orgAccountToken), "org-account")] : []),
+    ...orgKeys,
+  ];
   const account = (await (input.account?.() ?? Promise.resolve(undefined)).catch(() => undefined))?.trim();
-  return imageChainWithAccount(keys, account ? imageKeyCandidate(xaiAccountImage(account), "grok-account") : null, gen);
+  return imageChainWithAccount(mid, account ? imageKeyCandidate(xaiAccountImage(account), "grok-account") : null, gen);
 }
 
 /** Where one person's image credentials are read on this server: the same
@@ -186,6 +200,8 @@ export interface ImagePeople {
   soloKey(provider: "xai" | "openai"): Promise<string | undefined>;
   /** This person's connected Grok account, by the voice's own rule. */
   account(person: { principalId?: string | null; disabled?: boolean }): Promise<string | undefined>;
+  /** The organization's Grok account token for this person (#5200), or undefined. */
+  orgAccount?(principalId: string | null): Promise<string | undefined>;
   imageGen(): ImageGenerationConfig | undefined;
   /** The organization gave its xAI key to this person for images. */
   organizationXaiGiven(principalId: string | null): boolean;
@@ -201,6 +217,7 @@ export function personImageCredentials(people: ImagePeople, principalId: string 
     personal: (provider) => people.ownKey(principalId, provider),
     solo: (provider) => people.soloKey(provider),
     account: () => people.account(person),
+    orgAccount: () => people.orgAccount?.(principalId) ?? Promise.resolve(undefined),
     imageGen: people.imageGen(),
     organizationXaiAllowed: () => people.organizationXaiGiven(principalId),
     organizationXaiKey: () => people.organizationXaiKey(),

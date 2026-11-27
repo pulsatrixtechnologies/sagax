@@ -6386,10 +6386,10 @@
       "model.settings.aria": "20c0c0912fa697bfb47e8d39f2b72f000d49dbe23993d59fe6d4e0fb7ea76968",
       "model.fastTag": "6c582b62e0e5aa05647388bd045f2e3e5e7f51f479d00d9df592634c8088a22b",
       "model.effort": "4387e5d3966fc436532792769763cd1ab7cccd6464d4c01c2b91261894e96b77",
-      "model.effort.aria": "4387e5d3966fc436532792769763cd1ab7cccd6464d4c01c2b91261894e96b77",
+      "model.effort.aria": "3236aeec43e563ca9ea03a7d0c077021021a3e36b4a0648ea5539d07d9e0f379",
       "model.effort.defaultTitle": "8619e981c1e4ac91d77a963625fd26d3b28a97954be4912580e04850c8e4138f",
       "model.effort.defaultWith": "a2efc4503b5141a203075cad108b5ebc803e141e3395e43a01411c8d118b168d",
-      "model.effort.levelTitle": "a5d6380b5955143ca10704e7af4eb806ce5d1e83e86f7c460562cef981116686",
+      "model.effort.levelTitle": "cdb7d9fdc00183298f05d147fd234ec33db9aea890f50f344b6e71fa04532e57",
       "model.effort.summary": "b237dbb30a9bd498d08ee3828f5e48bfac2a2452f0767bd15bf131058922ae8b",
       "model.effortLevel.high": "c4ebc6d4a5832cd9415f906ad03661110c705a72381c8b8b145761d02e2dd23a",
       "model.effortLevel.low": "f793de205ead5ac302c4a1627829dea41f176b1068b993a32373fc869918374b",
@@ -19523,7 +19523,14 @@
       "usageDetail.noFigure": "8b32f57febf324e36f00405be6971235c19571a8582a96c4f7f136f9a34cf6e4",
       "heavy.runningPropose": "2e94d91d0941ea23634a55947fb3cea6f96d47c3cbe62f4f9e89e68d6d41e477",
       "heavy.runningCritique": "51ad40e1c500508c15b2b7895afca9285afb2f601671c6435e28772e7f1b58a7",
-      "heavy.agent.failedPreview": "37091ea31a2d49104275f5b1d485daaf10e8e3188e09e846adc9ded487ee607a"
+      "heavy.agent.failedPreview": "37091ea31a2d49104275f5b1d485daaf10e8e3188e09e846adc9ded487ee607a",
+      "model.reasoning": "d8211e24e83d1600a1b0cfe2f7baa68e4d4eb71131a0b2b1b2050cba111ea481",
+      "model.simple.reasoning": "d8211e24e83d1600a1b0cfe2f7baa68e4d4eb71131a0b2b1b2050cba111ea481",
+      "composer.meter.usageAria": "11768aacf8ae06dafa5461733f686dd7771397af06240438875fdd7a51713e80",
+      "model.mode.reasoning.imposed": "8982f4bcdaf4cbd2bdc80000312b1777bb3882033808a61f5c3f9043ab76a198",
+      "image.error.payerDisabled": "56cb64f33f1eba04ea594951945b1f6cd52991c9ebf1d385c2944e4b3b8b2180",
+      "image.error.orgXaiNotGiven": "cb8c48b7d4b860e0cf971fe14815ed5487d9cb0f44e040e6fd572cf1e1d6fe59",
+      "turnAccess.orgAccount": "4a3a0a8fe1ea2f0986577c273b2f781498f2d715479d634eb5a55eeb0b04bce5"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -24884,7 +24891,8 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
+      "model.simple.reasoning": "d8211e24e83d1600a1b0cfe2f7baa68e4d4eb71131a0b2b1b2050cba111ea481"
     },
     "pt-br": {
       "achievements.panel.all": "e2adb0c3b5f28a7c9d5bdac240382201b39376dd11671aedc93e8a73b6468f19",
@@ -35691,7 +35699,8 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
+      "model.simple.reasoning": "d8211e24e83d1600a1b0cfe2f7baa68e4d4eb71131a0b2b1b2050cba111ea481"
     }
   }
 }

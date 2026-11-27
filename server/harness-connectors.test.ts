@@ -102,6 +102,12 @@ describe("whose account connectors a turn reaches (review of #943, point 5)", ()
     expect(accountConnectorsForTurn({ ...base, driver: "grokAgent", via: "org-key", speaker: { origin: "person", principalId: BOB } })).toBe("none");
     expect(accountConnectorsForTurn({ ...base, driver: "codex", via: "subscription", speaker: { origin: "person", principalId: BOB } })).toBe("none");
   });
+  // #5200: an organization Grok account is an account form; its connectors
+  // serve the person who was given it (same consent as the organization's key)
+  it("an organization Grok account brings that account's connectors (#5200)", () => {
+    expect(accountConnectorsForTurn({ ...base, driver: "grokAgent", via: "org-account", speaker: { origin: "person", principalId: BOB } })).toBe("own");
+    expect(accountConnectorsForTurn({ ...base, driver: "grokAgent", via: "org-account", speaker: { origin: "person", principalId: "" } })).toBe("foreign");
+  });
   it("solo Claude and Grok (2026-10-30): the operator owns the machine's login, anyone else is foreign", () => {
     for (const driver of ["claudeAgent", "grokAgent", "grok"]) {
       expect(accountConnectorsForTurn({ ...base, identity: "solo", driver, speaker: { origin: "operator" } }), driver).toBe("own");

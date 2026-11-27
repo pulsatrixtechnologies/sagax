@@ -1120,7 +1120,6 @@
   "settings.receive.carrier": "Bot qui suit {domain}",
   "settings.receive.checklist.switch": "Liste de vérification de {name}",
   "settings.receive.group.addressed": "Adressé à mes bots",
-  "settings.receive.group.brief": "Brief du jour",
   "settings.receive.group.checklists": "Listes de vérification",
   "settings.receive.group.domains": "Alertes de l'organisation",
   "settings.receive.group.screen": "Contexte de l'écran",

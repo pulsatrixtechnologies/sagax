@@ -1349,7 +1349,6 @@
   "settings.receive.carrier": "Bot that follows {domain}",
   "settings.receive.checklist.switch": "Checklist of {name}",
   "settings.receive.group.addressed": "Addressed to my bots",
-  "settings.receive.group.brief": "Daily brief",
   "settings.receive.group.checklists": "Checklists",
   "settings.receive.group.domains": "Alerts from your organization",
   "settings.receive.group.screen": "Screen context",

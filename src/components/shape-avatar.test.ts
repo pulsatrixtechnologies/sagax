@@ -45,6 +45,7 @@ beforeAll(async () => {
 const ENGINE_FOR: Readonly<Record<string, string>> = {
   star: "star", cloud: "cloud", ghost: "ghost", cat: "cat", shield: "shield",
   pad: "controller", cup: "mug", bulb: "lightbulb", say: "chat", sprout: "sprout", tome: "book", ship: "rocket",
+  egg: "egg",
 };
 
 describe("every shape is an engine definition", () => {

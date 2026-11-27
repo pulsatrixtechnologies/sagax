@@ -30,6 +30,7 @@ import bunny from "../../third_party/open-bot-avatar/gallery/bunny.json" with { 
 import camera from "../../third_party/open-bot-avatar/gallery/camera.json" with { type: "json" };
 import cat from "../../third_party/open-bot-avatar/gallery/cat.json" with { type: "json" };
 import cloud from "../../third_party/open-bot-avatar/gallery/cloud.json" with { type: "json" };
+import egg from "../../third_party/open-bot-avatar/gallery/egg.json" with { type: "json" };
 import ghost from "../../third_party/open-bot-avatar/gallery/ghost.json" with { type: "json" };
 import magnifier from "../../third_party/open-bot-avatar/gallery/magnifier.json" with { type: "json" };
 import paintBrush from "../../third_party/open-bot-avatar/gallery/paint-brush.json" with { type: "json" };
@@ -41,7 +42,7 @@ import witchHat from "../../third_party/open-bot-avatar/gallery/witch-hat.json" 
 
 /** The engine's gallery (third_party/open-bot-avatar/gallery, copied verbatim), by id. */
 const GALLERY: Readonly<Record<string, unknown>> = {
-  book, brain, bull, bunny, camera, cat, cloud, ghost, magnifier, "paint-brush": paintBrush, palette, rocket, shield, star, "witch-hat": witchHat,
+  book, brain, bull, bunny, camera, cat, cloud, egg, ghost, magnifier, "paint-brush": paintBrush, palette, rocket, shield, star, "witch-hat": witchHat,
 };
 
 type BakedShape = { engine: string } | { own: unknown };

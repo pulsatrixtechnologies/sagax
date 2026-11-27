@@ -43,7 +43,9 @@ const ENGINE_SHAPES = {
   sprout: "sprout",
   tome: "book",
   ship: "rocket",
-};
+  // owner's choice 2026-11-26: the engine's Egg replaces the app's (#5279)
+  egg: "egg",
+}
 
 /** The engine's examples built into the package (getExample). */
 const EXAMPLES = new Set(["controller", "barbell", "mug", "lightbulb", "chat", "sprout", "watering-can"]);

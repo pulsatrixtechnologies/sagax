@@ -40,27 +40,31 @@ describe("cron date calculator", () => {
     expect(runs("0 9 1 * MON", "2026-09-30T23:59:00Z", 2)).toEqual(["2026-10-01T09:00:00.000Z", "2026-10-05T09:00:00.000Z"]);
   });
 
-  it("advances a nonexistent DST clock time through the spring gap", () => {
+  it("a fixed-time job in a spring DST gap runs at the first valid time after the gap", () => {
+    // America/New_York springs forward 2026-03-08 02:00 → 03:00. Croner 11 runs
+    // 02:30 at 03:00 EDT (07:00Z); 10.x delayed by the gap length (03:30 / 07:30Z).
     expect(runs("30 2 * * *", "2026-03-07T00:00:00Z", 3, "America/New_York")).toEqual([
-      "2026-03-07T07:30:00.000Z", "2026-03-08T07:30:00.000Z", "2026-03-09T06:30:00.000Z",
+      "2026-03-07T07:30:00.000Z", "2026-03-08T07:00:00.000Z", "2026-03-09T06:30:00.000Z",
     ]);
   });
 
-  it("runs a repeated DST clock time once, at its first occurrence", () => {
+  it("a fixed-time job in a fall-back overlap runs once at the first occurrence; an interval job runs both", () => {
     expect(runs("30 1 * * *", "2026-10-31T00:00:00Z", 3, "America/New_York")).toEqual([
       "2026-10-31T05:30:00.000Z", "2026-11-01T05:30:00.000Z", "2026-11-02T06:30:00.000Z",
     ]);
     expect(runs("30 1 * * *", "2026-11-01T05:45:00Z", 1, "America/New_York")).toEqual(["2026-11-02T06:30:00.000Z"]);
     expect(runs("30 1 * * *", "2026-11-01T06:05:00Z", 1, "America/New_York")).toEqual(["2026-11-02T06:30:00.000Z"]);
+    // Every-minute is an interval job: after the second 01:05 it keeps the second hour.
     expect(runs("* * * * *", "2026-11-01T06:05:00Z", 2, "America/New_York")).toEqual([
-      "2026-11-01T07:00:00.000Z", "2026-11-01T07:01:00.000Z",
+      "2026-11-01T06:06:00.000Z", "2026-11-01T06:07:00.000Z",
     ]);
   });
 
   it("only expands past a repeated clock time as far as the preview needs", () => {
     const calculate = vi.spyOn(Cron.prototype, "nextRuns");
     expect(runs("30 1 * * *", "2026-11-01T06:05:00Z", 1, "America/New_York")).toEqual(["2026-11-02T06:30:00.000Z"]);
-    expect(calculate.mock.calls.map(call => call[0])).toEqual([1, 2]);
+    // Croner 11 returns the next fixed-time run on the first ask (no past candidate to discard).
+    expect(calculate.mock.calls.map(call => call[0])).toEqual([1]);
   });
 
   it.each(["@monthly", "0 0 9 1 * *", "0 0 9 1 * * 2027", "0 9 * *", "0 9 * * * @daily", "*".repeat(300)])("rejects non-five-field expression %s", expression => {

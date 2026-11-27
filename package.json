@@ -143,7 +143,7 @@
     "ajv-formats": "3.0.1",
     "clsx": "^2.1.1",
     "codemirror": "6.0.2",
-    "croner": "10.0.1",
+    "croner": "11.0.1",
     "emojibase-data": "16.0.3",
     "hls.js": "^1.7.4",
     "jmespath": "0.16.0",

@@ -100,8 +100,10 @@ export function normalizeCronSchedule(value: unknown, after = Date.now()): Routi
 }
 
 /** Strictly-future instants, shared by the scheduler, cards and calendar.
- * Croner's DST policy is intentional: missing clock times advance through
- * the gap, and repeated clock times use their first occurrence only. */
+ * Croner 11 DST (Vixie-aligned): a fixed-time job in a spring gap runs at the
+ * first valid time after the gap; in a fall-back overlap it runs once at the
+ * first occurrence. An interval job (a wildcard or list in seconds/minutes/
+ * hours) runs on both occurrences of a repeated hour. */
 export function nextCronRuns(schedule: RoutineCronSchedule, after: number, count: number): number[] {
   return createCronRunPreview(schedule)(after, count);
 }

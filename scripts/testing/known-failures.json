@@ -1444,16 +1444,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/skills/personal-skills.test.ts",
-      "test": "Me skills, one source referenced by all of the person's bots > lets a member create and update their skill, never another person's",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/boot-host-order.test.ts",
       "test": "binds the leaf host before the first top-level await of the boot",
       "platforms": [
@@ -1486,16 +1476,6 @@
     {
       "file": "src/components/SettingsModal.oneCardLevel.dom.test.ts",
       "test": "Settings keep one card level (#2175) > advanced, providers: every row is a shared row in a card on every page",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/attachments/attachments-resume.e2e.test.ts",
-      "test": "resumes a real HTTP upload after the fixture server restarts and serves the committed bytes",
       "platforms": [
         "windows-latest"
       ],
@@ -1656,16 +1636,6 @@
     {
       "file": "src/lib/switch-colors.test.ts",
       "test": "switch contrast > the stylesheet is the derivation's output (pnpm gen:switch after a palette change)",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/attachments/attachments-resume-org.e2e.test.ts",
-      "test": "keeps resumed media private and streams encrypted ranges only to its conversation owner",
       "platforms": [
         "windows-latest"
       ],
@@ -2356,136 +2326,6 @@
     {
       "file": "scripts/testing/known-failures.test.ts",
       "test": "the command line > keeps a listed test that passed in a run on Linux only, since it may still fail on Windows or macOS",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/attachments/attachments-resume.test.ts",
-      "test": "durable bounded attachment uploads > replays a lost response without duplicating bytes or the committed file",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/attachments/attachments-resume.test.ts",
-      "test": "durable bounded attachment uploads > rolls back an interrupted chunk to the last acknowledged offset",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/attachments/attachments-resume.test.ts",
-      "test": "durable bounded attachment uploads > resumes after module restart and discards bytes not durably acknowledged",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/attachments/attachments-resume.test.ts",
-      "test": "durable bounded attachment uploads > isolates identical upload ids between people",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/attachments/attachments-resume.test.ts",
-      "test": "durable bounded attachment uploads > serializes concurrent chunks, refuses metadata changes and incomplete commits",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/attachments/attachments-resume.test.ts",
-      "test": "durable bounded attachment uploads > cancels partial storage and expires abandoned sessions without deleting completed files",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/attachments/attachments-resume.test.ts",
-      "test": "durable bounded attachment uploads > caps each request independently of the accepted 1 GB video",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/attachments/attachments-resume.test.ts",
-      "test": "durable bounded attachment uploads > reserves only received bytes for 1 GB sessions near the aggregate ceiling",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/attachments/attachments-resume.test.ts",
-      "test": "durable bounded attachment uploads > opens a sealed committed file before crash recovery finalizers read it",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/attachments/attachments-resume.test.ts",
-      "test": "durable bounded attachment uploads > accepts the same bytes after its receipt expires and rejects changed bytes",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/attachments/attachments-resume.test.ts",
-      "test": "durable bounded attachment uploads > cancels an unused committed file after its receipt expires",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/attachments/attachments-resume.test.ts",
-      "test": "durable bounded attachment uploads > runs idle crash-artifact recovery before a resumable receipt expires",
-      "platforms": [
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/attachments/attachments-resume.test.ts",
-      "test": "durable bounded attachment uploads > cleans a canceled commit only when no transcript uses its result",
       "platforms": [
         "windows-latest"
       ],

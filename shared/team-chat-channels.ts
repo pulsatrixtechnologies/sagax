@@ -5,7 +5,9 @@
 // offers one (the bot profile's Channels card, the bot panel's Slack page,
 // "Add to Slack" on a bot or a group, the phone's Connect apps) hides it:
 // an option that cannot work is hidden. The code stays; the complete
-// integration of Slack, Teams and the others is #3411.
+// integration of Slack, Teams and the others is #3411
+// (shared/team-channel.ts, server/channels/, docs/design/issue-3411-design.md).
+// Flip this only when the first platform ships end to end.
 //
 // Not this switch: "Reach me" by Teams, the bot reaching its own person in
 // their Teams self chat through their engine's connector

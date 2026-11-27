@@ -240,8 +240,9 @@ export function ModelPicker({
   const notGiven = (instance: typeof state.instances[number]) => engineOffer(offerContext, instance.instanceId) === "notGiven";
   // D-20261126-018: a provider the organization hid stays only in the menu
   // of what is already on it, as its model in use; a conversation on a
-  // backup can still go back to its bot's own engine
-  const ownEngine = state.own?.modelSelection.instanceId;
+  // backup can still go back to its bot's own engine. modelSetting is the
+  // profile (WireBot); modelSelection on an org server may be the thread.
+  const ownEngine = state.own?.modelSetting?.instanceId ?? state.own?.modelSelection.instanceId;
   const pickerInstances = offerContext.organization
     ? configured.filter((instance) => !notAllowed(instance) &&
       (instance.instanceId === selection.instanceId || (!engineHidden(offerContext, instance.instanceId) || instance.instanceId === ownEngine) && !orgRefusesEngine(instance) && !notGiven(instance)))

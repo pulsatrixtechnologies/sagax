@@ -14,6 +14,7 @@ import type { ModelSelection } from "../../shared/model-selection.ts";
 import { permissionRefusal } from "../../shared/permissions.ts";
 import { threadLinkUrl } from "../../shared/thread-link.ts";
 
+import { modelChangeCurrent } from "../index-leaves/modelChangeCurrent.ts";
 import { BOTS_READ_ONLY, MEMBER_BOT_FULL_ACCESS, type BotsCoreRouteDeps } from "./bots-core-deps.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -199,7 +200,9 @@ export function createBotsCoreTaskPatchRoutes(deps: BotsCoreRouteDeps): RouteHan
           if (!harnessed.ok) return json(res, harnessed.status, { error: harnessed.error });
           picked = harnessed.selection;
         }
-        const checked = checkedModelSelection(picked, { selection: current.modelSelection, busy: threadBusy(current.id, current.threadId) }, body.requireAvailableModel === true, sessionPrincipal(auth), deps.effectiveBotOwner(current));
+        // D-20261126-018: alsoOn carries the bot's own engine so a conversation
+        // on a backup can go back to it while that provider is hidden
+        const checked = checkedModelSelection(picked, modelChangeCurrent(deps, current), body.requireAvailableModel === true, sessionPrincipal(auth), deps.effectiveBotOwner(current));
         if (!checked.ok) return json(res, checked.status, { error: checked.error });
         patch.modelSelection = checked.selection;
       }

@@ -215,10 +215,12 @@ function IfItFailsCard({ bot, canSwitch, canOrder }: { bot: Bot; canSwitch: bool
   // the person pays for themselves stays when the organization lets own
   // accounts through (#1098, 2026-10-30). #2080: the same answer as
   // Settings > Models, the server default included.
+  // D-20261126-018: modelSetting is the profile; modelSelection may be a backup
+  const botEngine = bot.modelSetting?.instanceId ?? bot.modelSelection.instanceId;
   const keep = (entry: Backup) => {
-    // D-20261126-018: a backup on a provider the organization hid is skipped
-    // like one it no longer offers, unless it is the bot's own engine
-    if (entry.instanceId !== bot.modelSelection.instanceId && engineHidden(offerContext, entry.instanceId)) return false;
+    // a backup on a provider the organization hid is skipped like one it no
+    // longer offers, unless it is the bot's own engine
+    if (entry.instanceId !== botEngine && engineHidden(offerContext, entry.instanceId)) return false;
     const offer = engineOffer(offerContext, entry.instanceId);
     return offer === "offered" || (offer === "notGiven" && mine?.find((row) => row.instanceId === entry.instanceId)?.orgNotAllowed !== true);
   };
@@ -233,7 +235,7 @@ function IfItFailsCard({ bot, canSwitch, canOrder }: { bot: Bot; canSwitch: bool
     (instance) =>
       instance.snapshot.state === "available" &&
       Boolean(instance.models.default.trim()) &&
-      instance.instanceId !== bot.modelSelection.instanceId &&
+      instance.instanceId !== botEngine &&
       !chain.some((entry) => entry.instanceId === instance.instanceId),
   );
   const nameOf = (instanceId: string) => engineLabel(state.instances.find((instance) => instance.instanceId === instanceId)?.displayName, instanceId);

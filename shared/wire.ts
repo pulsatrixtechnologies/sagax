@@ -545,6 +545,12 @@ export interface WireBot {
   /** The bot's model: every thread without a model of its own runs on it
    * and moves with it. Navigating tasks never changes this value. */
   modelSelection: ModelSelection;
+  /** D-20261126-018 (#5351): the bot's own model as stored on its profile,
+   * never a conversation's. On an organization server the listed
+   * `modelSelection` may be the viewer's thread (a backup); menus that need
+   * the bot's engine (going back while a provider is hidden) read this.
+   * Absent only on an older server. */
+  modelSetting?: ModelSelection;
   /** #4329 lot 5: what runs this bot ("Runs with"), a driver kind
    * (shared/harness-matrix.ts) the person chose for this bot. Absent: the
    * person's default for the model's provider, else the engine the model was

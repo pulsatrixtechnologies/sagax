@@ -76,6 +76,9 @@ function useBackupFilter(): (entry: Backup, botEngine: string) => boolean {
   const mine = useMyEngines();
   const offerContext = engineOfferContext(state.config, org !== null, mine);
   return useCallback((entry: Backup, botEngine: string) => {
+    // D-20261126-018: botEngine is the profile's engine (caller passes
+    // modelSetting ?? modelSelection); a backup on a hidden provider is
+    // dropped unless it is that engine
     if (entry.instanceId !== botEngine && engineHidden(offerContext, entry.instanceId)) return false;
     const offer = engineOffer(offerContext, entry.instanceId);
     return offer === "offered" || (offer === "notGiven" && mine?.find((row) => row.instanceId === entry.instanceId)?.orgNotAllowed !== true);
@@ -84,7 +87,7 @@ function useBackupFilter(): (entry: Backup, botEngine: string) => boolean {
 
 /** "Grok 4", or "Grok 4 · default" when it comes from the server default. */
 function backupsText(bot: Bot, config: Parameters<typeof effectiveBackups>[1], keep: (entry: Backup, botEngine: string) => boolean, instances: Parameters<typeof formatBotBackups>[1]): string {
-  const { chain, source } = effectiveBackups(bot, config, (entry) => keep(entry, bot.modelSelection.instanceId));
+  const { chain, source } = effectiveBackups(bot, config, (entry) => keep(entry, bot.modelSetting?.instanceId ?? bot.modelSelection.instanceId));
   const text = formatBotBackups(chain, instances);
   return text && source === "org" ? t("botModels.backup.auto", { backups: text }) : text;
 }
@@ -168,12 +171,13 @@ function BotBackupCell({ bot, disabled }: { bot: Bot; disabled: boolean }) {
 
   // the effective chain (own list, own single backup, else the server
   // default): a change writes it as the bot's own list
-  const { chain } = effectiveBackups(bot, state.config, (entry) => keep(entry, bot.modelSelection.instanceId));
+  const botEngine = bot.modelSetting?.instanceId ?? bot.modelSelection.instanceId;
+  const { chain } = effectiveBackups(bot, state.config, (entry) => keep(entry, botEngine));
   const available = offered.filter(
     (instance) =>
       instance.snapshot.state === "available" &&
       Boolean(instance.models.default.trim()) &&
-      instance.instanceId !== bot.modelSelection.instanceId &&
+      instance.instanceId !== botEngine &&
       !chain.some((entry) => entry.instanceId === instance.instanceId),
   );
   const label = backupsText(bot, state.config, keep, state.instances) || t("botModels.backup.none");
@@ -410,7 +414,8 @@ export function BotModelsSettings() {
       if (bot.busy) continue;
       if (!viewerOwnsBot(state.config, bot) || !canEditBotField(state.config, bot, "fallback")) continue;
       // Skip a backup that matches the bot's own engine (same as the row editor).
-      const next = (fallback ?? []).filter((entry) => entry.instanceId !== bot.modelSelection.instanceId);
+      const botEngine = bot.modelSetting?.instanceId ?? bot.modelSelection.instanceId;
+      const next = (fallback ?? []).filter((entry) => entry.instanceId !== botEngine);
       dispatch({ type: "updateBot", botId: bot.id, patch: { fallback: next } });
     }
     stopEditing();

@@ -4,6 +4,7 @@ import { api, createBotWithRole, requestConfirmedBotDeletion } from "./api";
 import { readableError } from "@/lib/plain-error";
 import { t } from "@/lib/i18n";
 import { onNudgeSent } from "@/lib/desktop-nudge";
+import { engineHidden } from "../../../shared/offered-engines";
 import type { DispatchEnv } from "./dispatch-types";
 
 export function dispatchBotsEffects(action: Action, env: DispatchEnv): void {
@@ -46,7 +47,7 @@ export function dispatchBotsEffects(action: Action, env: DispatchEnv): void {
             notifications: source.notifications,
             // D-20261126-018: a copy is a new bot, never started on a provider
             // the organization hid: it keeps the start it was created with
-            ...(stateRef.current.config?.hiddenEngines?.includes(source.modelSelection.instanceId) ? {} : { modelSelection: source.modelSelection }),
+            ...(engineHidden({ organization: true, allowedEngines: null, hiddenEngines: stateRef.current.config?.hiddenEngines ?? null }, source.modelSelection.instanceId) ? {} : { modelSelection: source.modelSelection }),
             computer: source.computer,
             cloudBackend: source.cloudBackend,
             autoStartVps: source.autoStartVps,

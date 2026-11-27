@@ -13832,6 +13832,9 @@ const wireBot = (bot: BotRecord): WireBot => {
   // 2026-11-09: what the bot waits on, named (server/approvals/waiting-on.ts)
   const waitingOn = botWaitingOn(bot, visible.activity, tasks);
   const waitingOnTeammates = botWaitingOnTeammates(bot, waitingForTeammates, tasks, coordinated);
+  // D-20261126-018: the bot's own model, even when this record is a conversation
+  // projected onto a backup (GET /api/bots on an organization server)
+  const profileModel = store.bot(bot.id)?.modelSelection;
   return { ...visible, waitingForTeammates,
     ...(waitingOn ? { waitingOn } : {}),
     ...(waitingOnTeammates.length ? { waitingOnTeammates } : {}),
@@ -13839,6 +13842,7 @@ const wireBot = (bot: BotRecord): WireBot => {
     ...(waitingApprovals.length ? { waitingApprovals } : {}),
     ...(botConversations.length ? { botConversations } : {}),
     mainThreadId: botMainThread(bot.id),
+    ...(profileModel ? { modelSetting: profileModel } : {}),
     // #2092: the folder the settings show when the bot has none of its own
     ...(userSandbox ? { workFolder: sandboxBotFolders.peekFolderFor(bot.id, bot.name) } : {}),
     ...(IDENTITY.kind === "perspicax" ? { turnPayerDefault: defaultTurnPayerFor(bot) } : {}),
@@ -16795,11 +16799,9 @@ const limitFailover = createLimitFailoverHost({
     if (threadBusy(botId, threadId)) return "the conversation is working";
     const target = registry.get(to.instanceId);
     if (!target?.enabled) return "the engine is unavailable";
-    // D-20261126-018: going back to the engine it left, or to its bot's own,
-    // is no new choice of a hidden provider
-    const alreadyOn = back === true || to.instanceId === current.modelSelection.instanceId || to.instanceId === store.bot(botId)?.modelSelection.instanceId;
-    const refusal = policyModelRefusal(target) ?? orgEngineAllowRefusal(to.instanceId, effectiveBotOwner(current))
-      ?? (alreadyOn ? undefined : orgEngineHiddenRefusal(to.instanceId));
+    // D-20261126-018: the hidden-provider exception lives in checkedTaskModelSwitch
+    // (modelChangeCurrent); policy and allowedEngines stay here
+    const refusal = policyModelRefusal(target) ?? orgEngineAllowRefusal(to.instanceId, effectiveBotOwner(current));
     if (refusal) return refusal;
     const checked = checkedTaskModelSwitch(current, to, false, true, { returning: back === true });
     if (!checked.ok) return checked.error;
@@ -34860,7 +34862,9 @@ ROUTES.push(createBotRuntimeSettingsRoutes({
   checkBackup: (selection, bot) => {
     // #4435: the bot's owner may back it up with their own added account
     const owner = store.bot(bot.id);
-    const checked = checkedModelSelection(selection, undefined, true, owner ? effectiveBotOwner(owner) : undefined);
+    // D-20261126-018: a backup on the bot's own hidden engine (another model)
+    // is what it is already on, never a new choice
+    const checked = checkedModelSelection(selection, owner ? { selection: owner.modelSelection, busy: false } : undefined, true, owner ? effectiveBotOwner(owner) : undefined);
     if (!checked.ok) return { ok: false, status: checked.status, error: checked.error };
     const target = registry.get(checked.selection.instanceId);
     if (!target?.enabled) return { ok: false, status: 400, error: "Enable the backup engine before selecting it for recovery." };

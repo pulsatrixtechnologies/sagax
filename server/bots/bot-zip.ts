@@ -124,6 +124,7 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   soulDrift: { drop: "recomputed from SOUL.md" },
   instructionsLead: { drop: "recomputed from SOUL.md" },
   modelSelection: "settings",
+  modelSetting: { drop: "computed by the server" },
   fallback: "settings",
   cacheKeepWarm: "settings",
   maxConcurrentThreads: "settings",

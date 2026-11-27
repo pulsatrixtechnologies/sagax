@@ -649,7 +649,8 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     }
     if (!auto && backup && store.takeResend(own.messageId)) {
       const target = backHome ?? backup;
-      const refused = deps.switchThread(dispatch.botId, threadId, target);
+      // D-20261126-018: backHome is a return to the engine it left
+      const refused = deps.switchThread(dispatch.botId, threadId, target, Boolean(backHome));
       if (!refused) {
         let fromName = deps.engineName(dispatch.engine.instanceId);
         const toName = deps.engineName(target.instanceId);
@@ -974,7 +975,8 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         // takeover that moved it off ends here, and the run's own line says
         // so, with no second line in its thread.
         if (standIn && same(standIn.from, to)) {
-          const refused = deps.switchThread(botId, threadId, to);
+          // D-20261126-018: back on the conversation's own model
+          const refused = deps.switchThread(botId, threadId, to, true);
           if (refused) console.warn(`[limit-failover] ${threadId}: could not go back to ${to.instanceId}: ${refused}`);
           else store.forget(threadId);
           return;
@@ -1221,7 +1223,8 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
           // never "on" that engine as a stand-in for itself (2026-11-02,
           // review of the final pass).
           if (home && backup.instanceId === home.from.instanceId) {
-            const refused = deps.switchThread(botId, threadId, home.from);
+            // D-20261126-018: back on its own engine whose limit ended
+            const refused = deps.switchThread(botId, threadId, home.from, true);
             if (refused) {
               console.warn(`[limit-failover] ${threadId}: could not go back to ${home.from.instanceId}: ${refused}`);
               return;

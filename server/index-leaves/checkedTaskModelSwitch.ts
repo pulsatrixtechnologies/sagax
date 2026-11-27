@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** checkedTaskModelSwitch (#1388). Pure move from server/index.ts. */
+import { modelChangeCurrent } from "./modelChangeCurrent.ts";
 export type Host = Record<string, any>;
 
 export function createCheckedTaskModelSwitch(getHost: () => Host): any {
@@ -15,10 +16,11 @@ function checkedTaskModelSwitch(current: BotRecord, raw: unknown, updateBotDefau
   // D-20261126-018: the bot's own engine, and the one a conversation goes
   // back to, are what it is already on, never a new choice of a hidden one
   const target = (raw as { instanceId?: unknown } | null)?.instanceId;
-  const alsoOn = [profile?.modelSelection.instanceId, ...(options.returning && typeof target === "string" ? [target.trim()] : [])].filter(Boolean);
-  const checked = host.checkedModelSelection(raw, {
-    selection: current.modelSelection, busy: options.settling === true ? false : host.threadBusy(current.id, current.threadId), alsoOn
-  }, requireAvailableModel, host.effectiveBotOwner(current));
+  const checked = host.checkedModelSelection(raw, modelChangeCurrent(host, current, {
+    busy: options.settling === true ? false : undefined,
+    returning: options.returning === true,
+    ...(typeof target === "string" ? { target } : {}),
+  }), requireAvailableModel, host.effectiveBotOwner(current));
   if (!checked.ok) return checked;
   if (updateBotDefault) {
     const defaults = host.checkedModelSelection(checked.selection, {

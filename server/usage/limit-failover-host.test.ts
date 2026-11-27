@@ -31,6 +31,7 @@ function world(options: { allowed?: string[]; preferred?: Array<{ instanceId: st
     request: { messageId: "m1", turnId: "turn-1", origin: { kind: "user" } } as LimitRequest | undefined,
     busy: options.busy ?? false,
     switches: [] as ModelSelection[],
+    switchBack: [] as boolean[],
   };
   const allowed = options.allowed ?? ["claude", "codex", "grok"];
   const store = new LimitFailoverStore({ file: options.file ?? null, now: () => clock.now });
@@ -52,10 +53,11 @@ function world(options: { allowed?: string[]; preferred?: Array<{ instanceId: st
     refusal: (_bot, _thread, _speaker, id) => refusals.get(id),
     threadSelection: () => state.selection,
     busy: () => state.busy,
-    switchThread: (_bot, _thread, to) => {
+    switchThread: (_bot, _thread, to, back) => {
       if (state.busy) return "the conversation is working";
       state.selection = { ...to };
       state.switches.push({ ...to });
+      state.switchBack.push(back === true);
       return null;
     },
     note: (threadId, line) => { state.lines.push({ threadId, line }); },
@@ -569,9 +571,13 @@ describe("the next turn", () => {
     await w.host.idle();
     expect(w.host.beforeTurn("bot", "thread", undefined)).toBeNull();
     expect(w.state.selection).toEqual(B);
+    // the move onto the backup is not a return
+    expect(w.state.switchBack.at(-1)).toBe(false);
     w.clock.now += 2 * 3_600_000 + w.store.afterResetMs;
     expect(w.host.beforeTurn("bot", "thread", undefined)).toBeNull();
     expect(w.state.selection).toEqual(A);
+    // D-20261126-018: the timed return passes back so a hidden home engine is allowed
+    expect(w.state.switchBack.at(-1)).toBe(true);
     expect(w.state.lines.at(-1)).toEqual({ threadId: "thread", line: { kind: "back", engine: "Claude" } });
     expect(w.store.failover("bot", "thread")).toBeUndefined();
   });
@@ -642,6 +648,8 @@ describe("a local model and a backup the person cannot use", () => {
     expect(w.state.selection).toEqual(B);
     expect(w.host.backupRefused("bot", "thread")).toEqual({ from: "Claude", to: "Codex" });
     expect(w.state.selection).toEqual(A);
+    // D-20261126-018: backupRefused returns with back
+    expect(w.state.switchBack.at(-1)).toBe(true);
     expect(w.store.failover("bot", "thread")).toBeUndefined();
     expect(w.store.blockedUntil("server", "codex")).not.toBeNull();
     // Not on a backup any more: nothing to undo, so the caller shows its own error.

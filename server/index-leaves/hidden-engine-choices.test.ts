@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import type { ModelSelection } from "../contracts.ts";
 import { createCheckedModelSelection } from "./checkedModelSelection.ts";
 import { createCheckedTaskModelSwitch } from "./checkedTaskModelSwitch.ts";
+import { modelChangeCurrent } from "./modelChangeCurrent.ts";
 import { createRelayEnginesFor } from "./relayEnginesFor.ts";
 
 const HIDDEN = "Your organization does not offer this model provider for a new choice. A bot already on it keeps it.";
@@ -75,5 +76,50 @@ describe("a conversation goes back to the hidden provider it is already on", () 
     const { thread, switchTo } = setup();
     expect(switchTo(thread, { instanceId: "nimbus", model: "deep" }, false, true)).toMatchObject({ ok: false, error: HIDDEN });
     expect(switchTo(thread, { instanceId: "nimbus", model: "deep" }, false, true, { returning: true })).toMatchObject({ ok: true });
+  });
+});
+
+describe("the three model-change routes let a conversation on a backup go back to its bot's hidden engine", () => {
+  // Same shape the three routes used to call checkedModelSelection without
+  // alsoOn (bots-core-task-patch, bots-mutate-patch-build-profile,
+  // bots-mutate-patch-commit). modelChangeCurrent is what they pass now.
+  const setup = () => {
+    const value = host(["cirrus"]);
+    const profile = { id: "b1", threadId: "t-main", modelSelection: { instanceId: "cirrus", model: "deep" } as ModelSelection };
+    value.store = { bot: () => profile };
+    const thread = { id: "b1", threadId: "t-backup", modelSelection: { instanceId: "stratus", model: "deep" } as ModelSelection };
+    const check = createCheckedModelSelection(() => value) as (
+      raw: unknown,
+      current?: { selection: ModelSelection; busy: boolean; alsoOn?: readonly string[] },
+      requireAvailableModel?: boolean,
+    ) => { ok: boolean; error?: string };
+    return { value, thread, check, profile };
+  };
+
+  it("bots-core-task-patch: composer route current carries the profile engine", () => {
+    const { value, thread, check } = setup();
+    const without = check({ instanceId: "cirrus", model: "deep" }, { selection: thread.modelSelection, busy: false }, true);
+    expect(without).toMatchObject({ ok: false, error: HIDDEN });
+    expect(check({ instanceId: "cirrus", model: "deep" }, modelChangeCurrent(value, thread), true)).toMatchObject({ ok: true });
+  });
+
+  it("bots-mutate-patch-build-profile: selectedTask current carries the profile engine", () => {
+    const value = host(["cirrus", "nimbus"]);
+    const profile = { id: "b1", threadId: "t-main", modelSelection: { instanceId: "cirrus", model: "deep" } as ModelSelection };
+    value.store = { bot: () => profile };
+    const thread = { id: "b1", threadId: "t-backup", modelSelection: { instanceId: "stratus", model: "deep" } as ModelSelection };
+    const check = createCheckedModelSelection(() => value) as (
+      raw: unknown,
+      current?: { selection: ModelSelection; busy: boolean; alsoOn?: readonly string[] },
+      requireAvailableModel?: boolean,
+    ) => { ok: boolean; error?: string };
+    expect(check({ instanceId: "cirrus", model: "deep" }, modelChangeCurrent(value, thread), true)).toMatchObject({ ok: true });
+    // another hidden provider is still a new choice: refused
+    expect(check({ instanceId: "nimbus", model: "deep" }, modelChangeCurrent(value, thread), true)).toMatchObject({ ok: false, error: HIDDEN });
+  });
+
+  it("bots-mutate-patch-commit: projected conversation current carries the profile engine", () => {
+    const { value, thread, check } = setup();
+    expect(check({ instanceId: "cirrus", model: "deep" }, modelChangeCurrent(value, thread), false)).toMatchObject({ ok: true });
   });
 });

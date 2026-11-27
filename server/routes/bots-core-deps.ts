@@ -157,7 +157,7 @@ export interface BotsCoreRouteDeps {
   memberFolderPrincipal(auth: RequestAuth): string | null;
   checkedModelSelection(
     raw: unknown,
-    current: { selection?: ModelSelection; busy?: boolean } | undefined,
+    current: { selection?: ModelSelection; busy?: boolean; alsoOn?: readonly string[] } | undefined,
     requireAvailable: boolean,
     principal: string | null,
     /** #4435: the bot's owner, whose own added accounts it may run on. */

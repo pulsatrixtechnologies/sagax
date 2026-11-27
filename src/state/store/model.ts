@@ -543,6 +543,9 @@ export interface Bot {
    * fed to the Thinking timer so elapsed time survives thread switches. */
   turnStartedAt?: number | null;
   modelSelection: ModelSelection;
+  /** D-20261126-018 (#5351): the bot's own model as stored on its profile
+   * (WireBot.modelSetting), never a conversation's. Absent on an older server. */
+  modelSetting?: ModelSelection;
   /** #4329 lot 5: what runs this bot ("Runs with"), the driver kind the
    * person chose for it (shared/wire.ts); absent: no choice of its own. */
   harness?: string;

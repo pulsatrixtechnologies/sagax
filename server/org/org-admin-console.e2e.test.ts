@@ -880,6 +880,51 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     }
   }, 90_000);
 
+  it("C5: a conversation on a backup goes back to its bot's hidden engine via the composer and bot routes (D-20261126-018, #5351)", async () => {
+    const alice = await signIn(ALICE);
+    type Bot = { id: string; threadId: string; modelSelection: Record<string, unknown>; modelSetting?: Record<string, unknown>; tasks?: Array<{ threadId: string; modelSelection: Record<string, unknown> }> };
+    const botOf = async (id: string) => ((await api("GET", "/api/bots", alice)).body.bots as Bot[]).find((bot) => bot.id === id)!;
+    // Pivot: profile on claude; conversation moved to hold while claude is hidden
+    const pivot = await createBot(alice, "Pivot", "claude");
+    const listed = (await api("GET", "/api/instances", alice)).body.instances as Array<{ instanceId: string; models: { default: string } }>;
+    const modelOf = (instanceId: string) => listed.find((row) => row.instanceId === instanceId)!.models.default;
+    const hid = await admin("POST", "engines/claude/hide", ALICE, {});
+    expect(hid.status, hid.text).toBe(200);
+    try {
+      const toHold = await api("PATCH", `/api/bots/${pivot.id}/tasks/${pivot.threadId}`, alice, {
+        modelSelection: { instanceId: "hold", model: modelOf("hold") },
+      });
+      expect(toHold.status, toHold.text).toBe(200);
+      const after = await botOf(pivot.id);
+      expect(after.modelSelection).toMatchObject({ instanceId: "hold" });
+      expect(after.modelSetting).toMatchObject({ instanceId: "claude", model: "fake-model" });
+      // composer route: back to the bot's own engine
+      const backComposer = await api("PATCH", `/api/bots/${pivot.id}/tasks/${pivot.threadId}`, alice, {
+        modelSelection: { instanceId: "claude", model: "fake-model" },
+      });
+      expect(backComposer.status, backComposer.text).toBe(200);
+      expect((await botOf(pivot.id)).modelSelection).toMatchObject({ instanceId: "claude", model: "fake-model" });
+      // move away again, then PATCH /api/bots/:id (build-profile + commit)
+      expect((await api("PATCH", `/api/bots/${pivot.id}/tasks/${pivot.threadId}`, alice, {
+        modelSelection: { instanceId: "hold", model: modelOf("hold") },
+      })).status).toBe(200);
+      const backBot = await api("PATCH", `/api/bots/${pivot.id}`, alice, {
+        threadId: pivot.threadId,
+        modelSelection: { instanceId: "claude", model: "fake-model" },
+      });
+      expect(backBot.status, backBot.text).toBe(200);
+      expect((await botOf(pivot.id)).modelSelection).toMatchObject({ instanceId: "claude", model: "fake-model" });
+      // another bot still cannot pick the hidden provider
+      const other = await createBot(alice, "Other", "hold");
+      expect((await api("PATCH", `/api/bots/${other.id}/tasks/${other.threadId}`, alice, {
+        modelSelection: { instanceId: "claude", model: "fake-model" },
+      })).status).toBe(403);
+    } finally {
+      const back = await admin("POST", "engines/claude/restore", ALICE, {});
+      expect(back.status, back.text).toBe(200);
+    }
+  }, 60_000);
+
   it("C5: the vault export policy (2026-10-18), and a pairing code is no recent sign-in", async () => {
     // on by default; the console and Settings > Organization both carry it
     expect((await admin("GET", "settings", ALICE)).body.org).toMatchObject({ allowVaultExport: true });

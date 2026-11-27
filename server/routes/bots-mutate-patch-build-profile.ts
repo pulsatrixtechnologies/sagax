@@ -1,6 +1,7 @@
 // PATCH /api/bots/:id profile and presentation fields (#1383).
 // Never imports server/index.ts.
 import type { ModelSelection } from "../../shared/model-selection.ts";
+import { modelChangeCurrent } from "../index-leaves/modelChangeCurrent.ts";
 import type { BotPatchState, BotsMutateEnv } from "./bots-mutate-helpers.ts";
 import { requirePinnedClientThread } from "./bots-mutate-helpers.ts";
 import { normalizeDirectTriggers } from "../../shared/direct-triggers.ts";
@@ -83,9 +84,13 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
   let normalizedSelection: ModelSelection | undefined;
   if (rawSelection !== undefined) {
     const onMachine = existingBot ? env.selectionOnMachine({ host: existingBot.host, workers: env.registeredWorkers, raw: rawSelection }) : null;
+    // D-20261126-018: alsoOn carries the bot's own engine so a conversation
+    // on a backup (requestedTaskBot without threadId) can go back to it
+    const changeCurrent = selectedTask ? modelChangeCurrent(env, selectedTask)
+      : existingBot ? modelChangeCurrent(env, existingBot) : undefined;
     const checked = onMachine ?? env.checkedModelSelection(
       rawSelection,
-      selectedTask ? { selection: selectedTask.modelSelection, busy: env.threadBusy(selectedTask.id, selectedTask.threadId) } : undefined,
+      changeCurrent,
       body.requireAvailableModel === true,
       env.sessionPrincipal(env.auth),
       existingBot ? env.effectiveBotOwner(existingBot) : undefined,

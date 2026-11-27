@@ -1,6 +1,7 @@
 // PATCH /api/bots/:id trust check, runtime revoke, and persist (#1383).
 // Never imports server/index.ts.
 import type { BotRecord } from "../store.ts";
+import { modelChangeCurrent } from "../index-leaves/modelChangeCurrent.ts";
 import type { BotPatchState, BotsMutateEnv } from "./bots-mutate-helpers.ts";
 import { historyWriterOf } from "../history-writer.ts";
 import type { SoulSorter, SoulWriteMode } from "../bots/soul-sort.ts";
@@ -138,7 +139,9 @@ export async function commitBotPatch(env: BotsMutateEnv, state: BotPatchState): 
       env.json(env.res, 404, { error: "no such task" });
       return;
     }
-    const checked = env.checkedModelSelection(normalizedSelection, { selection: current.modelSelection, busy: env.threadBusy(current.id, current.threadId) }, false, env.sessionPrincipal(env.auth), env.effectiveBotOwner(current));
+    // D-20261126-018: alsoOn carries the bot's own engine so a conversation
+    // on a backup can go back to it while that provider is hidden
+    const checked = env.checkedModelSelection(normalizedSelection, modelChangeCurrent(env, current), false, env.sessionPrincipal(env.auth), env.effectiveBotOwner(current));
     if (!checked.ok) {
       env.json(env.res, checked.status, { error: checked.error });
       return;

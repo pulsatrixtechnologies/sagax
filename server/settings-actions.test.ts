@@ -9,7 +9,7 @@ import { createSettingsActions, finalRefusal, settingStepUpClasses, type Setting
 const PERSON: TurnFacts = { automation: false, guest: false, requestUsable: true, senderUnproven: false, provenPerson: "pr_owner", sharedServer: true };
 
 function harness(over: Partial<SettingsActionDeps> & { mode?: "ask" | "auto" | "full"; facts?: TurnFacts; routeStatus?: number | ((method: string, path: string) => number); answer?: unknown } = {}) {
-  const planned: Array<{ effect: string; path: string; method: string; body?: unknown; stepUpClasses: readonly string[]; primary?: unknown; rule?: { scope: Record<string, string> }; noRule?: boolean }> = [];
+  const planned: Array<{ effect: string; path: string; method: string; body?: unknown; stepUpClasses: readonly string[]; primary?: unknown; rule?: { scope: Record<string, string>; description: string }; noRule?: boolean }> = [];
   const audits: unknown[] = [];
   const screens: unknown[] = [];
   const acts = {

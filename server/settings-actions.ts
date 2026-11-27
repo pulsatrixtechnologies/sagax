@@ -784,10 +784,11 @@ export function createSettingsActions(deps: SettingsActionDeps) {
     // bot.* settings of one bot: Always allow covers that key on every bot
     const personWide = Boolean(ids.target) && spec.family === "bot" && spec.target === "bot";
     // keep a non-bot target (routine, credential, …) in the scope
-    const keepTarget = ids.target && !personWide ? { target: ids.target } : {};
+    const scope: Record<string, string> = { setting: spec.key, ...(exactValue ? { value: valueDigest(value) } : {}) };
+    if (ids.target && !personWide) scope.target = ids.target;
     const rule: ActRuleCandidate = {
       tool: "sagax_settings",
-      scope: { setting: spec.key, ...keepTarget, ...(exactValue ? { value: valueDigest(value) } : {}) },
+      scope,
       description: `${spec.label}${personWide ? " (all your bots)" : where ? ` (${where})` : ""}${exactValue ? (secret ? ", this exact value" : `: ${describe(value)}`) : ""}`.slice(0, 500),
     };
     const result = await deps.acts().handlePlanned({

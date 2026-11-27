@@ -179,7 +179,9 @@ it("an engine's card: Always allow keeps the command's program, a security key s
   }
 }, 120_000);
 
-it("an act card (sagax_settings): Always allow keeps that setting of that bot, another setting keeps its card, revoking brings it back", async () => {
+// #5364: Always allow on a bot setting is person-wide (no target), so it
+// covers that key on every bot of the person.
+it("an act card (sagax_settings): Always allow keeps that setting on every bot of the person, another setting keeps its card, revoking brings it back", async () => {
   const fixture = await launchVerificationServer({ ...process.env, FAKE_CLAUDE_MODE: "hang" });
   const { dataDir } = fixture.info;
   const { api } = client(fixture);
@@ -208,13 +210,15 @@ it("an act card (sagax_settings): Always allow keeps that setting of that bot, a
 
     expect((await settings({ action: "set", key: "bot.title", target: helper.id, value: "Night shift" })).text).toContain("Approval needed.");
     const held = (await actCards()).at(-1).card;
-    expect(held.ownerRule).toMatchObject({ tool: "sagax_settings", scope: { setting: "bot.title", target: helper.id } });
-    expect(held.ownerRule.description).toContain("Helper");
+    expect(held.ownerRule).toMatchObject({ tool: "sagax_settings", scope: { setting: "bot.title" } });
+    expect(held.ownerRule.scope).not.toHaveProperty("target");
+    expect(held.ownerRule.description).toContain("all your bots");
     expect(held.ownerRule.description).not.toContain(helper.id);
     await api("POST", `/api/threads/${scout.threadId}/respond`, { requestId: held.requestId, behavior: "allow", rule: "allow" });
     expect(await title()).toBe("Night shift");
     const rule = ((await api("GET", "/api/approval-rules")).rules as any[]).find((row) => row.tool === "sagax_settings");
-    expect(rule).toMatchObject({ botId: scout.id, scope: { setting: "bot.title", target: helper.id }, behavior: "allow" });
+    expect(rule).toMatchObject({ botId: null, scope: { setting: "bot.title" }, behavior: "allow" });
+    expect(rule.scope).not.toHaveProperty("target");
 
     // the same setting of the same bot: no card, done, journaled
     const before = (await actCards()).length;
@@ -223,9 +227,9 @@ it("an act card (sagax_settings): Always allow keeps that setting of that bot, a
     expect((await actCards()).length).toBe(before);
     await expect.poll(async () => (await decisions(api)).some((row) => row.tool === "act" && row.source === "owner-rule" && row.rule === rule.id), { timeout: 5_000 }).toBe(true);
 
-    // another setting, or the same setting of another bot: its card
+    // another setting keeps its card; the same setting of another bot is covered person-wide
     expect((await settings({ action: "set", key: "bot.description", target: helper.id, value: "Night desk" })).text).toContain("Approval needed.");
-    expect((await settings({ action: "set", key: "bot.title", target: scout.id, value: "Lead" })).text).toContain("Approval needed.");
+    expect((await settings({ action: "set", key: "bot.title", target: scout.id, value: "Lead" })).text).toMatch(/^Done/);
 
     // revoked: the card comes back
     await api("DELETE", `/api/approval-rules/${rule.id}`);

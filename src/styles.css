@@ -3204,76 +3204,102 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
   .overlay-scrollbar-thumb::before { background: CanvasText; }
 }
 
-/* Message bar customize mode (D-20261126-014): movable controls jiggle
-   like a phone's home-screen icons. Text field and Send stay outside
-   .composer-movable, so they never tremble. */
+/* Customize mode jiggle (D-20261126-014 message bar; D-20261127-004 whole-app).
+   Shared .ui-movable / .composer-movable path. Text field, Send, account menu
+   stay outside these classes so they never tremble. */
 @keyframes composer-movable-jiggle {
   0%, 100% { transform: rotate(-2.8deg) translateX(-0.5px); }
   50% { transform: rotate(2.8deg) translateX(0.5px); }
 }
-[data-composer-customize="1"] .composer-movable {
+[data-composer-customize="1"] .composer-movable,
+[data-ui-customize="1"] .ui-movable {
   position: relative;
   cursor: grab;
   animation: composer-movable-jiggle 0.32s ease-in-out infinite;
 }
 [data-composer-customize="1"] .composer-movable:active,
-[data-composer-customize="1"] .composer-movable[aria-grabbed="true"] {
+[data-composer-customize="1"] .composer-movable[aria-grabbed="true"],
+[data-ui-customize="1"] .ui-movable:active,
+[data-ui-customize="1"] .ui-movable[aria-grabbed="true"] {
   cursor: grabbing;
   animation: none;
   opacity: 0.85;
   transform: scale(1.04) rotate(2.8deg);
   z-index: 2;
 }
-[data-composer-customize="1"] .composer-movable[data-composer-movable="plus"] { animation-delay: 0ms; }
-[data-composer-customize="1"] .composer-movable[data-composer-movable="model"] { animation-delay: 50ms; }
-[data-composer-customize="1"] .composer-movable[data-composer-movable="usage"] { animation-delay: 100ms; }
-[data-composer-customize="1"] .composer-movable[data-composer-movable="voice"] { animation-delay: 150ms; }
+[data-composer-customize="1"] .composer-movable[data-composer-movable="plus"],
+[data-ui-customize="1"] .ui-movable[data-ui-movable="plus"] { animation-delay: 0ms; }
+[data-composer-customize="1"] .composer-movable[data-composer-movable="model"],
+[data-ui-customize="1"] .ui-movable[data-ui-movable="model"] { animation-delay: 50ms; }
+[data-composer-customize="1"] .composer-movable[data-composer-movable="usage"],
+[data-ui-customize="1"] .ui-movable[data-ui-movable="usage"] { animation-delay: 100ms; }
+[data-composer-customize="1"] .composer-movable[data-composer-movable="voice"],
+[data-ui-customize="1"] .ui-movable[data-ui-movable="voice"] { animation-delay: 150ms; }
 /* Headless capture freeze: mid-jiggle pose so a still PNG shows the tremble. */
-[data-composer-customize="1"][data-composer-jiggle-frame="1"] .composer-movable {
+[data-composer-customize="1"][data-composer-jiggle-frame="1"] .composer-movable,
+[data-ui-customize="1"][data-ui-jiggle-frame="1"] .ui-movable,
+[data-ui-customize="1"][data-composer-jiggle-frame="1"] .ui-movable {
   animation: none;
   transform: rotate(2.8deg) translateX(0.5px);
 }
-[data-composer-customize="1"][data-composer-jiggle-frame="1"] .composer-movable[aria-grabbed="true"] {
+[data-composer-customize="1"][data-composer-jiggle-frame="1"] .composer-movable[aria-grabbed="true"],
+[data-ui-customize="1"][data-ui-jiggle-frame="1"] .ui-movable[aria-grabbed="true"] {
   transform: scale(1.04) rotate(2.8deg);
 }
-.composer-movable-handle {
+.composer-movable-handle,
+.ui-movable-handle {
   pointer-events: none;
   display: none;
   color: var(--color-ink-tertiary);
 }
-[data-composer-customize="1"] .composer-movable-handle {
+[data-composer-customize="1"] .composer-movable-handle,
+[data-ui-customize="1"] .ui-movable-handle {
   display: inline-flex;
   align-items: center;
   margin-inline-end: 2px;
 }
 [data-composer-customize="1"] .composer-movable:hover .composer-movable-handle,
-[data-composer-customize="1"] .composer-movable:focus-visible .composer-movable-handle {
+[data-composer-customize="1"] .composer-movable:focus-visible .composer-movable-handle,
+[data-ui-customize="1"] .ui-movable:hover .ui-movable-handle,
+[data-ui-customize="1"] .ui-movable:focus-visible .ui-movable-handle {
   color: var(--color-ink-secondary);
+}
+[data-ui-customize="1"] .ui-movable-hide {
+  pointer-events: auto;
 }
 /* Reduced motion (system or Apparence > Mouvement Réduit): no tremble,
    dashed outline so the movable set still reads as rearrangeable. */
 @media (prefers-reduced-motion: reduce) {
-  [data-composer-customize="1"] .composer-movable {
+  [data-composer-customize="1"] .composer-movable,
+  [data-ui-customize="1"] .ui-movable {
     animation: none;
     outline: 1.5px dashed color-mix(in oklab, var(--color-ink-secondary) 55%, transparent);
     outline-offset: 2px;
   }
-  [data-composer-customize="1"] .composer-movable[aria-grabbed="true"] {
+  [data-composer-customize="1"] .composer-movable[aria-grabbed="true"],
+  [data-ui-customize="1"] .ui-movable[aria-grabbed="true"] {
     transform: scale(1.04);
   }
-  [data-composer-customize="1"][data-composer-jiggle-frame="1"] .composer-movable {
+  [data-composer-customize="1"][data-composer-jiggle-frame="1"] .composer-movable,
+  [data-ui-customize="1"][data-ui-jiggle-frame="1"] .ui-movable {
     transform: none;
   }
 }
-:root[data-reduced-motion="true"] [data-composer-customize="1"] .composer-movable {
+:root[data-reduced-motion="true"] [data-composer-customize="1"] .composer-movable,
+:root[data-reduced-motion="true"][data-ui-customize="1"] .ui-movable,
+:root[data-reduced-motion="true"] [data-ui-customize="1"] .ui-movable {
   animation: none;
   outline: 1.5px dashed color-mix(in oklab, var(--color-ink-secondary) 55%, transparent);
   outline-offset: 2px;
 }
-:root[data-reduced-motion="true"] [data-composer-customize="1"] .composer-movable[aria-grabbed="true"] {
+:root[data-reduced-motion="true"] [data-composer-customize="1"] .composer-movable[aria-grabbed="true"],
+:root[data-reduced-motion="true"][data-ui-customize="1"] .ui-movable[aria-grabbed="true"],
+:root[data-reduced-motion="true"] [data-ui-customize="1"] .ui-movable[aria-grabbed="true"] {
   transform: scale(1.04);
 }
-:root[data-reduced-motion="true"] [data-composer-customize="1"][data-composer-jiggle-frame="1"] .composer-movable {
+:root[data-reduced-motion="true"] [data-composer-customize="1"][data-composer-jiggle-frame="1"] .composer-movable,
+:root[data-reduced-motion="true"][data-ui-customize="1"][data-ui-jiggle-frame="1"] .ui-movable,
+:root[data-reduced-motion="true"] [data-ui-customize="1"][data-ui-jiggle-frame="1"] .ui-movable {
   transform: none;
 }
 /* Drop zones above/below while rearranging the usage pill. */

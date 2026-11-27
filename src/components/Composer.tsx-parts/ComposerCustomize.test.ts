@@ -46,10 +46,13 @@ describe("composer customize behaviours (D-20261126-014, D-20261127-001)", () =>
   it("Escape leaves customize mode (handler is registered while customizing)", async () => {
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
+    // Escape cancel lives on the whole-app mode (UiCustomizeMode); composer begin() enters it.
+    const mode = readFileSync(join(import.meta.dirname, "../ui-customize/UiCustomizeMode.tsx"), "utf8");
+    expect(mode).toMatch(/key !== "Escape"/);
+    expect(mode).toMatch(/setActive\(false\)/);
+    expect(mode).toMatch(/addEventListener\("keydown"/);
     const src = readFileSync(join(import.meta.dirname, "ComposerCustomize.tsx"), "utf8");
-    expect(src).toMatch(/key !== "Escape"/);
-    expect(src).toMatch(/setCustomizing\(false\)/);
-    expect(src).toMatch(/addEventListener\("keydown"/);
+    expect(src).toMatch(/ui\.begin\(\)/);
   });
 
   it("places the Customize context menu with useMenuInWindow so it stays in the window (D-20261127-005)", async () => {

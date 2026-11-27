@@ -706,15 +706,19 @@ failed or waiting (`routineRunTitle`, `server/notify.ts`), never "scheduled
 routine".
 
 What Sagax holds is per payer and per engine, and as accurate as it knows.
-Only a refusal Sagax saw holds an engine for Auto, its panel, a backup
-(chat, `beforeTurn`) and a run's takeover. A plan window the person's own
+Only a refusal Sagax saw holds an engine for a backup (chat, `beforeTurn`)
+and a run's takeover. A plan window the person's own
 usage report showed spent (J4, `GET /api/plan-usage` through
 `announcePlanThresholds`, `spentPlanUntil`, read as `planLimitUntil`) is a
 hint, since a report can be wrong: it never reads as spent while the row
 shows extra usage or credit left (Claude's "Extra Usage", a "Credits"
-line), it keeps only Sagax's quick pick (a wake's or a call's fast model,
-`autoExcluded(..., "quick")`) off that engine until a turn on it works again
-(`planWorked`, from `turnSucceeded`). A real refusal there that names no
+line), it keeps Sagax's own picks off that engine until a turn on it works
+again (`planWorked`, from `turnSucceeded`): the quick pick (a wake's or a
+call's fast model, `autoExcluded(..., "quick")`), and since M-20261126-101
+(#5403) Auto's and every mode's pick and the menu's preview
+(`autoExcluded(..., "report")`, see `docs/model-modes.md`). While such an
+entry is live the payer's limit clock reads the report again every 5 minutes
+by itself (`server/usage/plan-report-watch.ts`), so it never waits for an app. A real refusal there that names no
 reset is still held for the one-hour estimate, marked as one, and the engine
 tried again after it, never until that window's reset: a top-up shows only in
 a later report, which clears the hint and never a hold, so such a hold kept

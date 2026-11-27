@@ -124,7 +124,8 @@ async function handleBotAutoModel(env: BotsMutateEnv): Promise<boolean> {
     const engines = env.autoEnginesFor(previewBot, speaker, false, excluded);
     const payer = env.autoPayerKey(bot, speaker);
     const refused = env.autoRefusalsFor(payer);
-    const limited = env.limitFailover.autoExcluded(payer, engines);
+    // the same reading as the turn's pick (autoPickForTurn), M-20261126-101
+    const limited = env.limitFailover.autoExcluded(payer, engines, "report");
     const entry = (choice: { instanceId: string; model: string }): AutoModelEntry | null => {
       const engine = engines.find((candidate: any) => candidate.instanceId === choice.instanceId);
       const option = engine?.models.options.find((candidate: any) => candidate.id === choice.model);
@@ -134,10 +135,14 @@ async function handleBotAutoModel(env: BotsMutateEnv): Promise<boolean> {
       const item = entry(choice); if (item) excluded.push({ ...item, reason: "refused" });
     }
     for (const engine of engines) {
-      if (limited.has(engine.instanceId) && engines.some((candidate: any) => !limited.has(candidate.instanceId))) excluded.push({ instanceId: engine.instanceId, engineLabel: engine.displayName, reason: "limit" });
+      if (limited.has(engine.instanceId)) excluded.push({ instanceId: engine.instanceId, engineLabel: engine.displayName, reason: "limit" });
     }
     const turn = env.autoPickForTurn({ bot: previewBot, threadId: bot.threadId, speaker, role: "orchestration", text: "", withModes: true });
-    const chain = (turn?.pick.chain ?? []).flatMap((choice: any) => {
+    // M-20261126-101: with every account at its limit (the turn's own verdict, modesAtLimit) the turn still tries its
+    // list, and the preview names no model: no pick, no sentence, no order of choice (Settings > Models reads
+    // `modes.auto.limited` for when the first is back), each account left out for its limit
+    const allLimited = Boolean(turn?.modes?.auto?.limited);
+    const chain = allLimited ? [] : (turn?.pick.chain ?? []).flatMap((choice: any) => {
       const item = entry(choice);
       return item && !refused.some((skip: any) => skip.instanceId === choice.instanceId && skip.model === choice.model) ? [item] : [];
     });

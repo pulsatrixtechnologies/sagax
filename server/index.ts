@@ -526,6 +526,7 @@ import { USAGE_LIMIT } from "./drivers/retry.ts";
 import { recoveryCapabilityError } from "./automatic-recovery.ts";
 import { createCacheKeepWarm, type KeepWarmStatus, type KeepWarmTarget } from "./cache-keepwarm.ts";
 import { createLimitResetHost, SERVER_LIMIT_SCOPE } from "./usage/limit-reset-host.ts";
+import { createPlanReportWatch } from "./usage/plan-report-watch.ts";
 import { engineLabel } from "./usage/limit-resets.ts";
 import { billsEachUse, LimitFailoverStore } from "./usage/limit-failover.ts";
 import { createLimitFailoverHost, limitBackupRefusedText } from "./usage/limit-failover-host.ts";
@@ -16498,16 +16499,13 @@ const limitFailoverStore = new LimitFailoverStore({ file: join(DATA_DIR, "limit-
  * know of stays a `recovery:` row in the chat. */
 /** The person's message again, with what the turn a usage limit stopped had
  * already done; the message alone when it had done nothing yet. */
-/** 2026-11-02: per payer and engine, until when a plan window is spent (no
- * extra usage or credit left), from the last plan usage report read for that
- * payer (GET /api/plan-usage: the person's own, every few minutes while their
- * app is open; the server's when solo). The scope is the payer's key
- * (autoPayerKey). The usage-limit failover reads it (planLimitUntil) as a
- * hint only: Sagax's quick pick (a wake's or a call's fast model) skips a
- * spent engine. A real refusal on it that names no reset is still held for
- * Sagax's one-hour estimate, never until this reset: a top-up shows only in a
- * later report, which clears this hint, never a hold (2026-11-02). Auto and
- * other-provider backups read only real refusals; same-provider accounts also
+/** 2026-11-02: per payer (autoPayerKey) and engine, until when a plan window is spent (no extra usage or credit
+ * left), from the last usage report read for that payer: an app's (GET /api/plan-usage, every 10 minutes while a
+ * desktop chat is open) and, while an entry is live, the server's own every 5 minutes (usage/plan-report-watch.ts).
+ * The usage-limit failover reads it (planLimitUntil) as a hint only: Sagax's quick pick (a wake's or a call's fast
+ * model) skips a spent engine, and so does a mode's or Auto's pick (M-20261126-101). A real refusal on it that names
+ * no reset is still held for Sagax's one-hour estimate, never until this reset: a top-up shows only in a later report,
+ * which clears this hint, never a hold. Other-provider backups read only real refusals; same-provider accounts also
  * rotate from the report's used percent (#2192). */
 const spentPlans = new Map<string, number>();
 /** #2192: fullest window used-percent per payer and engine, from the last report. */
@@ -16744,7 +16742,7 @@ const limitFailover = createLimitFailoverHost({
   // next fast pick for this payer (voicePickForTurn reads autoRefusalsFor).
   refuseModel: (payer, selection, until) => rememberAutoRefusal(payer, { instanceId: selection.instanceId, model: selection.model }, until),
   // A plan window the person's usage report showed spent (J4), until a turn
-  // on that engine works for them again: only Sagax's quick pick skips it.
+  // on that engine works for them again: Sagax's own picks (quick, a mode, Auto) skip it.
   planLimitUntil: (payer, instanceId) => planLimitUntil(payer, instanceId),
   // #2192: used percent for silent same-provider rotation before the limit.
   planUsedPercent: (payer, instanceId) => planUsedPercentOf(payer, instanceId),
@@ -17043,6 +17041,7 @@ function agentModelHealthSources(principalId: string, instanceId: string): Healt
   return { refusals, limit: clock || held ? { resetsAt: resets.length ? Math.max(...resets) : null } : null };
 }
 const limitReset = createLimitResetHost({
+  ...createPlanReportWatch({ spentPlans, note: (report, payer) => notePlanLimits(report, payer) }),
   accounts: () => {
     // An organization server's own logins pay nobody's turns (its key runs
     // with an empty home, engine-credentials.ts materializeEngineAccess), so

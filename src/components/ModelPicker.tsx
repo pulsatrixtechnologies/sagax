@@ -229,7 +229,7 @@ export function ModelPicker({
   const autoOn = selection.auto === true && !viewerLocal && !choose;
   const autoTask = state.own?.tasks
     ?.find((task) => task.threadId === (threadId ?? bot.threadId));
-  const autoStatus = useAutoModelStatus(bot.id, threadId, (autoOn || anyOpen) && !choose, JSON.stringify([selection, state.config?.disabledModels, state.config?.myDisabledModels, state.instances]));
+  const autoStatus = useAutoModelStatus(bot.id, threadId, (autoOn || anyOpen) && !choose, JSON.stringify([selection, state.config?.disabledModels, state.config?.myDisabledModels, state.instances]), anyOpen);
   const autoPreview = autoStatus?.auto ? autoStatus.pick : null;
   const autoRecord = autoOn ? autoTask?.autoModel ?? autoPreview : null;
   const active = state.instances.find((instance) => instance.instanceId === selection.instanceId);

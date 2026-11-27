@@ -244,6 +244,59 @@ desktop's (#5090); the engine stays on the server. Tests:
 `ComposerModesTests.swift`; capture: `-mascotGallery heavy` in the
 simulator (`HeavyTeamGallery.swift`).
 
+## A model at its limit is never a mode's pick (#5403)
+
+Owner's request M-20261126-101. One list feeds the turn's pick and the
+menu's preview (`autoPickForTurn`, so `GET /api/bots/:id/auto-model` and its
+`modes` say what the turn would run). An account is out of that list while it
+cannot serve the person: signed out, no key, engine off or not responding
+(`autoEnginesFor`), a refusal Sagax saw, and an account whose 5-hour or weekly
+window the person's usage report shows used up with no extra usage left
+(`limitFailover.autoExcluded(payer, engines, "report")`, the verdict of
+`spentPlanUntil` that the quick pick already read; no second one).
+
+- Each account on its own: a model several accounts serve stays while one of
+  them has room, and the person's account strategy picks among those.
+- Auto, Fast and Expert take the next available model. Heavy seats only
+  available models: with fewer left the team is smaller.
+- A model the person set for a mode (Settings > Modes) is skipped the same
+  way for the turn; the setting is kept and runs again once the limit resets.
+- With every account at its limit the turn's pick keeps its list, as before:
+  the turn's refusal says when the limit resets. The menu's preview then names
+  no model (`modesAtLimit`: every mode's `pick` is null, with
+  `limited: { until }`, the first account expected back,
+  `limitFailover.limitedUntil`). The modes stay in the menu and each tooltip
+  reads "No model you can use right now · resets 3:40 PM", from the texts the
+  app already had (`model.cascade.none`, `limits.resets`).
+  The preview's own `pick` and its sentence are empty then too
+  (`server/routes/bots-mutate-small.ts`), so Auto's chip names no model either.
+  The route takes that verdict from the turn's answer (`modes.auto.limited`,
+  never a second test): its `chain` is empty and each account is in
+  `excluded` with `limit`. Settings > Models, "What Auto would choose now",
+  shows no order of choice, only the tooltip's line read from
+  `modes.auto.limited` (`limitedLine`), and lists each account under "Left out".
+- A report at 100 % is read again by the server, with no app asking: while a
+  payer has a live entry from the report (`spentPlans`), that payer's limit
+  clock (`LimitResetClock`, the timer that already reads usage every 5 minutes
+  while a refusal holds an engine) reads usage too, and the reading is noted
+  by the same `notePlanLimits` as an app's (`server/usage/plan-report-watch.ts`).
+  An early reset or extra usage bought since brings the account back within
+  about 5 minutes on an iPhone alone, in a routine or an unattended bot;
+  before, only a desktop app asking for the report did (every 10 minutes).
+- Every turn Sagax starts takes its model here, so all of this holds for a
+  routine's run (role `worker`, `routineReadinessBot` and the routine's
+  `startTurn`), a bot talking to another bot and every started turn
+  (`server/turns/start-turn-prepare-validate.ts`), a group room
+  (`server/turns/group-member-turn-prepare.ts`) and workers. A continued
+  conversation leaves its earlier pick while that account is flagged.
+- The desktop reads the preview again each time the menu opens
+  (`useAutoModelStatus`, `open`), the last answer staying on screen meanwhile.
+
+Tests: `server/index-leaves/autoPickForTurn.limit.test.ts`,
+`server/usage/limit-failover-host.test.ts`, `server/routes/bots-mutate.test.ts`,
+`src/lib/auto-model-preview.dom.test.ts`, `server/usage/plan-report-watch.test.ts`,
+`src/lib/model-mode.chatbar.test.ts`, `src/components/settings/AutoModelSettings.test.ts`.
+
 ## Heavy: a team of read-only experts (#5089)
 
 Owner's request M-20261119-077, answers D-20261119-084 and D-20261119-085:
@@ -267,7 +320,7 @@ called from `startTurn` before the leader's prompt is built.
   accounts, each one's strongest model, then each one's second strongest;
   `assignSeats` gives the experts different accounts first, then different
   models of the same provider. An account at its usage limit is already out
-  (#5031); only this person's accounts are offered.
+  (#5031, #5403); only this person's accounts are offered.
 - **Read-only, held by the server.** Each expert is a hidden thread of the same
   bot, confined before its first turn (`store.confineHeavyExpert`): the
   conversation's tool scope of #4993 keeps only reviewed reads of Sagax's own

@@ -76,6 +76,11 @@ export interface ModeResolution {
   /** Heavy: the seats its experts take (an account and a model each,
    * different accounts first), before the leader acts. */
   team?: ModeModel[];
+  /** M-20261126-101: every account the person could run a model on is at its
+   * usage limit, so no model is named (`pick` is null); `until`: when the
+   * first one is expected back, null when not known. The mode stays offered:
+   * its turn runs as before and the refusal says when. */
+  limited?: { until: number | null };
 }
 
 /** Heavy: at most this many seats, as many as the most experts a team may

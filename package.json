@@ -131,7 +131,7 @@
     "@resvg/resvg-js": "2.6.2",
     "@simplewebauthn/server": "14.1.0",
     "@tanstack/react-virtual": "^3.14.28",
-    "@trycua/cua-driver": "0.45.4",
+    "@trycua/cua-driver": "0.61.3",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-web-links": "^0.12.0",

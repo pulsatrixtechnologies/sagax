@@ -1,5 +1,5 @@
-// Cua Driver 0.45.4 lists 62 tools on macOS (0.28.2 listed 57 on Windows): its screen tools, its own browser over CDP,
-// its upkeep, and batch runners.
+// Cua Driver 0.61.3 lists 62 tools on macOS: its screen tools, its own browser over CDP, its upkeep, and batch runners.
+// (0.45.4 also listed 62; escalate_session and get_session_state left, agent_display and browser_motion_policy arrived.)
 
 /** The driver's config, recordings, updates, extensions, guide and diagnostics, the look of its agent cursor, and the
  * session read-backs it keeps for older callers. */

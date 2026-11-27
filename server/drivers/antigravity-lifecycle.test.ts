@@ -6,6 +6,7 @@ import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DATA_DIR } from "../config.ts";
+import { setOwnerOnlyAclTestHooks } from "../owner-only-acl.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
 import { AntigravityAcpClient, validateAntigravityRuntime } from "./antigravity-acp.ts";
 import type { AntigravityRuntime } from "./antigravity-runtime.ts";
@@ -164,13 +165,19 @@ describe("Antigravity validation shutdown", () => {
     const running = join(shared, `_MEI${process.pid.toString(16).padStart(8, "0")}2`);
     for (const folder of [abandoned, running]) mkdirSync(join(folder, "google3"), { recursive: true });
     // Nothing is spawned here (spawnCli is a fake), so the Windows branch can
-    // run on every OS.
+    // run on every OS. #5258 writeFileAtomic calls icacls when process.platform
+    // is win32; mock it so macOS/Linux CI does not spawn a missing binary (#5431).
     const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
     Object.defineProperty(process, "platform", { ...platform, value: "win32" });
+    setOwnerOnlyAclTestHooks({
+      platform: "win32",
+      runner: () => "Successfully processed 1 files; Failed processing 0 files\n",
+    });
     try {
       await validateAntigravityRuntime(runtime, "1.1.1");
     } finally {
       Object.defineProperty(process, "platform", platform);
+      setOwnerOnlyAclTestHooks(null);
     }
     const environment = vi.mocked(spawnCli).mock.calls[0][2].env!;
     // One fixed folder for every verification, so nothing a run leaves is

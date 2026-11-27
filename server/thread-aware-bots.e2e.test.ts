@@ -554,8 +554,13 @@ describe("coordinate_bots on a teammate", () => {
       expect(promptsOf(gate(1)).at(-1)?.message.content).toContain("Your downstream room requests have settled");
       expect(stream.frames.filter((frame) => frame.kind === "notify" && frame.notification?.botId === qa.id)).toEqual([]);
       expect((await botState(qa.id)).tasks.filter((task: any) => task.unread)).toEqual([]);
+      // Selected thread stays the main one; work stayed in `thread` (above).
+      // #4238 / #2915: "Asked by" receipts and replies do land in the person's
+      // chat with Quinn (not a switch of the selected thread).
       expect((await botState(qa.id)).threadId).toBe(qa.threadId);
-      expect(await messages(qa.threadId)).toEqual(originalConversation);
+      const main = await messages(qa.threadId);
+      expect(main.slice(0, originalConversation.length)).toEqual(originalConversation);
+      expect(main.some((row: any) => row.threadRef?.threadId === thread && row.tool?.name === "Asked by Pam")).toBe(true);
     } finally {
       stream.close();
       await cleanup([pm.id, qa.id]);
@@ -702,6 +707,11 @@ describe("list_threads", () => {
     const pm = await createBot("Parker", "gated");
     const qa = await createBot("Quinn", "gated");
     try {
+      // New bots start at Full (omb #2808); #5366 lets Full / Primary list
+      // person-facing peer threads. This case pins Ask so the narrower
+      // "only what you opened" scope stays what we check.
+      expect((await api("PATCH", `/api/bots/${pm.id}`, { approvalMode: "ask" })).status).toBe(200);
+      expect((await api("PATCH", `/api/bots/${qa.id}`, { approvalMode: "ask" })).status).toBe(200);
       // a thread the person opened on Quinn: Quinn's business, not Parker's
       const theirs = await api("POST", `/api/bots/${qa.id}/tasks`, { title: "Quinn's own audit" });
       expect(theirs.status).toBe(201);

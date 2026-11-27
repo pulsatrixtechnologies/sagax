@@ -35,6 +35,10 @@ export function handleRuntimeLifecycle(event: any, ctx: any, host: any): void {
       // a call's own session never becomes the conversation's cursor
       if (bot && event.sessionId && event.providerInstanceId && !(host.voiceCalls.active(event.threadId) && host.voiceSessions.noteSession(event.threadId, event.providerInstanceId, event.sessionId))) {
         host.store.setResumeCursor(bot.id, event.providerInstanceId, event.sessionId, event.threadId);
+        // A crash (SIGKILL) skips the deferred bots.json write: put the
+        // cursor on disk now so a restart can --resume the same session
+        // (#5402). Bookkeeping still batches other fields via saveBotsSoon.
+        host.store.persistEngineSessions?.();
       }
       if (typeof event.model === "string" && event.model) host.sessionModelByThread.set(event.threadId, event.model);
       break;

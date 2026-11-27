@@ -84,6 +84,12 @@ const ACCESS = /(?:\b(?:403|401|forbidden|unauthori[sz]ed|access denied|permissi
 const CHOICE = /\b(?:which (?:one|of the two|slot|wins)|choose between|pick (?:one|between)|either\b[^.\n]{0,60}\bor\b|lequel (?:des deux|garder|gagne|choisir)|laquelle (?:des deux|garder|gagne|choisir)|entre les deux|choisir entre|qui gagne)\b/iu;
 /** Something left to confirm. */
 const CONFIRM = /(?:\b(?:to confirm|to be confirmed|needs? (?:your |a )?(?:confirmation|go|approval)|awaiting (?:your |a )?(?:confirmation|answer|decision|go))\b|(?:^|[\s(])(?:à|a) (?:confirmer|valider|trancher|décider)\b|\battend (?:ta|votre|sa|une) (?:confirmation|réponse|décision)\b)/iu;
+/** Harness assignment / provenance boilerplate that must not read as a
+ * person-wait cue. Matching it raised false cards on Full-access
+ * hand-offs (#5431): envelope "nothing it allows needs confirmation" /
+ * "If something genuinely needs …", peer-provenance "without asking to
+ * confirm…". */
+const HARNESS_BOILERPLATE = /\bnothing it allows needs confirmation\b|\bwithout asking to confirm what your level allows\b|\bIf something genuinely needs \S[\s\S]*?end your reply with [`']?NEEDS INPUT:[`']?[\s\S]*$/giu;
 /** Something left on the person's plate, or skipped for lack of them. */
 const PENDING = /(?:\b(?:stays? on (?:the|your|today's|the day's) (?:\w+ )?list|left (?:for|to) (?:you|the person)|waits? (?:on|for) (?:you|the person)|needs? (?:you|the person|a human|your (?:decision|input|answer|call))|only (?:you|the person) can|your call|up to you|skipped|not (?:done|written|logged|handled) (?:because|for lack|without))\b|\breste (?:sur|dans) (?:la|ta) (?:\w+ )?liste\b|\breste à (?:faire|décider|trancher|régler)\b|(?:^|[\s(])à toi de\b|\b(?:ta|votre) décision\b|\bbesoin de (?:toi|vous|ta|ton|votre)\b|\bseule? (?:toi|vous|la personne) peu|\ben attente de (?:toi|vous|la personne|ta|ton|votre)\b|\bsauté(?:e|s)?(?!\p{L})|\blaissée? de côté(?!\p{L}))/iu;
 
@@ -121,7 +127,9 @@ export function personWaitCues(text: string | undefined, options: { strict?: boo
     if (!line) continue;
     // a line may hold several clauses ("nothing written; the knot is X; it
     // stays on the list"): the line is the item, read once
-    const hit = CUES.find(([, pattern]) => pattern.test(line));
+    const scanned = line.replace(HARNESS_BOILERPLATE, "").replace(/\s+/g, " ").trim();
+    if (!scanned) continue;
+    const hit = CUES.find(([, pattern]) => pattern.test(scanned));
     if (!hit) continue;
     if (options.strict && hit[0] !== "access" && !ADDRESSED.test(line)) continue;
     const id = line.toLocaleLowerCase();

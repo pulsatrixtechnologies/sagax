@@ -121,6 +121,10 @@ export function runGit(
       if (code !== 0 && !options.allowFail) return reject(new GitError(args, code, err));
       resolve(result);
     });
+    // git may exit before reading stdin (bad args, quick failure): end() then
+    // raises EPIPE on the pipe. Own it so vitest never exits non-zero with no
+    // failing test (#5438, CI shard with runner.test.ts).
+    child.stdin!.on("error", () => {});
     child.stdin!.end(options.input ?? "");
   });
 }

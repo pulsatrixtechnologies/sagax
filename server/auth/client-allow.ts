@@ -295,6 +295,7 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/tasks$/ },
   { methods: ["POST", "PATCH", "DELETE"], path: /^\/api\/bots\/[\w-]+\/tasks\/[\w-]+$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/tasks\/[\w-]+\/title$/ }, // Regenerate title: a rename by the bot's own engine
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/tasks\/[\w-]+\/compact$/ }, // #5367: compact this conversation (person's own bot)
   { methods: ["PATCH"], path: /^\/api\/bots\/[\w-]+\/profile$/ },
   // A bot's own parallel conversations, automatic recovery and tool access
   // (server/routes/bot-runtime-settings.ts): the handler lets through the

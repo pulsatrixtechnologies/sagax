@@ -372,9 +372,11 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Chat width (reading 960px, the default; wide ~1280px; full fills the pane) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.chatWidth` | simple |
 | Space under the composer (small 16px; standard 48px, the default; large 80px) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.composerBottomSpace` | simple |
 | Conversation header (pill: the bot's name in a centred pill, the default; title: a plain title at the top left) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.conversationHeader` | simple |
-| Usage in the message bar (on, the default: the usage pill after the model choice; off hides it) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.usagePillInBar` | simple |
+| Usage in the message bar (on, the default; off hides the usage pill) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.usagePillInBar` | simple |
+| Where the usage pill sits when shown (inBar: in the message bar after the model choice, the default; above: above the bar at the right; below: under the bar at the right) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.usagePillPlacement` | simple |
 | Usage pill shape (bars: three bars; circles: three circles, the default; battery; dots: three dots; text: text only) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.usagePillShape` | simple |
 | Context indicator of the conversation (on, the default; off hides the share of the model's context the conversation uses) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.contextIndicator` | simple |
+| Order of the message bar's movable buttons ({order: plus/model/usage/voice[], left: how many sit left of the text field}) | Settings > General > Appearance > More appearance > Conversation; right-click the message bar > Customize | `sagax_settings` get, set `appearance.composerBarLayout` | simple |
 
 ### Notifications et confidentialité
 

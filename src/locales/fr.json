@@ -15881,5 +15881,14 @@
   "image.error.avatarInvalidResponse": "{provider} a renvoyé une réponse d'image invalide",
   "image.error.avatarNeedsBase64": "La génération d'image de {provider} doit renvoyer l'image en base64 (b64_json)",
   "image.error.avatarInvalidData": "{provider} a renvoyé une image invalide",
-  "image.error.avatarOversized": "{provider} a renvoyé une image invalide ou trop lourde; formats attendus : PNG, JPEG ou WebP"
+  "image.error.avatarOversized": "{provider} a renvoyé une image invalide ou trop lourde; formats attendus : PNG, JPEG ou WebP",
+  "voiceMode.key.other.own": "ta clé {provider}{tail}",
+  "voiceMode.key.other.org": "la clé {provider} de l'organisation{tail}",
+  "voiceMode.key.other.server": "la clé {provider} de ce serveur{tail}",
+  "voiceMode.keyAction.other.own": "Ajoute des crédits à ce compte {provider}, ou change la clé dans Réglages > Fournisseurs.",
+  "voiceMode.keyAction.other.org": "Demande à un admin, ou ajoute ta propre clé {provider} dans Réglages > Fournisseurs.",
+  "voiceMode.provider.quota.namedOther": "{provider} n'a plus de crédits pour {key}. {action} Les réponses restent dans le chat.",
+  "voiceMode.provider.key.namedOther": "{provider} a refusé {key} : invalide, révoquée ou sans permission pour la voix. {action} Les réponses restent dans le chat.",
+  "voiceMode.provider.busy.namedOther": "{provider} limite le débit de {key}. Ça revient tout seul; les réponses restent dans le chat.",
+  "listening.otherProvider": "Une clé {providers} transcrit aussi : ajoutes-en une dans Réglages > Fournisseurs et l'écoute continue avec elle d'elle-même."
 }

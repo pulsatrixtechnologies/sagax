@@ -15,7 +15,7 @@ import { t } from "@/lib/i18n";
 import { dictationFrame, DICTATION_RATE } from "@/lib/composer-dictation";
 import { openPreferredMicrophone } from "@/lib/audio-input";
 import { attachVoiceCapture, type CaptureContext, type CaptureSource, type VoiceCapture } from "@/lib/voice-mode/capture-worklet";
-import { voiceFailureKind } from "@/lib/voice-mode/api";
+import { voiceFailureKind, VoiceProviderError } from "@/lib/voice-mode/api";
 import { voiceErrorNote } from "@/lib/voice-mode/failure";
 import { readVoiceprint, type SpeakerEmbedder } from "@/lib/voice-mode/speaker-id";
 import { LiveTranscriber } from "@/lib/voice-mode/stt-stream";
@@ -23,6 +23,7 @@ import { LevelVad, VAD_FRAME, type VoiceProbability } from "@/lib/voice-mode/vad
 import { readableError } from "@/lib/plain-error";
 
 import type { ListeningFrame, ListeningLine, ListeningSessionView, ListeningSources } from "../../../shared/listening";
+import { VOICE_PROVIDER_LABELS, VOICE_STT_PROVIDERS } from "../../../shared/voice-providers";
 import { ListeningChannel, type ChannelTranscriber, type ChannelUtterance } from "./listening-channel";
 import { EMPTY_LISTENING_VIEW, withFinal, withPartial, type ListeningChannelId, type ListeningView } from "./line-store";
 import { assignSpeaker, ECHO_WINDOW_MS, echoOf, newSpeakerBook, speakerLabel, type SpeakerBook } from "./speakers";
@@ -179,6 +180,17 @@ const browserDeps: ListeningDeps = {
   clearTimer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };
 
+/** The providers that can hear (shared/voice-providers.ts) and that no key
+ * refused for credits or for itself was of: a key of one of them, added in
+ * Settings > Providers, transcribes without anything else to change, since
+ * the server gives way to it by itself (server/voice/voice-mode.ts). Empty
+ * when the failure is not about a key, or once every provider was tried. */
+function untriedHearingProviders(kind: ReturnType<typeof voiceFailureKind>, cause: unknown): string[] {
+  if ((kind !== "quota" && kind !== "key") || !(cause instanceof VoiceProviderError) || !cause.key) return [];
+  const tried = new Set([cause.key, ...(cause.tried ?? [])].map((key) => key.provider ?? "xai"));
+  return VOICE_STT_PROVIDERS.filter((provider) => !tried.has(provider)).map((provider) => VOICE_PROVIDER_LABELS[provider]);
+}
+
 /** One running session's machinery. */
 class Session {
   private seq = 0;
@@ -269,7 +281,9 @@ class Session {
     const kind = voiceFailureKind(cause);
     const note = voiceErrorNote("transcribe-failed", kind, cause, t);
     // a refusal card's own sentence comes from the server, in the person's language
-    this.hearFailure = !kind && cause instanceof Error && cause.message ? readableError(cause) : t(note.key, note.params);
+    const reason = !kind && cause instanceof Error && cause.message ? readableError(cause) : t(note.key, note.params);
+    const others = untriedHearingProviders(kind, cause);
+    this.hearFailure = others.length ? `${reason} ${t("listening.otherProvider", { providers: others.join(", ") })}` : reason;
     this.showFailure();
   }
 

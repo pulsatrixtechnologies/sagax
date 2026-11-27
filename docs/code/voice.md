@@ -528,3 +528,40 @@ and no line yet, `ListeningCard` shows the reason alone. Tests:
 `src/lib/listening/listening-session.refusal.test.ts` (a stand-in voice
 service: no socket, a 503 `out_of_credits`, a 502), and
 `src/components/ListeningCard.dom.test.ts`.
+
+
+## Who transcribes a Listening session (2026-11-26, #5377)
+
+The Sagax server transcribes, with the person's own speech to text choice.
+The page cuts the microphone (and the computer's sound, a channel of its
+own) into utterances and sends their audio to `GET /voice/listen` with
+`purpose=listening`, else each one whole to `POST /voice/transcribe`
+(`src/lib/voice-mode/stt-stream.ts`); the page then posts the lines
+(`POST /api/listening/:id/lines`). Both routes are the call's and the
+dictation's (`server/voice/voice-mode.ts`): `requestedChoice` reads `stt`
+(Settings > Voice, or the bot's own), `voiceKeysFor` orders the keys (the
+chosen provider first, then every other one of `VOICE_STT_PROVIDERS` the
+person has a key for), and a key refused for credits or for itself gives way
+to the next, another provider included. The phone line's voice service of
+Perspicax is not on this path.
+
+A provider that took the listening socket and then stopped serving it (the
+session closes the page with 1011 after its reopens failed) is now
+remembered like one whose socket never opened (`giveWay` in
+`createListenAction`): the page's next socket starts with the next key or
+provider, with the same line in the Events lens. Before, the next socket
+went back to the provider that had just given up.
+
+What the card says when no key can transcribe: the key refused last is named
+by its own provider (`voiceKeyLabel` and `voiceErrorNote` in
+`src/lib/voice-mode/failure.ts`; an OpenAI or ElevenLabs key was called an
+xAI key, on the call and the dictation too), and Listening adds
+`listening.otherProvider` when a provider of `VOICE_STT_PROVIDERS` was not
+tried: a key of that provider, added in Settings > Providers, transcribes
+without anything else to change.
+
+Tests: `server/voice/listening-stt-provider.e2e.test.ts` (loopback xAI and
+OpenAI: credits refused at the socket, at the upload, after the socket
+opened, on every key), `src/lib/listening/listening-session.refusal.test.ts`,
+`src/lib/voice-mode/failure.test.ts`. `server/testing/fake-xai-voice.ts`
+has the `stt` switches (`refuse`, `failOnAudio`).

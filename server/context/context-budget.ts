@@ -45,10 +45,7 @@ export function shouldCompact(input: { contextTokens?: number; estimatedBytes: n
 
 /** #5367: how full the last measured context is, as a percent of its window.
  * Undefined when the turn has not reported tokens or a window yet. */
-export function contextUsagePercent(context: { tokens?: number; window?: number } | null | undefined): number | undefined {
-  if (!positive(context?.tokens) || !positive(context?.window)) return undefined;
-  return Math.min(100, Math.round((100 * context.tokens) / context.window));
-}
+export { contextUsagePercent } from "../../shared/context-usage.ts";
 
 /** #5367: fold point for a bot: its own compactAt (0-1 or tokens), else the
  * server's, else the engine default. Absent bot value means follow the server. */

@@ -22,6 +22,7 @@ import { PROVIDER_KEY_FIELDS, PROVIDER_KEYS, savedKeys } from "./settings-provid
 import { engineRow, type EngineRow } from "./settings-engine-row.ts";
 import { USER_PREFERENCE_KEYS } from "./user-preferences.ts";
 import { pageProactiveChoices } from "./proactive-choices-page.ts";
+import { contextUsagePercent } from "./context-usage.ts";
 
 /** `self`: the change targets the bot that is speaking. `shared` (#1545,
  * engines of an organization server): another person's bot, or the
@@ -586,7 +587,13 @@ add({
 // #5367: how full the last turn's context was, and compact this thread now.
 add({
   key: "thread.contextUsage", family: "thread", target: "thread", value: "number?", label: "Context usage of this conversation as a percent of its window (null until a turn measured it)", where: "Thread",
-  read: (ids) => ({ path: `/api/bots/${enc(ids.botId!)}`, list: "bots", match: "id", field: `tasks[threadId=${ids.target}].usage.context` }),
+  read: (ids) => ({
+    path: `/api/bots/${enc(ids.botId!)}`, list: "bots", match: "id",
+    // Task row so a conversation with no usage yet still reads as null, not 404.
+    field: `tasks[threadId=${ids.target}]`,
+    // Wire stores usage.context as { tokens, window }; bots read the promised percent.
+    shape: (v) => contextUsagePercent((v as { usage?: { context?: { tokens?: number; window?: number } } } | null | undefined)?.usage?.context),
+  }),
   write: () => "thread.contextUsage is read only: thread.compact folds the conversation when it is full.",
 });
 add({

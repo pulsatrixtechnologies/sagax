@@ -75,6 +75,58 @@ describe("actTurnFacts routine owner (QA 0.8.67 G8)", () => {
     };
     const facts = createActTurnFacts(() => host)(threadId, "g");
     expect(facts.provenPerson).toBe("pr_owner");
+    expect(facts.requestUsable).toBe(true);
     expect(actorForTurn(facts)).toEqual({ kind: "person", personKey: "pr_owner" });
+  });
+
+  // Stop / stale generation: taskOwner fills the actor person, never requestUsable.
+  it("a stopped request stays unusable even when the task has an owner", () => {
+    const threadId = "work";
+    const host = {
+      provenRequestPerson: () => null,
+      linePersonKey: () => null,
+      directRequestOwners: new Map([[threadId, { messageId: "m1", stopped: true, generations: new Set(["g"]) }]]),
+      guestDrivenTurns: new Map(),
+      store: {
+        messagesFor: () => [{ id: "m1", role: "bot" }],
+        botByThread: () => ({ id: "client" }),
+        taskByThread: () => ({ threadId, ownerPrincipalId: "pr_owner", openedBy: { botId: "dispatch", kind: "work", at: 1 } }),
+      },
+      effectiveBotOwner: () => "",
+      turnRoutineLineage: new Set(),
+      turnRoutinePayers: new Map(),
+      LOOPBACK: { trust: "service" },
+      IDENTITY: { kind: "perspicax" },
+      HOSTED_WORKSPACE: false,
+    };
+    const facts = createActTurnFacts(() => host)(threadId, "g");
+    expect(facts.provenPerson).toBe("pr_owner");
+    expect(facts.requestUsable).toBe(false);
+    expect(actorForTurn(facts)).toEqual({ kind: "none", reason: "unproven" });
+  });
+
+  it("a stale generation stays unusable even when the task has an owner", () => {
+    const threadId = "work";
+    const host = {
+      provenRequestPerson: () => null,
+      linePersonKey: () => null,
+      directRequestOwners: new Map([[threadId, { messageId: "m1", generations: new Set(["g-old"]) }]]),
+      guestDrivenTurns: new Map(),
+      store: {
+        messagesFor: () => [{ id: "m1", role: "bot" }],
+        botByThread: () => ({ id: "client" }),
+        taskByThread: () => ({ threadId, ownerPrincipalId: "pr_owner", openedBy: { botId: "dispatch", kind: "work", at: 1 } }),
+      },
+      effectiveBotOwner: () => "",
+      turnRoutineLineage: new Set(),
+      turnRoutinePayers: new Map(),
+      LOOPBACK: { trust: "service" },
+      IDENTITY: { kind: "perspicax" },
+      HOSTED_WORKSPACE: false,
+    };
+    const facts = createActTurnFacts(() => host)(threadId, "g-new");
+    expect(facts.provenPerson).toBe("pr_owner");
+    expect(facts.requestUsable).toBe(false);
+    expect(actorForTurn(facts)).toEqual({ kind: "none", reason: "unproven" });
   });
 });

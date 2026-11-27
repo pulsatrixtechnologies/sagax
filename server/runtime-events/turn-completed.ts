@@ -11,6 +11,7 @@ import { resendOnSignedOutBackup } from "../engines/signed-out-carry-on.ts";
 import { routineReportsByStreak, routineRunRowInEveryChat } from "../../shared/routine-repeat.ts";
 import { wakeTopicOf } from "../routines/routine-run-card.ts";
 import { heavyUsage } from "../heavy-team.ts";
+import { personLanguageCode, personWord } from "../people/person-words.ts";
 /** Whether a finished routine run rings "done": a completed result the
  * routine posts, never a quiet one, never one whose items for the person
  * rang "needs you" from its card. #3695, #3990: any other run of a routine
@@ -229,9 +230,10 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
         host.signedOutBackupResent.delete(event.threadId);
       }
       if (((emptyAfterWork && !emptyRetried) || emptyAfterAnnounce) && bot && !routineRun && !host.routines?.runForThread(event.threadId)) {
+        const language = personLanguageCode(host.languageOfPerson?.(host.effectiveBotOwner?.(bot) ?? host.recordedBotOwner?.(bot)));
         host.store.appendMessage(event.threadId, {
           role: "bot", kind: "text",
-          text: "This turn ended without a final reply after it started work. Say continue if you want me to pick it up.",
+          text: personWord(language, "chat.emptyOk.continue"),
           turnId: completedTurnId,
         });
       }

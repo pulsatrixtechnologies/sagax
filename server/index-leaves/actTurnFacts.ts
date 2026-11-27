@@ -42,8 +42,9 @@ function actTurnFacts(threadId: string, generation: string) {
   return {
     automation: Boolean(request?.automation),
     guest: host.guestDrivenTurns.get(threadId) === generation,
-    requestUsable: Boolean(request?.messageId) && request?.stopped !== true && Boolean(request?.generations.has(generation))
-      || Boolean(taskOwner),
+    // #5366: taskOwner fills provenPerson for a hand-off, never requestUsable.
+    // A Stop or a stale generation must stay unusable even when a task has an owner.
+    requestUsable: Boolean(request?.messageId) && request?.stopped !== true && Boolean(request?.generations.has(generation)),
     senderUnproven: Boolean(rawSender) && person === null,
     provenPerson: person,
     // #2701: a routine acts for the owner whose credentials it runs on

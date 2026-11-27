@@ -219,6 +219,24 @@ describe("sagax_settings", () => {
     expect(h.planned.at(-1)).toMatchObject({ method: "PATCH", body: { modelSelection: { model: "m", effort: "high" } } });
   });
 
+  // #5367: thread.contextUsage is the percent of the window, not the raw context object.
+  it("reads thread.contextUsage as a percent of the window", async () => {
+    const h = harness({
+      answer: {
+        bots: [{
+          id: "b1",
+          tasks: [{ threadId: "th1", usage: { input: 1, output: 1, costUsd: null, turns: 1, context: { tokens: 75_000, window: 100_000 } } }],
+        }],
+      },
+    });
+    const read = await h.call({ action: "get", key: "thread.contextUsage", target: "th1" });
+    expect(JSON.parse(String(read.body.text))).toEqual({ key: "thread.contextUsage", value: 75 });
+    const empty = await harness({
+      answer: { bots: [{ id: "b1", tasks: [{ threadId: "th1" }] }] },
+    }).call({ action: "get", key: "thread.contextUsage", target: "th1" });
+    expect(JSON.parse(String(empty.body.text))).toEqual({ key: "thread.contextUsage", value: null });
+  });
+
   // #1674: a model change is the bot's own, as Edit bot makes it: it names
   // the bot's thread (this conversation for the speaking bot, else the one
   // the person sees), or a bot with several threads refuses it
@@ -603,7 +621,8 @@ describe("sagax_settings: the rest of Settings (#1545, lot 2)", () => {
   });
 
   it("every setting has a get, or is an action the screen offers (create, delete, run, test, sign-in)", () => {
-    const actions = /(?:update|reset|power|Action|Attach|Revoke|create|delete|remove|Delete|Remove|run|Run|Test|SignIn|SignOut|Install|Refresh|Update|Account|Disconnect|Telegram|WhatsApp|commandAllow|template\.|section\.bots|account\.avatar|computer\.rename|liveKeyRemove|Export|Add|Classes|Rotate)/;
+    // #5367: thread.compact is a one-shot action (like Run), write only.
+    const actions = /(?:update|reset|power|Action|Attach|Revoke|create|delete|remove|Delete|Remove|run|Run|Test|SignIn|SignOut|Install|Refresh|Update|Account|Disconnect|Telegram|WhatsApp|commandAllow|template\.|section\.bots|account\.avatar|computer\.rename|liveKeyRemove|Export|Add|Classes|Rotate|compact)/;
     const missing = SETTINGS.filter((spec) => !spec.read && !actions.test(spec.key)).map((spec) => spec.key);
     expect(missing).toEqual([]);
   });

@@ -5492,6 +5492,7 @@
   "triggers.tokenEnding": "Jeton bearer se terminant par {last4}. Le jeton complet a été affiché une fois; régénère-le pour en obtenir un nouveau (l’actuel cesse de fonctionner immédiatement).",
   "triggers.tokenOnce": "Copie-le maintenant. Le jeton complet n’est affiché qu’une seule fois.",
   "triggers.tokenPendingBanner": "Ce webhook exige maintenant un jeton bearer; copie-le ici. Son ancienne URL ne fonctionne plus.",
+  "turnAccess.orgAccount": "Compte Grok de l'organisation",
   "turnAccess.orgKey": "Clé de l'organisation",
   "turnAccess.ownerCredentials": "Identifiants du propriétaire",
   "turnAccess.server": "Accès du serveur",

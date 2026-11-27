@@ -27,7 +27,7 @@ export type AutoTier = "top" | "coding" | "fast" | "long" | "vision";
 export type AutoReason = "strongest-own" | "strongest-other" | "tier-fallback" | "base" | "fast" | "mode";
 
 /** How the payer pays on the picked engine (server AccessVia). */
-export type AutoPayerVia = "subscription" | "owner-key" | "speaker-key" | "server" | "org-key";
+export type AutoPayerVia = "subscription" | "owner-key" | "speaker-key" | "server" | "org-key" | "org-account";
 
 /** The last pick on a thread (WireTask.autoModel), and the preview the
  * model chip shows before a thread has one. */

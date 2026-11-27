@@ -2515,6 +2515,7 @@ bindLeafHost({
   get queuedTurnTrigger() { return queuedTurnTrigger; },
   get hostComputerRefusal() { return hostComputerRefusal; },
   get orgAccountComputerRefusal() { return orgAccountComputerRefusal; },
+  get orgGrokAccountHolder() { return orgGrokAccountHolder; },
   get computerPlaceRefusal() { return computerPlaceRefusal; },
   get externalCompletion() { return externalCompletion; },
   get beginInternalCapabilityGeneration() { return beginInternalCapabilityGeneration; },
@@ -24055,6 +24056,13 @@ const imagePeople: ImagePeople = {
   },
   soloKey: (provider) => providerAccounts.key(undefined, provider),
   account: (person) => grokAccountTokenOf(person),
+  // #5200: the organization's Grok account on the image chain, after the
+  // person's keys and before the organization's key (same consent as the key)
+  orgAccount: async () => {
+    if (IDENTITY.kind !== "perspicax") return undefined;
+    const access = await orgGrokAccountAccess();
+    return access.ok ? access.accessToken : undefined;
+  },
   imageGen: () => cfg.imageGen,
   organizationXaiGiven: (principalId) => orgXaiMediaGiven("image", principalId),
   organizationXaiKey: () => cfg.xai?.key,
@@ -32120,6 +32128,20 @@ function orgGrokAccountAccess(candidate?: string): Promise<OrgGrokAccess> {
     },
     grokSignIn: grokLiveAccessOf,
   }, candidate);
+}
+
+/** #5200: whose Grok login is the organization's, when that form can serve
+ * a plan (sign-in present). Sync; the token is read only at materialize or
+ * at a live voice/image use. Never logs the value. */
+function orgGrokAccountHolder(): string | undefined {
+  if (IDENTITY.kind !== "perspicax") return undefined;
+  const sub = perspicaxDirectory?.voiceOrgAccount()?.trim();
+  if (!sub) return undefined;
+  const person = orgPersonBySub(sub);
+  if (!person?.active || !engineLogins) return undefined;
+  const instanceId = folderInstance("grokAgent", engineLogins.preferredAccount(person.principalId, "grokAgent") ?? DEFAULT_ACCOUNT);
+  if (!instanceId || !engineLogins.grokAccountIdentity(person.principalId, "primary", instanceId)?.kind) return undefined;
+  return person.principalId;
 }
 
 const voiceModeDeps: VoiceModeDeps = {

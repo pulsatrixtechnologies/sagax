@@ -7927,6 +7927,7 @@
   "triggers.event.issue_removed": "Issue removed",
   "triggers.event.comment_created": "Comment added",
   "triggers.event.cycle_completed": "Cycle completed",
+  "turnAccess.orgAccount": "Organization's Grok account",
   "turnAccess.orgKey": "Organization's key",
   "turnAccess.ownerCredentials": "Owner's credentials",
   "turnAccess.server": "Server access",

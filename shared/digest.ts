@@ -42,7 +42,7 @@ export interface TurnDigest {
 }
 
 export interface DigestAccess {
-  via: "subscription" | "owner-key" | "speaker-key" | "server" | "org-key";
+  via: "subscription" | "owner-key" | "speaker-key" | "server" | "org-key" | "org-account";
   payer: "speaker" | "owner" | "organization";
   payerPrincipalId?: string;
   /** The bot's routine (or a hop one started): the owner's credentials. */

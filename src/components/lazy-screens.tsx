@@ -10,6 +10,7 @@ export { NewBotDialog };
 
 export const AchievementsScreen = lazyScreen("AchievementsScreen", async () => (await import("./achievements/AchievementsScreen")).AchievementsScreen);
 export const ArtifactsHost = lazyScreen("ArtifactsHost", async () => (await import("./artifacts/ArtifactsHost")).ArtifactsHost);
+export const ArtifactSidePanel = lazyScreen("ArtifactSidePanel", async () => (await import("./artifacts/ArtifactSidePanel")).ArtifactSidePanel);
 export const BotCatalogModal = lazyScreen("BotCatalogModal", async () => (await import("./bot-catalog/BotCatalogModal")).BotCatalogModal);
 /** Browse Bots inside Connect apps' window (the same chunk as the modal). */
 import { BotCatalogPane } from "./lazy-bot-catalog";
@@ -39,7 +40,7 @@ export const TeamMapPage = lazyScreen("TeamMapPage", async () => (await import("
 export const TriggersPanel = lazyScreen("TriggersPanel", async () => (await import("./TriggersPanel")).TriggersPanel);
 
 const SCREENS = [
-  AchievementsScreen, ActivityPanel, ApprovalsPage, ArtifactsHost, BotCatalogModal, BotCatalogPane, BotSettingsDialog, BotWizard, BulkEditBotsDialog, CodePage, CommandPalette, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace, MemoryManagerPanel, NewBotDialog,
+  AchievementsScreen, ActivityPanel, ApprovalsPage, ArtifactsHost, ArtifactSidePanel, BotCatalogModal, BotCatalogPane, BotSettingsDialog, BotWizard, BulkEditBotsDialog, CodePage, CommandPalette, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace, MemoryManagerPanel, NewBotDialog,
   OrgImportDialog, PersonaEditorModal, PersonPanel, PluginsPanel, RemoteAgentSettingsPanel, RemoteDesktopPanel, RemoteSessionsAdminPage, RoutinesPage, ScreenPanel, SettingsModal, StagedOrgImport, TeamMapPage, TriggersPanel,
 ];
 

@@ -16,7 +16,36 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
     case "openPersonPanel": {
       const personId = action.personId?.trim() || null;
       if (!personId) return state.personPanelId === null ? state : { ...state, personPanelId: null };
-      return { ...state, personPanelId: personId, settingsOpen: false, computerOpen: false, inspectorOpen: false, appSettingsOpen: false, personaEditor: null };
+      return { ...state, personPanelId: personId, settingsOpen: false, computerOpen: false, inspectorOpen: false, appSettingsOpen: false, artifactPanel: null, personaEditor: null };
+    }
+    case "openArtifactPanel": {
+      const panel = action.panel;
+      if (!panel) return state.artifactPanel === null ? state : { ...state, artifactPanel: null };
+      if (
+        state.artifactPanel?.botId === panel.botId
+        && state.artifactPanel.artifactId === panel.artifactId
+        && state.artifactPanel.title === panel.title
+        && !state.settingsOpen
+        && !state.computerOpen
+        && !state.personPanelId
+        && !state.inspectorOpen
+        && !state.activityOpen
+        && !state.appSettingsOpen
+      ) {
+        return state;
+      }
+      return {
+        ...state,
+        artifactPanel: panel,
+        settingsOpen: false,
+        computerOpen: false,
+        personPanelId: null,
+        panelOwner: null,
+        inspectorOpen: false,
+        activityOpen: false,
+        appSettingsOpen: false,
+        personaEditor: null,
+      };
     }
     case "toggleSettings": {
       // Only Details (and Routines) live in the bot panel. A deep link to any
@@ -77,6 +106,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         computerOpen: open ? false : state.computerOpen,
         inspectorOpen: open ? false : state.inspectorOpen,
         appSettingsOpen: open ? false : state.appSettingsOpen,
+        artifactPanel: open ? null : state.artifactPanel,
         memoryManagerOpen: open ? false : state.memoryManagerOpen,
         // The bot's profile page fills the main area (#2136): opening the
         // bot panel gives the chat back.
@@ -196,6 +226,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         inspectorOpen: open ? false : state.inspectorOpen,
         activityOpen: open ? false : state.activityOpen,
         appSettingsOpen: open ? false : state.appSettingsOpen,
+        artifactPanel: open ? null : state.artifactPanel,
         personaEditor: open ? null : state.personaEditor,
       };
     }
@@ -251,6 +282,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         computerOpen: open ? false : state.computerOpen,
         activityOpen: open ? false : state.activityOpen,
         appSettingsOpen: open ? false : state.appSettingsOpen,
+        artifactPanel: open ? null : state.artifactPanel,
       };
     }
     case "toggleActivity": {
@@ -262,6 +294,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         computerOpen: open ? false : state.computerOpen,
         inspectorOpen: open ? false : state.inspectorOpen,
         appSettingsOpen: open ? false : state.appSettingsOpen,
+        artifactPanel: open ? null : state.artifactPanel,
       };
     }
     case "toggleAppSettings": {
@@ -279,6 +312,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         settingsOpen: open ? false : state.settingsOpen,
         computerOpen: open ? false : state.computerOpen,
         inspectorOpen: open ? false : state.inspectorOpen,
+        artifactPanel: open ? null : state.artifactPanel,
         pluginsOpen: open ? false : state.pluginsOpen,
         triggersOpen: open ? false : state.triggersOpen,
         // #4470: opened from the bot's profile page, the window opens over

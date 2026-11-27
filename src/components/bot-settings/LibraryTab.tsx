@@ -8,7 +8,7 @@
 // (docs/superpowers/specs/2026-10-16-artifacts-design.md)
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { AppWindow, Copy, Download, FolderOpen, LoaderCircle, MessageSquare, MoreHorizontal, Pin, PinOff, RefreshCw, RotateCcw, Share, Trash2, Users, X } from "lucide-react";
+import { AppWindow, Columns2, Copy, Download, FolderOpen, LoaderCircle, MessageSquare, MoreHorizontal, Pin, PinOff, RefreshCw, RotateCcw, Share, Trash2, Users, X } from "lucide-react";
 
 import { api, useStore, type Bot, type Group } from "@/state/store";
 import { groupThreadIds } from "@/lib/group-panel";
@@ -470,7 +470,8 @@ function ArtifactLibraryRow({ artifact, actions, now, openMenus }: { artifact: A
       openMenus={openMenus}
       menu={(close) => (
         <>
-          <MenuItem icon={<AppWindow size={14} />} label={t("artifacts.open")} onClick={() => { close(); actions.open(artifact); }} />
+          <MenuItem icon={<Columns2 size={14} />} label={t("artifacts.openBeside")} onClick={() => { close(); actions.open(artifact); }} />
+          <MenuItem icon={<AppWindow size={14} />} label={t("artifacts.openWindow")} onClick={() => { close(); actions.openWindow(artifact); }} />
           <MenuItem icon={pinned ? <PinOff size={14} /> : <Pin size={14} />} label={pinLabel} onClick={() => { close(); actions.toggleFavorite(artifact); }} />
           {artifact.popped && canOpenArtifactInOwnWindow() && (
             <MenuItem icon={<X size={14} />} label={t("artifacts.closeWindow")} onClick={() => { close(); actions.closeWindow(artifact); }} />

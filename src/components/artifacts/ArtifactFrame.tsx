@@ -40,6 +40,11 @@ function setFullscreenArtifact(next: FullscreenArtifact | null): void {
   fullscreenArtifact = next;
   for (const listener of fullscreenListeners) listener();
 }
+
+/** Open the in-app full-screen layer for an artifact (side panel Agrandir). */
+export function openArtifactFullscreen(artifact: FullscreenArtifact | null): void {
+  setFullscreenArtifact(artifact);
+}
 function subscribeFullscreen(listener: () => void): () => void {
   fullscreenListeners.add(listener);
   return () => { fullscreenListeners.delete(listener); };

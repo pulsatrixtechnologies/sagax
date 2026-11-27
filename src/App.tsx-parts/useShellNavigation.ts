@@ -37,6 +37,7 @@ export function useShellNavigation() {
     orgImportOpen: current.orgImportOpen,
     orgImportStaged: current.orgImportStaged,
     personPanelId: current.personPanelId,
+    artifactPanel: current.artifactPanel,
     personaEditor: current.personaEditor,
     pluginsOpen: current.pluginsOpen,
     selectedId: current.selectedId,
@@ -245,6 +246,7 @@ export function useShellNavigation() {
     state.inspectorOpen ||
     state.activityOpen ||
     state.appSettingsOpen ||
+    state.artifactPanel !== null ||
     state.personaEditor !== null;
 
   return {

@@ -10,7 +10,7 @@ import { SideThreadPanel } from "@/components/SideThreadPanel";
 import { useScreenPanelOpen } from "@/lib/screen-panel";
 import { ComposeToPicker } from "@/components/ComposeToPicker";
 import {
-  AchievementsScreen, ActivityPanel, ApprovalsPage, ArtifactsHost, BotCatalogModal, BotSettingsDialog, BotWizard, CodePage, CommandPalette, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace,
+  AchievementsScreen, ActivityPanel, ApprovalsPage, ArtifactsHost, ArtifactSidePanel, BotCatalogModal, BotSettingsDialog, BotWizard, CodePage, CommandPalette, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace,
   MemoryManagerPanel, OrgImportDialog, PersonaEditorModal, PersonPanel, PluginsPanel, RemoteAgentSettingsPanel, RemoteDesktopPanel, RemoteSessionsAdminPage, RoutinesPage, ScreenPanel, SettingsModal, StagedOrgImport, TeamMapPage,
 } from "@/components/lazy-screens";
 import { ArchivedBotsPanel } from "@/components/Sidebar";
@@ -227,6 +227,14 @@ export function ShellLayout(shell: ShellNavigation) {
       <div ref={setPanelSlot} data-split-panel-slot="" className="contents" />
       {remoteClient && state.settingsOpen && panelBotId && <BotSurface id={panelBotId}>{(current) => <RemoteAgentSettingsPanel bot={current} />}</BotSurface>}
       {state.personPanelId && <PersonPanel key={`person:${state.personPanelId}`} personId={state.personPanelId} />}
+      {state.artifactPanel && (
+        <ArtifactSidePanel
+          key={`artifact:${state.artifactPanel.artifactId}`}
+          botId={state.artifactPanel.botId}
+          artifactId={state.artifactPanel.artifactId}
+          title={state.artifactPanel.title}
+        />
+      )}
       {remoteClient && state.computerOpen && bot && (
         <BotSurface key={`computer:${bot.id}`} id={bot.id}>{(current) => <RemoteDesktopPanel bot={current} />}</BotSurface>
       )}

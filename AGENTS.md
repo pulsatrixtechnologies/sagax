@@ -183,6 +183,10 @@ Rules only. How the code works (files, routes, tests, history) lives in
 - Misuse guardrails: defensive security work is the `security.triage` permission, which never lifts a block (2026-10-12).
 - Never widen the artifact refresh tool list without the same review as the Perspicax read-only list (2026-10-16).
 
+## Artifacts
+
+- An artifact opens beside the chat in the shared docked panel or in its own Electron window; Detach and Dock to side switch between them; never bring back the internal floating panel removed on 2026-10-28 (2026-11-27).
+
 ## Pages
 
 - A published page is reached only within its sharing; never replace an unreadable registry with an empty one (2026-10-16).

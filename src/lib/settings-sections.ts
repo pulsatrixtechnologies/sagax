@@ -198,12 +198,23 @@ const SUB_PAGES_DEFINED = {
   "usage.traces": { section: "usage", titleKey: "usage.trace.title", gate: "usage" },
   // Updates
   "updates.about": { section: "updates", titleKey: "settings.section.about", gate: "about" },
-  "updates.advanced": { section: "updates", titleKey: "settings.advanced.title", gate: "developer" },
+  // Advanced (former Developer): on General since M-20261127-068
+  "general.advanced": { section: "general", titleKey: "settings.advanced.title", gate: "developer" },
 } as const satisfies Record<string, SettingsSubPageInfo>;
 
 export type SettingsSubPageId = keyof typeof SUB_PAGES_DEFINED;
 
 export const SETTINGS_SUB_PAGES: Readonly<Record<SettingsSubPageId, SettingsSubPageInfo>> = SUB_PAGES_DEFINED;
+
+/** Old sub-page ids that open the same page under a new id (deep links,
+ * saved state, e2e helpers). resolveSubPage and openSubPage map them. */
+export const SUB_PAGE_ALIASES: Readonly<Record<string, SettingsSubPageId>> = {
+  "updates.advanced": "general.advanced",
+};
+
+export function canonicalSubPageId(id: string): string {
+  return SUB_PAGE_ALIASES[id] ?? id;
+}
 
 /** #4457: where each former page lives now: a rail page, or one of its
  * sub-pages. An old link, deep link or saved section opens it there. */
@@ -221,7 +232,8 @@ const SECTION_PLACE: Partial<Record<AppSettingsSection, { section: AppSettingsSe
   // Connected apps joined Models on 2026-10-14 (settings-link.ts names it so)
   connectedApps: { section: "providers", subPage: "providers.models" },
   voice: { section: "providers", subPage: "providers.voice" },
-  developer: { section: "updates", subPage: "updates.advanced" },
+  // M-20261127-068: Advanced left Updates for the end of General
+  developer: { section: "general", subPage: "general.advanced" },
   about: { section: "updates", subPage: "updates.about" },
 };
 

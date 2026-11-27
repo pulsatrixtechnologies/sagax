@@ -116,7 +116,7 @@ describe("Settings > Models and voice", () => {
     // #4457: Models and Voice are sub-pages of Providers; the microphone is General > System
     const providers = SECTIONS.find((entry) => entry.id === "providers")!;
     const usage = SECTIONS.find((entry) => entry.id === "usage")!;
-    // Auto's explainer, Defaults and Keep warm moved to Developer (the owner 2026-11-08), Updates > Advanced
+    // Auto's explainer, Defaults and Keep warm moved to Developer (the owner 2026-11-08), General > Advanced
     expect(sectionMatches(providers, "modèle auto")).toBe(false);
     expect(sectionMatches(SECTIONS.find((entry) => entry.id === "updates")!, "modèle auto")).toBe(true);
     for (const typed of ["fournisseur d'images", "recherche web", "à configurer", "moteur de voix", "appels en direct"]) {

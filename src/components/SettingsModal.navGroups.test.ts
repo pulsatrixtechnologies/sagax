@@ -99,7 +99,7 @@ describe("Settings rail (#4457)", () => {
     expect(html).toContain(">Permissions</h2>");
   });
 
-  it("Providers holds the Models and Voice cards (their rows one page further); Updates holds What's new, About and Advanced", async () => {
+  it("Providers holds the Models and Voice cards; Updates holds What's new and About; Advanced is on General", async () => {
     const { ProvidersModelsVoice, ProvidersSettings } = await import("./lazy-settings-sections");
     await Promise.all([ProvidersModelsVoice.preload(), ProvidersSettings.preload()]);
     fixture.section = "providers";
@@ -113,21 +113,29 @@ describe("Settings rail (#4457)", () => {
     fixture.section = "updates";
     const updates = render();
     expect(updates).toContain('data-settings-card="updates.links"');
-    for (const row of ["updates.about", "updates.advanced"]) expect(updates, row).toContain(`data-settings-card="${row}"`);
+    expect(updates).toContain('data-settings-card="updates.about"');
+    expect(updates).not.toContain('data-settings-card="updates.advanced"');
+    expect(updates).not.toContain('data-settings-card="general.advanced"');
+    fixture.section = "general";
+    const general = render();
+    expect(general).toContain('data-settings-card="general.advanced"');
+    // Advanced is the last settings card on General
+    const lastCard = [...general.matchAll(/data-settings-card="([^"]+)"/g)].map((match) => match[1]).at(-1);
+    expect(lastCard).toBe("general.advanced");
   });
 
-  it("keeps Updates on the web (About and Advanced), with no updater", () => {
+  it("keeps Updates on the web (About), with no updater", () => {
     vi.stubGlobal("window", {});
     expect(railRows(render())).toContain("updates");
   });
 
   it("the search finds each moved option on the page that holds it now", () => {
     const where: Record<string, string[]> = {
-      general: ["language", "time zone", "avatar", "open at login", "hotkey", "send key", "microphone", "notification sound", "backup", "theme", "font"],
+      general: ["language", "time zone", "avatar", "open at login", "hotkey", "send key", "microphone", "notification sound", "backup", "theme", "font", "diagnostic", "advanced mode"],
       security: ["security key", "passkey", "always allow", "my tool access", "people's tool access", "read receipts", "screen recording"],
       credentials: ["vault", "1password", "one-time card"],
       providers: ["api key", "models", "voice", "tts", "decision model"],
-      updates: ["version", "diagnostic", "advanced mode", "licence", "send feedback"],
+      updates: ["version", "licence", "send feedback"],
       organization: ["server", "obsidian"],
     };
     for (const [id, queries] of Object.entries(where)) {

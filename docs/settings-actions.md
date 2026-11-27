@@ -324,7 +324,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | What upkeep learned about you (get lists them; set with a fact's id removes it) | None: their bots keep it (this setting) | `sagax_settings` get, set `account.learned` | suppression |
 | Anonymous usage counts to this server | Settings > General > Advanced > Usage meter | `sagax_settings` get, set `account.usageMeter` | simple |
 | Your monthly spend limit in USD (null removes; personal server) | Settings > Usage > Monthly limit | `sagax_settings` get, set `account.spendCap` | simple |
-| Your own experiments and tool calls shown ({features: {<key>: true/false/null}}) | Settings > Updates > Advanced > Experimental; Settings > General > Appearance > More appearance > Show tool calls | `sagax_settings` get, set `account.experimental` | simple |
+| Your own experiments and tool calls shown ({features: {<key>: true/false/null}}) | Settings > General > Advanced > Experimental; Settings > General > Appearance > More appearance > Show tool calls | `sagax_settings` get, set `account.experimental` | simple |
 
 ### Apparence
 
@@ -473,7 +473,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | New bot defaults | Settings > General > System > New bots | `sagax_settings` get, set `server.newBotDefaults` | simple; organisation : organisation |
 | Conversation cleanup | Settings > General > Advanced > Threads | `sagax_settings` get, set `server.threads` | simple; organisation : organisation |
 | Show tool calls | Settings > General > Appearance | `sagax_settings` get, set `server.showToolCalls` | simple; organisation : organisation |
-| Experimental features ({skillAuthoring, browser, connectedApps, decisionModel, dataWindow, meetingNotetaker, llmThreadTitles}) | Settings > Updates > Advanced > Experimental | `sagax_settings` get, set `server.feature` | simple; organisation : organisation |
+| Experimental features ({skillAuthoring, browser, connectedApps, decisionModel, dataWindow, meetingNotetaker, llmThreadTitles}) | Settings > General > Advanced > Experimental | `sagax_settings` get, set `server.feature` | simple; organisation : organisation |
 | Routines in conversation | Settings > Organization > Bots | `sagax_settings` get, set `server.routinesInConversation` | simple; organisation : organisation |
 | Room turn limit | Settings > Organization > Rooms | `sagax_settings` get, set `server.roomTurnTimeout` | simple; organisation : organisation |
 | MCP call time limit | Settings > Organization | `sagax_settings` get, set `server.mcpCallTimeout` | simple; organisation : organisation |

@@ -21,7 +21,12 @@ describe("Settings placement (the owner 2026-11-08)", () => {
     // #4457: the release notes are What's new on Updates, About its sub-page there
     expect(dev).not.toContain("requestReleaseNotes");
     const modal = read("../SettingsModal.tsx");
-    for (const needle of ['data-settings-card="updates.links"', 'requestReleaseNotes("browse")', '<SubPageEntry id="updates.about"', '<SubPageEntry id="updates.advanced"']) expect(modal, needle).toContain(needle);
+    for (const needle of ['data-settings-card="updates.links"', 'requestReleaseNotes("browse")', '<SubPageEntry id="updates.about"']) expect(modal, needle).toContain(needle);
+    expect(modal).not.toContain('<SubPageEntry id="updates.advanced"');
+    // M-20261127-068: Advanced is a row at the end of General
+    const general = read("./AppPage.tsx");
+    expect(general).toContain('<SubPageEntry id="general.advanced"');
+    expect(general).toContain('t("settings.sub.advanced.summary")');
     // never folded: no advanced flag on the moved groups
     expect(dev).not.toMatch(/advanced\s*[=}]/);
   });
@@ -36,9 +41,11 @@ describe("Settings placement (the owner 2026-11-08)", () => {
     expect(src).toContain("text-[13px] text-ink-secondary");
   });
 
-  it("search finds the moved options on Updates (Advanced is the former Developer), not on their old pages", () => {
-    const dev = SECTIONS.find((s) => s.id === "updates")!.keywords;
-    for (const k of ["advanced mode", "scheduled update", "github oauth", "server environment", "prompt cache"]) expect(dev).toContain(k);
+  it("search finds the moved options on General (Advanced is the former Developer), not on Updates", () => {
+    const general = SECTIONS.find((s) => s.id === "general")!.keywords;
+    for (const k of ["advanced mode", "scheduled update", "github oauth", "server environment", "prompt cache"]) expect(general).toContain(k);
+    const updates = SECTIONS.find((s) => s.id === "updates")!.keywords;
+    for (const k of ["advanced mode", "scheduled update", "github oauth", "server environment", "prompt cache"]) expect(updates).not.toContain(k);
     expect(CARD_KEYWORDS["general.interface"]).toEqual([]);
   });
 });

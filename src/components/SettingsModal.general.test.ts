@@ -118,7 +118,7 @@ describe("Settings > General, the reference design's layout", () => {
     const general = render();
     expect(general).toContain('data-settings-card="general.system"');
     expect(general).toContain('data-settings-card="general.input"');
-    // #2636: the loop guard is on Developer (Updates > Advanced)
+    // #2636: the loop guard is on Developer (General > Advanced)
     expect(general).not.toContain('data-settings-card="general.loopGuard"');
   });
 

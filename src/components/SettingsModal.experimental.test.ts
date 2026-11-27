@@ -154,14 +154,16 @@ describe("Settings > Developer > Experimental", () => {
 });
 
 describe("Settings > Account and App Advanced (#2080 L2)", () => {
-  it("keeps the technical cards off Account itself", async () => {
+  it("keeps the technical cards off General itself (Advanced is only a row)", async () => {
     fixture.features = { routinesInConversation: true };
     const html = await render();
-    expect(html).not.toContain('data-settings-card="general.advanced"');
+    // M-20261127-068: Advanced is a ▸ row at the end of General; its cards stay one page further
+    expect(html).toContain('data-settings-card="general.advanced"');
     expect(html).not.toContain("Routines in the conversation");
     expect(html).not.toContain('data-settings-card="organization.roomTurns"');
     expect(html).not.toContain('data-settings-card="organization.mcpCalls"');
     expect(html).not.toContain('data-settings-card="general.toolAccess"');
+    expect(html).not.toContain('data-settings-card="general.loopGuard"');
     expect(switchNamed("Run routines in the conversation")).toBeUndefined();
     expect(fixture.api).not.toHaveBeenCalled();
     expect(fixture.dispatch).not.toHaveBeenCalled();
@@ -235,24 +237,23 @@ describe("Settings > Organization (cards from General > Advanced, 2026-10-15; ti
     const { cardsMatching, SECTIONS, sectionMatches } = await import("./SettingsModal");
     expect(cardsMatching("mcp")).toContain("organization.mcpCalls");
     const org = SECTIONS.find((entry) => entry.id === "organization")!;
-    // #4457: Developer is Updates > Advanced; Account is a card of General
-    const developer = SECTIONS.find((entry) => entry.id === "updates")!;
+    // M-20261127-068: Developer is General > Advanced; Account is a card of General
     const general = SECTIONS.find((entry) => entry.id === "general")!;
+    const updates = SECTIONS.find((entry) => entry.id === "updates")!;
     expect(sectionMatches(org, "routines")).toBe(true);
-    expect(sectionMatches(developer, "routines")).toBe(false);
+    expect(sectionMatches(general, "routines")).toBe(false);
     for (const word of ["mcp", "group turns"]) {
-      expect(sectionMatches(developer, word), word).toBe(true);
+      expect(sectionMatches(general, word), word).toBe(true);
       expect(sectionMatches(org, word), word).toBe(false);
-      expect(sectionMatches(general, word), word).toBe(false);
+      expect(sectionMatches(updates, word), word).toBe(false);
     }
-    expect(sectionMatches(general, "mcp", ["mcp"])).toBe(true);
     const { currentSettingsSection, currentSettingsCard, isMovedOrganizationCard } = await import("@/lib/settings-sections");
     expect(currentSettingsSection("general", "general.routinesInConversation")).toBe("organization");
-    // #2636: the timeouts' old and new ids open Developer
-    expect(currentSettingsSection("general", "general.mcpCalls")).toBe("updates");
-    expect(currentSettingsSection("general", "organization.roomTurns")).toBe("updates");
+    // #2636: the timeouts' old and new ids open Developer (General > Advanced)
+    expect(currentSettingsSection("general", "general.mcpCalls")).toBe("general");
+    expect(currentSettingsSection("general", "organization.roomTurns")).toBe("general");
     expect(currentSettingsCard("general.roomTurns")).toBe("organization.roomTurns");
     expect(isMovedOrganizationCard("general.threadCleanup")).toBe(false);
-    expect(currentSettingsSection("general", "general.threadCleanup")).toBe("updates");
+    expect(currentSettingsSection("general", "general.threadCleanup")).toBe("general");
   });
 });

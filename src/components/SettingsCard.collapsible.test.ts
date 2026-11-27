@@ -207,8 +207,9 @@ describe("Settings → Account and General, compact", () => {
     const { GeneralPage } = await import("./settings/AppPage");
     const { ThreadCleanupSettings } = await import("./ThreadCleanupSettings");
     const html = renderToStaticMarkup(createElement(StoreProvider, null, createElement(SettingsModal)));
-    expect(html).not.toContain('data-settings-card="general.advanced"');
-    for (const id of ["general.threadCleanup", "general.roomTurns", "general.mcpCalls"]) {
+    // M-20261127-068: Advanced is a ▸ row on General; the technical cards stay one page further
+    expect(html).toContain('data-settings-card="general.advanced"');
+    for (const id of ["general.threadCleanup", "general.roomTurns", "general.mcpCalls", "general.loopGuard"]) {
       expect(html).not.toContain(`data-settings-card="${id}"`);
     }
     const advanced = renderToStaticMarkup(createElement(StoreProvider, null, createElement(GeneralPage), createElement(ThreadCleanupSettings)));

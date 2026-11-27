@@ -91,12 +91,13 @@ function LanguageRow() {
   );
 }
 
-/** General (#4457, the owner 2026-11-16): the reference app's General, five
- * cards. Account (who is signed in; About me is kept by the bots); Appearance (theme, accent,
+/** General (#4457, the owner 2026-11-16): the reference app's General.
+ * Account (who is signed in; About me is kept by the bots); Appearance (theme, accent,
  * language, time zone, spell check, send key, then More appearance);
  * Notifications (desktop notifications, the approval chime, then More
  * notifications); Mascots; System (microphone, hardware acceleration, open at
- * login, Shortcuts, Backups and storage). Each card keeps its former page's
+ * login, Shortcuts, Backups and storage); then Advanced (M-20261127-068, the
+ * former Developer page). Each card keeps its former page's
  * rules (a remote client shows this desktop's own cards only). On a solo
  * desktop Organization is hidden, so the bot rules stay here under Advanced;
  * a remote client keeps people's tool access here. */
@@ -165,6 +166,11 @@ export function GeneralPage({ remoteActive = false, lockedServer = null }: { rem
         </div>
       )}
       {remoteActive && editConfig && <PeopleToolAccessSettings />}
+
+      {/* M-20261127-068: Advanced (former Developer) at the end of General */}
+      <SettingsGroup groupId="generalAdvanced">
+        <SubPageEntry id="general.advanced" summary={t("settings.sub.advanced.summary")} />
+      </SettingsGroup>
     </>
   );
 }

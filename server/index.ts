@@ -1261,6 +1261,7 @@ import { PageDataApprovals } from "./pages/page-data-approvals.ts";
 import { pageActVerdict } from "./pages/page-act-verdict.ts";
 import { PageLinkApprovals } from "./pages/page-link-approvals.ts";
 import { createTeamBoardSource } from "./pages/sources/team-board.ts";
+import { createTeamBoardRoutes } from "./routes/team-board.ts";
 import { TEAM_BOARD_ENTRIES_PER_BOT, TEAM_BOARD_WORK_WINDOW_MS, waitingCardOf } from "./team-board/board.ts";
 import { createGithubBoardReader, ghGraphqlVia, ghRestVia } from "./team-board/github-board.ts";
 import { createBotCodeBranchRoutes } from "./routes/bot-code-branches.ts";
@@ -4689,6 +4690,7 @@ bindLeafHost({
   get createTeamExportImportRoutes() { return createTeamExportImportRoutes; },
   get createTeamLibraryGrokRoutes() { return createTeamLibraryGrokRoutes; },
   get createTeamLibraryRoutes() { return createTeamLibraryRoutes; },
+  get createTeamBoardRoutes() { return createTeamBoardRoutes; },
   get createTeamMapRoutes() { return createTeamMapRoutes; },
   get createTeamMemoryHttpRoutes() { return createTeamMemoryHttpRoutes; },
   get createTeamMemoryMemberMayAnswer() { return createTeamMemoryMemberMayAnswer; },
@@ -28388,9 +28390,10 @@ const botActivityDeps: BotActivityRouteDeps = {
 };
 ROUTES.push(createBotActivityRoutes(botActivityDeps));
 // The Team board (#3409), the `team-board` page source (#3413,
-// server/pages/sources/team-board.ts): the reader's own teams and bots,
-// their code work as the reader may read it, and GitHub read with the
-// reader's own account. Computed on demand, read only.
+// server/pages/sources/team-board.ts) and GET /api/team-board for the
+// native Tools page: the reader's own teams and bots, their code work as
+// the reader may read it, and GitHub read with the reader's own account.
+// Computed on demand, read only.
 const teamBoardActivity = createBotActivityReader(botActivityDeps);
 const teamBoardGithub = createGithubBoardReader({
   token: (person) => githubAccountToken(person),
@@ -28407,10 +28410,10 @@ function teamBoardBots(auth: RequestAuth): BotRecord[] {
   return store.bots.filter((bot) => !bot.hidden && visible.bot(bot.id)
     && (IDENTITY.kind !== "perspicax" || effectiveBotOwner(bot).trim().toLowerCase() === person.trim().toLowerCase()));
 }
-pageSources.register(createTeamBoardSource({
-  person: (auth) => actorPrincipalId(auth) || undefined,
-  viewerId: (auth) => channelFilterViewerId(auth),
-  teams: (auth) => {
+const teamBoardDeps = {
+  person: (auth: RequestAuth) => actorPrincipalId(auth) || undefined,
+  viewerId: (auth: RequestAuth) => channelFilterViewerId(auth),
+  teams: (auth: RequestAuth) => {
     const person = actorPrincipalId(auth);
     const bots = teamBoardBots(auth);
     const names = sectionChannels ? orgVisibleSections(orgSectionNames(), person || undefined) : store.sections;
@@ -28420,8 +28423,8 @@ pageSources.register(createTeamBoardSource({
       bots: bots.filter((bot) => sectionKey(bot.section) === sectionKey(name)).map((bot) => ({ id: bot.id, name: bot.name })),
     })).filter((team) => team.bots.length > 0);
   },
-  bots: (auth) => teamBoardBots(auth).map((bot) => ({ id: bot.id, name: bot.name, ...(bot.managedSections ? { managedSections: bot.managedSections } : {}) })),
-  entries: (board, viewerId) => {
+  bots: (auth: RequestAuth) => teamBoardBots(auth).map((bot) => ({ id: bot.id, name: bot.name, ...(bot.managedSections ? { managedSections: bot.managedSections } : {}) })),
+  entries: (board: { id: string }, viewerId: string | undefined) => {
     const bot = store.bot(board.id);
     if (!bot) return [];
     return teamBoardActivity.list(bot, viewerId, TEAM_BOARD_ENTRIES_PER_BOT, TEAM_BOARD_WORK_WINDOW_MS, { archived: true })
@@ -28435,7 +28438,9 @@ pageSources.register(createTeamBoardSource({
   },
   queued: () => coordinator.liveEdges().filter((edge) => edge.state === "queued").map((edge) => edge.threadId),
   github: teamBoardGithub
-}));
+};
+pageSources.register(createTeamBoardSource(teamBoardDeps));
+ROUTES.push(createTeamBoardRoutes({ board: teamBoardDeps }));
 // The work an orchestrator bot runs through its team (#3461, lot 1 of
 // #3451): GET /api/bots/:id/team-work for the Coding section of its panel,
 // the ids-only `team.work` frame when one of its hand-overs changes state,

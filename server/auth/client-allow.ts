@@ -165,6 +165,8 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   // reads: fleet, transcripts, search (no secrets in any of these)
   { methods: ["GET"], path: /^\/api\/bots$/ },
   { methods: ["GET"], path: /^\/api\/team-map$/ },
+  // Team board (#3409): the person's own kanban of their coding teams
+  { methods: ["GET"], path: /^\/api\/team-board$/ },
   // The engines catalogue the model picker and the chat header read. A
   // non-admin session gets clientInstanceView(): engine names, models,
   // capabilities and availability, never the host's CLI paths, install

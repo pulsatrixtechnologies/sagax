@@ -1,9 +1,11 @@
 // @vitest-environment happy-dom
 // The cell division of a Heavy run in the chat's row (M-20261126-122): the
 // row draws as many cells as the run has experts (2 to 8), each one the
-// bot's own shape; a run that is over is drawn finished and never replayed;
-// reduced motion (the device's, the app's, the mascot's own setting) lands
-// the steps at once; a bot whose mascot is a character keeps the owls.
+// bot's own shape in the bot's own colour, then the pile of the bot's own
+// avatars (M-20261127-178); a run that is over is that pile at once and never
+// replays; reduced motion (the device's, the app's, the mascot's own
+// setting) lands the steps at once; a character or a photo divides as a
+// round in its colour.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,7 +14,7 @@ import { setLocale } from "@/lib/i18n";
 import type { Message } from "@/state/store";
 import type { HeavyTeamLine } from "../../shared/heavy-team";
 import { OBJECT_SHAPE_BY_ID } from "../../shared/shape-avatar-presets";
-import { divisionShape, expertPaint } from "./HeavyDivision";
+import { divisionShape } from "./HeavyDivision";
 import { HeavyLeaderContext, HeavyTeamRow } from "./HeavyTeamRow";
 import { bakedStill, loadAllBakedStills } from "./shape-stills";
 
@@ -58,6 +60,11 @@ const row = (bot: Bot | null, line: HeavyTeamLine, busy: boolean, id = "m1") =>
   act(() => root.render(createElement(HeavyLeaderContext, { value: bot }, createElement(HeavyTeamRow, { message: message(line, id), busy }))));
 const $ = (selector: string) => host.querySelector<HTMLElement>(selector);
 const cells = () => [...host.querySelectorAll("[data-heavy-cell]")];
+/** The pile of the bot's own avatars, once the division has closed up (or at once for a run already over). */
+const pile = () => [...host.querySelectorAll<HTMLElement>("[data-heavy-pile] [data-heavy-expert-avatar]")];
+/** The division tells the row it reached its pile from its clock, outside React: the row draws again. */
+const settle = () => act(async () => { await Promise.resolve(); });
+const fill = (cell: Element) => cell.querySelector("use:not([stroke])")!.getAttribute("fill");
 /** Draw the frames the row asks for, 16 ms apart, until it asks for none or `seconds` have passed. */
 function pump(seconds: number): void {
   for (let frame = 0; frame < seconds * 60 && frames.length; frame += 1) {
@@ -92,15 +99,15 @@ afterEach(() => {
 });
 
 describe("the division in the chat's row", () => {
-  it("while the leader picks its team the row shows the bot's own mascot, alone, against the header", async () => {
+  it("while the leader picks its team the row shows the bot's own avatar, alone, against the header", async () => {
     await row(shapeBot("cat"), team(0), true);
-    expect(cells()).toHaveLength(1);
-    expect($("[data-heavy-division]")!.dataset.shape).toBe("cat");
-    expect($("[data-heavy-division]")!.nextElementSibling).toBe($("[data-heavy-header]"));
+    expect(cells()).toHaveLength(0);
+    expect($("[data-heavy-leader-avatar] [data-shape]")!.dataset.shape).toBe("cat");
+    expect($("[data-heavy-leader-avatar]")!.nextElementSibling).toBe($("[data-heavy-header]"));
     expect($("[data-heavy-header]")!.textContent).toMatch(/^Leader picking the team/);
   });
 
-  it.each([2, 3, 4, 5, 6, 7, 8])("divides into the %i experts the run announces, each in its colour", async (count) => {
+  it.each([2, 3, 4, 5, 6, 7, 8])("divides into the %i experts the run announces, each the bot in its own colour, then the pile of its avatars", async (count) => {
     await row(shapeBot("cat"), team(0), true, `run-${count}`);
     await row(shapeBot("cat"), team(count), true, `run-${count}`);
     expect(cells()).toHaveLength(1);
@@ -109,15 +116,22 @@ describe("the division in the chat's row", () => {
     pump(30);
     expect(cells()).toHaveLength(count);
     expect(cells().map((cell) => cell.getAttribute("data-heavy-expert"))).toEqual(Array.from({ length: count }, (_, index) => String(index + 1)));
-    expect(cells().map((cell) => cell.querySelector("use:not([stroke])")!.getAttribute("fill"))).toEqual(Array.from({ length: count }, (_, index) => expertPaint(index).color));
-    expect(new Set(cells().map((cell) => cell.querySelector("use:not([stroke])")!.getAttribute("fill"))).size).toBe(count);
+    // no colour of its own (M-20261127-178): every cell is the bot's colour, the membrane's
+    const own = $("[data-heavy-division] > g")!.getAttribute("fill");
+    expect(cells().map(fill)).toEqual(Array.from({ length: count }, () => own));
     // the drawing is exactly as wide as its pile, so the text stays against it
     expect($("[data-heavy-division]")!.getAttribute("width")).toBe(String(22 + 16 * (count - 1)));
     expect($("[data-heavy-division]")!.getAttribute("aria-label")).toBe(`${count} experts`);
+    // the pile closed up: the bot's own avatar once per expert
+    await settle();
+    expect(pile()).toHaveLength(count);
+    for (const expert of pile()) expect(expert.querySelector<HTMLElement>("[data-shape]")!.dataset.shape).toBe("cat");
+    expect($("[data-heavy-pile] [data-heavy-avatars]")!.getAttribute("aria-label")).toBe(`${count} experts`);
   });
 
-  it.each(["cat", "star", "circle", "ghost"])("starts from the bot's own shape (%s) and every expert keeps it: only the colour changes", async (shape) => {
-    await row(shapeBot(shape), done(5), false);
+  it.each(["cat", "star", "circle", "ghost"])("divides from the bot's own shape (%s) and every cell keeps it, and its colour", async (shape) => {
+    await row(shapeBot(shape), team(0), true, `own-${shape}`);
+    await row(shapeBot(shape), team(5), true, `own-${shape}`);
     const svg = $("[data-heavy-division]")!;
     expect(svg.dataset.shape).toBe(shape);
     // the body in the defs is this shape's own still, the one every other avatar of the bot draws
@@ -126,6 +140,7 @@ describe("the division in the chat's row", () => {
     const own = bakedStill(shape as Parameters<typeof bakedStill>[0])!.paths.map(([, d]) => d);
     expect(drawn.length).toBeGreaterThan(0);
     expect(drawn.every((d) => own.includes(d!))).toBe(true);
+    pump(30);
     // and each of the five cells is that one body, drawn again: its ring, its body, its volume (off for a flat body) and its eyes
     for (const cell of cells()) {
       const uses = [...cell.querySelectorAll("use")].map((use) => use.getAttribute("href"));
@@ -133,6 +148,7 @@ describe("the division in the chat's row", () => {
       expect(cell.querySelector("[data-heavy-shade]")!.getAttribute("opacity")).toBe("0");
     }
     expect(cells()).toHaveLength(5);
+    expect(new Set(cells().map(fill))).toEqual(new Set([svg.querySelector(":scope > g")!.getAttribute("fill")]));
   });
 
   it.each(["cat", "star", "ghost"])("divides as the bot's own silhouette (%s): the membrane is its body, never a disc", async (shape) => {
@@ -153,39 +169,45 @@ describe("the division in the chat's row", () => {
   });
 
   it("a bot in a material the page cannot paint divides into flat cells with the mock-up's simple volume", async () => {
-    await row(shapeBot("cat", { material: "fluffy" }), done(3), false, "fluffy");
+    await row(shapeBot("cat", { material: "fluffy" }), team(0), true, "fluffy");
+    await row(shapeBot("cat", { material: "fluffy" }), team(3), true, "fluffy");
+    pump(30);
     expect(cells()).toHaveLength(3);
     for (const cell of cells()) expect(Number(cell.querySelector("[data-heavy-shade]")!.getAttribute("opacity"))).toBe(1);
     expect($("[data-heavy-division] defs radialGradient")).not.toBeNull();
   });
 
-  it("an expert that fails mid-run stays marked: its cell is dimmed, and its line in the preview says so", async () => {
+  it("an expert that fails mid-run stays marked: its cell is dimmed, then its avatar in the pile, and its line in the preview says so", async () => {
     const working = team(3);
     await row(shapeBot("cat"), team(0), true, "fails");
     await row(shapeBot("cat"), working, true, "fails");
-    pump(30);
+    pump(1);
     const failedLine = team(3, { agents: working.agents.map((agent) => (agent.n === 2 ? { ...agent, status: "failed" as const, messages: ["My plan."] } : agent)) });
     await row(shapeBot("cat"), failedLine, true, "fails");
+    pump(30);
     expect(cells().map((cell) => cell.hasAttribute("data-heavy-failed"))).toEqual([false, true, false]);
     expect(cells()[1]!.querySelector("use:not([stroke])")!.getAttribute("opacity")).toBe("0.45");
     expect(cells()[0]!.querySelector("use:not([stroke])")!.getAttribute("opacity")).toBe("1");
     expect($("[data-heavy-agent='2']")!.textContent).toBe("Expert 2 · Persona 2Did not finish · My plan.");
-    // the division goes on: nothing started over
+    // the division went on: nothing started over
     expect(cells()).toHaveLength(3);
+    await settle();
+    expect(pile().map((expert) => expert.hasAttribute("data-heavy-failed"))).toEqual([false, true, false]);
+    expect((pile()[1]!.firstElementChild as HTMLElement).style.opacity).toBe("0.45");
   });
 
   it("a row that first shows once the experts are past their first round starts as the pile, never replays its division", async () => {
     const leader = team(4, { phase: "leader", rounds: [{ n: 1, kind: "propose", startedAt: T0, endedAt: T0 + 5_000 }] });
     await row(shapeBot("cat"), leader, true, "late-leader");
-    expect(cells()).toHaveLength(4);
-    expect($("[data-heavy-division]")!.dataset.heavyDivision).toBe("live");
+    expect(pile()).toHaveLength(4);
+    expect($("[data-heavy-division]")).toBeNull();
     const second = team(4, { rounds: [{ n: 1, kind: "propose", startedAt: T0, endedAt: T0 + 5_000 }, { n: 2, kind: "critique", startedAt: T0 + 5_000 }] });
     await row(shapeBot("cat"), second, true, "late-round");
-    expect(cells()).toHaveLength(4);
-    expect($("[data-heavy-division]")!.dataset.heavyDivision).toBe("live");
+    expect(pile()).toHaveLength(4);
+    expect($("[data-heavy-division]")).toBeNull();
   });
 
-  it("reduced motion turned on mid-run is followed: the division lands at once", async () => {
+  it("reduced motion turned on mid-run is followed: the division lands at once, into the pile", async () => {
     await row(shapeBot("cat"), team(0), true, "switch");
     await row(shapeBot("cat"), team(8), true, "switch");
     pump(1);
@@ -194,26 +216,27 @@ describe("the division in the chat's row", () => {
       document.documentElement.dataset.reducedMotion = "true";
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    expect(cells()).toHaveLength(8);
-    expect($("[data-heavy-division]")!.dataset.heavyDivision).toBe("rest");
-    pump(1);
-    expect(frames).toHaveLength(0);
+    await settle();
+    expect(pile()).toHaveLength(8);
+    // nothing fades under reduced motion: the division is gone at once
+    expect($("[data-heavy-division]")).toBeNull();
   });
 
-  it("the bot's own colour is the cell that divides", async () => {
-    await row(shapeBot("cat", { bodyColor: "#123abc" }), team(0), true);
+  it("the bot's own colour, a free one too, is the cell that divides and every expert's", async () => {
+    await row(shapeBot("cat", { bodyColor: "#123abc" }), team(0), true, "free");
+    await row(shapeBot("cat", { bodyColor: "#123abc" }), team(3), true, "free");
     expect($("[data-heavy-division] > g")!.getAttribute("fill")).toBe("#123abc");
+    pump(30);
+    expect(cells().map(fill)).toEqual(["#123abc", "#123abc", "#123abc"]);
   });
 
-  it("a run that is over, read back from history, is drawn finished and never replays its division", async () => {
+  it("a run that is over, read back from history, is the pile at once and never replays its division", async () => {
     await row(shapeBot("cat"), done(4), false);
-    expect(cells()).toHaveLength(4);
-    expect($("[data-heavy-division]")!.dataset.heavyDivision).toBe("rest");
-    expect(cells().map((cell) => cell.getAttribute("data-heavy-expert"))).toEqual(["1", "2", "3", "4"]);
-    // nothing moves: no frame was asked for, and the membrane's layer is off
+    expect(pile()).toHaveLength(4);
+    expect(pile().map((expert) => expert.getAttribute("data-heavy-expert-avatar"))).toEqual(["1", "2", "3", "4"]);
+    expect($("[data-heavy-division]")).toBeNull();
+    // nothing moves: no frame was asked for
     expect(frames).toHaveLength(0);
-    expect($("[data-heavy-division] > g")!.getAttribute("display")).toBe("none");
-    expect($("[data-heavy-division] > g")!.hasAttribute("filter")).toBe(false);
     expect($("[data-heavy-header]")!.textContent).toBe("Thought for 8s");
   });
 
@@ -240,40 +263,42 @@ describe("the division in the chat's row", () => {
     act(() => root.unmount());
     root = createRoot(host);
     await row(shapeBot("cat"), team(3), true, "seen");
-    expect(cells()).toHaveLength(3);
-    expect($("[data-heavy-division]")!.dataset.heavyDivision).toBe("live");
+    expect(pile()).toHaveLength(3);
+    expect($("[data-heavy-division]")).toBeNull();
   });
 
   it("when the run ends the cells stop breathing and no more frame is asked for", async () => {
     await row(shapeBot("cat"), team(2), true, "ends");
     pump(30);
-    expect(frames.length).toBe(1);
+    expect(cells()).toHaveLength(2);
     await row(shapeBot("cat"), done(2), false, "ends");
     pump(1);
     expect(frames).toHaveLength(0);
-    expect($("[data-heavy-division]")!.dataset.heavyDivision).toBe("rest");
-    expect(cells()).toHaveLength(2);
+    expect(pile()).toHaveLength(2);
   });
 
   it("under the app's reduced motion the steps show without animation", async () => {
     document.documentElement.dataset.reducedMotion = "true";
     await row(shapeBot("cat"), team(0), true, "calm");
-    expect(cells()).toHaveLength(1);
+    expect($("[data-heavy-leader-avatar]")).not.toBeNull();
     await row(shapeBot("cat"), team(6), true, "calm");
-    expect(cells()).toHaveLength(6);
-    expect($("[data-heavy-division]")!.dataset.heavyDivision).toBe("rest");
+    await settle();
+    expect(pile()).toHaveLength(6);
+    expect($("[data-heavy-division]")).toBeNull();
     expect(frames).toHaveLength(0);
   });
 
   it("under the device's reduced motion too, and under the mascot's own Motion setting", async () => {
     vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("reduce"), addEventListener() {}, removeEventListener() {} }));
     await row(shapeBot("cat"), team(4), true, "device");
-    expect(cells()).toHaveLength(4);
+    await settle();
+    expect(pile()).toHaveLength(4);
     expect(frames).toHaveLength(0);
     vi.unstubAllGlobals();
     stubFrames();
     await row(shapeBot("cat", { motion: "reduced" }), team(4), true, "mascot");
-    expect(cells()).toHaveLength(4);
+    await settle();
+    expect(pile()).toHaveLength(4);
     expect(frames).toHaveLength(0);
   });
 
@@ -284,13 +309,13 @@ describe("the division in the chat's row", () => {
     expect(divisionShape(shapeBot("cat"))).toBe("cat");
   });
 
-  it("a character bot: the bot while its leader picks, then a round in its colour divides, then each cell is the bot's own character again", async () => {
+  it("a character bot: the bot while its leader picks, then a round in its colour divides, then each cell is the bot's own character again, in its own colour", async () => {
     const owl = { name: "Nimbus", color: "blue" } as Bot;
     await row(owl, team(0), true, "owl-run");
     expect($("[data-heavy-leader-avatar] [data-owl]")).not.toBeNull();
     expect($("[data-heavy-leader-avatar]")!.nextElementSibling).toBe($("[data-heavy-header]"));
     await row(owl, team(3), true, "owl-run");
-    // the round, in the bot's own colour, divides
+    // the round, in the bot's own colour, divides, and every cell stays in it
     const svg = $("[data-heavy-division]")!;
     expect(svg.dataset.shape).toBe("circle");
     expect(svg.hasAttribute("data-heavy-character")).toBe(true);
@@ -298,20 +323,20 @@ describe("the division in the chat's row", () => {
     pump(1);
     expect(svg.dataset.heavyDivision).toBe("dividing");
     pump(30);
-    // the division tells the row it reached its pile (from its clock, outside React): the row draws again
-    await act(async () => { await Promise.resolve(); });
-    // the pile closed up: each cell is the bot's own character in its expert's colour, stacked as the pile is
-    const pile = $("[data-heavy-character-pile]")!;
-    expect(pile.querySelectorAll("[data-heavy-owl]")).toHaveLength(3);
-    expect(pile.querySelectorAll("[data-heavy-owl] [data-owl]")).toHaveLength(3);
-    expect(pile.querySelector("[data-heavy-avatars]")!.getAttribute("aria-label")).toBe("3 experts");
+    expect(cells().map(fill)).toEqual(["#377fe6", "#377fe6", "#377fe6"]);
+    await settle();
+    // the pile closed up: each cell is the bot's own owl, the same one three times, stacked as the pile is
+    expect(pile()).toHaveLength(3);
+    expect(host.querySelectorAll("[data-heavy-pile] [data-heavy-expert-avatar] [data-owl]")).toHaveLength(3);
+    expect(new Set(pile().map((expert) => expert.innerHTML.replace(/_r_[0-9a-z]+_|«r[0-9a-z]+»/g, "ID"))).size).toBe(1);
+    expect($("[data-heavy-pile] [data-heavy-avatars]")!.getAttribute("aria-label")).toBe("3 experts");
   });
 
   it("a character bot's run read back from history is its pile at once, never divided", async () => {
     await row({ name: "Nimbus", color: "blue", mascotLook: { character: "shiba" } } as Bot, done(4), false, "shiba-done");
     expect($("[data-heavy-division]")).toBeNull();
-    expect(host.querySelectorAll("[data-heavy-character-pile] [data-heavy-owl]")).toHaveLength(4);
-    expect(host.querySelectorAll("[data-heavy-owl] [data-shiba-skin]")).toHaveLength(4);
+    expect(pile()).toHaveLength(4);
+    expect(host.querySelectorAll("[data-heavy-expert-avatar] [data-shiba-skin]")).toHaveLength(4);
     expect(frames).toHaveLength(0);
   });
 
@@ -321,8 +346,8 @@ describe("the division in the chat's row", () => {
     await row(photo, team(2), true, "photo-run");
     expect($("[data-heavy-division]")!.dataset.shape).toBe("circle");
     pump(30);
-    await act(async () => { await Promise.resolve(); });
-    const pictures = [...host.querySelectorAll("[data-heavy-character-pile] [data-heavy-owl] img")];
+    await settle();
+    const pictures = [...host.querySelectorAll("[data-heavy-pile] [data-heavy-expert-avatar] img")];
     expect(pictures).toHaveLength(2);
     for (const picture of pictures) expect(picture.getAttribute("src")).toBe("/api/attachments/a.png");
   });

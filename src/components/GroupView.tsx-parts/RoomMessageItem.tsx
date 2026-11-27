@@ -23,6 +23,7 @@ import { RoomToolChip } from "./RoomToolChip";
 import { roomActivityVisible } from "@/lib/room-activity";
 import { DataResultChip } from "../DataResultChip";
 import { StatusActivityRow } from "../StatusActivityRow";
+import { HeavyLeaderContext } from "../HeavyTeamRow";
 import { isStatusActivity } from "@/lib/activity-runs";
 import { ScreenFrame } from "../ScreenFrame";
 import { VideoPlayerWidget } from "../video/VideoPlayerWidget";
@@ -197,7 +198,10 @@ export function RoomMessageItem({
       </div>
     ) : m.kind === "activity" && m.tool ? (
       roomActivityVisible(m, showToolCalls) ? (
-        m.dataResult ? <DataResultChip message={m} /> : isStatusActivity(m) ? <StatusActivityRow message={m} /> : <RoomToolChip message={m} roomId={group.id} live={liveTools.has(m.id)} />
+        m.dataResult ? <DataResultChip message={m} /> : isStatusActivity(m) ? (
+          // a Heavy run's experts are the bot that ran it (M-20261127-178)
+          <HeavyLeaderContext value={state.bots.find((candidate) => candidate.id === m.from?.botId) ?? null}><StatusActivityRow message={m} /></HeavyLeaderContext>
+        ) : <RoomToolChip message={m} roomId={group.id} live={liveTools.has(m.id)} />
       ) : null
     ) : m.kind === "screen" ? (
       // views on request only (shared/requested-views.ts)

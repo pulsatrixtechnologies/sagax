@@ -2,20 +2,22 @@
 // 2026-11-26, M-20261126-116, M-20261126-119 to M-20261126-122): the bot's
 // own mascot, at the row's small avatar size, divides in place into one cell
 // per expert. Each cell is the bot's shape for the whole division (its
-// open-bot-avatar body, the one every other avatar of the bot draws); only
-// the colour changes, and the experts end as the row's tight pile, each cut
-// out of its neighbour by a ring of the page's colour.
+// open-bot-avatar body, the one every other avatar of the bot draws), in the
+// bot's own colour: an expert is the bot duplicated, never a colour of its
+// own (M-20261127-178). The cells end as the row's tight pile, each cut out
+// of its neighbour by a ring of the page's colour, and once it has closed up
+// the row draws the bot's own avatars in their place (HeavyTeamRow.tsx).
 //
-// One SVG per row, no canvas of its own: the bodies still in the bot's colour
+// One SVG per row, no canvas of its own: the bodies still in the membrane
 // sit under a "goo" filter (a blur, then a threshold on its alpha), so the
 // bot's own silhouette stretches, pinches and lets go as one membrane. A
-// bot in a material (Fluffy, Glass) wears it in its cells: one still per
-// colour, painted once by the engine on the context the material already
+// bot in a material (Fluffy, Glass) wears it in its cells: the bot's one
+// still, painted once by the engine on the context the material already
 // shares across the page (shape-material-still.ts). Where the page cannot
 // paint it, the cells are flat with the mock-up's simple volume. A bot whose
 // mascot is a character or a photo divides too (D-20261126-037): a round in
-// its colour, whose cells become the bot's own character again once the pile
-// has closed up (HeavyTeamRow.tsx draws that pile). The motion
+// its colour, whose cells become the bot's own avatar again once the pile
+// has closed up. The motion
 // is src/lib/heavy-division.ts; this file draws its cells and runs its
 // clock, which stops when the row leaves the screen, when the page is hidden
 // and once nothing moves any more. A run that is over, read back from
@@ -26,7 +28,7 @@ import type { AvatarDefinition, AvatarMood, AvatarState, Matrix } from "open-bot
 import type { CanvasMaterial } from "open-bot-avatar/dom";
 
 import { t } from "@/lib/i18n";
-import { AGENT_COLORS, HEAVY_FAILED_OPACITY } from "@/lib/heavy-team";
+import { HEAVY_FAILED_OPACITY } from "@/lib/heavy-team";
 import { HeavyDivisionSim, type DivisionCell } from "@/lib/heavy-division";
 import { botAvatarProfile } from "../../shared/bot-avatar";
 import { completeMascotLook, DEFAULT_ENGINE_LOOK, engineLookOf, type MascotAvatarDef, type MascotShape, type ShapeMotion } from "../../shared/mascot-look";
@@ -70,7 +72,7 @@ export interface DivisionArt {
   character: boolean;
 }
 
-/** The bot's shape when its mascot is one (a character, or a picture of its own, divides into nothing: the row keeps its pile of avatars). */
+/** The bot's shape when its mascot is one (a character, or a picture of its own, has none: it divides as a round in its colour). */
 export function divisionShape(bot: DivisionBot | null | undefined): MascotShape | null {
   if (!bot) return null;
   const profile = botAvatarProfile(bot);
@@ -137,12 +139,6 @@ export function useDivisionArt(bot: DivisionBot | null | undefined): DivisionArt
   }, [shape, look.shape, frame, look.body, look.ink, settings.motion, material, shaded, character]);
 }
 
-/** An expert's colour and the ink of its eyes: the pile's plumages, in the order of the experts, as a plain shape paints them. */
-export function expertPaint(index: number): { color: string; ink: string } {
-  const look = shapeLook({ shape: "circle", skin: "plain", color: AGENT_COLORS[index % AGENT_COLORS.length]!, material: false });
-  return { color: look.body, ink: look.ink };
-}
-
 /** The runs whose division this window already showed to its end: scrolling a row away and back never plays it again. */
 const played = new Set<string>();
 
@@ -159,7 +155,7 @@ interface CellNodes {
   group: SVGGElement;
   solid: SVGGElement;
   fill: SVGUseElement;
-  /** The expert in its material. */
+  /** The expert in its material: the bot's own still. */
   picture: SVGImageElement | null;
   shade: SVGUseElement;
   eyes: SVGUseElement;
@@ -200,7 +196,7 @@ export interface HeavyDivisionProps {
   settled?: boolean;
   /** The experts that failed mid-run, by their place in the pile: their cells are dimmed. */
   failed?: readonly boolean[];
-  /** Called once the run's division has reached its pile (a character's row then draws its own pile). */
+  /** Called once the run's division has reached its pile (the row then draws the bot's own avatars in its place). */
   onRest?: () => void;
   size?: number;
 }
@@ -230,8 +226,8 @@ export function HeavyDivision({ art, count, running, runId, settled = false, fai
   const reduced = art.motion === "reduced" || (art.motion === "system" && systemReduced);
   // what the cells are painted with: read on every draw, so a change repaints them and never restarts the division
   const failedKey = (failed ?? []).map((value) => (value ? "1" : "0")).join("");
-  // the stills worn now; `version` changes each time they are replaced, so the cells take new ones of the same count too
-  const stills = useRef<{ own: MaterialStill | null; experts: Array<MaterialStill | null>; version: number } | null>(null);
+  // the bot's still worn now, by the bot and by every expert; `version` changes each time it is replaced
+  const stills = useRef<{ own: MaterialStill | null; version: number } | null>(null);
   const paint = useRef({ art, failed: failedKey, onRest });
   paint.current = { art, failed: failedKey, onRest };
 
@@ -351,17 +347,17 @@ export function HeavyDivision({ art, count, running, runId, settled = false, fai
         const at = `translate(${f2(cell.x)} ${f2(y)}) scale(${Math.round(k * 10000) / 10000}) translate(${f2(-body.cx)} ${f2(-body.cy)})`;
         if (made.expert !== cell.expert) {
           made.expert = cell.expert;
-          const colours = cell.expert >= 0 ? expertPaint(cell.expert) : { color: look.color, ink: look.ink };
-          made.fill.setAttribute("fill", colours.color);
-          made.eyes.style.color = colours.ink;
+          // the bot and every expert in the bot's own colours: an expert is the bot duplicated (M-20261127-178)
+          made.fill.setAttribute("fill", look.color);
+          made.eyes.style.color = look.ink;
           if (cell.expert >= 0) made.group.setAttribute("data-heavy-expert", String(cell.expert + 1));
           else made.group.removeAttribute("data-heavy-expert");
           const gone = cell.expert >= 0 && dim[cell.expert] === "1";
           if (gone) made.group.setAttribute("data-heavy-failed", "");
           else made.group.removeAttribute("data-heavy-failed");
           made.fill.setAttribute("opacity", gone ? String(FAILED_OPACITY) : "1");
-          // the material's stills: the expert's in its cell, the bot's over its own body while nothing divides
-          const picture = cell.expert >= 0 ? worn?.experts[cell.expert % AGENT_COLORS.length] ?? null : null;
+          // the bot's material still: in an expert's cell, and over the bot's own body while nothing divides
+          const picture = cell.expert >= 0 ? worn?.own ?? null : null;
           if (picture) {
             made.picture ??= element("image", made.solid);
             placeImage(made.picture, picture);
@@ -516,9 +512,8 @@ export function HeavyDivision({ art, count, running, runId, settled = false, fai
     live.current?.repaint();
   }, [art.color, art.ink, art.shaded, failedKey]);
 
-  // the material's stills, the bot's and one per expert of the run, painted once per look and kept
+  // the material's still: the bot's one, worn by every cell, painted once per look and kept
   const material = art.material;
-  const experts = Math.min(count, AGENT_COLORS.length);
   useEffect(() => {
     if (!material) {
       if (stills.current) {
@@ -529,17 +524,16 @@ export function HeavyDivision({ art, count, running, runId, settled = false, fai
     }
     let alive = true;
     const px = Math.ceil((100 * size) / (live.current?.span ?? 84));
-    const wanted = [{ color: art.color, ink: art.ink }, ...Array.from({ length: experts }, (_, index) => expertPaint(index))];
-    void Promise.all(wanted.map((colours) => materialStill({ definition: material.definition, material: material.finish, color: colours.color, ink: colours.ink, depth: material.depth, state: material.state, mood: material.mood, px })))
-      .then(([own, ...painted]) => {
+    void materialStill({ definition: material.definition, material: material.finish, color: art.color, ink: art.ink, depth: material.depth, state: material.state, mood: material.mood, px })
+      .then((own) => {
         if (!alive) return;
-        stills.current = { own: own ?? null, experts: painted, version: (stills.current?.version ?? 0) + 1 };
+        stills.current = { own, version: (stills.current?.version ?? 0) + 1 };
         live.current?.repaint();
       });
     return () => {
       alive = false;
     };
-  }, [material, art.color, art.ink, experts, size]);
+  }, [material, art.color, art.ink, size]);
 
   // the width and the view box follow the cells: the drawing writes them, so the text stays against the pile
   return (

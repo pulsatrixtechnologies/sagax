@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 // Heavy mode in the chat (#4901, #5089): the row while the experts work,
-// after, Auto's one line, and the Thoughts panel it opens. Here the bot's
-// mascot is no shape, so the experts are the pile of owls; a shape's
-// division is HeavyDivision.dom.test.ts.
-import { act, createElement } from "react";
+// after, Auto's one line, and the Thoughts panel it opens. Every expert is
+// the conversation's bot, drawn by BotAvatar (a stand-in here that says which
+// bot it drew); the real avatars are HeavyExperts.mascot.dom.test.ts, a
+// shape's division HeavyDivision.dom.test.ts.
+import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,13 +15,18 @@ import type { Message } from "@/state/store";
 import type { HeavyTeamLine } from "../../shared/heavy-team";
 
 vi.mock("./Avatar", () => ({
-  MausAvatar: (props: { color: string; state?: string; animated?: boolean }) => ({ $$typeof: Symbol.for("react.transitional.element"), type: "span", key: null, ref: null, props: { "data-owl": props.color, "data-owl-state": props.state, "data-owl-animated": String(props.animated) }, _owner: null, _store: {} }),
+  BotAvatar: (props: { bot: { name?: string; color: string }; state?: string; animated?: boolean }) => ({ $$typeof: Symbol.for("react.transitional.element"), type: "span", key: null, ref: null, props: { "data-avatar-bot": `${props.bot.name}/${props.bot.color}`, "data-avatar-state": props.state, "data-avatar-animated": String(props.animated) }, _owner: null, _store: {} }),
 }));
 
-const { HeavyTeamRow } = await import("./HeavyTeamRow");
+const { HeavyLeaderContext, HeavyTeamRow: Row } = await import("./HeavyTeamRow");
 const { ThoughtsPanel, ThoughtsPanelHost } = await import("./ThoughtsPanel");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+/** The conversation's bot: a brown character, as the owner's (M-20261127-178). */
+const BOT = { name: "Ada", color: "brown" as const, mascotLook: { character: "shiba" as const } };
+/** The row as the chat draws it: under its conversation's bot. */
+const HeavyTeamRow = (props: Parameters<typeof Row>[0]): ReactNode => createElement(HeavyLeaderContext, { value: BOT }, createElement(Row, props));
 
 const T0 = 1_000_000;
 const line = (over: Partial<HeavyTeamLine> = {}): HeavyTeamLine => ({
@@ -65,31 +71,37 @@ afterEach(() => {
 });
 
 describe("a Heavy run while the experts work", () => {
-  it("keeps the experts' pile of owls against the header while they work, for a bot whose mascot is no shape", () => {
-    render(createElement(HeavyTeamRow, { message: message(line()), busy: true }));
-    expect($$("[data-heavy-open] [data-owl]").map((owl) => owl.dataset.owl)).toEqual(["blue", "green", "orange"]);
+  it("keeps the experts' pile against the header while they work: the conversation's bot once per expert, no colour of its own", () => {
+    render(createElement(HeavyTeamRow, { message: message(critique()), busy: true }));
+    expect($$("[data-heavy-open] [data-avatar-bot]").map((avatar) => avatar.dataset.avatarBot)).toEqual(["Ada/brown", "Ada/brown", "Ada/brown"]);
     expect($("[data-heavy-division]")).toBeNull();
-    expect($("[data-heavy-avatars]")!.nextElementSibling).toBe($("[data-heavy-header]"));
+    expect($("[data-heavy-pile]")!.nextElementSibling).toBe($("[data-heavy-header]"));
   });
 
   it("keeps the pile alive while they work, the one speaking at work, as the orbit drew them; still once the run is over", () => {
-    render(createElement(HeavyTeamRow, { message: message(line()), busy: true }));
-    expect($$("[data-owl]").map((owl) => [owl.dataset.owlState, owl.dataset.owlAnimated])).toEqual([["thinking", "true"], ["idle", "true"], ["idle", "true"]]);
+    render(createElement(HeavyTeamRow, { message: message(critique()), busy: true }));
+    expect($$("[data-avatar-bot]").map((avatar) => [avatar.dataset.avatarState, avatar.dataset.avatarAnimated])).toEqual([["thinking", "true"], ["idle", "true"], ["idle", "true"]]);
     render(createElement(HeavyTeamRow, { message: message(line({ phase: "done", thoughtEndedAt: T0 + 6_000 })), busy: false }));
-    expect($$("[data-owl]").map((owl) => [owl.dataset.owlState, owl.dataset.owlAnimated])).toEqual([["idle", "false"], ["idle", "false"], ["idle", "false"]]);
+    expect($$("[data-avatar-bot]").map((avatar) => [avatar.dataset.avatarState, avatar.dataset.avatarAnimated])).toEqual([["idle", "false"], ["idle", "false"], ["idle", "false"]]);
   });
 
   it("dims an expert that failed mid-run, in the pile and in the preview", () => {
-    const failed = line({ agents: line().agents.map((agent) => (agent.n === 2 ? { ...agent, status: "failed" as const } : agent)) });
+    const failed = line({ rounds: critique().rounds, agents: line().agents.map((agent) => (agent.n === 2 ? { ...agent, status: "failed" as const } : agent)) });
     render(createElement(HeavyTeamRow, { message: message(failed), busy: true }));
-    expect($$("[data-heavy-owl]").map((owl) => owl.hasAttribute("data-heavy-failed"))).toEqual([false, true, false]);
-    expect(($("[data-heavy-owl='2'] > span") as HTMLElement).style.opacity).toBe("0.45");
+    expect($$("[data-heavy-expert-avatar]").map((expert) => expert.hasAttribute("data-heavy-failed"))).toEqual([false, true, false]);
+    expect(($("[data-heavy-expert-avatar='2'] > span") as HTMLElement).style.opacity).toBe("0.45");
     expect($("[data-heavy-agent='2']")!.textContent).toBe("Expert 2 · SecurityDid not finish · The rollback plan is the real risk.");
   });
 
   it("while the leader picks the team the row shows the bot itself, as the orbit's centre did", () => {
     render(createElement(HeavyTeamRow, { message: message(line({ phase: "planning", agents: [], rounds: [] })), busy: true }));
-    expect($("[data-heavy-leader-avatar] [data-owl]")).not.toBeNull();
+    expect($("[data-heavy-leader-avatar] [data-avatar-bot]")!.dataset.avatarBot).toBe("Ada/brown");
+  });
+
+  it("without a bot to duplicate it draws no avatar at all: never an owl or a generic shape", () => {
+    render(createElement(Row, { message: message(critique()), busy: true }));
+    expect($("[data-heavy-open] [data-avatar-bot]")).toBeNull();
+    expect($("[data-heavy-header]")!.textContent).toBe("Experts critiquing · round 2 of 5 · 6s");
   });
 
   it("says what the experts do in the round, the round and the seconds, and a live preview of the exchange", () => {
@@ -143,7 +155,7 @@ describe("agreement and after", () => {
     expect($("[data-heavy-header]")!.textContent).toBe("Thought for 8s");
     expect($("[data-heavy-outcome]")!.textContent).toBe("· agreed in round 2");
     expect($("[data-heavy-preview]")).toBeNull();
-    expect($$("[data-owl]").map((owl) => owl.dataset.owl)).toEqual(["blue", "green", "orange"]);
+    expect($$("[data-avatar-bot]").map((avatar) => avatar.dataset.avatarBot)).toEqual(["Ada/brown", "Ada/brown", "Ada/brown"]);
     act(() => { vi.advanceTimersByTime(60_000); });
     expect($("[data-heavy-header]")!.textContent).toBe("Thought for 8s");
   });
@@ -276,5 +288,11 @@ describe("the panel's host", () => {
     expect($("[data-thoughts-live]")!.textContent).toBe("A newer thought");
     render(createElement(ThoughtsPanelHost, { messages: [], busy: false }));
     expect($("[data-thoughts-panel]")).toBeNull();
+  });
+
+  it("draws every expert as the conversation's bot, the one still writing at work (M-20261127-178)", () => {
+    act(() => openThoughts("run-2"));
+    render(createElement(HeavyLeaderContext, { value: BOT }, createElement(ThoughtsPanelHost, { messages: [message(line(), "run-2")], busy: true })));
+    expect($$("[data-thoughts-avatar] [data-avatar-bot]").map((avatar) => [avatar.dataset.avatarBot, avatar.dataset.avatarState])).toEqual([["Ada/brown", "thinking"], ["Ada/brown", "thinking"], ["Ada/brown", "thinking"]]);
   });
 });

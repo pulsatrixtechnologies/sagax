@@ -1,72 +1,74 @@
 // A Heavy run in the chat (#4901, #5089, the reference app's Heavy): the
-// row's small avatars are the run itself. While the team works, the bot's
-// own mascot divides in place into one cell per expert (HeavyDivision, owner
-// 2026-11-26, M-20261126-122), "Experts critiquing · round 2 of 5 · 6s"
-// against it and a live preview of what each one writes, then the leader's
-// step; an expert that failed stays dimmed in the pile and in the preview.
-// Once they are done, the same pile and one quiet line, "Thought for 8s",
-// and how it ended (agreed in round 2, or the leader decided after 5); it
-// opens the Thoughts panel. A bot whose mascot is a character or a photo
-// divides too (D-20261126-037): while its leader picks the team the row
-// shows the bot itself, then a round in its colour divides, and each cell
-// becomes the bot's own character again, in its expert's colour, stacked as
-// the pile is (alive while the run goes, the one speaking at work, as the
-// orbit drew them). When Auto chose Heavy on its own it says so in one line
-// above. The final answer is the leader's ordinary reply under it. State:
-// shared/heavy-team.ts.
+// row's small avatars are the run itself. Every expert is the conversation's
+// bot, exactly as the chat's header draws it (BotAvatar, the bot unchanged:
+// its character, shape, skin, colours or picture), duplicated once per expert,
+// never a colour of its own, an owl or a generic shape (M-20261127-178,
+// M-20261126-119, D-20261126-037). While the team works the bot's mascot
+// divides in place into one cell per expert (HeavyDivision, owner 2026-11-26,
+// M-20261126-122), "Experts critiquing · round 2 of 5 · 6s" against it and a
+// live preview of what each one writes, then the leader's step; an expert
+// that failed stays dimmed in the pile and in the preview. Once they are
+// done, the same pile and one quiet line, "Thought for 8s", and how it ended
+// (agreed in round 2, or the leader decided after 5); it opens the Thoughts
+// panel. While its leader picks the team the row shows the bot itself, then
+// its mascot divides (its own shape, or a round in its colour for a
+// character or a photo), and once the pile has closed up each cell becomes
+// the bot's own avatar again, stacked as the pile is (alive while the run
+// goes, the one speaking at work, as the orbit drew them). When Auto chose
+// Heavy on its own it says so in one line above. The final answer is the
+// leader's ordinary reply under it. State: shared/heavy-team.ts.
 import { createContext, use, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import {
-  AGENT_COLORS, agentPreview, expertName, failedPreview, HEAVY_FAILED_OPACITY, heavyAutoText, heavyHeader, heavyIsRunning, heavyOutcomeText, leaderNow, leaderStepText, refusalText,
+  agentPreview, expertName, failedPreview, HEAVY_FAILED_OPACITY, heavyAutoText, heavyHeader, heavyIsRunning, heavyOutcomeText, leaderNow, leaderStepText, refusalText,
 } from "@/lib/heavy-team";
 import { toggleThoughts, useOpenThoughts } from "@/lib/thoughts-panel";
 import type { Message } from "@/state/store";
 import type { HeavyAgentLine, HeavyTeamLine } from "../../shared/heavy-team";
-import { BotAvatar, MausAvatar, type BotAvatarProps } from "./Avatar";
-import { divisionPlayed, divisionShape, HeavyDivision, useDivisionArt, type DivisionArt } from "./HeavyDivision";
+import { BotAvatar, type BotAvatarProps } from "./Avatar";
+import { divisionPlayed, HeavyDivision, useDivisionArt, type DivisionArt } from "./HeavyDivision";
 import { useReducedMotionPreference } from "./TabIndicator";
 
 type LeaderBot = BotAvatarProps["bot"];
 
-/** The bot of the conversation, the team's leader: its mascot is what divides (ChatViewShell provides it). */
+/** The bot of the conversation, the team's leader: its mascot is what divides, and every expert is it (ChatViewShell provides it to the transcript and the Thoughts panel). */
 export const HeavyLeaderContext = createContext<LeaderBot | null>(null);
 
-/** An expert as a copy of the bot's own character: its look in the expert's colour (a free body colour set aside), its picture as it is. */
-function expertBot(bot: LeaderBot, index: number): LeaderBot {
-  const look = bot.mascotLook ? (({ bodyColor: _free, ...kept }) => kept)(bot.mascotLook) : bot.mascotLook;
-  return { ...bot, color: AGENT_COLORS[index % AGENT_COLORS.length]!, mascotLook: look, busy: false };
+/**
+ * One expert of a Heavy run, in the row's pile and in the Thoughts panel:
+ * the conversation's bot exactly as the chat's header draws it (BotAvatar,
+ * the bot unchanged), never a colour, an owl or a shape of its own
+ * (M-20261127-178). Only its life is the expert's: at work while it speaks.
+ */
+export function ExpertAvatar({ bot, size, working, animated }: { bot: LeaderBot; size: number; working: boolean; animated: boolean }) {
+  const state = working ? "thinking" : "idle";
+  return <BotAvatar bot={bot} size={size} state={state} agentState={state} animated={animated} trackPointer={false} label="" />;
 }
 
 /**
- * The experts, overlapping, each in its own colour: the owls (no bot to
- * copy), or the bot's own character once its round has divided
- * (D-20261126-037). While the run goes they are alive, the one speaking at
- * work (as the orbit drew them); one that failed is dimmed.
+ * The experts, overlapping: the bot's own avatar once per expert. While the
+ * run goes they are alive, the one speaking at work (as the orbit drew
+ * them); one that failed is dimmed.
  */
-export function AgentAvatars({ agents, running = false, bot = null, size = 22 }: { agents: readonly Pick<HeavyAgentLine, "n" | "status" | "speaking">[]; running?: boolean; bot?: LeaderBot | null; size?: number }) {
+function AgentAvatars({ agents, running = false, bot, size = 22 }: { agents: readonly Pick<HeavyAgentLine, "n" | "status" | "speaking">[]; running?: boolean; bot: LeaderBot; size?: number }) {
   return (
     <span data-heavy-avatars="" role="img" aria-label={t("heavy.avatars", { count: agents.length })} className="flex shrink-0 items-center">
-      {agents.map((agent, index) => {
-        const speaking = running && agent.speaking === true;
-        return (
-          <span key={agent.n} data-heavy-owl={agent.n} data-heavy-failed={agent.status === "failed" ? "" : undefined}
-            className={cn("flex items-center justify-center rounded-full bg-app ring-2 ring-app", index > 0 && "-ml-1.5")}>
-            <span className="flex" style={agent.status === "failed" ? { opacity: HEAVY_FAILED_OPACITY } : undefined}>
-              {bot
-                ? <BotAvatar bot={expertBot(bot, index)} size={size} state={speaking ? "thinking" : "idle"} agentState={speaking ? "thinking" : "idle"} animated={running} trackPointer={false} label="" />
-                : <MausAvatar color={AGENT_COLORS[index % AGENT_COLORS.length]!} size={size} state={speaking ? "thinking" : "idle"} animated={running} trackPointer={false} />}
-            </span>
+      {agents.map((agent, index) => (
+        <span key={agent.n} data-heavy-expert-avatar={agent.n} data-heavy-failed={agent.status === "failed" ? "" : undefined}
+          className={cn("flex items-center justify-center rounded-full bg-app ring-2 ring-app", index > 0 && "-ml-1.5")}>
+          <span className="flex" style={agent.status === "failed" ? { opacity: HEAVY_FAILED_OPACITY } : undefined}>
+            <ExpertAvatar bot={bot} size={size} working={running && agent.speaking === true} animated={running} />
           </span>
-        );
-      })}
+        </span>
+      ))}
     </span>
   );
 }
 
-/** What the row drew a moment ago, fading out over what it draws now (the bot into its round, the round's cells into the bot's characters); gone at once under reduced motion. */
+/** What the row drew a moment ago, fading out over what it draws now (the bot into its division, the division's cells into the bot's avatars); gone at once under reduced motion. */
 function FadeAway({ children, onDone }: { children: ReactNode; onDone: () => void }) {
   const reduced = useReducedMotionPreference();
   useEffect(() => {
@@ -79,16 +81,17 @@ function FadeAway({ children, onDone }: { children: ReactNode; onDone: () => voi
 }
 
 /**
- * A bot whose mascot is a character or a photo (D-20261126-037): the bot
- * while its leader picks the team, then a round in its colour divides, and
- * once the pile has closed up each cell becomes the bot's own character
- * again. A run that is over, past its first round, or already shown starts
- * as the pile.
+ * The team out of the bot's mascot, for every bot (M-20261127-178,
+ * D-20261126-037): the bot while its leader picks the team, then its mascot
+ * divides (its own shape, or a round in its colour for a character or a
+ * photo), and once the pile has closed up each cell becomes the bot's own
+ * avatar again. A run that is over, past its first round, or already shown
+ * starts as the pile.
  */
-function CharacterDivision({ art, bot, line, running, runId, settled, failed }: { art: DivisionArt | null; bot: LeaderBot; line: HeavyTeamLine; running: boolean; runId: string; settled: boolean; failed: readonly boolean[] }) {
+function ExpertsDivision({ art, bot, line, running, runId, settled, failed }: { art: DivisionArt | null; bot: LeaderBot; line: HeavyTeamLine; running: boolean; runId: string; settled: boolean; failed: readonly boolean[] }) {
   const count = line.agents.length;
   const [pile, setPile] = useState(() => !running || settled || divisionPlayed(runId));
-  // what fades out over the drawing: the bot once its round shows, the round once its characters show
+  // what fades out over the drawing: the bot once its division shows, the division once the pile of its avatars shows
   const [fading, setFading] = useState<"leader" | "round" | null>(null);
   const [planned, setPlanned] = useState(count > 0);
   useEffect(() => {
@@ -99,7 +102,7 @@ function CharacterDivision({ art, bot, line, running, runId, settled, failed }: 
   }, [count, planned, pile]);
   const done = useCallback(() => setFading(null), []);
   const piled = useRef(pile);
-  // the round's division reached its pile: the characters take its place, the round fading out over them
+  // the division reached its pile: the bot's avatars take its place, the division fading out over them
   const rest = useCallback(() => {
     if (piled.current) return;
     piled.current = true;
@@ -109,7 +112,7 @@ function CharacterDivision({ art, bot, line, running, runId, settled, failed }: 
   const division = art && <HeavyDivision art={art} count={count} running={running} runId={runId} settled={settled} failed={failed} onRest={rest} />;
   if (pile) {
     return (
-      <span data-heavy-character-pile="" className="relative flex shrink-0 items-center">
+      <span data-heavy-pile="" className="relative flex shrink-0 items-center">
         <AgentAvatars agents={line.agents} running={running} bot={bot} />
         {fading === "round" && division && <FadeAway onDone={done}>{division}</FadeAway>}
       </span>
@@ -124,11 +127,11 @@ function CharacterDivision({ art, bot, line, running, runId, settled, failed }: 
   );
 }
 
-/** The bot alone while its leader picks the team, at the pile's size: a bot whose mascot is no shape (a shape's is the division's first cell). */
-function LeaderAvatar({ bot, size = 22 }: { bot: LeaderBot | null; size?: number }) {
+/** The bot alone while its leader picks the team (or while its shape's still loads), at the pile's size. */
+function LeaderAvatar({ bot, size = 22 }: { bot: LeaderBot; size?: number }) {
   return (
     <span data-heavy-leader-avatar="" aria-hidden="true" className="flex shrink-0 items-center">
-      {bot ? <BotAvatar bot={bot} size={size} trackPointer={false} /> : <MausAvatar color="white" size={size} state="thinking" animated trackPointer={false} />}
+      <BotAvatar bot={bot} size={size} trackPointer={false} />
     </span>
   );
 }
@@ -143,10 +146,9 @@ export function HeavyTeamRow({ message, busy = false }: { message: Message; busy
     return () => clearInterval(timer);
   }, [running]);
   const open = useOpenThoughts() === message.id;
-  // the bot's mascot divides into the experts: its shape, or a round in its colour for a character or a photo
+  // the bot's mascot divides into the experts (its shape, or a round in its colour for a character or a photo), each the bot's own avatar
   const leader = use(HeavyLeaderContext);
   const art = useDivisionArt(leader);
-  const character = leader !== null && divisionShape(leader) === null;
   const working = (line.phase === "planning" || line.phase === "agents") && busy;
   // a row that first shows once the experts are past their first round starts as the pile: their division is long over
   const settled = line.phase === "leader" || line.rounds.some((round) => round.endedAt !== undefined);
@@ -162,11 +164,7 @@ export function HeavyTeamRow({ message, busy = false }: { message: Message; busy
           <button type="button" data-heavy-open="" aria-expanded={open} aria-label={`${header}. ${t("heavy.open")}`} title={t("heavy.open")}
             onClick={() => toggleThoughts(message.id)}
             className="group -ml-1.5 flex max-w-full items-center gap-2 rounded-xl px-1.5 py-1 text-[13px] leading-5 text-ink-secondary outline-none hover:bg-menu-hover hover:text-ink focus-visible:bg-menu-hover focus-visible:ring-2 focus-visible:ring-focus">
-            {character && leader
-              ? (running || line.agents.length > 0) && <CharacterDivision art={art ?? null} bot={leader} line={line} running={running} runId={message.id} settled={settled} failed={failed} />
-              : art
-                ? (running || line.agents.length > 0) && <HeavyDivision art={art} count={line.agents.length} running={running} runId={message.id} settled={settled} failed={failed} />
-                : art === undefined && (line.agents.length > 0 ? <AgentAvatars agents={line.agents} running={running} /> : running && <LeaderAvatar bot={leader} />)}
+            {leader && (running || line.agents.length > 0) && <ExpertsDivision art={art ?? null} bot={leader} line={line} running={running} runId={message.id} settled={settled} failed={failed} />}
             <span data-heavy-header="" className="whitespace-nowrap">{header}</span>
             {outcome && <span data-heavy-outcome="" className="whitespace-nowrap text-ink-tertiary">· {outcome}</span>}
             <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 text-ink-tertiary transition-transform group-hover:text-ink-secondary", open && "rotate-180")} />

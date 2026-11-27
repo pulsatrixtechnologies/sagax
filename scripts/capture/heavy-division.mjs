@@ -89,8 +89,8 @@ async function appFrames(browser, skin, n) {
     const box = await page.locator("[data-heavy-open]").boundingBox();
     frames.push(await page.screenshot({ clip: { x: Math.max(0, box.x - 12), y: box.y - 10, width: 1100, height: box.height + 20 } }));
   }
-  // a character or a photo ends as its own pile (D-20261126-037), a shape as its cells
-  const cells = (await page.$("[data-heavy-character-pile]")) ? String(await page.locator("[data-heavy-character-pile] [data-heavy-owl]").count()) : await page.getAttribute("[data-heavy-division]", "data-heavy-cells");
+  // every bot ends as the pile of its own avatars (M-20261127-178)
+  const cells = String(await page.locator("[data-heavy-pile] [data-heavy-expert-avatar]").count());
   if (Number(cells) !== n) throw new Error(`${n} experts (${skin}): the row ends with ${cells} cells`);
   await page.close();
   return frames;
@@ -131,9 +131,7 @@ async function restRow(browser, skin, n) {
   for (let attempt = 0; ; attempt += 1) {
     await page.goto(`${base}?lang=en&skin=${skin}&case=done&shape=${shape}&n=${n}${extra}`, { waitUntil: "networkidle" });
     try {
-      await page.waitForSelector("[data-heavy-owl], [data-heavy-division][data-heavy-cells]", { timeout: 10_000 });
-      // a material's stills come in a few frames after the cells
-      if (look.includes("material=")) await page.waitForSelector("[data-heavy-cell] image", { timeout: 10_000 });
+      await page.waitForSelector("[data-heavy-pile] [data-heavy-expert-avatar]", { timeout: 10_000 });
       break;
     } catch (error) {
       if (attempt) throw error;
@@ -174,7 +172,7 @@ async function cost(browser) {
       const page = await browser.newPage({ viewport: { width: 1280, height: 2000 }, deviceScaleFactor: 2 });
       const client = await page.context().newCDPSession(page);
       await page.goto(`${base}?lang=en&skin=pulsatrix&case=${phase === "over" ? "done" : "division"}&shape=${shape}&n=8&rows=${rowsShown}`, { waitUntil: "load" });
-      await page.waitForSelector(phase === "over" ? "[data-heavy-cells]" : "[data-gallery-planned]");
+      await page.waitForSelector(phase === "over" ? "[data-heavy-pile]" : "[data-gallery-planned]");
       if (phase === "breathing") await page.waitForFunction(() => [...document.querySelectorAll("[data-heavy-division]")].every((node) => node.getAttribute("data-heavy-division") === "live"), null, { timeout: 30_000 });
       await page.evaluate(() => {
         window.__frames = [];

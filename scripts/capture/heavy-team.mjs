@@ -6,11 +6,14 @@
  * agreed, the row after ("Thought for 26s", the leader's plan and the
  * disputes) and the Thoughts panel. The division itself, frame by frame, is
  * scripts/capture/heavy-division.mjs. Synthetic data and demo accounts
- * only. Real Chrome headless, DPR 2.
- * Usage: node scripts/capture/heavy-team.mjs [--out DIR] [--port N]
+ * only. Real Chrome headless, DPR 2. --look adds the gallery's look
+ * parameters to every page (character=shiba, photo=1, shape=cat&color=brown...:
+ * every expert is that bot, M-20261127-178), --tag names the files after it,
+ * --shots keeps only the shots named.
+ * Usage: node scripts/capture/heavy-team.mjs [--out DIR] [--port N] [--look "photo=1"] [--tag photo] [--shots heavy-done-decided,heavy-panel-decided]
  */
 import { spawn } from "node:child_process";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,8 +24,11 @@ const arg = (name, fallback) => {
 };
 const outDir = resolve(arg("--out", join(root, "docs", "screenshots", "heavy-team")));
 const port = Number(arg("--port", "5389"));
+const look = arg("--look", "");
+const tag = arg("--tag", "");
+const only = arg("--shots", "").split(",").filter(Boolean);
 const skins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }];
-const shots = [
+const allShots = [
   { name: "heavy-propose-auto", query: "case=propose&auto=risky", header: "Experts proposing · round 1 of 5 · 14s" },
   { name: "heavy-critique", query: "case=critique", header: "Experts critiquing · round 3 of 5 · 14s" },
   { name: "heavy-leader-writing", query: "case=merged", header: "Thought for 14s" },
@@ -32,6 +38,7 @@ const shots = [
   { name: "heavy-refused-fr", query: "case=refused", lang: "fr" },
   { name: "heavy-refused-panel-fr", query: "case=refused-panel", lang: "fr", panel: true },
 ];
+const shots = only.length ? allShots.filter((shot) => only.includes(shot.name)) : allShots;
 
 async function waitForServer(url, ms = 120_000) {
   const start = Date.now();
@@ -63,9 +70,12 @@ try {
   await mkdir(outDir, { recursive: true });
   browser = await chromium.launch({ channel: "chrome", headless: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 760 }, deviceScaleFactor: 2 });
+  // the gallery's `photo=1` bot wears the app's icon as its own picture (an attachment the dev server does not have)
+  const photo = await readFile(join(root, "public", "app-icon-192.png"));
+  await page.route("**/api/attachments/demo-photo.png", (route) => route.fulfill({ status: 200, contentType: "image/png", body: photo }));
   for (const { id, label } of skins) {
     for (const shot of shots) {
-      await page.goto(`${base}?lang=${shot.lang ?? "en"}&skin=${id}&${shot.query}`, { waitUntil: "networkidle" });
+      await page.goto(`${base}?lang=${shot.lang ?? "en"}&skin=${id}&${shot.query}${look ? `&${look}` : ""}`, { waitUntil: "networkidle" });
       await page.waitForSelector("[data-heavy-header]");
       const header = await page.textContent("[data-heavy-header]");
       if (shot.header && header !== shot.header) throw new Error(`${shot.name} (${label}): header reads "${header}", expected "${shot.header}"`);
@@ -75,7 +85,7 @@ try {
       }
       await page.mouse.move(2, 2);
       await page.waitForTimeout(250);
-      const file = join(outDir, `${shot.name}-${label}.png`);
+      const file = join(outDir, `${shot.name}${tag ? `-${tag}` : ""}-${label}.png`);
       await page.screenshot({ path: file });
       console.log(file);
     }

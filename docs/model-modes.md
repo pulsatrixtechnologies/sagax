@@ -282,8 +282,9 @@ model and favorites above the runnable providers. `ComposerModesTests` covers
 a selection still on Build reading as Auto, mode availability and the cascade
 (#5245, #5398).
 The Heavy row (`HeavyTeamRowView.swift`, the state
-`HeavyTeamLine.swift`) draws the server's Heavy run (#5089) like the
-desktop's (#5090); the engine stays on the server. Tests:
+`HeavyTeamLine.swift`) draws the server's Heavy run (#5089) with the orbit
+of #5090 (the desktop's row now divides the bot's mascot instead, see "The
+division" below); the engine stays on the server. Tests:
 `ComposerModesTests.swift`; capture: `-mascotGallery heavy` in the
 simulator (`HeavyTeamGallery.swift`).
 
@@ -390,18 +391,76 @@ called from `startTurn` before the leader's prompt is built.
 - **The row.** One activity row of the conversation (`shared/heavy-team.ts`)
   keeps the whole run: the experts, their personas and seats, every round,
   who speaks, each verdict, the outcome and the disagreements.
-- **The animation** (#5090, `src/components/HeavyOrbit.tsx`, drawn by
-  `HeavyTeamRow.tsx`): while the team works the experts' avatars turn around
-  the bot's; the one speaking pulses; during a critique round lines link every
-  two experts still in it; on agreement they merge into the bot while it
-  writes. Transform and opacity only, at rest under reduced motion. Beside it:
-  "Experts thinking · round 2 of 5 · 6s" and a live line per expert ("Expert
-  1 · Skeptic"). After: "Thought for 8s · agreed in round 2" (or "no agreement
-  after 5 rounds, the leader decided"), which opens the Thoughts panel (#4924):
-  the leader's steps, the disputed points, each expert's persona, seat and
-  one message per round. Auto's choice of Heavy reads in one line above.
-  Tests: `src/components/HeavyTeamRow.dom.test.ts`; captures:
-  `scripts/capture/heavy-team.mjs`.
+- **The division** (owner 2026-11-26, M-20261126-116, M-20261126-119 to
+  M-20261126-122; `src/components/HeavyDivision.tsx`, the motion
+  `src/lib/heavy-division.ts`, drawn by `HeavyTeamRow.tsx`). Desktop only.
+  The row's small avatars (22 px) are the run itself: while the leader picks
+  its team the row shows the bot's own mascot; when the team is known the
+  mascot divides in place into one cell per expert. A cell loses its eyes;
+  the bot's own silhouette elongates, pinches in the middle and lets go
+  (one membrane until it breaks: a blur then a threshold on its alpha, on
+  the silhouette itself, in SVG); each daughter gets its eyes back, takes
+  its expert's colour, and the experts close up into the pile, each cut out
+  of its neighbour by a ring of the page's colour. Any number the run
+  announces is drawn (the colours are eight, `AGENT_COLORS`, the seventh
+  lime as in the mock-up); several cells divide at once when many are
+  needed (1, 2, 4, 8). One speed, the mock-up's (`DIVISION_SPEED`). The
+  drawing is as wide as its cells, so the header stays against the pile.
+  - The cell is the bot's own shape for the whole division: its
+    open-bot-avatar body (the baked still every other avatar of the bot
+    draws, or its own drawing read once per content), its colour, its eyes
+    where the bot has them; every expert keeps the shape and only the colour
+    changes. The look's rules are ShapeMascot's own (`shape-look.ts`, held
+    to ShapeMascot by `shape-look.test.ts`).
+  - A Fluffy or Glass bot wears its material in its cells: the bot's still
+    while nothing divides, each expert's once it has its colour, painted
+    once per look and colour by the engine on the WebGL2 context the
+    material already shares across the page (`shape-material-still.ts`), so
+    no context is added per row. While the cells divide the membrane is flat
+    in the bot's colour with the mock-up's simple volume, and where the page
+    cannot paint the material (no WebGL2) the cells stay flat with that
+    volume. A Flat bot's cells are flat, as its avatars are. A skin's layers
+    (gold, neon...) are not carried into the cells: the bot's own cell takes
+    the skin's fill and eyes, the experts their colour.
+  - An expert that fails mid-run stays marked: its cell (or its owl) is
+    dimmed, as the orbit dimmed it, and its line in the preview reads "Did
+    not finish · ..." in the tertiary ink.
+  - A bot whose mascot is a character (the owl, Shiba...) or its own picture
+    divides too (D-20261126-037): while its leader picks the team the row
+    shows the bot itself, then a round in the bot's colour divides, and once
+    the pile has closed up each cell becomes the bot's own character again
+    (its look in the expert's colour; a picture as it is), stacked as the
+    pile is, the round fading out over them. The pile is alive while the run
+    goes (the one speaking at work, as the orbit drew them) and still after;
+    a run read back from history is that pile at once.
+  - A run that is over, or read back from history, is drawn finished and
+    never replayed; so is a row that first shows once the experts are past
+    their first round or the leader writes; a division shown to its end is
+    not played again when its row comes back. Under reduced motion (the
+    device's, the app's, the mascot's own Motion setting, followed while the
+    run goes) every step lands at once.
+  - The clock stops when the row leaves the screen, when the window is
+    hidden and once nothing moves (a finished row asks for no frame and has
+    no filter). While the run goes the cells breathe at 30 frames a second.
+    Measured by `scripts/capture/heavy-division.mjs --measure`.
+  - It replaces the orbit of #5090 on the desktop (D-20261126-022): the
+    phone keeps its own until its lot. Who speaks still reads in the live
+    line per expert, and the round's kind in the header.
+  Beside it: "Experts proposing · round 1 of 5 · 6s" or "Experts critiquing
+  · round 2 of 5 · 9s" ("Experts thinking" between two rounds) and a live
+  line per expert ("Expert 1 · Skeptic"). After: "Thought for 8s · agreed in
+  round 2" (or "no agreement after 5 rounds, the leader decided"), which
+  opens the Thoughts panel (#4924): the leader's steps, the disputed points,
+  each expert's persona, seat and one message per round. Auto's choice of
+  Heavy reads in one line above.
+  Tests: `src/lib/heavy-division.test.ts`,
+  `src/components/HeavyDivision.dom.test.ts`,
+  `src/components/HeavyDivision.material.dom.test.ts`,
+  `src/components/shape-look.test.ts`,
+  `src/components/HeavyTeamRow.dom.test.ts`; captures:
+  `scripts/capture/heavy-division.mjs` (frame by frame, beside the mock-up
+  with `--mockup`; `--look` for an own drawing, a material, a failure, a
+  character, a picture; `--shape owl`), `scripts/capture/heavy-team.mjs`.
 
 Tests: `server/heavy-team.test.ts` (an expert's write is refused by the server;
 the leader stops at 5 rounds at most; agreement stops early; the plan, the

@@ -214,7 +214,7 @@ export function ChatViewShell(m: Record<string, any>) {
             <div ref={topSentinelRef} className="h-2 w-full pointer-events-none" aria-hidden="true" />
           ) : null}
           {windowedMessages.length === 0 && !bot.busy && (!streamHasEarlier || !streamDrawn) && <EmptyChat bot={bot} />}
-          <ChatRowsContext.Provider value={rows}><LiveToolsContext value={liveTools}><LiveTurnsContext value={liveTurns}><ChatBusyContext value={busy}><HeavyLeaderContext value={<BotAvatar bot={bot} size={34} trackPointer={false} />}>
+          <ChatRowsContext.Provider value={rows}><LiveToolsContext value={liveTools}><LiveTurnsContext value={liveTurns}><ChatBusyContext value={busy}><HeavyLeaderContext value={bot}>
             <ConversationGalleryProvider>
             <MessagesList
               confidential={confidential}

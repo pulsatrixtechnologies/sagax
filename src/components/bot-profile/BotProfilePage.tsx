@@ -9,12 +9,12 @@
 // into a blurred bar with the small mascot and the name. Then pill tabs:
 //
 // - General: section cards with their controls in place (#3398). Settings
-//   (the switches "Collaborators can create routines" and "Notify me", then
-//   the rows Model, Appearance, Before it acts), the Channels card, the Bot
-//   accounts card, More (Rules, When it acts alone, Voice, Advanced
-//   settings, Versions). Personality is reached from Knowledge > the Bot
-//   folder (SOUL.md); Shared with and Who can see it are in the Share
-//   popover of the top bar (owner 2026-11-19).
+//   (collaborators switch, then Model, Appearance, Before it acts),
+//   Notifications (notify me, daily brief, reviews: #5445), the Channels
+//   card, the Bot accounts card, More (Rules, When it acts alone, Voice,
+//   Advanced settings, Versions). Personality is reached from Knowledge >
+//   the Bot folder (SOUL.md); Shared with and Who can see it are in the
+//   Share popover of the top bar (owner 2026-11-19).
 // - Appearance is not a tab: its row in General > Settings (M-20261119-081)
 //   and the header's mascot open the whole mascot editor (character, shape,
 //   colour, style, moves, Play a move, Randomize) in a modal. Nothing else
@@ -55,7 +55,7 @@
 // lack of a permission.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { Bell, Repeat } from "lucide-react";
+import { Repeat } from "lucide-react";
 
 import { openNotificationTarget, openRoutineRun, useStore, type Bot, type BotSettingsSection } from "@/state/store";
 import { shallowEqual, useStoreSelector } from "@/state/store-selector";
@@ -92,7 +92,6 @@ import { botAvatarProfile } from "../../../shared/bot-avatar";
 import { mascotDominantColor } from "@/lib/mascot-dominant";
 import { profileBannerColors } from "@/lib/profile-banner";
 import { DescribedRow, SettingsSurfaceProvider, Switch } from "../SettingsPrimitives";
-import { NotifyMeRow } from "../bot-settings/VoiceSection";
 import { MascotHeroSlotContext } from "../floating-bots/mascot-hero-slot";
 import { RulesSection } from "../bot-settings/RulesSection";
 import { SkillsSection } from "../bot-settings/SkillsSection";
@@ -104,6 +103,7 @@ import { DeveloperLink } from "../settings/DeveloperLink";
 import { botSectionLock, useBotSectionAvailability, useBotSectionContent } from "../bot-settings/useBotSectionContent";
 import { AccountsCard, Block, ChannelsCard, Note, ProfileCard, sectionLabel, type Channel } from "./BotProfilePage.tsx-parts/cards";
 import { BotFolderCard } from "./BotProfilePage.tsx-parts/BotFolderCard";
+import { BotNotificationsCard } from "./BotProfilePage.tsx-parts/BotNotificationsCard";
 import { BotProfileHeader, useBotProfileHero } from "./BotProfilePage.tsx-parts/BotProfileHeader";
 import { BotProfileTabBar, useBotProfileSearch } from "./BotProfilePage.tsx-parts/BotProfileTabs";
 import { useCaptionChrome } from "../DesktopCapabilities";
@@ -119,8 +119,10 @@ import { OutcomesCard, useOutcomes } from "./BotProfilePage.tsx-parts/Outcomes";
 import { MemoryManagerPanel, PluginsPanel } from "../lazy-screens";
 import { PageHostProvider } from "../page-host";
 
-/** General's Settings card (its two switches lead it, #3398). */
+/** General's Settings card (collaborators switch, #3398). */
 const SETTINGS_CARD_SELECTOR = '[data-settings-group="bot-profile-group-settings"]';
+/** General > Notifications (#5445): notify me, brief, reviews. */
+const NOTIFICATIONS_CARD_SELECTOR = '[data-settings-group="bot-profile-notifications"]';
 
 type BotProfilePageProps = { bot: Bot; section: BotSettingsSection; onClose: () => void };
 
@@ -478,7 +480,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         {lockOf("permissions") ? body("permissions") : <PermissionsSection bot={bot} derived={derived} part={part} />}
       </Block>
     ) : null;
-  const access = (part: "brief" | "advanced") =>
+  const access = (part: "advanced") =>
     shown("access") ? (
       <Block key={`access-${part}`} id="access" locked={lockOf("access") !== null}>
         {lockOf("access") ? body("access") : <AccessSection bot={bot} derived={derived} part={part} />}
@@ -497,7 +499,8 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
       case "rules":
         return <>{block("rules")}{permissions("rules")}</>;
       case "actsAlone":
-        return <>{permissions("actsAlone")}{access("brief")}</>;
+        // #5445: daily brief moved to General > Notifications
+        return permissions("actsAlone");
       case "voice":
         return block("voice");
       case "advanced":
@@ -512,11 +515,10 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
 
   // The short value every row shows on its right (the canvas, #2621).
   const rowValue = useBotRowValues(bot, { tab, listing: page === null });
-  // General > Settings starts with its two switches in place (#3398): who
-  // may create routines on the bot (#2622, for whoever may change it) and
-  // this person's own "Notify me" (with its per-person override).
-  // #4360: collaborators exist only where the bot can be shared (an
-  // organization server); a person alone is offered no switch about them.
+  // General > Settings: who may create routines on the bot (#2622).
+  // #5445: "Notify me" moved to General > Notifications with the brief
+  // and reviews. #4360: collaborators exist only where the bot can be
+  // shared (an organization server); a person alone is offered no switch.
   const collaboratorsSwitch = available("sharing") && canEditBotField(state.config, bot, "collaboratorsCreateRoutines") ? (
     <DescribedRow
       key="collaboratorsCreateRoutines"
@@ -533,12 +535,15 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
       />
     </DescribedRow>
   ) : null;
-  const notifySwitch = shown("voice") && lockOf("voice") === null ? <NotifyMeRow key="notifyMe" bot={bot} derived={derived} icon={<Bell strokeWidth={1.5} />} keywords={SETTINGS_SWITCH_SEARCH_WORDS.notifyMe.join(" · ")} /> : null;
+  const notifyShown = shown("voice") && lockOf("voice") === null;
 
   // One group of the General or Knowledge tab: a card in place, or rows
   // that each open their sub-page (a group with nothing left is not drawn).
   const tabGroup = (group: (typeof BOT_PROFILE_TAB_GROUPS)[BotProfileTab][number]): ReactNode => {
     if (group.card === "folder") return block("files");
+    if (group.card === "notifications") {
+      return <BotNotificationsCard key={group.id} bot={bot} derived={derived} notifyShown={notifyShown} />;
+    }
     if (group.card === "channels") return <ChannelsCard key={group.id} bot={bot} slackUrl={slackUrl} open={channel} onOpen={setChannel} />;
     if (group.card === "accounts") {
       return (
@@ -550,7 +555,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         </Block>
       );
     }
-    const switches = group.id === "settings" ? [collaboratorsSwitch, notifySwitch].filter(Boolean) : [];
+    const switches = group.id === "settings" ? [collaboratorsSwitch].filter(Boolean) : [];
     const rows: ReactNode[] = group.pages.filter(subPageShown).map((id) => (
       <SubPageRow key={id} page={id} value={rowValue(id)} hit={search.q !== "" && id === searchRow} onOpen={() => openPage(id)} />
     ));
@@ -568,12 +573,17 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     );
   };
 
-  // The Settings card when a search names one of its switches and this
-  // viewer has it, as a selector (the search marks the row inside it).
-  const switchShown: Record<BotProfileSettingsSwitch, boolean> = { notifyMe: notifySwitch !== null, collaboratorsCreateRoutines: collaboratorsSwitch !== null };
+  // Search: collaborators stay on Settings; notify me and daily brief are
+  // on Notifications (#5445). Brief is always offered (the card mounts it).
+  const switchShown: Record<BotProfileSettingsSwitch, boolean> = {
+    notifyMe: notifyShown,
+    dailyBrief: true,
+    collaboratorsCreateRoutines: collaboratorsSwitch !== null,
+  };
   function settingsSwitchSelector(query: string): string | null {
     const id = settingsSwitchForQuery(query, pages.map(sectionLabel));
-    return id && switchShown[id] ? SETTINGS_CARD_SELECTOR : null;
+    if (!id || !switchShown[id]) return null;
+    return id === "notifyMe" || id === "dailyBrief" ? NOTIFICATIONS_CARD_SELECTOR : SETTINGS_CARD_SELECTOR;
   }
 
   const pages = useMemo(

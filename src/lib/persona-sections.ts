@@ -84,11 +84,12 @@ export function personaGroupSections(group: PersonaGroup): readonly PersonaCateg
  * same section bodies as before) only for a setting too long for a card.
  * Stats shows the usage in place.
  *
- * - General: Settings (two switches in place, then Model, Appearance,
- *   Before it acts), the Channels card and the Access card in place, More
- *   (Rules, When it acts alone, Voice, Advanced settings, Versions).
- *   Personality has no row: Knowledge > the Bot folder > SOUL.md opens its
- *   page.
+ * - General: Settings (collaborators switch, then Model, Appearance,
+ *   Before it acts), Notifications (notify me, daily brief, reviews this
+ *   bot holds: #5445 / M-20261127-070), the Channels card and the Access
+ *   card in place, More (Rules, When it acts alone, Voice, Advanced
+ *   settings, Versions). Personality has no row: Knowledge > the Bot
+ *   folder > SOUL.md opens its page.
  *   Shared with has no row either: the Share button of the top bar holds
  *   the people and groups and Who can see it.
  * - Appearance is not a tab: the mascot editor is a modal that its row in
@@ -139,9 +140,10 @@ export const BOT_PROFILE_SUBPAGE_SECTIONS: Readonly<Record<BotProfileSubPage, re
 };
 
 /** The cards a tab draws in place, controls and all (#3398): the
- * channels and the bot's accounts; Knowledge's To review and Bot folder
- * (M-20261119-081, before it To review and Skills, #3400). Not sub-pages. */
-export const BOT_PROFILE_CARDS = ["channels", "accounts", "folder"] as const;
+ * channels and the bot's accounts; Notifications (#5445); Knowledge's To
+ * review and Bot folder (M-20261119-081, before it To review and Skills,
+ * #3400). Not sub-pages. */
+export const BOT_PROFILE_CARDS = ["channels", "accounts", "notifications", "folder"] as const;
 export type BotProfileCard = (typeof BOT_PROFILE_CARDS)[number];
 
 /** The persona sections each in-place card holds (a deep link to one opens
@@ -149,6 +151,8 @@ export type BotProfileCard = (typeof BOT_PROFILE_CARDS)[number];
 export const BOT_PROFILE_CARD_SECTIONS: Readonly<Record<BotProfileCard, readonly PersonaCategory[]>> = {
   channels: ["slack"],
   accounts: ["access"],
+  // drawn in place on General; no persona section of its own (notify / brief / reviews)
+  notifications: [],
   // the skills are managed from the folder (its "..." menu opens them), the files are its rows
   folder: ["skills", "files"],
 };
@@ -157,6 +161,7 @@ export const BOT_PROFILE_CARD_SECTIONS: Readonly<Record<BotProfileCard, readonly
 export const BOT_PROFILE_CARD_GROUP: Readonly<Record<BotProfileCard, string>> = {
   channels: "bot-profile-channels",
   accounts: "bot-profile-accounts",
+  notifications: "bot-profile-notifications",
   // a link to the folder or the skills lands on To review, the top of the two cards
   folder: "bot-profile-review",
 };
@@ -168,6 +173,7 @@ export const BOT_PROFILE_CARD_GROUP: Readonly<Record<BotProfileCard, string>> = 
 export const BOT_PROFILE_TAB_GROUPS: Readonly<Record<BotProfileTab, ReadonlyArray<{ id: string; pages: readonly BotProfileSubPage[]; card?: BotProfileCard }>>> = {
   general: [
     { id: "settings", pages: ["model", "beforeActing"] },
+    { id: "notifications", pages: [], card: "notifications" },
     { id: "channels", pages: [], card: "channels" },
     { id: "accounts", pages: [], card: "accounts" },
     { id: "more", pages: ["rules", "actsAlone", "voice", "advanced", "versions"] },

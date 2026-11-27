@@ -4,7 +4,7 @@
 // 2026-10-29: the brief runs on its own each day at the time the person
 // picks, once they turned it on, and arrives in the conversation and
 // through "Me joindre". The person turns it on or off or moves its time
-// here, or in Settings, Notifications, « Ce que je reçois » (#3432).
+// here on the bot page (General > Notifications, #5445 / M-20261127-070).
 // #2699: screen context, off by default, on the desktop app only (hidden
 // elsewhere): the bot sees the app and window in front, to propose at the
 // right time.
@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { t } from "@/lib/i18n";
 import { localTimeZone } from "@/lib/reach-me";
 import { routeMissingOnServer } from "@/lib/server-route";
+import { SETTINGS_SWITCH_SEARCH_WORDS } from "@/lib/persona-search";
 import { Monitor, Sunrise } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { PILL, PLAIN_FIELD, Switch, useSettingsSurface } from "../SettingsPrimitives";
@@ -41,7 +42,11 @@ export function briefQueueText(view: BriefView | null): string | null {
   return null;
 }
 
-export function BackgroundBriefCard({ botId }: { botId: string }) {
+export function BackgroundBriefCard({ botId, embedded = false }: {
+  botId: string;
+  /** Inside General > Notifications (#5445): rows only, no second card. */
+  embedded?: boolean;
+}) {
   const { request: api } = useBotEditor();
   const [view, setView] = useState<BriefView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,11 +103,9 @@ export function BackgroundBriefCard({ botId }: { botId: string }) {
   const pending = (view?.suggestions ?? []).filter((item) => item.status === "pending");
   const plain = useSettingsSurface() === "plain";
   if (needsUpdate) {
-    return (
-      <PaneSection title={t("brief.title")}>
-        <p data-brief-needs-update="" className="text-[12.5px] text-ink-secondary">{t("serverRoute.needsUpdate")}</p>
-      </PaneSection>
-    );
+    const notice = <p data-brief-needs-update="" className="text-[12.5px] text-ink-secondary">{t("serverRoute.needsUpdate")}</p>;
+    if (embedded) return <div data-brief-embedded="" className="px-4 py-2">{notice}</div>;
+    return <PaneSection title={t("brief.title")}>{notice}</PaneSection>;
   }
   const time = (
     <input
@@ -122,11 +125,24 @@ export function BackgroundBriefCard({ botId }: { botId: string }) {
     : null;
   // The bot's profile page (#2313): the daily brief is one row (icon,
   // title, the delivery note as its subtitle, the time and the switch at
-  // the right), the queue is text, and Read is a pill.
+  // the right), the queue is text, and Read is a pill. #5445: `embedded`
+  // drops the PaneSection so General > Notifications owns the card.
   if (plain) {
-    return (
-      <PaneSection title={t("brief.title")}>
-        <div className="flex min-h-[44px] flex-wrap items-center justify-between gap-x-4 gap-y-2">
+    const body = (
+      <div data-brief-embedded={embedded ? "" : undefined} className={embedded ? "flex flex-col" : undefined}>
+        {/* #5445: data-settings-row so persona search marks the brief on Notifications */}
+        <div
+          role="group"
+          {...(embedded ? {
+            "data-settings-row": "botDailyBrief",
+            "data-settings-rowkind": "described",
+            "data-settings-keywords": SETTINGS_SWITCH_SEARCH_WORDS.dailyBrief.join(" · "),
+          } : {})}
+          className={cn(
+            "flex min-h-[44px] flex-wrap items-center justify-between gap-x-4 gap-y-2",
+            embedded ? "px-4 py-2" : undefined,
+          )}
+        >
           <div className="flex min-w-0 flex-1 basis-[200px] items-center gap-3">
             <Sunrise aria-hidden="true" className="size-5 shrink-0 text-ink-secondary" />
             <div className="min-w-0">
@@ -137,7 +153,7 @@ export function BackgroundBriefCard({ botId }: { botId: string }) {
           <div className="flex shrink-0 items-center gap-2">{time}{toggle}</div>
         </div>
         {screenToggle && (
-          <div className="mt-3 flex min-h-[44px] flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div className={cn("flex min-h-[44px] flex-wrap items-center justify-between gap-x-4 gap-y-2", embedded ? "mt-1 px-4 py-2" : "mt-3")}>
             <div className="flex min-w-0 flex-1 basis-[200px] items-center gap-3">
               <Monitor aria-hidden="true" className="size-5 shrink-0 text-ink-secondary" />
               <div className="min-w-0">
@@ -148,7 +164,7 @@ export function BackgroundBriefCard({ botId }: { botId: string }) {
             <div className="flex shrink-0 items-center gap-2">{screenToggle}</div>
           </div>
         )}
-        <div className="mt-4 flex flex-col gap-1 text-[12px] leading-4 text-ink-secondary">
+        <div className={cn("flex flex-col gap-1 text-[12px] leading-4 text-ink-secondary", embedded ? "mt-2 px-4 pb-2" : "mt-4")}>
           {note && <p role="status" data-brief-empty="">{note}</p>}
           {!note && pending.length === 0 && <p>{t("brief.queueEmpty")}</p>}
           {pending.length > 0 && (
@@ -158,14 +174,16 @@ export function BackgroundBriefCard({ botId }: { botId: string }) {
           )}
           {error && <p role="alert" className="text-danger">{error}</p>}
         </div>
-        <div className="mt-3 flex">
+        <div className={cn("flex", embedded ? "mt-2 px-4 pb-2" : "mt-3")}>
           <button type="button" onClick={() => void read()} className={PILL}>{t("brief.read")}</button>
         </div>
-      </PaneSection>
+      </div>
     );
+    if (embedded) return body;
+    return <PaneSection title={t("brief.title")}>{body}</PaneSection>;
   }
-  return (
-    <PaneSection title={t("brief.title")}>
+  const classic = (
+    <>
       <div className="mb-2 flex flex-wrap items-center gap-2 text-[12.5px] text-ink">
         {toggle}
         <span>{t("brief.daily")}</span>
@@ -187,6 +205,8 @@ export function BackgroundBriefCard({ botId }: { botId: string }) {
       )}
       {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
       <button type="button" onClick={() => void read()} className="mt-2 text-[12.5px] text-ink-secondary underline">{t("brief.read")}</button>
-    </PaneSection>
+    </>
   );
+  if (embedded) return <div data-brief-embedded="">{classic}</div>;
+  return <PaneSection title={t("brief.title")}>{classic}</PaneSection>;
 }

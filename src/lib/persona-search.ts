@@ -43,25 +43,27 @@ export const PERSONA_PART_SEARCH_WORDS: Partial<Record<PersonaCategory, Partial<
     advanced: ["bot principal", "primary bot", "primary", "coordination", "contacter", "contact", "pairs", "peers", "garde-fou de boucle", "loop guard", "boucle", "loop", "crochets", "hooks", "accès aux outils", "tool access", "parallèle", "parallele", "parallel", "envois en ton nom", "sending on your behalf", "limite quotidienne", "daily limit"],
   },
   access: {
-    actsAlone: ["résumé de fond", "resume de fond", "background brief", "brief", "en arrière-plan", "background"],
+    // #5445: daily brief left actsAlone for General > Notifications
     advanced: ["ordinateur", "computer", "nuage", "cloud", "navigateur", "browser"],
   },
 };
 
-/** The two switches General > Settings holds in place (#3398): "Notify me"
- * (it left Voice) and "Collaborators can create routines" (it left
- * Routines). A search for their words opens General at the Settings card,
+/** Switches (and the Notifications card) General holds in place (#3398,
+ * #5445): "Notify me", the daily brief, and "Collaborators can create
+ * routines". A search for their words opens General at the right card,
  * not the page they used to be on. A word a page also answers to (such as
  * "routines", the Routines page) is not here: the switch only takes over a
  * query that names it, see settingsSwitchForQuery. */
-export type BotProfileSettingsSwitch = "notifyMe" | "collaboratorsCreateRoutines";
+export type BotProfileSettingsSwitch = "notifyMe" | "dailyBrief" | "collaboratorsCreateRoutines";
 export const SETTINGS_SWITCH_SEARCH_WORDS: Readonly<Record<BotProfileSettingsSwitch, readonly string[]>> = {
   notifyMe: ["notify me", "m'avertir", "avertis-moi", "me prévenir", "notifications", "alertes", "alerts"],
+  // #5445: brief left Access > When it acts alone for General > Notifications
+  dailyBrief: ["résumé de fond", "resume de fond", "background brief", "brief", "brief du jour", "daily brief", "en arrière-plan"],
   collaboratorsCreateRoutines: ["collaborators can create routines", "les collaborateurs peuvent créer des routines", "collaborators", "collaborateurs"],
 };
 
-/** The page whose search result stands for the two switches: it lives on the
- * General tab, and openCategory then opens General at the Settings card. */
+/** The page whose search result stands for the in-place General controls:
+ * openCategory then opens General at Settings or Notifications. */
 const SETTINGS_SWITCH_PAGE: PersonaCategory = "permissions";
 
 /** Shortest query that may take a switch on a partial match. */

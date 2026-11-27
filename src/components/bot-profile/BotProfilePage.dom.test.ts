@@ -441,18 +441,23 @@ describe("bot profile page: General cards in place (#3398)", () => {
     await settle();
     expect(document.querySelector("[data-bot-page-modal]")).toBeNull();
     expect(document.activeElement).toBe(reachButton);
-    // the two switches lead the Settings card
+    // #5445: collaborators stay on Settings; notify me leads Notifications
     const settings = panel.querySelector<HTMLElement>('[data-settings-group="bot-profile-group-settings"]')!;
-    const switches = Array.from(settings.querySelectorAll("[role='switch']")).map((node) => node.getAttribute("aria-label"));
-    expect(switches).toEqual([t("botPanel.routines.collaboratorsCreate"), t("botPanel.voice.notifyHelp")]);
+    const settingsSwitches = Array.from(settings.querySelectorAll("[role='switch']")).map((node) => node.getAttribute("aria-label"));
+    expect(settingsSwitches).toEqual([t("botPanel.routines.collaboratorsCreate")]);
+    const notifications = panel.querySelector<HTMLElement>('[data-settings-group="bot-profile-notifications"]')!;
+    expect(notifications).not.toBeNull();
+    expect(notifications.querySelector(`[role='switch'][aria-label="${t("botPanel.voice.notifyHelp")}"]`)).not.toBeNull();
   });
 
   it("offers a person alone no collaborators switch and no sharing words (#4360)", async () => {
     await mount("en", false);
     const panel = await home("general");
     const settings = panel.querySelector<HTMLElement>('[data-settings-group="bot-profile-group-settings"]')!;
-    const switches = Array.from(settings.querySelectorAll("[role='switch']")).map((node) => node.getAttribute("aria-label"));
-    expect(switches).toEqual([t("botPanel.voice.notifyHelp")]);
+    const settingsSwitches = Array.from(settings.querySelectorAll("[role='switch']")).map((node) => node.getAttribute("aria-label"));
+    expect(settingsSwitches).not.toContain(t("botPanel.routines.collaboratorsCreate"));
+    expect(settingsSwitches).not.toContain(t("botPanel.voice.notifyHelp"));
+    expect(panel.querySelector(`[role='switch'][aria-label="${t("botPanel.voice.notifyHelp")}"]`)).not.toBeNull();
     expect(panel.textContent).not.toContain(t("botPanel.routines.collaboratorsCreate"));
     expect(panel.textContent).not.toContain(t("botSettings.sharing.empty"));
     // one person signs in: the bot has nobody to be seen by, and Shared with is no row anywhere
@@ -1087,13 +1092,20 @@ describe("bot profile page: General cards in place (#3398)", () => {
       await settle();
       return host.querySelector<HTMLElement>("[data-bot-profile-page]")!;
     };
-    for (const [query, label] of [["notifications", t("botPanel.voice.notifyHelp")], ["alerts", t("botPanel.voice.notifyHelp")], ["collaborators", t("botPanel.routines.collaboratorsCreate")]] as const) {
+    for (const [query, label, group] of [
+      ["notifications", t("botPanel.voice.notifyHelp"), "bot-profile-notifications"],
+      ["alerts", t("botPanel.voice.notifyHelp"), "bot-profile-notifications"],
+      // #5445: brief search lands on Notifications, not When it acts alone
+      ["background brief", t("brief.daily"), "bot-profile-notifications"],
+      ["brief", t("brief.daily"), "bot-profile-notifications"],
+      ["collaborators", t("botPanel.routines.collaboratorsCreate"), "bot-profile-group-settings"],
+    ] as const) {
       await home("knowledge");
       const page = await search(query);
       expect(page.getAttribute("data-bot-profile-tab-current"), query).toBe("general");
       expect(page.getAttribute("data-bot-profile-subpage-current"), `${query}: no sub-page`).toBeNull();
-      const settings = page.querySelector<HTMLElement>('[data-settings-group="bot-profile-group-settings"]')!;
-      const hit = settings.querySelector<HTMLElement>("[data-settings-search-hit]");
+      const card = page.querySelector<HTMLElement>(`[data-settings-group="${group}"]`)!;
+      const hit = card.querySelector<HTMLElement>("[data-settings-search-hit]");
       expect(hit?.textContent, `${query}: the switch is marked`).toContain(label);
     }
   });

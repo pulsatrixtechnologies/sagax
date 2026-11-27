@@ -1,14 +1,16 @@
-/** Isolated gallery for headless screenshots of #3432 (not shipped):
+/** Isolated gallery for headless screenshots of #3432 / #5445 (not shipped):
  * Settings, Notifications, « Ce que je reçois » under the daily budget and
  * quiet hours (its conforming neighbour, SignalSettings), and the bot
- * page's Permissions with « Ce que ce bot suit pour toi » under the
- * Proactive rows. ?skin=<id>&lang=<code>&view=settings|bot|empty */
+ * page's General > Notifications (brief, reviews, notify me).
+ * ?skin=<id>&lang=<code>&view=settings|bot|empty */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { PermissionsSection } from "../components/bot-settings/PermissionsSection";
 import type { useBotSettingsDerived } from "../components/bot-settings/useBotSettingsDerived";
+import { BotEditorContext } from "../components/bot-settings/BotEditorContext";
 import { SignalSettings } from "../components/settings/SignalSettings";
 import { ProactiveReceiveSettings } from "../components/settings/ProactiveReceiveSettings";
+import { BotNotificationsCard } from "../components/bot-profile/BotProfilePage.tsx-parts/BotNotificationsCard";
+import { SettingsSurfaceProvider } from "../components/SettingsPrimitives";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, useStore, type Bot } from "../state/store";
@@ -66,6 +68,8 @@ window.fetch = async (input, init) => {
   // races the gallery's hydrate and empties the page (a blank capture)
   if (path === "/api/bots") return json({ bots, groups: [], sections: [], computerControl: {}, botQueuedMessages: {} });
   if (path.endsWith("/lifecycle-hooks")) return json({ enabled: false, events: [] });
+  if (path === "/api/routines" || path.startsWith("/api/routines?")) return json({ routines: [], runs: [] });
+  if (path === "/api/webhooks" || path.startsWith("/api/webhooks?")) return json({ webhooks: [], attempts: [], ingress: null });
   if (path.startsWith("/api/")) return json({});
   return original(input, init);
 };
@@ -75,10 +79,29 @@ const derived = {
   trustedModesAvailable: false, sectionName: "", currentChief: undefined,
 } as unknown as ReturnType<typeof useBotSettingsDerived>;
 
+const request = async (path: string, init?: { method?: string; body?: string }) => {
+  const method = init?.method ?? "GET";
+  if (path.includes("/background-brief") && method === "GET") {
+    return {
+      apps: 2,
+      settings: { enabled: true, at: "08:00", timeZone: "America/Toronto", screenContext: false },
+      screenContextAvailable: true,
+      suggestions: [{ id: "s1", text: fr ? "Répondre au fournisseur" : "Reply to the supplier", status: "pending" }],
+    };
+  }
+  if (path.includes("/background-brief") && method === "PUT") {
+    const body = JSON.parse(String(init?.body ?? "{}"));
+    if (body.reviews) return { reviews: body.reviews };
+    return { settings: { enabled: body.enabled ?? true, at: body.at ?? "08:00", screenContext: body.screenContext === true } };
+  }
+  return {};
+};
+
 function Hydrate() {
   const { dispatch } = useStore();
   useEffect(() => {
-    dispatch({ type: "hydrate", bots, groups: [], sections: [], computerControl: {} } as never);
+    dispatch({ type: "hydrate", bots, groups: [], sections: [], computerControl: {}, routines: [], routineRuns: [] } as never);
+    dispatch({ type: "routinesHydrated", routines: [], runs: [] } as never);
   }, [dispatch]);
   return null;
 }
@@ -91,7 +114,13 @@ function Gallery() {
       <Hydrate />
       {view === "bot" ? (
         <div data-gallery-panel="" className="w-[560px] rounded-2xl border border-hairline/40 bg-panel px-4 pb-6 pt-4">
-          {main && <PermissionsSection bot={main} derived={derived} part="actsAlone" />}
+          {main && (
+            <SettingsSurfaceProvider surface="plain">
+              <BotEditorContext.Provider value={{ request: request as never }}>
+                <BotNotificationsCard bot={main} derived={derived} notifyShown />
+              </BotEditorContext.Provider>
+            </SettingsSurfaceProvider>
+          )}
         </div>
       ) : (
         <div data-gallery-panel="" className="mx-auto flex max-w-[680px] flex-col gap-6">

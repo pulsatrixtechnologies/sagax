@@ -290,7 +290,9 @@ describe("a menu sized to its content stays in the window", () => {
   it("keeps a wide menu opened at the right edge inside the window, 8px in", () => {
     const { left, top } = place({ left: 900, top: 650 });
     expect(left + width).toBe(1000 - 8);
-    expect(top + height).toBe(700 - 8);
+    // Near the bottom with more room above: opens upward (D-20261127-005).
+    expect(top).toBe(650 - height);
+    expect(top + height).toBe(650);
   });
 
   it("puts a menu under a \"...\" with its right edge on the trigger's", () => {
@@ -299,6 +301,12 @@ describe("a menu sized to its content stays in the window", () => {
 
   it("leaves a menu that fits where it was asked", () => {
     expect(place({ left: 100, top: 100 })).toEqual({ left: 100, top: 100 });
+  });
+
+  it("flips above the point when the menu would leave the bottom of the window", () => {
+    const { top } = place({ left: 100, top: 680 });
+    expect(top).toBe(680 - height);
+    expect(top + height).toBeLessThanOrEqual(700 - 8);
   });
 
   it("the conversation menu places itself with its measured size", () => {

@@ -1,22 +1,14 @@
-// Bot avatar in the sidebar: shared pointer gaze, lean, and tap reactions.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+// Bot avatar in the sidebar: shared pointer gaze and lean. A click to open
+// the bot must not poke, wink or morph the drawing (M-20261127-080); the
+// row or pinned tile keeps the click for navigation. Manual turn stays on
+// the bot page and the mascot picker (#5389).
+import { useEffect, useRef, type ReactNode } from "react";
 import { botMascotLook, completeMascotLook } from "../../shared/mascot-look";
-import type { ShapeMove } from "./shape-engine";
 import { pointerGazeOffset } from "@/lib/owl/owl-art";
-import { pickSidebarReaction, type SidebarMascotReactionKind } from "@/lib/sidebar-mascot/interaction";
 import { attachSidebarMascotRoot, registerSidebarMascot, refreshSidebarMascotReducedMotion } from "@/lib/sidebar-mascot/loop";
-import { useReducedMotion, type FxMoveRequest } from "./skin-fx/skin-fx";
+import { useReducedMotion } from "./skin-fx/skin-fx";
 import { BotAvatar, type BotAvatarProps, type MausAvatarHandle } from "./Avatar";
 import { AliveSeatAskContext, type AliveSeatAsk } from "./shape-alive";
-
-/** The Shapes move a tap plays on a shape in a row (ShapeMascot plays it at any size, then rests on its still). */
-const SHAPE_REACT: Readonly<Record<SidebarMascotReactionKind, ShapeMove>> = {
-  wink: "wink",
-  blink: "alert",
-  hop: "burst",
-  wiggle: "swirl",
-  squish: "egg",
-};
 
 export function SidebarMascotProvider({ rootRef, children }: { rootRef: React.RefObject<HTMLElement | null>; children: ReactNode }) {
   const reduced = useReducedMotion();
@@ -43,8 +35,7 @@ export function SidebarMascotAvatar(props: BotAvatarProps & { botId: string; sea
   const reduced = useReducedMotion();
   const look = completeMascotLook(botMascotLook(avatarProps.bot.mascotLook));
   // a shape joins no pointer loop of the sidebar's: it lives on the engine's own (#5404: its idle life and
-  // the six states, as the large mascot, only while on screen); a tap plays a move on it
-  const [tapMove, setTapMove] = useState<FxMoveRequest | null>(null);
+  // the six states, as the large mascot, only while on screen)
   const alive = !reduced && !avatarProps.animated && look.character !== "shape";
 
   useEffect(() => {
@@ -65,42 +56,11 @@ export function SidebarMascotAvatar(props: BotAvatarProps & { botId: string; sea
     });
   }, [alive, botId]);
 
-  const react = () => {
-    if (reduced) return;
-    const kind = pickSidebarReaction(botId);
-    if (look.character === "owl") {
-      if (kind === "hop") mascotRef.current?.spin();
-      else mascotRef.current?.blink();
-      return;
-    }
-    if (look.character === "shape") {
-      setTapMove({ clip: SHAPE_REACT[kind], key: Date.now() });
-      return;
-    }
-    // Rigid squish on the wrapper for every other character.
-    if (!wrap.current) return;
-    wrap.current.animate(
-      [
-        { transform: "scale(1, 1)" },
-        { transform: "scale(1.12, 0.86)", offset: 0.35 },
-        { transform: "scale(0.94, 1.06)", offset: 0.65 },
-        { transform: "scale(1, 1)" },
-      ],
-      { duration: 380, easing: "cubic-bezier(0.34, 1.2, 0.64, 1)" },
-    );
-  };
-
   return (
     <span
       ref={wrap}
       className="inline-flex origin-center will-change-transform"
       data-sidebar-mascot=""
-      // #4433: the tap plays on the click, never on the press. A shape's move
-      // swaps its still image for the moving drawing; done on pointerdown it
-      // took the pressed element off the page, so the release had another
-      // target and the browser sent the row (or the pinned tile) no click.
-      // The click bubbles on to the row, which opens the bot's chat.
-      onClick={react}
     >
       <span ref={box} className="inline-flex">
         {/* a pinned tile keeps its seat, the faces of a group's stack share one (shape-alive.ts) */}
@@ -111,7 +71,6 @@ export function SidebarMascotAvatar(props: BotAvatarProps & { botId: string; sea
             sidebarAlive={alive}
             shapeAlive
             mascotRef={mascotRef}
-            characterMove={tapMove ?? avatarProps.characterMove}
           />
         </AliveSeatAskContext.Provider>
       </span>

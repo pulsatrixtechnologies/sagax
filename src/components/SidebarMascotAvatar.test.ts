@@ -5,7 +5,6 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { SidebarMascotAvatar } from "./SidebarMascotAvatar";
-import { isShapeMove } from "./shape-moves";
 
 vi.mock("./Avatar", () => ({
   BotAvatar: ({ sidebarAlive, shapeAlive }: { sidebarAlive?: boolean; shapeAlive?: boolean }) =>
@@ -52,13 +51,14 @@ describe("SidebarMascotAvatar", () => {
     expect(html).toContain('data-shape-alive="1"');
   });
 
-  it("plays a Shapes move on a shape in a row when it is tapped (#4145 regression: no reaction lost)", () => {
+  it("does not poke, wink or morph on a click that opens the bot (M-20261127-080)", () => {
     const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "SidebarMascotAvatar.tsx"), "utf8");
-    const table = /const SHAPE_REACT[^{]*\{([^}]*)\}/.exec(source)?.[1] ?? "";
-    const moves = Object.fromEntries([...table.matchAll(/(\w+): "(\w+)"/g)].map((m) => [m[1], m[2]]));
-    expect(Object.keys(moves).sort()).toEqual(["blink", "hop", "squish", "wiggle", "wink"]);
-    for (const move of Object.values(moves)) expect(isShapeMove(move), move).toBe(true);
-    expect(source).toMatch(/look\.character === "shape"\) \{\s*setTapMove\(\{ clip: SHAPE_REACT\[kind\]/);
-    expect(source).toContain("characterMove={tapMove ?? avatarProps.characterMove}");
+    expect(source).not.toMatch(/onClick=\{react\}/);
+    expect(source).not.toMatch(/SHAPE_REACT/);
+    expect(source).not.toMatch(/setTapMove/);
+    expect(source).not.toMatch(/pickSidebarReaction/);
+    // gaze and lean stay; only the open-click reaction is gone
+    expect(source).toContain("registerSidebarMascot");
+    expect(source).toContain("data-sidebar-mascot");
   });
 });

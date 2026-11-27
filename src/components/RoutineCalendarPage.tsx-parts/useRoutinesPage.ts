@@ -225,14 +225,14 @@ export function useRoutinesPage({ onBack, onOpenRoom, embedded = false, fill = f
     const run = runId ? scopedRuns.find((candidate) => candidate.id === runId) ?? state.routineRuns.find((candidate) => candidate.id === runId) : undefined;
     if (run) openRun(run);
   }, [state.routinesFocus, state.routineRuns.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
-  // 2026-11-02: Configuration in a run's ⋯ menu opens the routine's editor
-  // in the side panel (a routine is edited there).
+  // 2026-11-02: Configuration in a run's ⋯ menu opens the routine's page
+  // in the side panel (same RoutinePanelPage as the bot chat, D-20261127-005).
   useEffect(() => {
     const editId = state.routinesFocus?.editRoutineId;
     const routine = editId ? scopedRoutines.find((candidate) => candidate.id === editId) ?? state.routines.find((candidate) => candidate.id === editId) : undefined;
     if (!routine) return;
-    setSelected(null);
-    setEditor({ kind: "routine", at: routineEditorAt(routine), durationMinutes: routine.durationMinutes, botIds: [routine.botId], routine });
+    setEditor(null);
+    openRoutine(routine);
   }, [state.routinesFocus, state.routines.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
   const macInset = capabilities.windowChrome === "mac-inset";
   const windowDragStyle = macInset

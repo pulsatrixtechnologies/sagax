@@ -101,7 +101,7 @@ describe("activity detail steps", () => {
     expect(tree.top.map((step) => step.id)).toEqual(["s0", "s1", "s2", "s4"]);
     expect(tree.children.get("s2")!.map((step) => step.id)).toEqual(["s3"]);
     const html = renderToStaticMarkup(createElement(ActivityDetailBody, {
-      item: detail, detail, error: false, now: NOW, onStop: () => {}, onOpenThread: () => {}, onOpenChild: () => {}, onSteer: async () => {},
+      item: detail, detail, error: false, now: NOW, onStop: () => {}, onOpenThread: () => {}, onOpenChild: () => {},
     }));
     expect(html).toContain('data-activity-detail-status="running"');
     expect(html).toContain("Parallel task");
@@ -111,8 +111,8 @@ describe("activity detail steps", () => {
     // the raw id and arguments wait behind the row's chevron, one per group
     expect(html).toContain('data-activity-step="mcp__sagax-environment__read_file"');
     expect(html).toContain("data-step-row");
-    // the running task takes a message
-    expect(html).toContain("data-activity-steer");
-    expect(html).toContain("Send a message to this task");
+    // Writing goes through Open <bot>'s chat only (D-20261127-005).
+    expect(html).not.toContain("data-activity-steer");
+    expect(html).not.toContain("Send a message to this task");
   });
 });

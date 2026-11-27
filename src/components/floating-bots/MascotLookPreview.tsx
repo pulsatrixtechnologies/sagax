@@ -13,10 +13,12 @@ import { t } from "@/lib/i18n";
 import { agentStateForBot, type MascotLiveBot, type MausColor, type MausMotion, type MausState } from "@/lib/mascot";
 import { BotAvatar } from "@/components/Avatar";
 import type { MascotSkinId } from "../../../shared/mascot-skins";
-import type { MascotCharacter, MascotLook } from "../../../shared/mascot-look";
+import type { MascotCharacter, MascotLook, ShapeMoodSetting } from "../../../shared/mascot-look";
+import { ShapeStageContext } from "@/components/shape-stage";
 import type { FxMoveRequest } from "@/components/skin-fx/skin-fx";
 import type { OwlMove } from "./moves";
 import { useDrawnLeftInset } from "./drawn-inset";
+import { MascotGlassCaustic, MascotTurnReset, turnCursor, useMascotTurn } from "./use-mascot-turn";
 
 const focusRing = "outline-none focus-visible:ring-2 focus-visible:ring-accent";
 /** The mascot's size in the profile page's hero (Grok Bot's avatar, on the
@@ -52,9 +54,11 @@ export interface MascotLookPreviewProps {
   /** The bot's live state and the moves it plays across the app. */
   liveState?: MausState;
   liveMotion?: { kind: Exclude<MausMotion, "none">; nonce: number } | null;
+  /** The M key on a shape mascot changes its mood (#5384); none where the look is not the person's to change here. */
+  onMood?: ((mood: ShapeMoodSetting) => void) | undefined;
 }
 
-type StageProps = Pick<MascotLookPreviewProps, "bot" | "shown" | "shownName" | "shownLook" | "owlSkin" | "moves" | "fxMove" | "onPlay" | "onPlayNext" | "picture" | "liveState" | "onActivate" | "activateLabel"> & {
+type StageProps = Pick<MascotLookPreviewProps, "bot" | "shown" | "shownName" | "shownLook" | "owlSkin" | "moves" | "fxMove" | "onPlay" | "onPlayNext" | "picture" | "liveState" | "onActivate" | "activateLabel" | "onMood"> & {
   motion: { kind: Exclude<MausMotion, "none">; nonce: number } | null;
   size: number;
   profile?: boolean;
@@ -65,20 +69,27 @@ type StageProps = Pick<MascotLookPreviewProps, "bot" | "shown" | "shownName" | "
   clip?: boolean;
 };
 
-function MascotStage({ bot, shownName, shownLook, owlSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, onActivate, activateLabel, motion, size, profile, pad = 4, clip = false }: StageProps) {
+function MascotStage({ bot, shownName, shownLook, owlSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, onActivate, activateLabel, onMood, motion, size, profile, pad = 4, clip = false }: StageProps) {
+  // a shape is turned by hand, as on the engine's site (#5384); a press that barely moved still opens the picker
+  const turn = useMascotTurn({ look: shownLook, picture: Boolean(picture), onMood });
   return (
+    <span className="relative inline-grid shrink-0" data-mascot-turn={turn.enabled ? (turn.dragging ? "dragging" : "") : undefined}>
     <button
       type="button"
       data-mascot-stage=""
       aria-label={activateLabel ?? t("appearance.preview", { name: shownName })}
+      aria-description={turn.enabled ? t("mascotStage.hint") : undefined}
       title={activateLabel}
       data-mascot-activate={onActivate ? "" : undefined}
       onMouseEnter={() => { if (moves[0]) onPlay(moves[0]); }}
       onClick={onActivate ?? onPlayNext}
+      {...turn.handlers}
       style={{ width: size + pad, height: size + pad }}
-      className={cn("relative grid shrink-0 place-items-center rounded-2xl", onActivate && "cursor-pointer", clip && "overflow-hidden", focusRing)}
+      className={cn("relative grid shrink-0 place-items-center rounded-2xl", onActivate && !turn.enabled && "cursor-pointer", turnCursor(turn), clip && "overflow-hidden", focusRing)}
     >
-      <span aria-hidden="true" className={cn("pointer-events-none", profile && "profile-mascot-shadow")}>
+      <ShapeStageContext.Provider value={turn.stage}>
+      <MascotGlassCaustic turn={turn} bot={{ color: bot.color, mascotLook: shownLook }} state={liveState !== undefined ? agentStateForBot(bot as MascotLiveBot) : "idle"} />
+      <span aria-hidden="true" className={cn("pointer-events-none relative", profile && "profile-mascot-shadow")}>
         <BotAvatar
           bot={picture ?? { name: bot.name, color: bot.color, mascotSkin: owlSkin, mascotLook: shownLook, avatarCrop: "mascot" }}
           size={size}
@@ -91,7 +102,10 @@ function MascotStage({ bot, shownName, shownLook, owlSkin, moves, fxMove, onPlay
           label={t("appearance.preview", { name: shownName })}
         />
       </span>
+      </ShapeStageContext.Provider>
     </button>
+    <MascotTurnReset turn={turn} className="-right-2 -top-2" />
+    </span>
   );
 }
 
@@ -114,9 +128,10 @@ export function MascotLookPreview({
   activateLabel,
   liveState,
   liveMotion,
+  onMood,
 }: MascotLookPreviewProps): ReactNode {
   const motion = owlMotion ?? liveMotion ?? null;
-  const stage = { bot, shown, shownName, shownLook, owlSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, onActivate, activateLabel, motion };
+  const stage = { bot, shown, shownName, shownLook, owlSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, onActivate, activateLabel, onMood, motion };
   // The profile hero's frame moves left by the air its art leaves, so the
   // art's left edge lines up with the name's first letter (M-20261119-081).
   const frameRef = useRef<HTMLSpanElement>(null);

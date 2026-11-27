@@ -204,7 +204,10 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
       // nested [role=dialog] and the check above leaves it alone. A key
       // pressed with focus outside this panel belongs to whoever holds it.
       if (dialog && event.target instanceof Node && !dialog.contains(event.target)) return;
-      if (event.key === "Escape") {
+      // A key something inside already took is taken (the avatar's mascot
+      // with a turn or a previewed state to cancel, docs/mascots.md): the
+      // panel closes only on a key nobody wanted.
+      if (event.key === "Escape" && !event.defaultPrevented) {
         event.preventDefault();
         dispatch({ type: "toggleSettings", open: false });
         dispatch({ type: "toggleComputer", open: false });

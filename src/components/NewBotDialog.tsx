@@ -306,7 +306,8 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
       if (!root || (event.target instanceof Node && !root.contains(event.target))) return;
       const nested = root.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]');
       if (nested && nested.getClientRects().length) return;
-      if (event.key === "Escape") { event.preventDefault(); closeRef.current(); }
+      // a key something inside already took (the avatar's turned mascot, its picker: docs/mascots.md) is taken
+      if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); closeRef.current(); }
       if (event.key !== "Tab") return;
       const controls = [...root.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]')]
         .filter(control => control.getClientRects().length && !control.closest("[hidden],fieldset:disabled"));

@@ -69,6 +69,7 @@ export default function MascotHero({ bot, onOwlMove }: MascotHeroProps) {
       activateLabel={slot?.openLabel}
       liveState={slot?.state}
       liveMotion={slot?.motion}
+      onMood={slot?.onMood}
     />
   );
 }

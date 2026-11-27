@@ -924,6 +924,16 @@ private struct DesktopShellRouting: ViewModifier {
                 model.panelOpen = screen.opensBotPanel
                 if let tab = screen.panelTab { model.panelTab = tab }
                 if screen == .panelAvatarEditor { model.showAppearance() }
+                else if let page = screen.personaParityPage {
+                    // persona-* / org-persona-*: Edit bot in the main column (#4271)
+                    model.panelSection = page.section
+                    model.personaPage = page
+                    model.page = nil
+                    if model.panelOpen {
+                        withAnimation(.easeOut(duration: 0.2)) { model.panelOpen = false }
+                    }
+                    model.personaOpen = true
+                }
                 else if screen.opensPersonaEditor { model.showPersona(screen.panelSection) }
                 // `-parityBotEditRoute root` (the profile captures, #3403): Ara's profile page
                 else if UserDefaults.standard.string(forKey: "parityBotEditRoute") == "root" { model.showPersona() }

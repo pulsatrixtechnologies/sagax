@@ -61,14 +61,17 @@ export function appPermissionAllowed(permission, requestingUrlOrOrigin, renderer
     return permission === "media" && microphone.includes(requesting) && audioOnly(details);
   }
 
+  // Electron 45 reports screen/window/tab capture as "display-capture" (was "media"
+  // with empty mediaTypes on 43/44). Allow it for the local page so the guarded
+  // displayMediaGuard in main still runs; never the camera.
+  if (permission === "display-capture") return true;
+
   // Media: audio (microphone) is permitted; video (camera/webcam) is strictly denied.
-  // Electron 43 routes getDisplayMedia through permission="media" with mediaTypes: []
-  // before selecting display media. Allowing this preserves the guarded displayMediaGuard
-  // without granting webcam access.
+  // Empty mediaTypes on "media" is kept for the 43/44 getDisplayMedia route.
   if (permission === "media") {
     if (details?.mediaType !== undefined && details.mediaType !== "audio") return false;
     if (details?.mediaTypes !== undefined) {
-      // Empty mediaTypes is Electron getDisplayMedia routing; ["audio"] is microphone capture.
+      // Empty mediaTypes is Electron 43/44 getDisplayMedia routing; ["audio"] is microphone capture.
       return Array.isArray(details.mediaTypes) && details.mediaTypes.every((type) => type === "audio");
     }
     return details?.mediaType === "audio";

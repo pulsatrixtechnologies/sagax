@@ -24,8 +24,10 @@ test("allows media for audio (microphone) and guarded display-capture, denies vi
   assert.equal(appPermissionAllowed("media", LOCAL_PAGE, LOCAL_ORIGIN, { mediaTypes: ["audio"] }), true);
   assert.equal(appPermissionAllowed("media", LOCAL_PAGE, LOCAL_ORIGIN, { mediaType: "audio" }), true);
 
-  // Guarded display-capture path: Electron 43 routes getDisplayMedia through permission="media"
-  // with an empty mediaTypes array before dispatching to setDisplayMediaRequestHandler
+  // Electron 45: screen/window/tab capture arrives as permission="display-capture".
+  assert.equal(appPermissionAllowed("display-capture", LOCAL_PAGE, LOCAL_ORIGIN, { mediaTypes: ["video"] }), true);
+  assert.equal(appPermissionAllowed("display-capture", LOCAL_PAGE, LOCAL_ORIGIN, { mediaTypes: ["video", "audio"] }), true);
+  // Electron 43/44 still routed getDisplayMedia through permission="media" with empty mediaTypes.
   assert.equal(appPermissionAllowed("media", LOCAL_PAGE, LOCAL_ORIGIN, { mediaTypes: [] }), true);
 
   // Video / camera: strictly denied
@@ -43,13 +45,14 @@ test("refuses permissions to any other origin", () => {
   assert.equal(appPermissionAllowed("notifications", "https://other.example/chat", LOCAL_ORIGIN), false);
   assert.equal(appPermissionAllowed("clipboard-read", "http://127.0.0.1:5200/", LOCAL_ORIGIN), false);
   assert.equal(appPermissionAllowed("media", "https://127.0.0.1:5199/", LOCAL_ORIGIN), false);
+  assert.equal(appPermissionAllowed("display-capture", "https://other.example/chat", LOCAL_ORIGIN), false);
   assert.equal(appPermissionAllowed("fullscreen", "http://localhost:5199/", LOCAL_ORIGIN), false);
 });
 
 test("keeps every privileged capability off even for the local renderer page", () => {
   const privileged = [
     "geolocation", "camera", "usb", "hid", "serial", "midi", "midiSysex",
-    "display-capture", "fileSystem", "openExternal", "idle-detection", "speaker-selection",
+    "fileSystem", "openExternal", "idle-detection", "speaker-selection",
     "window-management", "storage-access", "top-level-storage-access", "pointerLock",
     "keyboardLock", "mediaKeySystem", "unknown",
   ];
@@ -165,7 +168,8 @@ test("this computer's own page keeps its permissions through the same handlers",
   const { ask, check } = handlersFixture();
   const local = { getURL: () => LOCAL_PAGE };
   assert.equal(ask("media", { requestingUrl: LOCAL_PAGE, isMainFrame: true, mediaTypes: ["audio"] }, local), true);
-  assert.equal(ask("media", { requestingUrl: LOCAL_PAGE, isMainFrame: true, mediaTypes: [] }, local), true, "guarded display capture");
+  assert.equal(ask("display-capture", { requestingUrl: LOCAL_PAGE, isMainFrame: true, mediaTypes: ["video"] }, local), true, "Electron 45 display capture");
+  assert.equal(ask("media", { requestingUrl: LOCAL_PAGE, isMainFrame: true, mediaTypes: [] }, local), true, "Electron 43/44 guarded display capture");
   assert.equal(ask("media", { requestingUrl: LOCAL_PAGE, isMainFrame: true, mediaTypes: ["video"] }, local), false);
   assert.equal(ask("notifications", { requestingUrl: LOCAL_PAGE, isMainFrame: true }, local), true);
   // No requesting URL: the window's own address decides, as before.

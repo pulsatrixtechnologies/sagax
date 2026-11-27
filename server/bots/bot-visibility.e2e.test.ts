@@ -648,14 +648,17 @@ posixOnly("per-bot visibility on a shared workspace", () => {
     // two with the same audience are teammates to each other.
     const benefits = await makeBot("Benefits Lynx", "People");
     expect((await api("PATCH", `/api/bots/${benefits.id}`, { visibility: { people: [ADA] } }, BOSS)).status).toBe(200);
+    // Roster lines are "- <name> (…)" (#5394): a bare toContain("Board Heron")
+    // also matches an imported "Board Heron 2" that shares Payroll's audience.
+    const rosterLine = (blob: string, name: string) => blob.includes(`- ${name} (`);
     const roster = async (id: string) => JSON.stringify((await api("GET", `/api/bots/${id}/system-prompt`, undefined, BOSS)).body);
     const hr = await roster(ids.hr);
-    expect(hr).toContain("Benefits Lynx");
-    expect(hr).not.toContain("Board Heron");
-    expect(await roster(ids.board)).not.toContain("Payroll Zebra");
+    expect(rosterLine(hr, "Benefits Lynx")).toBe(true);
+    expect(rosterLine(hr, "Board Heron")).toBe(false);
+    expect(rosterLine(await roster(ids.board), "Payroll Zebra")).toBe(false);
     // Unrestricting Board makes nobody new reachable: it now has everyone's audience.
     expect((await api("PATCH", `/api/bots/${ids.board}`, { visibility: "everyone" }, BOSS)).status).toBe(200);
-    expect(await roster(ids.hr)).not.toContain("Board Heron");
+    expect(rosterLine(await roster(ids.hr), "Board Heron")).toBe(false);
     expect((await api("PATCH", `/api/bots/${ids.board}`, { visibility: "admins" }, BOSS)).status).toBe(200);
   });
 

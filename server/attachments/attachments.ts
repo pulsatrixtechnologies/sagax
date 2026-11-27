@@ -4,13 +4,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   linkSync,
-  closeSync,
-  fsyncSync,
   mkdirSync,
-  openSync,
   readFileSync,
   readdirSync,
-  renameSync,
   rmSync,
   statSync,
   unlinkSync,
@@ -19,6 +15,7 @@ import {
 } from "node:fs";
 import { link, open, unlink } from "node:fs/promises";
 import { basename, dirname, join, extname, resolve, sep } from "node:path";
+import { writeFileAtomic } from "../atomic.ts";
 import { DATA_DIR } from "../config.ts";
 import { atRestChunks, atRestInfoSync, holdPlain, isAtRestTemp, noteAtRestWrite, readAtRestSync, registerAtRestRoot, releasePlain, type ContentScope } from "../encryption/content-at-rest.ts";
 import { WORKSPACE_OWNER } from "../encryption/content-keys.ts";
@@ -640,11 +637,9 @@ function resumePaths(owner: string, id: string) {
 }
 
 function saveResumeMetadata(path: string, state: ResumableUpload): void {
-  const temporary = `${path}.tmp`;
-  writeFileSync(temporary, JSON.stringify(state), { mode: 0o600 });
-  const descriptor = openSync(temporary, "r");
-  try { fsyncSync(descriptor); } finally { closeSync(descriptor); }
-  renameSync(temporary, path);
+  // writeFileAtomic: fsync on the write handle, then renameWithRetry. The old
+  // open("r")+fsync+renameSync path threw EPERM on Windows runners (#4495).
+  writeFileAtomic(path, JSON.stringify(state), { mode: 0o600 });
 }
 
 function releaseResume(partial: string): void {

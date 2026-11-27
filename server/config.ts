@@ -12,6 +12,7 @@ import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../shar
 import { stripOpenAiEndpointSuffix } from "../shared/openai-compat-url.ts";
 
 import { writeFileAtomic } from "./atomic.ts";
+import { ensureOwnerOnlyAcl } from "./owner-only-acl.ts";
 import { settledFileCache, settledFileStamp } from "./settled-file.ts";
 import { applyStoredEngineEnv } from "./engines/engine-api-keys.ts";
 import { migrateConfigPlaintextKeys, readOnboardingEngineKey } from "./engines/onboarding-engine-key.ts";
@@ -1483,7 +1484,12 @@ export function ensureDirs() {
       /* cross-device or busy — fall through to a fresh dir */
     }
   }
-  for (const dir of [DATA_DIR, EVENTS_DIR, NATIVE_DIR]) mkdirSync(dir, { recursive: true });
+  for (const dir of [DATA_DIR, EVENTS_DIR, NATIVE_DIR]) {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    // #5258: on Windows, mode bits are meaningless; lock each data folder to
+    // the owner, SYSTEM and Administrators with inheritance from the parent off.
+    ensureOwnerOnlyAcl(dir, { directory: true });
+  }
   migrateLegacyFeatureFlags();
   migrateLegacyNewBotEffort();
   migrateGrokVoiceKey();

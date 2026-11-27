@@ -19546,7 +19546,11 @@
       "composer.customize.item.plus": "bd09e253953c1d44af0b2c9052bd18ded68b67ffb741b2e451817e4fe21caf87",
       "composer.customize.item.model": "20e1128d456efa1bc2fca20e31a1cfda496809c6dc9197b6c32da569ee92a8bb",
       "composer.customize.item.usage": "6cf648d4fbfa15194c08ca8a91ff061bf2d417f0c66ee6ba79beb9a38eefcce4",
-      "composer.customize.item.voice": "003482add4d8d76cfe37565c60d21ae8be0c22cca97c61f39956d214a6e0b10c"
+      "composer.customize.item.voice": "003482add4d8d76cfe37565c60d21ae8be0c22cca97c61f39956d214a6e0b10c",
+      "screenPanel.detach": "5e8fdbc6ff9d5747dec406275d03721eef34d1a5e41886faf13ecdba3420595b",
+      "screenPanel.expand": "07548c2c6511d4d1780564de8a237a1966cf9c99a97cf5c8a185e6c2aeacff09",
+      "browser.panel.browseWith": "e36b668ed227127614f4be4f248eb39a4bb66be98936caadc106c067458f891b",
+      "browser.panel.browseWithHint": "e414801e26f8c67454b7354f3055be31bcc7e3098d8e2a752b3cdd03c2cbb4e2"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

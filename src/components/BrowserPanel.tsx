@@ -17,7 +17,7 @@ import { BROWSER_STANDARD_VIEWPORT, setPanelStageReport } from "@/lib/browser-pa
 import { readableError } from "@/lib/plain-error";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { useAnchoredDismissRoot } from "./AnchoredPopover";
-import { LiveBrowserView } from "./BrowserPanel.tsx-parts/LiveBrowserView";
+import { LiveBrowserView, type LiveBrowserDocked } from "./BrowserPanel.tsx-parts/LiveBrowserView";
 import { useLiveBrowserFlags } from "./BrowserPanel.tsx-parts/useLiveBrowserFlags";
 
 interface BrowserTab { tabId: string; title: string; url: string; active: boolean }
@@ -45,7 +45,7 @@ export type BrowserSignIn = { url: string; site: string; nonce: number };
  * `control`: false hands the browser back at once and leaves the page
  * view-only. `placeholder`: the preview's last picture, shown dimmed while
  * the live view connects, so the window never opens on an empty square. */
-export function LiveBrowser({ bot, control: allowed = true, placeholder, teach = false, signIn, onDescriber }: { bot: Bot; control?: boolean; placeholder?: string | undefined; teach?: boolean; signIn?: BrowserSignIn | undefined; onDescriber?: ((describe: BrowserDescriber | null) => void) | undefined }) {
+export function LiveBrowser({ bot, control: allowed = true, placeholder, teach = false, signIn, onDescriber, docked }: { bot: Bot; control?: boolean; placeholder?: string | undefined; teach?: boolean; signIn?: BrowserSignIn | undefined; onDescriber?: ((describe: BrowserDescriber | null) => void) | undefined; docked?: LiveBrowserDocked }) {
   const confirm = useConfirm();
   const { state } = useStore();
   const {
@@ -477,6 +477,7 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
     action={action}
     confirm={confirm}
     setError={setError}
+    docked={docked}
   />;
 }
 
@@ -659,8 +660,9 @@ function BrowserNote({ caption, children }: { caption: string; children: ReactNo
 }
 
 /** `live`: the screen side panel (#4452) draws the live browser in place, in its
- * own column, instead of the Computer tab's preview square and its window. */
-export function BrowserPanel({ bot, signIn, live = false, onDescriber }: { bot: Bot; signIn?: BrowserSignIn | undefined; live?: boolean; onDescriber?: ((describe: BrowserDescriber | null) => void) | undefined }) {
+ * own column, instead of the Computer tab's preview square and its window.
+ * `docked`: compact chrome from the side panel (tabs + Detach / Expand / Close). */
+export function BrowserPanel({ bot, signIn, live = false, onDescriber, docked }: { bot: Bot; signIn?: BrowserSignIn | undefined; live?: boolean; onDescriber?: ((describe: BrowserDescriber | null) => void) | undefined; docked?: LiveBrowserDocked }) {
   const { state } = useStore();
   const engine = state.config?.browserEngine;
   const [requested, setRequested] = useState(false);
@@ -679,7 +681,7 @@ export function BrowserPanel({ bot, signIn, live = false, onDescriber }: { bot: 
   // Watching and taking over a session the bot already opened is for anyone
   // who can use the bot. Installing the engine on this computer stays admin.
   if (engine?.kind === "engine" && !installing && !engine.installError) {
-    return live ? <LiveBrowser key={bot.id} bot={bot} signIn={signIn} onDescriber={onDescriber} /> : <BrowserComputerScreen key={bot.id} bot={bot} signIn={signIn} />;
+    return live ? <LiveBrowser key={bot.id} bot={bot} signIn={signIn} onDescriber={onDescriber} docked={docked} /> : <BrowserComputerScreen key={bot.id} bot={bot} signIn={signIn} />;
   }
   return <BrowserNote caption={caption}>
     <div className="text-[15px] font-medium text-ink">{engine?.kind === "engine" ? t("browser.panel.incomplete") : t("browser.panel.notInstalled")}</div>

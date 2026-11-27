@@ -987,6 +987,10 @@ export interface ConfigStatus {
    * admin allows in Perspicax; null or absent means every provider
    * (shared/org-allowed-engines.ts). Refreshed by the config frame. */
   allowedEngines?: string[] | null;
+  /** D-20261126-018: the providers its admin hid in Perspicax, left out of
+   * every menu for a new choice; the one a bot is on stays in its own menu
+   * (shared/offered-engines.ts `engineHidden`). */
+  hiddenEngines?: string[];
   /** 2026-10-30: a person's own subscription or key may run an engine
    * outside `allowedEngines` (Perspicax, off by default). */
   ownAccountsOutsideList?: boolean;
@@ -1075,7 +1079,7 @@ export interface BrowserProfile {
 // Settings shows (a saved key's Test button used to vanish that way).
 export type ConfigStatusFrame = Pick<
   ConfigStatus,
-  "xai" | "mistral" | "cerebras" | "groq" | "deepseek" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "fleet" | "box" | "meta" | "vps" | "rooms" | "mcp" | "threads" | "automaticRecovery" | "cacheKeepWarm" | "localVm" | "opencodeGo" | "tts" | "decider" | "imageGen" | "live" | "profile" | "language" | "features" | "loopGuard" | "onboarding" | "browserEngine" | "browserProfiles" | "personalSettings" | "edition" | "budgets" | "billing" | "managedPolicy" | "viewer" | "allowedEngines" | "ownAccountsOutsideList" | "disabledModels" | "myDisabledModels" | "confidentialThreadsByDefault" | "orgCapabilities"
+  "xai" | "mistral" | "cerebras" | "groq" | "deepseek" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "fleet" | "box" | "meta" | "vps" | "rooms" | "mcp" | "threads" | "automaticRecovery" | "cacheKeepWarm" | "localVm" | "opencodeGo" | "tts" | "decider" | "imageGen" | "live" | "profile" | "language" | "features" | "loopGuard" | "onboarding" | "browserEngine" | "browserProfiles" | "personalSettings" | "edition" | "budgets" | "billing" | "managedPolicy" | "viewer" | "allowedEngines" | "hiddenEngines" | "ownAccountsOutsideList" | "disabledModels" | "myDisabledModels" | "confidentialThreadsByDefault" | "orgCapabilities"
 >;
 
 export function configStatusFromFrame(frame: ConfigStatusFrame): ConfigStatus {
@@ -1118,6 +1122,7 @@ export function configStatusFromFrame(frame: ConfigStatusFrame): ConfigStatus {
     managedPolicy: frame.managedPolicy,
     viewer: frame.viewer,
     allowedEngines: frame.allowedEngines,
+    hiddenEngines: frame.hiddenEngines,
     ownAccountsOutsideList: frame.ownAccountsOutsideList,
     disabledModels: frame.disabledModels,
     myDisabledModels: frame.myDisabledModels,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { engineOffer, offeredEngines, orgEngineMoveLine, ownAccountOnly, type EngineOfferContext } from "./offered-engines.ts";
+import { engineHidden, engineOffer, offeredEngines, orgEngineMoveLine, ownAccountOnly, type EngineOfferContext } from "./offered-engines.ts";
+import { offeredModels } from "./offered-models.ts";
 
 const engines = [{ instanceId: "claude" }, { instanceId: "codex" }, { instanceId: "grok" }];
 const ids = (rows: readonly { instanceId: string }[]) => rows.map((row) => row.instanceId);
@@ -63,6 +64,29 @@ describe("the engines offered to a person (2026-10-18)", () => {
     expect(ids(offeredEngines(engines, org(null, mine), "settings"))).toEqual(["claude", "codex", "grok"]);
     // not known yet (loading): nothing is dropped for it
     expect(engineOffer(org(null, null), "grok")).toBe("offered");
+  });
+
+  it("D-20261126-018: a provider the organization hid is in no list for a new choice, and stays where it is already the choice", () => {
+    const hidden = { ...org(null), hiddenEngines: ["codex"] };
+    expect(engineHidden(hidden, "codex")).toBe(true);
+    expect(engineHidden(hidden, "claude")).toBe(false);
+    // hidden is not off: what already runs on it is still offered
+    expect(engineOffer(hidden, "codex")).toBe("offered");
+    expect(ids(offeredEngines(engines, hidden))).toEqual(["claude", "grok"]);
+    expect(ids(offeredEngines(engines, hidden, "settings"))).toEqual(["claude", "grok"]);
+    // the engine a bot is on stays in that bot's own list
+    expect(ids(offeredEngines(engines, hidden, "pick", "codex"))).toEqual(["claude", "codex", "grok"]);
+    expect(ids(offeredEngines(engines, hidden, "pick", ["codex"]))).toEqual(["claude", "codex", "grok"]);
+    expect(ids(offeredEngines(engines, hidden, "pick", "claude"))).toEqual(["claude", "grok"]);
+    const withModels = engines.map((engine) => ({ ...engine, models: { default: "m", options: [{ id: "m" }] } }));
+    expect(ids(offeredModels(withModels, hidden, null))).toEqual(["claude", "grok"]);
+    expect(ids(offeredModels(withModels, hidden, null, "pick", "codex"))).toEqual(["claude", "codex", "grok"]);
+    // keeping it never lifts the organization's list
+    expect(ids(offeredEngines(engines, { ...org(["claude"]), hiddenEngines: ["codex"] }, "pick", "codex"))).toEqual(["claude"]);
+    // a solo server has no organization to hide anything
+    const solo = { organization: false, allowedEngines: null, hiddenEngines: ["codex"] };
+    expect(engineHidden(solo, "codex")).toBe(false);
+    expect(ids(offeredEngines(engines, solo))).toEqual(["claude", "codex", "grok"]);
   });
 
   it("the moved bot's plain line", () => {

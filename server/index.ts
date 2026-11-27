@@ -1460,6 +1460,7 @@ import { routineScheduleLabel } from "./org/org-admin-schedule.ts";
 import { routinesRoutes, type RoutinesDeps } from "./org/org-admin-routines.ts";
 import { routineRunsRoutes, type RoutineRunsDeps } from "./org/org-admin-runs.ts";
 import { opsRoutes, type ConnectionsView, type OpsDeps } from "./org/org-admin-ops.ts";
+import { enginesRoutes, orgEngineRow, type EnginesDeps } from "./org/org-admin-engines.ts";
 import { createOrgImportRoute } from "./org/org-import-routes.ts";
 import { sandboxdKeySource } from "./sandbox/sandboxd-auth.ts";
 import { sandboxBackendFor, sandboxRouteFromEnv } from "./sandbox/sandbox-route.ts";
@@ -1571,7 +1572,7 @@ import { createPlanHistoryStore } from "./usage/plan-history.ts";
 import { createKeysTestRoutes } from "./routes/keys-test.ts";
 import { createDecisionsRoutes } from "./routes/decisions.ts";
 import { createAdminActivityRoutes } from "./routes/admin-activity.ts";
-import { createInstancesRoutes, instancesInView, removeAddedAccount, type AddedAccountRemovalDeps } from "./routes/instances.ts";
+import { createInstancesRoutes, instancesInView, removeAccountMovingBots, removeAddedAccount, saveOrgEngineKey, type AddedAccountRemovalDeps } from "./routes/instances.ts";
 import { accountOwnedBy, accountOwnerOf, allowedWithOwnedAccounts, describeUnownedAccount, unownedAddedAccounts } from "./engines/account-owner.ts";
 import { accountWords } from "../shared/model-accounts.ts";
 import { providerOfInstance } from "../shared/model-provider.ts";
@@ -1582,7 +1583,7 @@ import { createAccountSwitch } from "./usage/account-switch-host.ts";
 import { cleanModeModels, type ModeModels } from "../shared/mode-models.ts";
 import { outcomeOfSettledTurn } from "./usage/learned-routing.ts";
 import { createUsageForecast } from "./usage/usage-forecast.ts";
-import { addedAccount } from "../shared/added-account.ts";
+import { addedAccount, providerFirstAccount } from "../shared/added-account.ts";
 import { createCliTestRoutes } from "./routes/cli-test.ts";
 import { createMcpServersHttpRoutes } from "./routes/mcp-servers-http.ts";
 import { createConfigHttpRoutes } from "./routes/config-http.ts";
@@ -3072,6 +3073,9 @@ bindLeafHost({
   get modelSwitchRefusal() { return modelSwitchRefusal; },
   get orgOwnAccountsOutsideList() { return orgOwnAccountsOutsideList; },
   get orgAllowedEngines() { return orgAllowedEngines; },
+  get orgEngineHidden() { return orgEngineHidden; },
+  get orgEngineHiddenRefusal() { return orgEngineHiddenRefusal; },
+  get orgHiddenEnginesFor() { return orgHiddenEnginesFor; },
   get personPaysEngine() { return personPaysEngine; },
   get orgEngineName() { return orgEngineName; },
   get insideDataDir() { return insideDataDir; },
@@ -8842,6 +8846,8 @@ const IDENTITY = identityConfigFromEnv();
 setSharedHost(IDENTITY.kind === "perspicax");
 /** A model on an engine the organization's admin does not allow (allowedEngines). */
 const ORG_ENGINE_NOT_ALLOWED = "Your organization does not allow this model provider.";
+/** D-20261126-018: a provider the organization hid, picked as a new choice. */
+const ORG_ENGINE_HIDDEN = "Your organization does not offer this model provider for a new choice. A bot already on it keeps it.";
 /** 2026-10-30 (lot 2): a model turned off, by the organization or by the person. */
 const MODEL_TURNED_OFF_BY_ORG = "Your organization turned this model off. Pick another model or Auto.";
 const MODEL_TURNED_OFF_BY_PERSON = "You turned this model off in Settings > Providers > Models. Turn it back on there, or pick another model.";
@@ -11566,13 +11572,14 @@ function selectableInstances<T extends SelectableInstance>(instances: readonly T
  * of their own wins over it; the organization's engine policy applies. */
 const selectionContext = {
   company: (instanceId: string) => managedDesktop.owns(instanceId),
-  refusal: (instance: SelectableInstance) => policyModelRefusal(instance) ?? orgEngineAllowRefusal(instance.instanceId)
+  // every use is a new choice: a hidden provider is never picked (D-20261126-018)
+  refusal: (instance: SelectableInstance) => policyModelRefusal(instance) ?? orgEngineAllowRefusal(instance.instanceId) ?? orgEngineHiddenRefusal(instance.instanceId)
 };
 /** #1098: the same for one person, who may pick an engine they pay for. */
 function selectionContextFor(principalId: string | null | undefined) {
   return {
     ...selectionContext,
-    refusal: (instance: SelectableInstance) => policyModelRefusal(instance) ?? orgEngineAllowRefusal(instance.instanceId, principalId)
+    refusal: (instance: SelectableInstance) => policyModelRefusal(instance) ?? orgEngineAllowRefusal(instance.instanceId, principalId) ?? orgEngineHiddenRefusal(instance.instanceId)
   };
 }
 
@@ -11621,8 +11628,9 @@ function accountMovesHost(): AccountMovesHost {
       if (person && IDENTITY.kind === "perspicax") {
         // the person's own access: their sign-in, their key or the organization's key
         const access = personEngineAccess(person) as Array<{ id: string; via: string }>;
+        // a move target is a new choice: never a provider the organization hid (D-20261126-018)
         return orgOfferedEngines(registry.entries(), person)
-          .filter((entry) => personalProviderInstances.visible(entry.instanceId, person) && !accountNames.removed(person, entry.instanceId))
+          .filter((entry) => personalProviderInstances.visible(entry.instanceId, person) && !accountNames.removed(person, entry.instanceId) && !orgEngineHidden(entry.instanceId))
           .map((entry) => ({
             instanceId: entry.instanceId,
             defaultModel: registry.get(entry.instanceId)?.models.default ?? "",
@@ -16779,15 +16787,19 @@ const limitFailover = createLimitFailoverHost({
   },
   threadSelection: (botId, threadId) => store.projectBotForTask(botId, threadId)?.modelSelection ?? null,
   busy: threadBusy,
-  switchThread: (botId, threadId, to) => {
+  switchThread: (botId, threadId, to, back) => {
     const current = store.projectBotForTask(botId, threadId);
     if (!current) return "the conversation is gone";
     if (threadBusy(botId, threadId)) return "the conversation is working";
     const target = registry.get(to.instanceId);
     if (!target?.enabled) return "the engine is unavailable";
-    const refusal = policyModelRefusal(target) ?? orgEngineAllowRefusal(to.instanceId, effectiveBotOwner(current));
+    // D-20261126-018: going back to the engine it left, or to its bot's own,
+    // is no new choice of a hidden provider
+    const alreadyOn = back === true || to.instanceId === current.modelSelection.instanceId || to.instanceId === store.bot(botId)?.modelSelection.instanceId;
+    const refusal = policyModelRefusal(target) ?? orgEngineAllowRefusal(to.instanceId, effectiveBotOwner(current))
+      ?? (alreadyOn ? undefined : orgEngineHiddenRefusal(to.instanceId));
     if (refusal) return refusal;
-    const checked = checkedTaskModelSwitch(current, to, false, true);
+    const checked = checkedTaskModelSwitch(current, to, false, true, { returning: back === true });
     if (!checked.ok) return checked.error;
     if (!store.switchTaskModel(botId, threadId, checked.selection, false, {
       ...hostedModels?.resetTask(current.modelSelection, checked.selection), rewound: true
@@ -22683,7 +22695,8 @@ const chiefPeerTargetRule = (noun: string) => (proposerBotId: string, targetBotI
  * selection must resolve, and the destination driver must still support the
  * bot's existing approval setup. */
 const validateModelProposal = (selection: ModelSelection, current?: BotRecord): string | null => {
-  const checked = checkedModelSelection(selection, undefined, true, current ? effectiveBotOwner(current) : undefined);
+  // the bot's own selection, as every model switch: its engine is no new choice (D-20261126-018)
+  const checked = checkedModelSelection(selection, current ? { selection: current.modelSelection, busy: false } : undefined, true, current ? effectiveBotOwner(current) : undefined);
   if (!checked.ok) return checked.error;
   if (current?.approvalGrant) return "Wait for the approval-level confirmation before changing this bot's model";
   if (current) {
@@ -25525,6 +25538,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     },
     orgOfferedEngines,
     consoleEngineAllowed,
+    orgEngineHidden,
     orgOwnAccountsOutsideList,
     personPaysEngine,
     ownerBotsReadOnly,
@@ -33292,6 +33306,40 @@ function orgConsolePeople(): Array<{ principalId: string; disabled: boolean }> {
     .map((entry) => ({ principalId: entry.principalId!, disabled: Boolean(entry.disabled) }));
 }
 
+/** The organization's engines the console adds to and removes from
+ * (server/org/org-admin-engines.ts, #5351). The rows are the ones GET
+ * capabilities lists, less the voice and media rows (not bot engines). */
+const orgEngineDriver = (instanceId: string): string => providerConfigs()[instanceId]?.driver ?? registry.get(instanceId)?.driverKind ?? "";
+const orgEnginesDeps: EnginesDeps = {
+  engines: () => {
+    const configs = providerConfigs();
+    return orgAdminEngines()
+      .filter((engine: { voice?: boolean; image?: boolean }) => !engine.voice && !engine.image)
+      .map((engine: Parameters<typeof orgEngineRow>[0]) => orgEngineRow(engine, orgEngineDriver(engine.id), configs[engine.id]?.access, orgHiddenEngines().includes(engine.id)));
+  },
+  setHidden: (instanceId, hidden) => {
+    const others = orgHiddenEngines().filter((id) => id !== instanceId);
+    const organization = { ...cfg.organization };
+    const next = hidden ? [...others, instanceId] : others;
+    if (next.length) organization.hiddenEngines = next;
+    else delete organization.hiddenEngines;
+    saveConfig({ organization });
+    cfg.organization = organization;
+    // D-20261126-018: the menus redraw; no bot moves, on hide or on restore
+    broadcast({ kind: "config", ...configStatus() });
+  },
+  refusal: () => (hostedModels ? HOSTED_PROVIDER_SETTINGS_ERROR : null),
+  remove: async (instanceId) => {
+    const { removed, plan } = await removeAccountMovingBots({ ...addedAccountRemoval, accountMoves: accountMovesHost() }, instanceId);
+    return removed.ok ? { ok: true, ...(plan ? { moved: plan.moves, noEngine: plan.noEngine } : {}) } : removed;
+  },
+  setKey: (instanceId, key) => saveOrgEngineKey({
+    cfg, saveConfig, loadConfig, broadcast, configStatus, providerConfigs, reloadProviders,
+    getProviderConfigBusy: addedAccountRemoval.getProviderConfigBusy,
+    setProviderConfigBusy: addedAccountRemoval.setProviderConfigBusy,
+  }, instanceId, orgEngineDriver(instanceId), key),
+};
+
 /** The console's Overview (server/org/org-admin-overview.ts). */
 const orgOverviewDeps = {
   version: releaseVersion,
@@ -33512,7 +33560,10 @@ const orgBotsDeps: BotsDeps = {
     const sourceMode = approvalModeFor(source);
     const mode = memberAutoRefused(copy, ["ask"], sourceMode) ? "ask" : sourceMode;
     store.patchBot(copy.id, {
-      modelSelection: structuredClone(source.modelSelection),
+      // D-20261126-018: a copy is a new bot, never started on a provider the
+      // organization hid: it keeps the start the import gave it, as the app's
+      // Duplicate does
+      ...(orgEngineHidden(source.modelSelection.instanceId) ? {} : { modelSelection: structuredClone(source.modelSelection) }),
       ...(input.name ? { name: input.name } : {}),
       ...(mode !== "full" && mode !== "custom" ? { approvalMode: mode, autoApprove: mode === sourceMode ? source.autoApprove : false } : {}),
       ...(source.speakReplies !== undefined ? { speakReplies: source.speakReplies } : {}),
@@ -33769,7 +33820,7 @@ const botZipHost: BotZipHost = {
   principalByEmail: (email) => principals.byEmail(email)?.id ?? undefined,
   mcpServer: mcpServerSummary,
   engineUsable: (selection) => Boolean(registry.get(selection.instanceId)) && engineInstalled(selection.instanceId)
-    && consoleEngineAllowed(selection.instanceId) && (!hostedModels || hostedModels.allows(selection)),
+    && consoleEngineAllowed(selection.instanceId) && !orgEngineHidden(selection.instanceId) && (!hostedModels || hostedModels.allows(selection)),
   defaultSelection: () => defaultSelection(),
   newBotSelection: (owner, selection, harness) => newBotSelection(owner, selection, harness),
   sectionExists: (name) => store.sections.includes(name),
@@ -34337,6 +34388,33 @@ function orgAllowedEngines(): string[] | null {
   // #4435: a person's own added account follows its provider's first one.
   return IDENTITY.kind === "perspicax" && Array.isArray(allowed) ? allowedWithOwnedAccounts(allowed, cfg.instances) : null;
 }
+/** 2026-11-25: the catalog engines the organization hid (Perspicax, Model
+ * providers, `POST engines/{id}/hide`). Empty on a solo server. */
+function orgHiddenEngines(): string[] {
+  return IDENTITY.kind === "perspicax" ? cfg.organization?.hiddenEngines ?? [] : [];
+}
+/** D-20261126-018: a provider the organization hid is out of every new
+ * choice (a menu, a new bot, a backup, Auto's pick, a fallback), never off:
+ * what already runs on it goes on unchanged, and restoring it moves nothing.
+ * #4435: a person's own added account follows its provider's first one. */
+function orgEngineHidden(instanceId: string): boolean {
+  const hidden = orgHiddenEngines();
+  if (!hidden.length) return false;
+  if (hidden.includes(instanceId)) return true;
+  return Boolean(accountOwnerOf(cfg.instances, instanceId)) && hidden.includes(providerFirstAccount(instanceId, cfg.instances?.[instanceId]?.driver ?? "") ?? "");
+}
+/** The hidden engines the app leaves out of its menus (config `hiddenEngines`):
+ * the organization's, and for a person their own accounts that follow one. */
+function orgHiddenEnginesFor(person?: string | null): string[] {
+  if (!orgHiddenEngines().length) return [];
+  return registry.entries().map((entry) => entry.instanceId)
+    .filter((id) => orgEngineHidden(id) && (person ? personalProviderInstances.visible(id, person) : !personalProviderInstances.ownerOf(id)));
+}
+/** A new choice of this engine (a model picked by name, a new bot's start, a
+ * move target, Auto's pick) while the organization hid it. */
+function orgEngineHiddenRefusal(instanceId: string): string | undefined {
+  return orgEngineHidden(instanceId) ? ORG_ENGINE_HIDDEN : undefined;
+}
 /** Why a model choice may not use this engine here, if it may not.
  * 2026-10-30: an engine outside the organization's list is refused to
  * everyone, admins included. Only with `ownAccountsOutsideList` does it stay
@@ -34427,6 +34505,7 @@ const orgAdmin = createOrgAdminRoutes({
     ...routineRunsRoutes(orgRoutineRunsDeps),
     ...routinesRoutes(orgRoutinesDeps),
     ...opsRoutes(orgOpsDeps),
+    ...enginesRoutes(orgEnginesDeps),
     ...computersRoutes(orgComputersDeps),
   ],
   // The console's file browser (Perspicax 2026-10-08, slice 1: read only).
@@ -38476,6 +38555,7 @@ const startTurnRunner = createStartTurn({
   officeTurnText,
   orgEngineRefusal,
   orgEngineTurnRefusal,
+  orgEngineHidden,
   orgSpeakerPrincipal,
   principals,
   releaseVersion,

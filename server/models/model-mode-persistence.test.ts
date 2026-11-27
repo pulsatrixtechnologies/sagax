@@ -49,6 +49,7 @@ describe("checkedModelSelection and modes", () => {
     IDENTITY: { kind: "solo" },
     personalProviderInstances: { ownerOf: () => undefined },
     orgEngineAllowRefusal: () => null,
+    orgEngineHiddenRefusal: () => undefined,
     modelSwitchRefusal: () => null,
     isAutoOptimize,
     providerInstancesChanging: new Set<string>(),

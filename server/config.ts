@@ -530,6 +530,11 @@ const appConfigSchema = z.object({
     /** 2026-10-08, the console's Settings: the engine instances bots may be
      * switched to from the console. Absent means every engine. */
     allowedEngines: z.array(z.string().max(80)).max(100).optional(),
+    /** 2026-11-25: catalog engines the organization hid from its list and
+     * from everyone's model menus (Perspicax, Model providers), for new
+     * choices only: a bot already on one keeps it (D-20261126-018).
+     * `allowedEngines` is not changed. */
+    hiddenEngines: z.array(z.string().max(80)).max(100).optional(),
     /** 2026-10-30: a member may run an engine outside `allowedEngines` on
      * their own subscription or key (the #1098 exception, now the admin's
      * choice). Absent or false: an engine off the list is off for everyone,
@@ -871,6 +876,8 @@ export interface AppConfig extends HelperConfig {
     pluginMarketplaces?: { mode: "any" } | { mode: "list"; allow: string[] };
     githubClientId?: string;
     allowedEngines?: string[];
+    /** 2026-11-25: catalog engines hidden from the organization. */
+    hiddenEngines?: string[];
     /** 2026-10-30: own subscriptions and keys run engines outside the list. */
     ownAccountsOutsideList?: boolean;
     /** #5180: personal API keys. Absent means on. */

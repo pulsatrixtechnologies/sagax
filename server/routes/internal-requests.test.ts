@@ -95,6 +95,7 @@ function baseDeps(over: Partial<InternalRequestsDeps> = {}): InternalRequestsDep
     canAccessTeam: () => true,
     orgOfferedEngines: (instances) => instances,
     consoleEngineAllowed: () => true,
+    orgEngineHidden: () => false,
     orgOwnAccountsOutsideList: () => false,
     personPaysEngine: () => false,
     ownerBotsReadOnly: () => false,

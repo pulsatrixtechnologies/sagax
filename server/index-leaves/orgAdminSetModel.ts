@@ -17,6 +17,8 @@ function orgAdminSetModel(botId: string, input: { engineInstanceId?: string; mod
   const entry = registry.entries().find((candidate) => candidate.instanceId === instanceId);
   if (!entry || !host.engineInstalled(instanceId)) throw new ConsoleRefusal(400, "engine_not_installed", `The engine ${instanceId} is not installed on this server.`);
   if (!host.consoleEngineAllowed(instanceId)) throw new ConsoleRefusal(400, "engine_not_allowed", `The organization's policy does not allow the engine ${instanceId}.`);
+  // D-20261126-018: a hidden provider is no new choice; a bot already on it keeps it
+  if (instanceId !== bot.modelSelection.instanceId && host.orgEngineHidden(instanceId)) throw new ConsoleRefusal(400, "engine_not_allowed", `The organization hid the engine ${instanceId}.`);
   if (bot.approvalGrant) throw new ConsoleRefusal(409, "busy", "Wait for the approval-level change to finish before changing models.");
   // null: the bot's model on the same engine, else the engine's default.
   const model = input.model ?? (instanceId === bot.modelSelection.instanceId ? bot.modelSelection.model : registry.get(instanceId)?.models.default ?? null);

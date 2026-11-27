@@ -10,7 +10,7 @@ async function defaultSelection(saved: ModelSelection | null = getHost().cfg.def
   return selectDefaultModelSelection(host.selectableInstances<SelectableInstance>(instances ?? await host.registry.describe()), saved ?? undefined, {
     company: (instanceId) => host.managedDesktop.owns(instanceId),
     // a new bot starts on an engine the organization allows
-    refusal: (instance) => host.policyModelRefusal(instance) ?? host.orgEngineAllowRefusal(instance.instanceId)
+    refusal: (instance) => host.policyModelRefusal(instance) ?? host.orgEngineAllowRefusal(instance.instanceId) ?? host.orgEngineHiddenRefusal(instance.instanceId)
   });
 }
   return defaultSelection;

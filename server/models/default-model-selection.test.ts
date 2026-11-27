@@ -227,8 +227,9 @@ describe("new bot default model selection wiring in index.ts", () => {
       `${code}; return { policyModelRefusal, selectableInstances };`)(managedDesktop, managedPolicy,
       [{ driverKind: "claudeAgent", metadata: { displayName: "Claude" } }], () => configs, withInstanceConfig);
     const host = { hostedModels: undefined, cfg: { defaultModelSelection: saved }, registry: { describe }, managedDesktop, policyModelRefusal, selectableInstances,
-      // the organization's engine allow-list (orgEngineAllowRefusal, org policy) has its own tests; here every engine is allowed
-      orgEngineAllowRefusal: () => undefined };
+      // the organization's engine allow-list (orgEngineAllowRefusal, org policy) and its hidden
+      // providers (orgEngineHiddenRefusal) have their own tests; here every engine is allowed
+      orgEngineAllowRefusal: () => undefined, orgEngineHiddenRefusal: () => undefined };
     const defaultSelection = createDefaultSelection(() => host) as (saved?: ModelSelection | null, instances?: readonly SelectableInstance[]) => Promise<ModelSelection>;
     return { defaultSelection, describe, close: () => managedPolicy.close() };
   }

@@ -121,6 +121,7 @@ import {
   voiceKeyRef,
   voiceFailureCause,
   chainFailureBody,
+  defaultVoiceLine,
   providerFailureBody,
   retriesOnDefaultVoice,
   speakOnKnownVoice,
@@ -395,7 +396,7 @@ async function governVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, threadId: s
   return { ok: true, keys, ...(confirm ? { confirm } : {}) };
 }
 
-/** A connected Grok account speaks through the CLI voice host. Every other
+/** A connected Grok account speaks with its token header. Every other
  * source stays an API key on api.x.ai. */
 function onThisKey<T>(candidate: { source: string }, run: () => T): T {
   return withVoiceAuth(voiceKeyAuth(candidate), run);
@@ -588,8 +589,8 @@ return async function speech(req: IncomingMessage, res: import("node:http").Serv
   const tried: VoiceKeyRefusal[] = [];
   const fellBack: VoiceKeyRefusal[] = [];
   const ordered = refusals.order(who, usable).map((entry) => entry.candidate);
-  // set while the current credential is asked back on its own default voice
-  let onDefault = false;
+  // the name the current credential is asked back without, on its own default voice
+  let onDefault: string | undefined;
   for (let i = 0; i >= 0 && i < ordered.length;) {
     const candidate = ordered[i]!;
     const provider = candidateProvider(candidate);
@@ -636,12 +637,11 @@ return async function speech(req: IncomingMessage, res: import("node:http").Serv
       const failure = grokVoiceFailure(message || "not reachable");
       if (session.lastError && voice && retriesOnDefaultVoice(failure, voice)) {
         // the name, not the credential: the same one, on its own default voice
-        refusals.rememberUnknownVoice(who, voiceKeyRef(candidate), voice);
-        (deps.log ?? console.warn)(`[voice-mode] the ${describeVoiceKey(candidate)} does not know the voice "${voice}": asking it back on its own default voice`);
-        onDefault = true;
+        (deps.log ?? console.warn)(defaultVoiceLine(candidate, voice));
+        onDefault = voice;
         continue;
       }
-      onDefault = false;
+      onDefault = undefined;
       const next = session.lastError ? nextCandidateIndex(ordered, i, failure) : -1;
       if (session.lastError && voiceKeyFailureIsFinal(failure)) refusals.remember(who, voiceKeyRef(candidate), failure);
       else if (next >= 0) refusals.remember(who, voiceKeyRef(candidate), failure, VOICE_PROVIDER_REFUSAL_TTL_MS);
@@ -657,6 +657,7 @@ return async function speech(req: IncomingMessage, res: import("node:http").Serv
       return;
     }
     refusals.forget(who, voiceKeyRef(candidate));
+    if (onDefault) refusals.rememberUnknownVoice(who, voiceKeyRef(candidate), onDefault);
     sayFallback(threadId, "voice", fellBack, candidate);
     upgrade.release();
     const head = upgrade.head;
@@ -767,7 +768,7 @@ return async function realtime(req: IncomingMessage, res: import("node:http").Se
         if (name && retriesOnDefaultVoice(failure, name) && ask + 1 < names.length) {
           // the name, not the credential: ask it back on the provider's default
           voiceReset = { asked: name };
-          (deps.log ?? console.warn)(`[voice-realtime] the ${describeVoiceKey(candidate)} does not know the voice "${name}": asking it back on its own default voice`);
+          (deps.log ?? console.warn)(defaultVoiceLine(candidate, name, "voice-realtime"));
           continue;
         }
         tried.push({ ...voiceKeyRef(candidate), failure });
@@ -795,9 +796,8 @@ return async function realtime(req: IncomingMessage, res: import("node:http").Se
   }
   // No credential took the call. The cause is named in one sentence, the one
   // that belongs to the credential closest to the person, and an unknown voice
-  // is never dressed up as credits or as a network (#5179, #5180). The
-  // refusal memory may have tried that credential last: the person's own
-  // order decides, then the others follow in one line (M-20261126-145).
+  // is never dressed up as credits or as a network (#5179, #5180), in the
+  // person's own order, then the others in one line (M-20261126-145).
   const inOrder = inPersonOrder(tried, keys.map(voiceKeyRef));
   const cause = voiceFailureCause(inOrder);
   const chain = chainCallReason(inOrder, words);
@@ -1146,7 +1146,6 @@ async function handleVoiceModeRequest(env: any, ctx: Parameters<RouteHandler>[0]
     (deps.log ?? console.warn)(`[voice-mode] ${VOICE_PROVIDER_LABELS[candidateProvider(keys[0]!)]} ${what} failed (${keys[0]!.via}): ${message}`);
     return withConfirm(providerFailureBody(message, { key: voiceKeyRef(keys[0]!) }));
   };
-  // credits anywhere in the chain, not only in the cause it leads with
   const withConfirm = <T extends { out_of_credits?: true; tried?: VoiceKeyRefusal[] }>(body: T): T & { confirm?: NonNullable<Extract<VoiceKeys, { ok: true }>["confirm"]> } => (
     (body.out_of_credits || body.tried?.some((entry) => entry.failure === "quota")) && resolved.ok && resolved.confirm ? { ...body, confirm: resolved.confirm } : body
   );

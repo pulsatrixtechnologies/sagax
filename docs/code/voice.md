@@ -253,15 +253,18 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   goes in `session.update`) name none, so their 404 is `key` (the
   credential is not served there, the next one may be). A saved voice a
   credential does not know is asked back on its own default voice, for
-  speech (`speakOnKnownVoice`, the speech socket) as for a call, and the next
-  sentences go there at once (`VoiceKeyRefusals.voiceUnknown`).
+  speech (`speakOnKnownVoice`, the speech socket) as for a call; once the
+  default spoke, the next sentences go there at once
+  (`VoiceKeyRefusals.voiceUnknown`). A 400 or 404 whose body names the voice
+  is the voice too.
 - A chain where no credential served names its first real cause: `tried`
   is put back in the person's order (`inPersonOrder`; the refusal memory may
-  have tried their account last), and when its refusals are not all xAI
-  credits or keys, `chainCallReason` leads with the closest credential's own
-  cause, then says the others in one line; the body's `key` and `failure`
-  are that first cause, so the bar and the phone name it, never only the
-  last refusal (#5424).
+  have tried their account last). With a connected Grok account in it, or
+  refusals that are not all xAI credits or keys, `chainCallReason` is its one
+  sentence (`noCallReason` delegates to it): the closest credential's own
+  cause and what to do at that provider, then the others in one line; the
+  body's `key` and `failure` are that first cause, so the bar and the phone
+  name it, never only the last refusal (#5424).
 - A refused realtime handshake keeps xAI's reason (`openRealtimeSocket` in
   `server/tts/grok.ts`): 402 is `quota`, 401, 403 and xAI's 400 are `key`,
   only a failure of xAI is `down`. A key refused for itself is remembered,

@@ -66,8 +66,8 @@ export function keyLast4(key: string): string | null {
 }
 
 /** How a credential is presented to xAI: a connected Grok account, the
- * person's or the organization's, speaks through the CLI voice host with its
- * token header, every other source is an API key on api.x.ai
+ * person's or the organization's, speaks on api.x.ai with its session token
+ * and the CLI token header, every other source is an API key on api.x.ai
  * (server/tts/grok.ts withVoiceAuth). One rule for the app's own voice and
  * for the keys a phone line is given (server/org/org-link-routes.ts). */
 export type VoiceKeyAuth = "grok-account" | "api-key";
@@ -207,11 +207,17 @@ export function retriesOnDefaultVoice(failure: GrokVoiceFailure, asked: string |
   return failure === "voice" && Boolean(asked);
 }
 
+/** The one log line of a credential asked back on its own default voice. */
+export function defaultVoiceLine(candidate: VoiceKeyRef, voice: string, tag = "voice-mode"): string {
+  return `[${tag}] the ${describeVoiceKey(candidate)} does not know the voice "${voice}": asking it back on its own default voice`;
+}
+
 /** Speak with the voice `asked` on `candidate`, or at once on the provider's
  * own default voice when that credential said lately it does not know the
- * name. A refusal of the name asks the same credential back on its default
- * and is remembered for the next sentences; any other failure goes to the
- * caller (withVoiceKeys moves on as before). */
+ * name. A refusal of the name asks the same credential back on its default;
+ * once the default spoke, the name is remembered for the next sentences (a
+ * default refused too proves the address, never the name, #5427 review). Any
+ * other failure goes to the caller (withVoiceKeys moves on as before). */
 export async function speakOnKnownVoice<T>(
   who: string,
   candidate: VoiceKeyCandidate,
@@ -227,9 +233,10 @@ export async function speakOnKnownVoice<T>(
     if (error instanceof Error && error.name === "AbortError") throw error;
     const message = error instanceof Error ? error.message : String(error);
     if (!voice || !retriesOnDefaultVoice(grokVoiceFailure(message), voice)) throw error;
+    log?.(defaultVoiceLine(candidate, voice));
+    const spoken = await speak(undefined);
     refusals.rememberUnknownVoice(who, voiceKeyRef(candidate), voice);
-    log?.(`[voice-mode] the ${describeVoiceKey(candidate)} does not know the voice "${voice}": asking it back on its own default voice`);
-    return await speak(undefined);
+    return spoken;
   }
 }
 

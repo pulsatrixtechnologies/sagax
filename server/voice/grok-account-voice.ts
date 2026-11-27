@@ -62,22 +62,22 @@ export function voiceSentenceLanguage(locale: string | null | undefined, languag
   return "en";
 }
 
-type Side = "credits" | "refused" | "missing";
-
-/** One plain sentence when a connected Grok account was tried and every
- * tried credential is out of credits or refused. Null otherwise, so a
- * voice that never tried an account keeps today's words. */
+/** One plain sentence when a connected Grok account was tried and no
+ * credential served. Alone, it says the account's own state and that no API
+ * key stands behind it; with credentials behind it, it is the one sentence of
+ * a chain (chainCallReason, M-20261126-145), so a chain is never said two
+ * ways. Null when no connected account was tried, so such a voice keeps its
+ * own words, and for an account alone that failed for anything else than
+ * credits or its key. */
 export function noCallReason(tried: readonly { source: string; failure: string }[], language: NoCallLanguage): string | null {
   if (!tried.some((entry) => entry.source === "grok-account")) return null;
-  if (!tried.every((entry) => entry.failure === "quota" || entry.failure === "key")) return null;
-  const account = tried.find((entry) => entry.source === "grok-account");
-  // the organization's Grok account is an account too, never "the xAI API key"
-  const orgAccount = tried.find((entry) => entry.source === "org-account");
-  const api = tried.filter((entry) => entry.source !== "grok-account" && entry.source !== "org-account");
-  const accountSide: Side = account?.failure === "quota" ? "credits" : "refused";
-  const apiSide: Side = api.length === 0 ? "missing" : api.every((entry) => entry.failure === "quota") ? "credits" : "refused";
-  const orgSide = orgAccount ? (orgAccount.failure === "quota" ? "credits" : "refused") : null;
-  return language === "fr" ? french(accountSide, apiSide, orgSide) : english(accountSide, apiSide, orgSide);
+  if (tried.length > 1) return chainCallReason(tried, language);
+  const only = tried[0]!;
+  if (!finalFailure(only.failure)) return null;
+  const refused = only.failure === "key";
+  return language === "fr"
+    ? `Aucun appel : le compte Grok connecté ${refused ? "a été refusé" : "n'a plus de crédit"}, et il n'y a pas de clé API xAI.`
+    : `No call was placed: the connected Grok account ${refused ? "was refused" : "is out of credits"}, and there is no xAI API key.`;
 }
 
 /** One plain sentence when the provider does not know the voice name that was
@@ -331,6 +331,19 @@ function chainState(failure: string, many: boolean, masculine: boolean, language
   return language === "fr" ? (many ? "n'ont pas répondu" : "n'a pas répondu") : "did not answer";
 }
 
+/** What to do about a key of the person's own at another provider than
+ * xAI: that provider's account, where the key was added (#5427 review). */
+function otherProviderAction(row: ChainRow, language: NoCallLanguage): string {
+  const provider = providerLabel(row);
+  const where = row.source === "perspicax-key" ? "Perspicax" : VOICE_SETTINGS[language];
+  if (row.failure === "quota") {
+    return language === "fr"
+      ? `Ajoute des crédits à ce compte ${provider}, ou change la clé dans ${where}, puis rappelle.`
+      : `Add credits to that ${provider} account, or change the key in ${where}, then call back.`;
+  }
+  return language === "fr" ? `Change la clé ${provider} dans ${where}, puis rappelle.` : `Change the ${provider} key in ${where}, then call back.`;
+}
+
 /** The first credential's own cause, and what to do about it. */
 function chainHead(row: ChainRow, language: NoCallLanguage): string {
   const who = chainName(row, language);
@@ -343,7 +356,7 @@ function chainHead(row: ChainRow, language: NoCallLanguage): string {
     const action = given ? askAdmin
       : row.source === "grok-account" && row.failure === "key"
         ? (language === "fr" ? `Vérifie ton compte Grok dans ${VOICE_SETTINGS.fr}.` : `Check your Grok account in ${VOICE_SETTINGS.en}.`)
-        : ownAction([row], language);
+        : (row.provider ?? "xai") !== "xai" ? otherProviderAction(row, language) : ownAction([row], language);
     return `${lead}${who} ${chainState(row.failure, false, isAccount(row.source), language)}. ${action}`;
   }
   if (row.failure === "voice") {
@@ -375,49 +388,20 @@ function chainRest(rows: readonly ChainRow[], language: NoCallLanguage): string 
   return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`;
 }
 
-/** One plain sentence when the whole chain failed and its refusals are not
- * all credits or keys of xAI (an unknown voice, a provider that did not
- * answer, another provider's keys), or the connected account's state is not
- * the others' (refused while the key behind it is dry): the first real cause
- * comes first, named with the credential closest to the person (`tried` in
- * their order), then one line for every credential behind it
- * (M-20261126-145). The person used to read only the last refusal ("no
- * credits"). Null for a single refusal and for the other chains of xAI
- * credits and keys, which the sentences above already say whole
- * (noCallReason, realtimeKeyRefusedCallReason). */
+/** One plain sentence when the whole chain failed with a connected Grok
+ * account in it, or with refusals that are not all credits or keys of xAI (an
+ * unknown voice, a provider that did not answer, another provider's keys): the
+ * first real cause comes first, named with the credential closest to the
+ * person (`tried` in their order), then one line for every credential behind
+ * it (M-20261126-145). The person used to read only the last refusal ("no
+ * credits"). Null for a single refusal and for a chain of xAI credits and keys
+ * with no connected account, which realtimeKeyRefusedCallReason says whole. */
 export function chainCallReason(tried: readonly ChainRow[], language: NoCallLanguage): string | null {
   if (tried.length < 2) return null;
+  // xAI credits and keys with no connected account: realtimeKeyRefusedCallReason
+  // names each credential with who fixes it
   const xaiFinal = tried.every((row) => finalFailure(row.failure) && (row.provider ?? "xai") === "xai");
-  // noCallReason says one state for the account and one for the rest ("non
-  // plus", "aussi"): right only when they agree
-  const accountApart = tried.some((row) => row.source === "grok-account") && new Set(tried.map((row) => row.failure)).size > 1;
-  if (xaiFinal && !accountApart) return null;
+  if (xaiFinal && !tried.some((row) => row.source === "grok-account")) return null;
   const [first, ...rest] = tried;
   return `${chainHead(first!, language)} ${chainRest(rest, language)}`;
-}
-
-function english(account: Side, api: Side, org: "credits" | "refused" | null): string {
-  const left = account === "credits" ? "the connected Grok account is out of credits" : "the connected Grok account was refused";
-  if (org) {
-    const middle = org === "credits" ? "your organization's Grok account is out of credits" : "your organization's Grok account was refused";
-    const last = api === "missing" ? "there is no xAI API key" : api === "credits" ? "the xAI API key is out of credits" : "the xAI API key was refused";
-    return `No call was placed: ${left}, ${middle}, and ${last}.`;
-  }
-  const right = api === "missing" ? "and there is no xAI API key"
-    : api === "credits" ? "and the xAI API key is out of credits too"
-      : "and the xAI API key was refused too";
-  return `No call was placed: ${left}, ${right}.`;
-}
-
-function french(account: Side, api: Side, org: "credits" | "refused" | null): string {
-  const left = account === "credits" ? "le compte Grok connecté n'a plus de crédit" : "le compte Grok connecté a été refusé";
-  if (org) {
-    const middle = org === "credits" ? "le compte Grok de ton organisation n'a plus de crédit" : "le compte Grok de ton organisation a été refusé";
-    const last = api === "missing" ? "il n'y a pas de clé API xAI" : api === "credits" ? "la clé API xAI n'a plus de crédit" : "la clé API xAI a été refusée";
-    return `Aucun appel : ${left}, ${middle}, et ${last}.`;
-  }
-  const right = api === "missing" ? "et il n'y a pas de clé API xAI"
-    : api === "credits" ? "et la clé API xAI non plus"
-      : "et la clé API xAI a été refusée aussi";
-  return `Aucun appel : ${left}, ${right}.`;
 }

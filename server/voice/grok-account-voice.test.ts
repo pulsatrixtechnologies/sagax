@@ -13,10 +13,15 @@ import {
 const TRIED = (source: string, failure: string) => ({ source, failure });
 
 describe("no call when neither side can pay", () => {
-  it("stays quiet unless a connected account was tried and every refusal is credits or a key", () => {
+  it("stays quiet unless a connected account was tried, and says a chain with it in the chain's one sentence", () => {
     expect(noCallReason([TRIED("org-key", "quota")], "en")).toBeNull();
-    expect(noCallReason([TRIED("grok-account", "quota"), TRIED("org-key", "down")], "en")).toBeNull();
+    expect(noCallReason([TRIED("grok-account", "down")], "en")).toBeNull();
     expect(noCallReason([], "en")).toBeNull();
+    // M-20261126-145: an account then a key that did not answer is no longer
+    // left to the last refusal
+    const rows = [TRIED("grok-account", "quota"), TRIED("org-key", "down")];
+    expect(noCallReason(rows, "en")).toBe(chainCallReason(rows, "en"));
+    expect(noCallReason(rows, "en")).toBe("No call was placed: your connected Grok account is out of credits. Add credits on the connected Grok account, then call back. Your organization's xAI key did not answer.");
   });
 
   // M-20261126-145: a chain with the connected account is one sentence,

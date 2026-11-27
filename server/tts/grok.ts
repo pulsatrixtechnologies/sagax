@@ -22,14 +22,15 @@ const LOOPBACK_HTTP = /^https?:\/\/127\.0\.0\.1:\d{1,5}(?:\/|$)/;
 const LOOPBACK_WS = /^wss?:\/\/127\.0\.0\.1:\d{1,5}(?:\/|$)/;
 
 /** `api-key`: api.x.ai, Bearer only. `grok-account`: the person's connected
- * Grok account, on the CLI voice host, with the CLI token header. */
+ * Grok account, its session token on api.x.ai with the CLI token header. */
 export type VoiceAuthKind = "api-key" | "grok-account";
 
 const voiceAuth = new AsyncLocalStorage<VoiceAuthKind>();
 
 /** Run `fn` as an API key or as the connected Grok account. The sockets and
  * fetches it starts keep that choice. The token itself stays the argument
- * the caller already passes; this only picks the host and the header. */
+ * the caller already passes; this only adds the header (and a test's loopback
+ * host). */
 export function withVoiceAuth<T>(kind: VoiceAuthKind, fn: () => T): T {
   return voiceAuth.run(kind, fn);
 }
@@ -166,6 +167,9 @@ export function refusal(status: number, detail: { code?: string; error?: string 
   // the socket is open), so their 404 is the address, never the voice; xAI's
   // own words naming a voice still are (M-20261126-145, #5179)
   if (status === 404) return asked.voice || VOICE_REFUSED.test(said) ? VOICE_NOT_FOUND : NOT_SERVED;
+  // the speech socket refuses an invalid voice before the upgrade with a 400
+  // too: xAI's words naming the voice, never a bare 400 (an invalid key is one)
+  if (status === 400 && asked.voice && VOICE_REFUSED.test(said)) return VOICE_NOT_FOUND;
   // xAI's category only ("Client specified an invalid argument"), never its message
   const category = detail.code && /^[\w .,:'()-]{1,100}$/.test(detail.code) ? `: ${detail.code}` : "";
   return `Grok voice failed (HTTP ${status}${category}). Try again later.`;

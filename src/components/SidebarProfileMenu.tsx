@@ -628,6 +628,22 @@ function useAccountMenuData(enabled: boolean, refresh = 0, open = false): Accoun
   };
 }
 
+/** The footer avatar, always in its real colours; no presence dot (the
+ * reference design's foot, 2026-10-16). Kept out of SidebarProfileMenu so
+ * that function stays under the client function-size ratchet (#1383). */
+function FootAvatar({ url, initials, size }: { url?: string | null; initials: string; size: number }) {
+  return (
+    <span className="relative flex shrink-0 rounded-full">
+      {url ? (
+        <img src={url} alt="" style={{ width: size, height: size }} className="rounded-full object-cover" />
+      ) : (
+        // the reference's monogram: 14px medium from 36px up, 12px below
+        <InitialsAvatar initials={initials} size={size} fontSize={size >= 36 ? 14 : 12} />
+      )}
+    </span>
+  );
+}
+
 export function SidebarProfileMenu({ avatarOnly = false, withName = false, places = [], memberLine = true }: {
   /** just the avatar, for the collapsed (icons) rail; the name moves to the
    * tooltip and the menu keeps its width */
@@ -818,18 +834,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   // a place in the menu asking for attention while the menu is folded away
   const placeAttention = places.some((item) => item.attention);
 
-  const avatar = (size: number) => (
-    // the footer avatar, always in its real colours; no presence dot (the reference
-    // design's foot, 2026-10-16)
-    <span className="relative flex shrink-0 rounded-full">
-      {profile?.avatarUrl ? (
-        <img src={profile.avatarUrl} alt="" style={{ width: size, height: size }} className="rounded-full object-cover" />
-      ) : (
-        // the reference's monogram: 14px medium from 36px up, 12px below
-        <InitialsAvatar initials={initials} size={size} fontSize={size >= 36 ? 14 : 12} />
-      )}
-    </span>
-  );
+  const avatar = (size: number) => <FootAvatar url={profile?.avatarUrl} initials={initials} size={size} />;
 
   // The approvals dot on the avatar's bottom-right corner opens the
   // Approvals screen (the #approvals screen). It is a button of its own, a

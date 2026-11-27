@@ -379,6 +379,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Usage pill shape for the menu bar or notification area place (bars: three bars, the default; circles; battery; dots; text). The native tray icon itself stays two small bars | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.usagePillShapeMenuBar` | simple |
 | Context indicator of the conversation (on, the default; off hides the share of the model's context the conversation uses) | Settings > General > Appearance > More appearance > Conversation | `sagax_settings` get, set `appearance.contextIndicator` | simple |
 | Order of the message bar's movable buttons ({order: plus/model/usage/voice[], left: how many sit left of the text field}) | Settings > General > Appearance > More appearance > Conversation; right-click the message bar > Customize | `sagax_settings` get, set `appearance.composerBarLayout` | simple |
+| Whole-app interface layout by zone ({version:1, zones:{composerBar,sidebar,conversationHeader,botPage}}) | Account menu > Customize interface; right-click the message bar > Customize | `sagax_settings` get, set `appearance.uiLayout` | simple |
 
 ### Notifications et confidentialité
 

@@ -99,6 +99,48 @@ describe("a mode in the turn's pick", () => {
     expect(pickFor({ bot: bot(undefined), threadId: "t1", speaker, role: "worker", text: "Delete the production database." })?.pick.autoHeavy).toBeUndefined();
   });
 
+  describe("D-20261126-017: under Auto the Effort level the person chose is used on every turn", () => {
+    const RISKY = "Delete the old mailboxes and migrate the rest to the new tenant.";
+    const HARD = "Design the migration of our billing system to the new ledger, compare three architectures in depth and justify the trade-offs of each one.";
+    const texts = ["hello there", "What time is it in Paris?", HARD, RISKY];
+    const real = createAutoPickForTurn(() => ({ ...host, effortAcceptedByEngine: (level: string, offered: readonly string[]) => offered.includes(level) }));
+    const ask = (text: string, effort?: "low" | "medium" | "high" | "max", mode?: "fast" | "expert" | "heavy", role: "orchestration" | "continue" = "orchestration") =>
+      real({ bot: { ...bot(mode), modelSelection: { ...bot(mode).modelSelection, ...(effort ? { effort } : {}) } }, threadId: "t1", speaker, role, text })?.pick;
+
+    it("nothing clicked: Auto decides, turn by turn (no level of the person's is added)", () => {
+      // a turn Auto hands to Heavy runs at Heavy's level, an ordinary one at the model's own (none sent)
+      expect(ask(RISKY)).toMatchObject({ autoHeavy: "risky", selection: { effort: "high" } });
+      expect(ask("hello there")?.selection.effort).toBeUndefined();
+    });
+
+    it.each(["low", "medium", "high"] as const)("a level clicked, %s, runs every turn: whatever model and engine Auto takes, a turn it hands to Heavy included", (level) => {
+      const engines = new Set<string>();
+      for (const text of texts) {
+        for (const role of ["orchestration", "continue"] as const) {
+          const pick = ask(text, level, undefined, role);
+          expect(pick?.selection.effort, `${role}: ${text}`).toBe(level);
+          // the level changes nothing else of the pick
+          const { effort: _with, ...withLevel } = pick!.selection;
+          const { effort: _without, ...without } = ask(text, undefined, undefined, role)!.selection;
+          expect(withLevel).toEqual(without);
+          engines.add(pick!.selection.instanceId);
+        }
+      }
+      // the turns ran on another engine than the bot's own too (grok is the bot's)
+      expect([...engines].some((id) => id !== "grok")).toBe(true);
+    });
+
+    it("an engine that does not take the level runs its own instead of failing the turn", () => {
+      expect(ask(RISKY, "max")?.selection.effort).toBe("high");
+    });
+
+    it("Fast, Expert and Heavy chosen by the person keep setting their own level", () => {
+      expect(ask("hello there", "medium", "fast")?.selection.effort).toBe("low");
+      expect(ask("hello there", "medium", "expert")?.selection.effort).toBe("high");
+      expect(ask("hello there", "low", "heavy")?.selection.effort).toBe("high");
+    });
+  });
+
   it("work a bot hands out is Auto's, whatever the mode", () => {
     expect(turn("expert", "worker")?.pick.mode).toBeUndefined();
   });

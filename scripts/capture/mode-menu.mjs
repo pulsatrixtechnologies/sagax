@@ -1,17 +1,20 @@
 #!/usr/bin/env node
 /**
- * Headless screenshots of the composer's mode menu (#4900, #5088;
- * M-20261123-040, M-20261123-045, M-20261123-047) through the gallery
+ * Headless screenshots of the chat bar and its mode menu (#4900, #5088;
+ * M-20261126-104, M-20261126-103) through the gallery
  * src/gallery/mode-menu.tsx (real composer, chip, ModelPanel with its modes
- * and real menu sections): the chat bar at rest with its chip and its
- * context and usage meter under the box (#5372), the rows (Auto, Fast,
- * Expert, Heavy, Favorites, Reasoning, All models) with a tooltip, Reasoning greyed under a mode that
- * sets its own level, the reasoning levels, and each step of All models
- * (providers, accounts, models, a provider with one account going straight
- * to its models), a pinned model. Since #5338 (M-20261125-035,
- * D-20261125-012) the levels are cascading submenus beside the menu: the
- * shots show the whole path at once, opened by clicks, by a rest of the
- * pointer and by the keyboard, and flipped to the left in a narrow window.
+ * and real menu sections): the chat bar at rest with its chip inside the box,
+ * just before the voice button, and the context and usage meter under the box
+ * (#5372); the menu, 280 px wide (Auto, Fast, Expert, Heavy, Custom, Effort)
+ * with a tooltip, Effort greyed under a mode that sets its own level, the
+ * Effort levels (the explaining sentence, Recommended, the info mark on Max),
+ * the list Custom opens (Favorites, the providers, Manage models) and each
+ * step of its cascade (accounts, models, a provider with one account going
+ * straight to its models), a model picked by hand. Since #5338
+ * (M-20261125-035, D-20261125-012) the levels are cascading submenus beside
+ * the menu: the shots show the whole path at once, opened by clicks, by a
+ * rest of the pointer and by the keyboard, and flipped to the left in a
+ * narrow window.
  * Real Chrome headless, DPR 2, no window.
  * Usage: node scripts/capture/mode-menu.mjs [--out DIR] [--port N] [--lang en|fr]
  * Files: <shot>-<dark|light>.png
@@ -33,10 +36,15 @@ const lang = arg("--lang", "en");
 const english = lang === "en";
 // `steps`: the rows a person clicks, in order, before the shot
 const shots = [
-  // the chat bar (#5372): one box, the chip and the meter in the quiet row under it
+  // the chat bar (M-20261126-104): the chip inside the box, just before the voice button; the meter in the quiet row under it
   { name: "00-bar-rest", query: "mode=expert&open=0" },
-  { name: "00-bar-narrow", query: "mode=expert&open=0", width: 400 },
-  { name: "00-bar-narrowest", query: "mode=expert&open=0", width: 330 },
+  { name: "00-bar-rest-auto", query: "mode=auto&open=0" },
+  { name: "00-bar-rest-custom", query: "mode=pinned&open=0" },
+  // under 560 px of box the chip folds away, as in the app (the + menu's Model row opens the same menu)
+  { name: "00-bar-narrow", query: "mode=expert&open=0", width: 400, folded: true },
+  { name: "00-bar-narrowest", query: "mode=expert&open=0", width: 330, folded: true },
+  // D-20261126-017: under Auto a level shows on the chip and on Effort's row only once the person clicked one
+  { name: "00-bar-rest-auto-level", query: "mode=auto&open=0&level=high" },
   { name: "00-meter-context", query: "mode=expert&open=0&meter=context" },
   { name: "00-meter-usage", query: "mode=expert&open=0&meter=usage" },
   // the one voice button's menu: Dictation or Voice conversation, the microphone, the dictation's language
@@ -46,9 +54,16 @@ const shots = [
   { name: "00-settings-modes-set", query: "settings=modes&set=1" },
   { name: "01-menu-auto", query: "mode=auto" },
   { name: "02-menu-fast-tooltip", query: "mode=auto&hover=fast", tip: english ? "Quick responses · Grok 4 Fast" : undefined },
-  { name: "03-menu-expert-reasoning-imposed", query: "mode=expert" },
-  { name: "05-reasoning-levels", query: "mode=auto", steps: ['[data-mode-row="reasoning"]'] },
-  { name: "06-all-models-providers", query: "mode=auto", steps: ['[data-mode-row="all"]'] },
+  { name: "03-menu-expert-effort-imposed", query: "mode=expert" },
+  // D-20261126-017: nothing clicked under Auto, no value on the row and no level checked; then a level clicked
+  { name: "05-effort-levels", query: "mode=auto", steps: ['[data-mode-row="reasoning"]'], levelWidth: 260, checked: [], aboveFoot: true },
+  { name: "05-effort-levels-chosen", query: "mode=auto&level=high", steps: ['[data-mode-row="reasoning"]'], levelWidth: 260, checked: ["high"], aboveFoot: true },
+  { name: "05-effort-levels-custom", query: "mode=pinned", steps: ['[data-mode-row="reasoning"]'], levelWidth: 260, checked: ["high"], aboveFoot: true },
+  { name: "06-custom-list", query: "mode=auto", steps: ['[data-mode-row="all"]'], levelWidth: 280, aboveFoot: true },
+  // no name cut short: a thread's "Use <bot>'s model" row, a favorite with its account, a long model name on Custom's row
+  { name: "06-custom-list-follow", query: "mode=pinned&follow=1&pin=Claude%20Sonnet%205", steps: ['[data-mode-row="all"]'], levelWidth: 280, whole: ["[data-follow-bot-model] span.break-words", "[data-mode-favorite] [data-model-row-account]", "[data-mode-pinned-model]"] },
+  { name: "11-menu-pinned-sonnet", query: "mode=pinned&pin=Claude%20Sonnet%205", whole: ["[data-mode-pinned-model]"] },
+  { name: "11-menu-pinned-long-name", query: "mode=pinned&pin=Claude%20Sonnet%205%20%281M%20context%2C%20preview%29", middleCut: true },
   { name: "07-all-models-accounts", query: "mode=auto", steps: ['[data-mode-row="all"]', '[data-model-cascade-provider="anthropic"]'] },
   { name: "08-all-models-models", query: "mode=auto", steps: ['[data-mode-row="all"]', '[data-model-cascade-provider="anthropic"]', "[data-model-cascade-account] >> nth=1"] },
   { name: "09-all-models-single-account", query: "mode=auto", steps: ['[data-mode-row="all"]', '[data-model-cascade-provider="xai"]'] },
@@ -57,8 +72,8 @@ const shots = [
   // the whole path at once (D-20261125-012): the menu, the providers, the accounts, the models
   { name: "12-cascade-full-path", query: "mode=auto&place=left", side: "right", levels: ["root", "providers", "accounts", "models"], steps: ['[data-mode-row="all"]', '[data-model-cascade-provider="anthropic"]', "[data-model-cascade-account] >> nth=1"] },
   { name: "13-cascade-hover", query: "mode=auto&place=left", side: "right", levels: ["root", "providers", "accounts", "models"], rests: ['[data-mode-row="all"]', '[data-model-cascade-provider="anthropic"]', "[data-model-cascade-account] >> nth=0"] },
-  { name: "14-cascade-keyboard", query: "mode=auto&place=left", side: "right", levels: ["root", "providers", "accounts", "models"], keys: ["End", "ArrowRight", "ArrowRight", "ArrowRight"] },
-  { name: "15-cascade-escape-one-level", query: "mode=auto&place=left", side: "right", levels: ["root", "providers", "accounts"], keys: ["End", "ArrowRight", "ArrowRight", "ArrowRight", "Escape"] },
+  { name: "14-cascade-keyboard", query: "mode=auto&place=left", side: "right", levels: ["root", "providers", "accounts", "models"], keys: ["End", "ArrowUp", "ArrowRight", "ArrowDown", "ArrowDown", "ArrowRight", "ArrowRight"] },
+  { name: "15-cascade-escape-one-level", query: "mode=auto&place=left", side: "right", levels: ["root", "providers", "accounts"], keys: ["End", "ArrowUp", "ArrowRight", "ArrowDown", "ArrowDown", "ArrowRight", "ArrowRight", "Escape"] },
   { name: "16-cascade-pinned-path", query: "mode=pinned&place=left", side: "right", levels: ["root", "providers", "accounts", "models"], steps: ['[data-mode-row="all"]', '[data-model-cascade-provider="anthropic"]', "[data-model-cascade-account] >> nth=0"] },
   // a bar at the window's right: no room on the right for the path, the levels open to the left of the menu
   { name: "17-cascade-flipped-left", query: "mode=auto&place=right", side: "left", levels: ["root", "providers", "accounts", "models"], steps: ['[data-mode-row="all"]', '[data-model-cascade-provider="anthropic"]', "[data-model-cascade-account] >> nth=1"] },
@@ -103,7 +118,23 @@ try {
       // the pointer of the shot before rests on nothing
       await page.mouse.move(1, 1);
       await page.goto(`${base}?lang=${lang}&skin=${id}&${shot.query}`, { waitUntil: "networkidle" });
-      await page.waitForSelector("[data-gallery-chip]");
+      await page.waitForSelector("[data-gallery-chip]", { state: "attached" });
+      // M-20261126-104: the menu is 280 px wide, and the chip sits inside the box, right before the voice button
+      if (new URLSearchParams(shot.query).get("settings") === null) {
+        const shape = await page.evaluate(() => {
+          const chip = document.querySelector("[data-composer-model-chip] button");
+          const box = chip?.closest('[data-tour="composer"]');
+          const voice = box?.querySelector("[data-composer-voice-button], [data-composer-voice-menu-toggle]");
+          return { menu: document.querySelector("[data-gallery-menu]")?.getBoundingClientRect().width ?? null, inBox: Boolean(box), beforeVoice: Boolean(chip && voice && chip.getBoundingClientRect().right <= voice.getBoundingClientRect().left + 1), wide: (chip?.getBoundingClientRect().width ?? 0) > 0 };
+        });
+        if (shape.menu !== null && Math.round(shape.menu) !== 280) throw new Error(`${shot.name} (${label}): the menu is ${shape.menu}px wide, expected 280`);
+        if (Boolean(shot.folded) === shape.wide) throw new Error(`${shot.name} (${label}): the chip is ${shape.wide ? "shown" : "folded away"}, expected ${shot.folded ? "folded away" : "shown"}`);
+        // the chevron points down while the menu is closed, up while it is open
+        const up = await page.evaluate(() => document.querySelector("[data-composer-model-chip] button svg:last-of-type")?.classList.contains("rotate-180") ?? false);
+        if (shape.wide && up !== (shape.menu !== null)) throw new Error(`${shot.name} (${label}): the chip's chevron points ${up ? "up" : "down"} with the menu ${shape.menu !== null ? "open" : "closed"}`);
+        if (!shape.inBox) throw new Error(`${shot.name} (${label}): the model chip is not inside the message box`);
+        if (shape.wide && !shape.beforeVoice) throw new Error(`${shot.name} (${label}): the model chip is not before the voice button`);
+      }
       for (const step of shot.steps ?? []) await page.click(step);
       // a rest of the pointer on a row opens its level, without a click
       for (const row of shot.rests ?? []) {
@@ -113,6 +144,38 @@ try {
       if (shot.keys) {
         await page.focus('[data-mode-row][aria-checked="true"]');
         for (const key of shot.keys) await page.keyboard.press(key);
+      }
+      if (shot.levelWidth) {
+        const wide = await page.evaluate(() => document.querySelector("[data-mode-level]")?.getBoundingClientRect().width ?? 0);
+        if (Math.round(wide) !== shot.levelWidth) throw new Error(`${shot.name} (${label}): the level is ${wide}px wide, expected ${shot.levelWidth}`);
+      }
+      if (shot.checked) {
+        const checked = await page.evaluate(() => [...document.querySelectorAll('[data-model-effort-choice][aria-checked="true"]')].map((node) => node.dataset.modelEffortChoice));
+        if (checked.join(",") !== shot.checked.join(",")) throw new Error(`${shot.name} (${label}): levels checked ${checked.join(",") || "none"}, expected ${shot.checked.join(",") || "none"}`);
+      }
+      // a level never runs lower than the menu: the voice button and the meter under it stay in view
+      if (shot.aboveFoot) {
+        const over = await page.evaluate(() => {
+          const level = document.querySelector("[data-mode-level]").getBoundingClientRect();
+          const voice = document.querySelector("[data-composer-voice-button], [data-composer-voice-menu-toggle]").getBoundingClientRect();
+          return { low: level.bottom - document.querySelector("[data-gallery-menu]").getBoundingClientRect().bottom, voice: Math.min(level.bottom, voice.bottom) - Math.max(level.top, voice.top) > 0 && Math.min(level.right, voice.right) - Math.max(level.left, voice.left) > 0 };
+        });
+        if (over.low > 1 || over.voice) throw new Error(`${shot.name} (${label}): the level runs ${Math.round(over.low)}px under the menu${over.voice ? ", over the voice button" : ""}`);
+      }
+      // text that must read whole: nothing clipped (its box is as wide as its content)
+      for (const selector of shot.whole ?? []) {
+        const cut = await page.evaluate((query) => [...document.querySelectorAll(query)].flatMap((node) => [node, ...node.querySelectorAll("*")]).filter((node) => node.scrollWidth > node.clientWidth + 1).map((node) => node.textContent), selector);
+        if (cut.length) throw new Error(`${shot.name} (${label}): cut short: ${cut.join(" | ")}`);
+        if (!(await page.locator(selector).count())) throw new Error(`${shot.name} (${label}): nothing matches ${selector}`);
+      }
+      // a name past the row's room is cut in its middle: its end stays whole, the whole name in the tooltip
+      if (shot.middleCut) {
+        const name = await page.evaluate(() => {
+          const node = document.querySelector("[data-mode-pinned-model]");
+          const [head, tail] = node.children;
+          return { headCut: head.scrollWidth > head.clientWidth, tailWhole: tail.scrollWidth <= tail.clientWidth + 1, inRow: node.getBoundingClientRect().right <= node.closest("button").querySelector("[data-mode-custom-check]").getBoundingClientRect().left, title: node.closest("button").title, text: node.textContent };
+        });
+        if (!name.headCut || !name.tailWhole || !name.inRow || !name.title.startsWith(name.text)) throw new Error(`${shot.name} (${label}): the long name is not cut in its middle: ${JSON.stringify(name)}`);
       }
       if (shot.levels) {
         // the menu never leaves the screen and every level of the path is in view, none over another

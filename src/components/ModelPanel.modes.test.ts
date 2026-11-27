@@ -1,9 +1,10 @@
 // The composer's mode menu in the one model panel (#5088; owner 2026-11-23,
-// M-20261123-040, M-20261123-045, M-20261123-047). The short view is Auto,
-// Fast, Expert, Heavy, Reasoning, All models. Reasoning opens the levels
-// of the model in use. All models is a cascade, provider, account, model,
-// with only what can run now; the starred favorites lead it and the star is
-// still a toggle. The footer keeps Account, Runs with and Manage models; how
+// M-20261123-040, M-20261123-045, M-20261123-047; 2026-11-26, M-20261126-104).
+// The short view is Auto, Fast, Expert, Heavy, Custom, Effort, and nothing
+// else: no "All models" row, no favorites and no footer. Effort opens the
+// levels of the model in use. Custom opens the model list: the starred
+// favorites lead it, then a cascade, provider, account, model, with only what
+// can run now, and Manage models at its foot; the star is still a toggle. How
 // many models are off is no longer counted here.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -95,13 +96,19 @@ const props = (extra: Partial<ModelPanelProps> = {}): ModelPanelProps => ({
 const html = (extra?: Partial<ModelPanelProps>) => renderToStaticMarkup(createElement(ModelPanel, props(extra)));
 
 describe("the model panel with the composer's modes", () => {
-  it("opens on the rows of the menu, no model list, the footer kept", () => {
+  it("M-20261126-104: opens on the rows of the menu alone: no model list, no favorites, no footer, no Manage models", () => {
     const markup = html();
     const order = [...markup.matchAll(/data-mode-row="([a-z]+)"/g)].map((match) => match[1]);
-    expect(order).toEqual(["auto", "fast", "expert", "heavy", "reasoning", "all"]);
+    expect(order).toEqual(["auto", "fast", "expert", "heavy", "all", "reasoning"]);
     expect(markup).not.toContain("data-model-panel-segment");
     expect(markup).not.toContain('data-model-option="opus"');
-    expect(markup).toContain("data-model-manage");
+    expect(markup).not.toContain("data-model-panel-footer");
+    expect(markup).not.toContain("data-model-manage");
+    expect(markup).not.toContain("data-mode-favorite");
+    expect(markup).not.toContain("All models");
+    expect(markup).not.toContain("Reasoning");
+    // every other place the panel opens keeps its footer
+    expect(html({ modes: undefined })).toContain("data-model-panel-footer");
   });
 
   it("D-20261124-002: Optimize for left the mode menu; the panel's own short view (a bot's Model cell in Settings) keeps it under Auto", () => {
@@ -111,24 +118,35 @@ describe("the model panel with the composer's modes", () => {
     expect(html({ modes: undefined })).toContain("data-model-auto-optimize-row");
   });
 
-  it("M-20261123-047: the menu no longer counts the models turned off; Manage models keeps its link", () => {
-    const markup = html();
+  it("M-20261123-047: the menu no longer counts the models turned off; Manage models sits at the foot of the list Custom opens", () => {
+    const markup = html({ view: "all" });
     expect(markup).toContain("data-model-manage");
+    expect(markup.indexOf("data-model-manage")).toBeGreaterThan(markup.lastIndexOf("data-model-cascade-provider"));
     expect(markup).not.toContain("data-model-manage-off");
     expect(markup).not.toContain("4 off");
     // every other place the panel opens still says it
     expect(html({ modes: undefined })).toContain("4 off");
   });
 
-  it("M-20261123-040: Reasoning is a row with the level in use, never the segmented control at the foot", () => {
+  it("M-20261123-040, M-20261126-104, D-20261126-017: Effort is a row with the level in use, never the segmented control at the foot and never Auto", () => {
     const markup = html();
     expect(markup).not.toContain("data-model-panel-reasoning");
-    expect(markup).toMatch(/data-mode-row="reasoning"[^>]*>.*data-mode-reasoning-value[^>]*>Auto</);
+    // under Auto with no level clicked: the row alone, no value beside it (Auto decides turn by turn)
+    expect(markup).toMatch(/data-mode-row="reasoning"[^>]*>.*>Effort</);
+    expect(markup).not.toContain("data-mode-reasoning-value");
+    // off the modes with no level chosen: the model's own
+    expect(html({ autoOn: false, modes: { current: null, onPick: vi.fn(), pinnedLabel: "Claude · opus" } })).toMatch(/data-mode-reasoning-value[^>]*>Medium</);
     // a level the person chose reads on the row
     expect(html({ effort: { ...props().effort!, value: "high" } })).toMatch(/data-mode-reasoning-value[^>]*>High</);
   });
 
-  it("a mode that sets its own reasoning greys the row and shows the level it imposes; Auto and a pinned model leave it open", () => {
+  it("one name everywhere: the panel's other places say Effort too, never Reasoning", () => {
+    const markup = html({ modes: undefined, effort: { ...props().effort!, title: "Effort" } });
+    expect(markup).toMatch(/data-model-panel-reasoning[^>]*>.*?>Effort</);
+    expect(markup).not.toContain("Reasoning");
+  });
+
+  it("a mode that sets its own effort greys the row and shows the level it imposes; Auto and a model picked by hand leave it open", () => {
     const resolutions = { expert: { mode: "expert", pick: null, effort: "high" } } as unknown as NonNullable<ModelPanelProps["modes"]>["resolutions"];
     const imposed = html({ modes: { current: "expert", onPick: vi.fn(), resolutions } });
     expect(imposed).toMatch(/<button[^>]*disabled=""[^>]*data-mode-row="reasoning"[^>]*data-mode-reasoning-imposed/);
@@ -138,17 +156,18 @@ describe("the model panel with the composer's modes", () => {
     }
   });
 
-  it("the level follows the model: a model with no level has no Reasoning row", () => {
+  it("the level follows the model: a model with no level has no Effort row", () => {
     const markup = html({ effort: undefined });
     expect(markup).not.toContain('data-mode-row="reasoning"');
   });
 
-  it("All models names the pinned model on its row", () => {
-    const markup = html({ autoOn: false, modes: { current: null, onPick: vi.fn(), pinnedLabel: "Claude · opus" } });
-    expect(markup).toMatch(/data-mode-row="all"[^>]*>.*Claude · opus/);
+  it("Custom names the model picked by hand on its row, checked while it runs", () => {
+    const markup = html({ autoOn: false, modes: { current: null, onPick: vi.fn(), pinnedLabel: "opus", pinnedTitle: "Claude · opus" } });
+    expect(markup).toMatch(/aria-checked="true"[^>]*data-mode-row="all"[^>]*>.*>Custom<.*data-mode-pinned-model[^>]*><span[^>]*>opus</);
+    expect(markup).toMatch(/data-mode-row="all"[^>]*title="Claude · opus"/);
   });
 
-  it("M-20261123-045: All models opens on the providers, no account, no state, no model of a provider yet", () => {
+  it("M-20261123-045: Custom opens on the providers, no account, no state, no model of a provider yet", () => {
     const markup = html({ view: "all" });
     expect(markup).toContain('data-mode-panel="providers"');
     expect(markup).not.toContain("data-model-panel-segment");
@@ -160,25 +179,22 @@ describe("the model panel with the composer's modes", () => {
     expect(markup).not.toContain('data-model-option="mythos"');
   });
 
-  it("M-20261125-074: the favorites sit in the menu itself, under the modes and the heading Favorites, before Reasoning; the providers no longer repeat them", () => {
+  it("M-20261126-104: the favorites lead the list Custom opens, under the heading Favorites, before the providers; each one once", () => {
     const markup = html({ view: "all" });
     const at = (needle: string) => markup.indexOf(needle);
-    expect(at('data-mode-favorite="grok\u0000grok-4"')).toBeGreaterThan(at('data-mode-row="heavy"'));
-    expect(at('data-mode-favorite="grok\u0000grok-4"')).toBeLessThan(at('data-mode-row="reasoning"'));
+    expect(at('data-mode-favorite="grok\u0000grok-4"')).toBeGreaterThan(at('data-mode-level="providers"'));
+    expect(at('data-mode-favorite="grok\u0000grok-4"')).toBeLessThan(at("data-model-cascade-provider"));
     expect(markup).toMatch(/data-mode-favorites=""[^>]*>.*?>Favorites</);
     // sentence case, never capitals
     expect(markup.match(/<div[^>]*data-mode-favorites-heading[^>]*class="([^"]*)"/)?.[1]).not.toContain("uppercase");
     expect(markup).not.toContain("data-model-cascade-favorites");
-    // one row per favorite, in the menu only
     expect(markup.match(/data-mode-favorite=/g)).toHaveLength(1);
   });
 
   it("a favorite is a model the person picks in one click; one that cannot run now is absent, and with no favorite there is no heading", () => {
-    const given = props();
-    const tree = renderToStaticMarkup(createElement(ModelPanel, given));
-    expect(tree).toContain("data-mode-favorite=");
-    expect(html({ sections: sections().filter((section) => section.key !== "favorites") })).not.toContain("data-mode-favorites");
+    expect(html({ view: "all" })).toContain("data-mode-favorite=");
+    expect(html({ view: "all", sections: sections().filter((section) => section.key !== "favorites") })).not.toContain("data-mode-favorites");
     const off = sections().map((section) => section.key === "favorites" ? { ...section, rows: section.rows.map((one) => ({ ...one, unavailable: "Signed out" })) } : section);
-    expect(html({ sections: off })).not.toContain("data-mode-favorites");
+    expect(html({ view: "all", sections: off })).not.toContain("data-mode-favorites");
   });
 });

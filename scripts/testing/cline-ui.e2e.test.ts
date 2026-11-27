@@ -32,6 +32,9 @@ const enabled = process.env.SAGAX_UI_E2E === "1";
       // The model window: the composer menu, then Manage models.
       await expect.poll(() => evaluate("document.querySelector('[data-composer-model-chip] button') !== null"), { timeout: 15_000 }).toBe(true);
       await evaluate("document.querySelector('[data-composer-model-chip] button').click(); true");
+      // M-20261126-104: Manage models sits at the foot of the list Custom opens
+      await expect.poll(() => evaluate("document.querySelector('[data-mode-row=all]') !== null")).toBe(true);
+      await evaluate("document.querySelector('[data-mode-row=all]').click(); true");
       await expect.poll(() => evaluate("document.querySelector('[data-model-manage]') !== null")).toBe(true);
       await evaluate("document.querySelector('[data-model-manage]').click(); true");
       await expect.poll(() => evaluate("document.querySelector('[data-model-manager]') !== null")).toBe(true);

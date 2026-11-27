@@ -635,9 +635,9 @@ describe("the owner unified chat guards (#2106)", () => {
     expect(offenders).toEqual([]);
   });
 
-  // M-20261125-074: the chip sits in the row under the message box
-  it("the row under the message box holds a visible model chip (no headless chat-bar picker)", () => {
-    const bar = readRoot("src/components/Composer.tsx-parts/ComposerUnderRow.tsx");
+  // M-20261126-104: the chip sits inside the message box again, before the voice button
+  it("the message box holds a visible model chip (no headless chat-bar picker)", () => {
+    const bar = readRoot("src/components/Composer.tsx-parts/ComposerActionBar.tsx");
     expect(bar).toMatch(/#2106/);
     expect(bar).toMatch(/<ModelPicker inComposer/);
     expect(bar).not.toMatch(/headless/);

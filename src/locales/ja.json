@@ -1910,7 +1910,6 @@
   "model.simple.effort": "推論の深さ",
   "model.simple.apiKey": "API キー",
   "model.simple.signInForOwn": "{name} 独自のモデルを使うためにサインイン",
-  "model.simple.reasoning": "推論",
   "model.useBotModel": "{name} のモデルを使う",
   "model.botModelTag": "（ボットのモデル）",
   "model.followsBot": "{name} のモデルを使用",

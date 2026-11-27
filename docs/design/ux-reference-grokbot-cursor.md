@@ -2022,24 +2022,31 @@ Rules that hold at every width:
   bubble of text is at most min(80%, 560px, column minus 82px), the person's
   and the bot's alike; tables, charts and cards take the wide cap
   (min(94%, 780px)).
-- Composer: one capsule on the column's edges; the model chip shows while
+- Composer: one capsule on the column's edges; the model chip sits inside it,
+  just before the voice button (M-20261126-104), the mode's icon then its name; it shows while
   the capsule is at least 560px wide (35rem) and folds into the + menu's
   Model row below that.
 - Mode menu (owner, 2026-11-19, #5088; 2026-11-23, M-20261123-040,
   M-20261123-045, M-20261123-047): the chip reads the mode's name ("Expert ⌄")
-  and opens the model panel's short view as the mode menu, the same rows as the
-  Perspicax console's (`shared/mode-menu.ts`): Auto, Fast, Expert, Heavy (never Build, D-20261126-005), a hairline, Reasoning, a hairline, All
-  models; the panel's 36px rows, a mode's glyph in a 16px slot, the check or
-  the chevron in the right icon slot, no heading over the rows. A hovered or
+  and opens the model panel's short view as the mode menu, 280px wide (owner,
+  2026-11-26, M-20261126-104, #5408): Auto, Fast, Expert, Heavy (never Build, D-20261126-005), Custom, a hairline, Effort;
+  the panel's 36px rows, an icon before every row in a 16px slot, the check or
+  the chevron in the right icon slot, no heading over the rows, no footer. A hovered or
   keyboard focused mode opens a small tooltip beside the menu, level with the
   row: what the mode does, then the model behind it in secondary ink ("Quick
-  responses · Grok 4.7"); a click's own focus stays quiet. Reasoning shows the
-  level in use at its right, in 12px secondary ink, and opens the levels of
-  the model in use beside the menu; under Fast, Expert and Heavy it is greyed and
-  shows the level the mode imposes. All models names the pinned model at its
-  right and opens three levels as cascading submenus (owner, 2026-11-25,
-  M-20261125-035, D-20261125-012, #5338): the providers (the favorites first),
-  the provider's accounts, the account's models with a search past eight rows,
+  responses · Grok 4.7"); a click's own focus stays quiet. Effort shows the
+  level in use at its right, in 12px secondary ink (never "Auto"; under Auto
+  nothing until the person clicks a level, and no level checked,
+  D-20261126-017; off the modes the model's own when none is chosen), and opens beside the menu a 260px level: one
+  explaining sentence, the levels of the model in use, "Recommended" beside
+  the model's own, an info mark on Max; under Fast, Expert and Heavy it is greyed and
+  shows the level the mode imposes. Custom names the model picked by hand at its
+  right, whole (cut in its middle only past the row's room, the whole name in
+  the tooltip), and opens three levels as cascading submenus (owner, 2026-11-25,
+  M-20261125-035, D-20261125-012, #5338): a 280px list (the favorites under
+  "Favorites", an outline star before each, an account on a second line; "All models" and the providers, each with
+  its mark; the lines of a model picked by hand; "Manage models" at the foot,
+  a gear before it), the provider's accounts, the account's models with a search past eight rows,
   each in the menu family's box beside the row that opened it, 4px over the
   box before, level with that row; the menu and the whole path stay on screen,
   no page replaces the menu and there is no back row. The row whose level is

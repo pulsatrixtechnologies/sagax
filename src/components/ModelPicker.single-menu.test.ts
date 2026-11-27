@@ -19,7 +19,7 @@ function sources(dir: string, out: string[] = []): string[] {
 const files = sources(SRC).map((path) => ({ path: relative(SRC, path).split(sep).join("/"), text: readFileSync(path, "utf8") }));
 
 const SURFACES = [
-  "components/Composer.tsx-parts/ComposerUnderRow.tsx",
+  "components/Composer.tsx-parts/ComposerActionBar.tsx",
   "components/ModelWindowHost.tsx",
   "components/settings/BotModelsSettings.tsx",
   "components/bot-settings/ModelSection.tsx",

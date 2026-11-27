@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 
-import { CAP_HELLO_MESSAGE, CAP_MESSAGE, CAP_READY_MESSAGE, CAP_RESULT_MESSAGE, CAP_TAKEN_MESSAGE, CAP_WAIT_MS, pageCapabilitiesAny, pageCapabilitiesOf, pageCapabilitiesPersonal, pageCapGranted, parsePageCapabilities, type PageCapCall, type PageCapabilities } from "../../shared/page-capabilities.ts";
+import { CAP_EVENT_MESSAGE, CAP_HELLO_MESSAGE, CAP_MESSAGE, CAP_READY_MESSAGE, CAP_RESULT_MESSAGE, CAP_TAKEN_MESSAGE, CAP_WAIT_MS, pageCapabilitiesAny, pageCapabilitiesOf, pageCapabilitiesPersonal, pageCapGranted, parsePageCapabilities, type PageCapCall, type PageCapabilities } from "../../shared/page-capabilities.ts";
 import { capabilityBridgeSource, pageDocument, PREVIEW_CAP_RELAY_SOURCE, STATE_BRIDGE_SOURCE, stateBridgeSource, wrapperDocument } from "./published-pages-render.ts";
 
 const HTML = `<!doctype html><html><head><title>t</title></head><body><h1>Board</h1><script>document.body.dataset.x="1"</script></body></html>`;
@@ -344,6 +344,33 @@ describe("files added by readers in the frame (#3413 lot 5)", () => {
     expect(bridge.posted.at(-1)).toMatchObject({ cap: "files.get", args: { id: "abc" } });
     void sagax.files.remove("abc");
     expect(bridge.posted.at(-1)).toMatchObject({ cap: "files.remove", args: { id: "abc" } });
+  });
+});
+
+describe("page.bot in the frame (#5461)", () => {
+  const caps = { data: ["bot" as const], viewer: false, open: false, files: [] };
+
+  it("accepts bot as a source and aliases page.bot to data.read and data.subscribe", async () => {
+    expect(parsePageCapabilities({ data: ["bot", "nope", "team-board"] })).toEqual({ data: ["bot", "team-board"], viewer: false, open: false, files: [] });
+    expect(stateBridgeSource(caps)).toContain("Object.assign({page:Object.freeze(Object.assign(page,{bot:pageBot}))},caps)");
+    expect(stateBridgeSource({ data: ["team-board"], viewer: false, open: false, files: [] })).not.toContain("pageBot");
+    expect(stateBridgeSource({ ...caps, propose: true })).toContain("Object.assign(page,{propose:cpropose,bot:pageBot})");
+    const bridge = runBridge(capabilityBridgeSource(caps));
+    bridge.deliver(bridge.parent, { type: CAP_READY_MESSAGE, v: 1, taken: true });
+    const sagax = bridge.win.sagax as { page: { bot: { (): Promise<unknown>; subscribe(fn: (value: unknown) => void): () => void } } };
+    const pending = sagax.page.bot();
+    expect(bridge.posted.at(-1)).toMatchObject({ type: CAP_MESSAGE, cap: "data.read", args: { name: "bot", params: {} } });
+    bridge.deliver(bridge.parent, { type: CAP_RESULT_MESSAGE, v: 1, id: 1, ok: true, value: { name: "Nimbus" } });
+    await expect(pending).resolves.toEqual({ name: "Nimbus" });
+    const seen: unknown[] = [];
+    sagax.page.bot.subscribe((value) => { seen.push(value); });
+    bridge.deliver(bridge.parent, { type: CAP_EVENT_MESSAGE, v: 1, cap: "data", name: "bot" });
+    const again = bridge.posted.at(-1) as { id: number };
+    expect(again).toMatchObject({ cap: "data.read", args: { name: "bot", params: {} } });
+    bridge.deliver(bridge.parent, { type: CAP_RESULT_MESSAGE, v: 1, id: again.id, ok: true, value: { name: "Nimbus", activity: "idle" } });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(seen).toEqual([{ name: "Nimbus", activity: "idle" }]);
   });
 });
 

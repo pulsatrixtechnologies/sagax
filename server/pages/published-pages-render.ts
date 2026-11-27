@@ -299,7 +299,9 @@ try{P.postMessage({type:"${STATE_ASK_MESSAGE}",v:1},"*")}catch(x){}
  * `store.collection(name)` (lot 3: get, list, put, delete, and subscribe,
  * read again on the wrapper's `store` event), `model.ask` (lot 4), and
  * `files.add` (from a click), `files.list`, `files.get`, `files.remove` (lot 5),
- * `page.propose` (lot 6, on `page`), and `connector.call` (lot 7). Every call is one message to the parent, the wrapper, which
+ * `page.propose` (lot 6, on `page`), `connector.call` (lot 7), and, when the
+ * page declares `bot`, `page.bot()` / `page.bot.subscribe` (the same
+ * data.read / data.subscribe("bot")). Every call is one message to the parent, the wrapper, which
  * asks the server with the reader's own session; the server checks it
  * again. No network. Defines `caps` for the code that follows. Pure. */
 function capabilityParts(caps: PageCapabilities): string {
@@ -315,7 +317,7 @@ function capabilityParts(caps: PageCapabilities): string {
   // "unavailable". A ready without taken (a released app) keeps the unbounded
   // wait once sent only for the calls that may wait on a card there (CL);
   // any other call stays bounded. No periodic timer.
-  return String.raw`var C=${granted},CL=${JSON.stringify(PAGE_CAP_LEGACY_CARD_CALLS)},cpend={},cseq=0,dsubs={},ssubs={},CP=window.parent,cready=false,ctk=false,cqueue=[];
+  const body = String.raw`var C=${granted},CL=${JSON.stringify(PAGE_CAP_LEGACY_CARD_CALLS)},cpend={},cseq=0,dsubs={},ssubs={},CP=window.parent,cready=false,ctk=false,cqueue=[];
 function capPost(m){try{CP.postMessage(m,{targetOrigin:"*",includeUserActivation:true})}catch(x){var p=cpend[m.id];if(p){delete cpend[m.id];clearTimeout(p.t);p.no(x)}}}
 function capWait(id,sent){var p=cpend[id];if(!p)return;clearTimeout(p.t);p.t=0;if(sent&&!ctk&&CL.indexOf(p.c)>=0)return;p.t=setTimeout(function(){if(cpend[id]!==p)return;delete cpend[id];cqueue=cqueue.filter(function(q){return q.id!==id});var er=new Error(sent?"The page's wrapper did not answer. Update the app to use this.":"The page's wrapper did not answer.");er.code="unavailable";p.no(er)},${CAP_WAIT_MS})}
 function capCall(c,a,g){return new Promise(function(ok,no){var id=++cseq,m={type:"${CAP_MESSAGE}",v:1,id:id,cap:c,args:a||{}};if(typeof g==="boolean")m.gesture=g;cpend[id]={ok:ok,no:no,t:0,c:c};
@@ -344,6 +346,10 @@ open:function(r){return capCall("open",{ref:String(r)})},files:Object.freeze({do
 add:function(){var g=false;try{g=navigator.userActivation.isActive===true}catch(x){}return capCall("files.add",{},g)},
 list:function(){return capCall("files.list",{})},get:function(i){return capCall("files.get",{id:String(i)})},remove:function(i){return capCall("files.remove",{id:String(i)})}})};
 function cpropose(o){o=typeof o==="string"?{content:o}:o&&typeof o==="object"?o:{};return capCall("page.propose",{content:o.content,title:o.title})}`;
+  const bot = caps.data.includes("bot")
+    ? `function pageBot(q){return capCall("data.read",{name:"bot",params:q&&typeof q==="object"?q:{}})}\npageBot.subscribe=function(f,q){return caps.data.subscribe("bot",f,q)};`
+    : "";
+  return body + bot;
 }
 
 /** The app's preview wrapper (a server document between the app and the
@@ -362,13 +368,24 @@ if(e.source===parent&&parent!==window&&DOWN[d.type]===1){try{f.contentWindow.pos
 
 const STATE_BRIDGE_DEFINE = `try{Object.defineProperty(W,"sagax",{value:Object.freeze({page:Object.freeze(page)}),writable:false,configurable:false,enumerable:false})}catch(x){}`;
 
+/** Fields hung on `page` (propose, and `bot` when that source is declared).
+ * Empty when the version adds nothing there. Pure. */
+function pageCapabilityFields(caps: PageCapabilities): string {
+  const fields = [
+    caps.propose ? "propose:cpropose" : "",
+    caps.data.includes("bot") ? "bot:pageBot" : "",
+  ].filter(Boolean);
+  return fields.length ? `{${fields.join(",")}}` : "";
+}
+
 /** A reading frame's bridge: today's state bridge exactly when the version
  * declares no capability (a golden test pins it), else the same with the
  * capability calls beside `page`. Pure. */
 export function stateBridgeSource(caps?: PageCapabilities | null): string {
   if (!pageCapabilitiesAny(caps)) return STATE_BRIDGE_SOURCE;
-  // lot 6: propose sits on `page`, beside the state's own calls
-  const page = caps.propose ? "Object.assign(page,{propose:cpropose})" : "page";
+  // lot 6: propose sits on `page`, beside the state's own calls. `bot` does too.
+  const fields = pageCapabilityFields(caps);
+  const page = fields ? `Object.assign(page,${fields})` : "page";
   return STATE_BRIDGE_SOURCE.replace(STATE_BRIDGE_DEFINE,
     `${capabilityParts(caps)}\ntry{Object.defineProperty(W,"sagax",{value:Object.freeze(Object.assign({page:Object.freeze(${page})},caps)),writable:false,configurable:false,enumerable:false})}catch(x){}`);
 }
@@ -376,7 +393,8 @@ export function stateBridgeSource(caps?: PageCapabilities | null): string {
 /** The app's preview frame has no shared state bridge: a page that declares
  * capabilities gets them alone on window.sagax. Pure. */
 export function capabilityBridgeSource(caps: PageCapabilities): string {
-  const value = caps.propose ? "Object.assign({page:Object.freeze({propose:cpropose})},caps)" : "caps";
+  const fields = pageCapabilityFields(caps);
+  const value = fields ? `Object.assign({page:Object.freeze(${fields})},caps)` : "caps";
   return `(function(){"use strict";${capabilityParts(caps)}\ntry{Object.defineProperty(window,"sagax",{value:Object.freeze(${value}),writable:false,configurable:false,enumerable:false})}catch(x){}})();`;
 }
 

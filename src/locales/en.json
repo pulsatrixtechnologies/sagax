@@ -13109,6 +13109,7 @@
   "pages.caps.reads": "Reads: {what}",
   "pages.caps.does": "May do: {what}",
   "pages.caps.adds": "New in this version: {what}",
+  "pages.caps.source.bot": "this page's bot",
   "pages.caps.source.team-board": "the work of your coding teams",
   "pages.caps.viewer": "your name and role",
   "pages.caps.open": "opens links and chats",

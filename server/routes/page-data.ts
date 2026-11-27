@@ -232,7 +232,7 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
     if (!allowRead(`${page.id}\u0000${who.by.toLowerCase()}`)) return refuse(429, "rate_limited");
     let read: Awaited<ReturnType<typeof source.read>>;
     try {
-      read = await source.read(auth, { params, fresh: url.searchParams.get("fresh") === "1", lang });
+      read = await source.read(auth, { params, fresh: url.searchParams.get("fresh") === "1", lang, page: { id: page.id, botId: page.botId } });
     } catch (error) {
       if (error instanceof PageSourceError) return refuse(error.status, error.code);
       return refuse(503, "unavailable");

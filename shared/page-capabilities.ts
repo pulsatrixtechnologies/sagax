@@ -40,7 +40,8 @@
 //
 // What the page receives (#3413 lot 1b, decided): `data.read(name)` resolves
 // with the source's value alone (PageDataAnswer.value: for `team-board` a
-// TeamBoard, shared/team-board.ts); the answer's `links` and `refs` stay in
+// TeamBoard, shared/team-board.ts; for `bot` a PageBotView, shared/page-bot.ts);
+// the answer's `links` and `refs` stay in
 // the wrapper. `viewer.get()` resolves with PageViewerInfo; `open(ref)` with
 // `true`. A refusal rejects with an Error whose `code` is a stable
 // PageCapError and whose `message` is in the reader's language when the
@@ -101,8 +102,9 @@ export type PageCapCall = (typeof PAGE_CAP_CALLS)[number];
  * since such an app either answers it at once or drops it. */
 export const PAGE_CAP_LEGACY_CARD_CALLS: readonly PageCapCall[] = ["data.read", "open"];
 
-/** The named data sources a page may declare (server/pages/page-sources.ts). */
-export const PAGE_DATA_SOURCES = ["team-board"] as const;
+/** The named data sources a page may declare (server/pages/page-sources.ts).
+ * `bot` is the page's own bot, as the reader may see it (shared/page-bot.ts). */
+export const PAGE_DATA_SOURCES = ["team-board", "bot"] as const;
 export type PageDataSource = (typeof PAGE_DATA_SOURCES)[number];
 
 /** A file call a version may declare: `download` (lot 2, the page hands the

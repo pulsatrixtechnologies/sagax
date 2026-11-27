@@ -7,6 +7,7 @@ import { t } from "@/lib/i18n";
 import { pageCapabilitiesAct, pageCapabilitiesAny, parsePageCapabilities, type PageCapabilities, type PageCapFile, type PageDataSource } from "../../shared/page-capabilities";
 
 const SOURCE_WORDS: Record<PageDataSource, () => string> = {
+  bot: () => t("pages.caps.source.bot"),
   "team-board": () => t("pages.caps.source.team-board"),
 };
 

@@ -32,8 +32,9 @@ export interface PageSource {
   /** Throws PageSourceError for a refusal the reader can act on. `params`:
    * what the page passed (string values, shape checked by the route; the
    * source checks their meaning); `lang`: the reader's language, for the
-   * few labels a source writes. */
-  read(auth: RequestAuth, input: { params: Record<string, unknown>; fresh: boolean; lang?: "fr" | "en" }): Promise<PageSourceRead>;
+   * few labels a source writes. `page`: the page being read, when the route
+   * has it (the `bot` source reads that page's bot). */
+  read(auth: RequestAuth, input: { params: Record<string, unknown>; fresh: boolean; lang?: "fr" | "en"; page?: { id: string; botId: string } }): Promise<PageSourceRead>;
 }
 
 export class PageSourceError extends Error {

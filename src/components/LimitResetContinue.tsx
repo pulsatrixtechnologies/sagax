@@ -132,8 +132,7 @@ export function EngineLimitActions({ detail, botId, onDone, only }: {
 /** The quiet limit indicator beside a model picker outside the chat bar (JC
  * 2026-11-08: no banner above the chat, ever; M-20261125-070: the chat bar
  * itself shows the usage meter under the message box, ComposerMeter.tsx, and
- * no dot; with that pill hidden, the chat bar shows this dot again while the
- * serving engine is held, #5421). A small dot, warning near the limit and danger at it, with the
+ * no dot, even with that pill hidden, #5421). A small dot, warning near the limit and danger at it, with the
  * usage line as its tooltip; a click opens a small menu holding the line,
  * the weekly window and the actions. Nothing renders when the engine is
  * nowhere near its limit. */

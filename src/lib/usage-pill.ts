@@ -67,8 +67,10 @@ const idsOf = (row: PlanRow) => (row.instanceIds?.length ? row.instanceIds : row
 /** The latest of the times given, null with none. */
 const latest = (times: Array<number | null>) => times.reduce<number | null>((max, at) => (at !== null && (max === null || at > max) ? at : max), null);
 
-function accountOfRow(row: PlanRow, engine: string | undefined, limits: readonly EngineLimit[], now: number): UsageAccount {
-  const ids = idsOf(row);
+/** `fallback`: the ids a row the plan report names no instance for answers
+ * to (an older server: the serving provider's row is the serving engine's). */
+function accountOfRow(row: PlanRow, engine: string | undefined, limits: readonly EngineLimit[], now: number, fallback: readonly string[] = []): UsageAccount {
+  const ids = idsOf(row).length ? idsOf(row) : fallback;
   const fiveHour = row.state === "windows" ? usedOf(row.fiveHour) : null;
   const weekly = row.state === "windows" ? usedOf(row.weekly) : null;
   // the limit report's verdict for this login (#5421 review H1): a window at
@@ -102,8 +104,9 @@ function accountOfEngine(engine: string, name: string, serving: boolean, limit: 
     id: `engine:${engine}`,
     name,
     plan: null,
+    // a hold that names no window (a key's refusal) is no week's figure (#5421 round 2)
     fiveHour: limit?.window === "5-hour" ? used : null,
-    weekly: limit?.window === "5-hour" ? null : used,
+    weekly: limit?.window === "weekly" || limit?.window === "other" ? used : null,
     hours: 5,
     serving,
     blocked,
@@ -142,7 +145,10 @@ export function servingAccounts(input: {
     const drivers = new Set([...own.map((row) => row.driver), ...(input.driver ? [input.driver] : [])]);
     rows = metered.filter((row) => own.includes(row) || drivers.has(row.driver));
   }
-  const accounts = rows.map((row) => accountOfRow(row, input.engine, limits, now));
+  // an older server names no instance on its rows: the serving provider's one
+  // row answers to the serving engine's own limit, as the meter read it before
+  const lone = input.engine && own.length === 1 && !idsOf(own[0]!).length ? own[0] : undefined;
+  const accounts = rows.map((row) => accountOfRow(row, input.engine, limits, now, row === lone ? [input.engine!] : []));
   const covered = new Set(rows.flatMap(idsOf));
   // a key's row: the plan report says it has no window, so it has no limit
   const keys = new Set(input.rows.filter((row) => row.state === "no-windows").flatMap(idsOf));

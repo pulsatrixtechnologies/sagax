@@ -299,6 +299,8 @@ export function profileMenuItems(input: {
   usageName?: string | null;
   /** the account the percent is read from (its tooltip) */
   usageAccount?: string | null;
+  /** the sum of every account as the pill names it ("wk 44%"); absent: the bare percent */
+  usageFigure?: string | null;
   /** the plan rows that report a window: one row each in Usage › */
   usageRows: PlanRow[];
   /** the starred plan's id, and how a star is toggled; absent: no stars */
@@ -479,7 +481,7 @@ export function profileMenuItems(input: {
       icon: <Gauge size={18} />,
       // the label "Usage", the percent at the right, no account name (the owner
       // 2026-11-17); the account the figure belongs to is in the tooltip
-      value: input.usagePercent === null ? undefined : t("usage.limits.figure", { percent: input.usagePercent }),
+      value: input.usagePercent === null ? undefined : input.usageFigure || t("usage.limits.figure", { percent: input.usagePercent }),
       tooltip: input.usagePercent === null
         ? undefined
         : input.usageAccount
@@ -534,6 +536,8 @@ interface AccountMenuData {
   /** the starred plan's short name while it drives the percent */
   percentName: string | null;
   percentAccount: string | null;
+  /** the sum as the pill names it ("wk 44%"), null for a starred plan */
+  percentFigure: string | null;
   rows: PlanRow[];
   monthCost: string | null;
   targets: SwitchTarget[];
@@ -586,6 +590,7 @@ function useAccountMenuData(enabled: boolean, refresh = 0): AccountMenuData {
     percent: summary.percent,
     percentName: summary.name,
     percentAccount: summary.account,
+    percentFigure: summary.figure ?? null,
     rows,
     monthCost,
     targets: listSwitchTargets(environments, t("sidebar.account.solo")),
@@ -701,6 +706,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
     usagePercent: account.percent,
     usageName: account.percentName,
     usageAccount: account.percentAccount,
+    usageFigure: account.percentFigure,
     usageRows: account.rows,
     usageFavorite: { id: usageFavorite, onToggle: toggleUsageFavorite },
     monthCost: account.monthCost,

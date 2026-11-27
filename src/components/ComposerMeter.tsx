@@ -18,8 +18,9 @@
 // opens, the last answer kept on screen meanwhile and if the read fails
 // (#5421 review H2). Settings > Appearance chooses the shape, hides the pill,
 // and hides the context indicator; no action is lost (#5421 review M3, M4):
-// with the pill hidden the context keeps its own small ring and the limit dot
-// comes back while the serving engine is held (its "Try again now"); with
+// with the pill hidden the context keeps its own small ring and the pill
+// itself comes back while the serving engine is held (its "Try again now",
+// never the limit dot, M-20261125-070); with
 // the context indicator hidden the detail keeps "Compact now", and with both
 // hidden the ring comes back at 80% (the nearly-full warning). A measure with
 // no data is absent. The named percentage stays in sight in a narrow window.
@@ -46,7 +47,7 @@ import type { Bot } from "@/state/store";
 import type { AutoModelPreview } from "../../shared/auto-model";
 import { usePlanRows } from "./ChatUsageNotices";
 import { useCompact } from "./ContextWarning";
-import { EngineLimitActions, EngineLimitIndicator, useEngineLimitDetail } from "./LimitResetContinue";
+import { EngineLimitActions, useEngineLimitDetail } from "./LimitResetContinue";
 import type { PlanUsageViewProps } from "./PlanUsage";
 import { UsageAccountsDetail, type UsageAccountsDetailProps } from "./UsageAccountsDetail";
 import { UsagePill, usagePillLabel } from "./UsagePill";
@@ -142,8 +143,9 @@ export function ComposerMeterView({ context, usage, pill = true, shape = "circle
   // the pill's third measure, only while the person shows the context
   const measured = contextShown ? context : undefined;
   const values = pill && usage?.accounts.length ? usagePill({ accounts: usage.accounts, context: measured?.percent ?? null, now, poolKnown: usage.poolKnown }) : null;
-  // accounts with no figure and nothing blocked: nothing to say, no pill
-  const usageShown = values && (values.named || values.blocked || values.freeEngine) ? values : null;
+  // accounts with no figure and nothing blocked: nothing to say, no pill; a
+  // hold of the serving engine always has its pill (its Try again now)
+  const usageShown = values && (values.named || values.blocked || values.freeEngine || releaseAction) ? values : null;
   // the context's own ring, only while the pill does not carry it; hidden by
   // the person, it still comes back once the context is nearly full, so
   // Compact now stays one click away (#5421 review M4)
@@ -220,13 +222,18 @@ export function ComposerMeter({ bot, threadId }: { bot: Bot; threadId: string })
   const task = bot.tasks?.find((candidate) => candidate.threadId === threadId);
   const own = threadId === bot.threadId;
   const context = contextHalf(task?.usage, own ? bot.messages : []);
-  const pill = usagePillInBar.use() === "on";
+  const pillOn = usagePillInBar.use() === "on";
 
   // the engine this conversation really runs on (Auto resolved): the one marked as serving
   const selection = bot.modelSelection;
   const engine = (selection.auto === true ? task?.autoModel?.instanceId : undefined) ?? selection.instanceId;
   const limits = useEngineLimits();
   const limit = limits.find((candidate) => candidate.engine === engine);
+  // #5421 review M3: hidden, the pill still comes back while the serving
+  // engine is held, so its "Try again now" stays in the bar; the meter stays
+  // the bar's only usage surface (M-20261125-070: no limit dot), as the
+  // context ring comes back once the context is nearly full
+  const pill = pillOn || Boolean(limit?.held);
   const rows = usePlanRows(open === "usage");
   // who can serve this conversation: the usage-limit takeover's own pool (no
   // second verdict), read again when the detail opens with the last answer
@@ -240,7 +247,7 @@ export function ComposerMeter({ bot, threadId }: { bot: Bot; threadId: string })
   const fromLimit = Boolean(serving && !serving.row && detail.near);
   const compact = useCompact();
   const favorite = useUsageFavorite();
-  const meter = (
+  return (
     <ComposerMeterView
       context={context ? { percent: context.percent, detail: task?.usage ? contextDetail(task.usage) : null } : undefined}
       usage={accounts.length ? { accounts, favorite: { id: favorite, onToggle: toggleUsageFavorite }, line: fromLimit ? detail.line : null, poolKnown: preview !== null } : undefined}
@@ -259,16 +266,5 @@ export function ComposerMeter({ bot, threadId }: { bot: Bot; threadId: string })
       usageActions={(close) => <EngineLimitActions detail={detail} botId={bot.id} onDone={close} />}
       releaseAction={limit?.held ? (close) => <EngineLimitActions detail={detail} botId={bot.id} onDone={close} only="release" /> : undefined}
     />
-  );
-  // #5421 review M3: the pill hidden, the serving engine's hold keeps its
-  // "Try again now" in the bar: the limit dot the pill replaced, as it was
-  if (pill || !limit?.held) return meter;
-  return (
-    <span className="flex items-center gap-2">
-      {meter}
-      <span data-composer-limit-dot="" className="relative block size-2.5">
-        <EngineLimitIndicator engine={engine} driver={limit.driver} botId={bot.id} threadId={threadId} messages={own ? bot.messages : undefined} />
-      </span>
-    </span>
   );
 }

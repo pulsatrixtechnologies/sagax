@@ -78,9 +78,11 @@ Auto without an error (`RETIRED_MODEL_MODE`, `shared/model-mode.ts`).
   (`sagax.usagePillInBar.v1`, on), its shape (`sagax.usagePillShape.v1`: bars,
   circles, battery, dots, text; circles) and the context indicator
   (`sagax.contextIndicator.v1`, on). No action is lost: with the pill off the
-  context keeps its own ring and the limit dot comes back while the serving
-  engine is held (its "Try again now"); with the context indicator off the
-  detail keeps Compact now, and with both off the ring comes back at 80%.
+  context keeps its own ring and the pill itself comes back while the serving
+  engine is held (its "Try again now"; the bar never shows the limit dot
+  again, M-20261125-070); with the context indicator off the detail keeps
+  Compact now, and with both off the ring comes back at 80%. The account
+  menu's Usage row names the window of the sum ("wk 44%").
   With no plan window for the engine the pill draws from the engine's own
   limit once it is near, with its line. The conversation's header shows no
   token figure any more.

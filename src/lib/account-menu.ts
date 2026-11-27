@@ -16,7 +16,7 @@
 // so the menu's rules are tested without a store or a bridge.
 import type { EngineLimit } from "../../shared/limit-reset";
 import type { PlanRow } from "./plan-usage";
-import { accountsUsage } from "./usage-pill";
+import { accountsUsage, windowFigure } from "./usage-pill";
 
 /** No public App Store or TestFlight link for Sagax exists yet: "Get Sagax
  * on mobile" stays out of the menu until one does. */
@@ -50,9 +50,12 @@ export interface UsageSummary {
   /** the starred plan's short name ("Grok"), only while it drives the
    * figure; null with the usual rule */
   name: string | null;
-  /** the account the figure belongs to (the starred one, else the highest),
-   * for the row's tooltip; null with no figure */
+  /** the account the figure belongs to (the starred one), for the row's
+   * tooltip; null with no figure or for the sum */
   account: string | null;
+  /** the sum as the pill names it ("wk 44%"), for the row's value; null for
+   * a starred plan's own figure */
+  figure?: string | null;
 }
 
 /** The figure beside Usage (2026-11-03): the starred plan's own figure, with
@@ -67,7 +70,8 @@ export function usageSummary(rows: readonly PlanRow[], favorite: string | null, 
     const percent = row ? planPercent(row) : null;
     if (row && percent !== null) return { percent, name: row.name, account: row.name };
   }
-  return { percent: accountsUsage(rows, limits).named?.percent ?? null, name: null, account: null };
+  const named = accountsUsage(rows, limits).named;
+  return { percent: named?.percent ?? null, name: null, account: null, figure: named ? windowFigure(named.window, named.percent, named.hours) : null };
 }
 
 /** This person's own space on this computer (the solo server). Switch

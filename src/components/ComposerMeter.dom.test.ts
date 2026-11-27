@@ -445,24 +445,35 @@ describe("Settings > Appearance: the pill, its shape, the context indicator (M-2
     expect(host.querySelector('[data-composer-meter-detail="context"] [data-composer-meter-compact]')?.textContent).toBe("Compact now");
   });
 
-  it("#5421 review M3: the pill hidden, a held serving engine keeps Try again now in the bar (the limit dot)", async () => {
+  it("#5421 review M3: the pill hidden, a held serving engine brings the pill back with Try again now, never the limit dot (M-20261125-070)", async () => {
     engineLimits([{ ...limit(100, true), held: true }]);
     act(() => prefs.usagePillInBar.set("off"));
     await mount();
-    expect(half("usage")).toBeNull();
-    const dot = host.querySelector<HTMLButtonElement>('[data-testid="engine-limit-indicator"]');
-    expect(dot).not.toBeNull();
-    await click(dot);
-    const release = host.querySelector<HTMLButtonElement>('[data-testid="engine-limit-menu"] [data-testid="engine-limit-release"]');
+    expect(host.querySelector('[data-testid="engine-limit-indicator"]')).toBeNull();
+    expect(half("usage")).not.toBeNull();
+    await click(half("usage"));
+    const release = detailOf().querySelector<HTMLButtonElement>('[data-testid="engine-limit-release"]');
     expect(release?.textContent).toBe("Try again now");
     fixture.api.mockClear();
     await click(release);
     expect(fixture.api).toHaveBeenCalledWith("/api/limit-resets/release", expect.objectContaining({ method: "POST", body: JSON.stringify({ engine: "claude" }) }));
   });
 
-  it("#5421 review M3: the pill hidden and nothing held, no dot; the pill off reads no pool", async () => {
+  it("#5421 round 2: a hold of the serving engine shows its pill and Try again now even while other accounts are free", async () => {
+    fixture.plan = [provider({ weekly: window(100) }), second()];
+    fixture.serves = ["claude", "work"];
+    engineLimits([{ ...limit(100, true), held: true }]);
+    await mount();
+    expect(pillText()).toBe("wk 56%");
+    await click(half("usage"));
+    expect(detailOf().querySelector('[data-testid="engine-limit-release"]')).not.toBeNull();
+    expect(detailOf().querySelector('[data-testid="engine-limit-switch"]')).toBeNull();
+  });
+
+  it("#5421 review M3: the pill hidden and nothing held, no pill and no dot; the pill off reads no pool", async () => {
     act(() => prefs.usagePillInBar.set("off"));
     await mount();
+    expect(half("usage")).toBeNull();
     expect(host.querySelector('[data-testid="engine-limit-indicator"]')).toBeNull();
     expect(fixture.api.mock.calls.some((call) => String(call[0]).includes("/auto-model"))).toBe(false);
   });

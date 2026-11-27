@@ -238,6 +238,21 @@ describe("which accounts can serve (no second verdict)", () => {
     expect(pill(refusing)).toMatchObject({ named: null, blocked: true, text: "" });
   });
 
+  it("#5421 round 2: a hold that names no window is no week's figure", () => {
+    const held = servingAccounts({ rows: [], engine: "key", limits: [limit("key", { window: null, usedPercent: 100, blocked: true, held: true, resetsAt: Date.parse(SAT) })], now: NOW });
+    expect(held).toMatchObject([{ weekly: null, fiveHour: null, blocked: true }]);
+    expect(pill(held)).toMatchObject({ named: null, blocked: true, text: "back Sat 9 p.m." });
+  });
+
+  it("#5421 round 2: an older server's one row with no instance id answers to the serving engine's own limit", () => {
+    const bare = row("claude-row", 12, 100, { instanceId: null, instanceIds: [] });
+    const accounts = servingAccounts({ rows: [bare], engine: "claude", driver: "claude", limits: [blockedAt("claude", SAT)], now: NOW });
+    expect(accounts).toMatchObject([{ id: "claude-row", serving: true, blocked: true, backAt: Date.parse(SAT) }]);
+    // two such rows: which one serves is not known, none takes the engine's verdict
+    const two = servingAccounts({ rows: [bare, { ...bare, id: "claude-row-2" }], engine: "claude", driver: "claude", limits: [blockedAt("claude", SAT)], now: NOW });
+    expect(two.map((account) => account.blocked)).toEqual([false, false]);
+  });
+
   it("an API key row and a signed-out row are no account", () => {
     const noWindows = [row("key", null, null, { state: "no-windows", access: "api-key" }), row("out", null, null, { state: "signed-out" })];
     expect(allAccounts(noWindows, [], NOW)).toEqual([]);

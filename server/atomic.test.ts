@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
+import { isOwnerOnlyProtected } from "./owner-only-acl.ts";
 import {
   chmodSync,
   existsSync,
@@ -64,14 +65,14 @@ describe("writeFileAtomic", () => {
     expect(existsSync(p)).toBe(true);
   });
 
-  it.skipIf(process.platform === "win32")("applies the requested mode when replacing a file", () => {
+  it("applies owner-only protection when replacing a file (#5258)", () => {
     const p = join(dir, "secret.json");
     writeFileAtomic(p, "old");
-    chmodSync(p, 0o644);
+    if (process.platform !== "win32") chmodSync(p, 0o644);
 
     writeFileAtomic(p, "new", { mode: 0o600 });
 
-    expect(statSync(p).mode & 0o777).toBe(0o600);
+    expect(isOwnerOnlyProtected(p)).toBe(true);
   });
 
   it("cleans up the temporary file when replacement fails", () => {
@@ -293,7 +294,7 @@ describe("OwnedFile", () => {
     expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ n: 3 });
     expect(vi.mocked(spied.writeFileSync).mock.calls.length).toBe(writes);
     expect(vi.mocked(spied.fsyncSync).mock.calls.length).toBe(syncs);
-    if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(isOwnerOnlyProtected(path)).toBe(true);
     expect(tempFiles()).toEqual([]);
   });
 

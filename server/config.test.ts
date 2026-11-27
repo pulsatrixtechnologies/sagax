@@ -1,4 +1,5 @@
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { isOwnerOnlyProtected } from "./owner-only-acl.ts";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -1540,7 +1541,7 @@ describe("Grok voice key migration (2026-10-14)", () => {
     const lines = log.mock.calls.map((call) => String(call[0]));
     expect(lines.some((line) => line.includes("Grok voice key is now the xAI key"))).toBe(true);
     expect(lines.join("\n")).not.toContain("voice-secret");
-    if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(isOwnerOnlyProtected(path)).toBe(true);
     // a second boot finds nothing left to migrate and leaves the file alone
     const written = readFileSync(path, "utf8");
     ensureDirs();
@@ -1600,7 +1601,7 @@ describe("onboarding engine key migration", () => {
     expect(readFileSync(path, "utf8")).not.toContain(SECRET);
     // …the sealed store does, and the running driver gets it back…
     expect(readFileSync(join(DATA_DIR, "provider-keys.enc"), "utf8")).not.toContain(SECRET);
-    if (process.platform !== "win32") expect(statSync(join(DATA_DIR, "provider-keys.enc")).mode & 0o777).toBe(0o600);
+    expect(isOwnerOnlyProtected(join(DATA_DIR, "provider-keys.enc"))).toBe(true);
     const live = instanceConfigs(loadConfig())["api-0a1b2c3d"]!.config as { key?: string };
     expect(live.key).toBe(SECRET);
     // …the log says what moved, never the value…
@@ -1655,7 +1656,7 @@ describe("legacy feature flag migration", () => {
     ensureDirs();
     expect(readDisk()).toEqual({ profile: { name: "Ada" }, features: { browser: false, skillAuthoring: true } });
     expect(skillAuthoringEnabled(loadConfig())).toBe(true);
-    if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(isOwnerOnlyProtected(path)).toBe(true);
     // a second boot finds nothing left to migrate and leaves the file alone
     const written = readFileSync(path, "utf8");
     ensureDirs();
@@ -2555,7 +2556,7 @@ describe("the saved mail settings", () => {
     saveConfig({ mail });
     expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ profile: { name: "Ada" }, mail });
     expect(loadConfig().mail).toEqual(mail);
-    if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(isOwnerOnlyProtected(path)).toBe(true);
   });
 
   it("are not part of the generic config patch: the mail route owns them", () => {

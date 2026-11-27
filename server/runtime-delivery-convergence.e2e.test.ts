@@ -7,6 +7,7 @@
 // one result, one source wake, and a terminal or explicit waiting state.
 // No provider is called and no user data is read.
 import { spawn, type ChildProcess } from "node:child_process";
+import { isOwnerOnlyProtected } from "./owner-only-acl.ts";
 import { closeSync, existsSync, openSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1094,7 +1095,7 @@ it("peer inbox (second pass): a teammate's notice gathered before a restart (a p
   expect(onDisk).not.toContain("ROLL_SECRET_WORDS");
   expect(onDisk).not.toContain("Northwind");
   expect(JSON.parse(onDisk).pending[receiver.id]).toEqual([{ key: expect.stringMatching(/^peer-notice:/), ref: { kind: "peer", noticeId: expect.any(String) }, status: "pending" }]);
-  if (process.platform !== "win32") expect(statSync(pendingFile).mode & 0o777).toBe(0o600); // Windows has no POSIX modes
+  expect(isOwnerOnlyProtected(pendingFile)).toBe(true);
   await f.restart({ SAGAX_PROACTIVE_GATHER_MS: "1000", SAGAX_PROACTIVE_REPLAY_MS: "0" });
   const wakes = async () => ((await f.api("/api/routines", undefined, "GET")).runs as any[]).filter((run) => run.botId === receiver.id && run.proactive);
   await expect.poll(async () => (await wakes()).map((run) => run.status), { timeout: 60_000, interval: 250 }).toEqual(["completed"]);

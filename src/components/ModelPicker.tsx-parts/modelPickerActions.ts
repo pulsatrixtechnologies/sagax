@@ -165,8 +165,11 @@ export function makeToggleMenu(ctx: MenuToggleCtx) {
     const rect = (anchor ?? (headless ? fallbackAnchor?.() : triggerRef.current))?.getBoundingClientRect();
     if (rect && typeof window.innerWidth === "number") {
       if (anchor && box) {
-        const left = Math.max(8, Math.min(box.getBoundingClientRect().right + 6, window.innerWidth - MENU_WIDTH - 8));
-        setMenuAt({ left, bottom: Math.max(8, window.innerHeight - rect.bottom - 6) });
+        // #5422: open beside the + menu at the row's top, never at the window's top left
+        const menuBox = box.getBoundingClientRect();
+        const left = Math.max(8, Math.min(menuBox.right + 6, window.innerWidth - MENU_WIDTH - 8));
+        const top = Math.max(8, Math.min(rect.top, window.innerHeight - 120));
+        setMenuAt({ left, top });
       } else if (windowOnly) {
         setMenuAt(windowOnlyMenuPlace());
       } else if (headless) {

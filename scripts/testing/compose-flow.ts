@@ -152,6 +152,9 @@ export async function openNewBotDialog(flow: NewBotFlow): Promise<void> {
   }
 
   const namedTeam = async () => (await flow.evaluate(`([...document.querySelectorAll("[data-team-key]")].map((el) => el.getAttribute("data-team-key")).find(Boolean) || "")`)) as string;
+  // canEditTeams loads from the session after first paint (#3568): wait for the
+  // Add control before creating a team, else the Manage summary is missing too.
+  await until(async () => Boolean(await flow.evaluate(`Boolean(document.querySelector('summary[aria-label="Add to team map"]') || document.querySelector('summary[aria-label^="Manage "]'))`)), 12_000, "Team map manage controls");
   let team = await namedTeam();
   if (!team) {
     await flow.evaluate(`(() => {
@@ -176,15 +179,15 @@ export async function openNewBotDialog(flow: NewBotFlow): Promise<void> {
     team = "Desk";
   }
 
+  const manageSummaryJs = `document.querySelector(${JSON.stringify(`[data-team-key="${team}"] summary[aria-label^="Manage "]`)}) || document.querySelector('summary[aria-label^="Manage "]')`;
+  await until(async () => Boolean(await flow.evaluate(`Boolean(${manageSummaryJs})`)), 12_000, `Manage ${team}`);
   await flow.evaluate(`(() => {
-    const summary = document.querySelector(${JSON.stringify(`[data-team-key="${team}"] summary`)})
-      || document.querySelector('summary[aria-label^="Manage "]');
+    const summary = ${manageSummaryJs};
     if (!summary) throw new Error("no named team to manage");
     const details = summary.parentElement;
     if (details && !("open" in details && details.open)) summary.click();
     return true;
-  })()`);
-  const move = `Move bots to ${team}`;
+  })()`);  const move = `Move bots to ${team}`;
   await until(async () => (await flow.snapshot()).includes(move), 10_000, move);
   await click(move);
   await until(async () => (await flow.snapshot()).includes("New Bot"), 10_000, "New Bot");

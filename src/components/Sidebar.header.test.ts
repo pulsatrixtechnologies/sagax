@@ -221,7 +221,14 @@ describe("sidebar head has no bot panel button", () => {
     expect(src).not.toContain("data-sidebar-bot-panel");
     expect(src).not.toContain("<Ellipsis");
     expect(src).not.toContain("<PanelRight");
-    expect(src).toContain("const headButtons = <>{collapseButton}{searchButton}{newButton}</>");
+    // Head order is dynamic via sidebarHeadOrder (collapse → search → new by default, #5017 / #5443).
+    expect(src).toContain("data-sidebar-search");
+    expect(src).toContain("data-sidebar-new");
+    expect(src).toContain("data-sidebar-compact-toggle");
+    expect(src).toContain("collapse: collapseButton");
+    expect(src).toContain("search: searchButton");
+    expect(src).toContain("new: newButton");
+    expect(src).toContain("sidebarHeadOrder(sidebarZone).map((id) => wrapHead(id, headById[id] ?? null))");
     expect(render()).not.toContain("data-sidebar-bot-panel");
   });
 });

@@ -195,29 +195,27 @@ export function UiCustomizeProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/** Stable no-op when a surface mounts outside UiCustomizeProvider (gallery / isolated tests). */
+const NOOP_CUSTOMIZE: UiCustomizeApi = {
+  active: false,
+  draft: defaultUiLayout(),
+  begin: () => undefined,
+  save: () => undefined,
+  cancel: () => undefined,
+  requestReset: () => undefined,
+  resetAndLeave: () => undefined,
+  hide: () => undefined,
+  restore: () => undefined,
+  move: () => undefined,
+  nudge: () => undefined,
+  setSide: () => undefined,
+  setPlacement: () => undefined,
+  ensureSidebarSections: () => undefined,
+  dragging: null,
+  setDragging: () => undefined,
+};
+
 export function useUiCustomize(): UiCustomizeApi {
   const ctx = useContext(UiCustomizeContext);
-  if (!ctx) {
-    // Safe no-op outside the provider (gallery / isolated tests).
-    const empty = defaultUiLayout();
-    return {
-      active: false,
-      draft: empty,
-      begin: () => undefined,
-      save: () => undefined,
-      cancel: () => undefined,
-      requestReset: () => undefined,
-      resetAndLeave: () => undefined,
-      hide: () => undefined,
-      restore: () => undefined,
-      move: () => undefined,
-      nudge: () => undefined,
-      setSide: () => undefined,
-      setPlacement: () => undefined,
-      ensureSidebarSections: () => undefined,
-      dragging: null,
-      setDragging: () => undefined,
-    };
-  }
-  return ctx;
+  return ctx ?? NOOP_CUSTOMIZE;
 }

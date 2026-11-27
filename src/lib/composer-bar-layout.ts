@@ -146,10 +146,20 @@ export function composerBarSlots(
   };
 }
 
+// useSyncExternalStore needs the same object while the underlying uiLayout
+// reference is unchanged (React compares getSnapshot with Object.is).
+let cachedFromUi: ReturnType<typeof getUiLayout> | null = null;
+let cachedComposerLayout: ComposerBarLayout = {
+  order: DEFAULT_COMPOSER_BAR_LAYOUT.order,
+  left: DEFAULT_COMPOSER_BAR_LAYOUT.left,
+};
+
 function fromStore(): ComposerBarLayout {
-  const { order, left } = composerLayoutFromUi(getUiLayout());
+  const ui = getUiLayout();
+  if (ui === cachedFromUi) return cachedComposerLayout;
+  const { order, left } = composerLayoutFromUi(ui);
   // Visible-only: drop ids that are hidden in uiLayout.
-  const hidden = new Set(getUiLayout().zones.composerBar.hidden);
+  const hidden = new Set(ui.zones.composerBar.hidden);
   const visible = order.filter((id): id is ComposerBarItem => isItem(id) && !hidden.has(id));
   // Recount left against the visible list.
   let visibleLeft = 0;
@@ -158,10 +168,12 @@ function fromStore(): ComposerBarLayout {
     if (id && isItem(id) && !hidden.has(id)) visibleLeft += 1;
   }
   const filled = visible.length ? visible : [...DEFAULT_COMPOSER_BAR_LAYOUT.order];
-  return {
-    order: filled,
+  cachedFromUi = ui;
+  cachedComposerLayout = {
+    order: Object.freeze(filled) as readonly ComposerBarItem[],
     left: Math.max(0, Math.min(filled.length, visibleLeft || (hidden.size ? 0 : DEFAULT_COMPOSER_BAR_LAYOUT.left))),
   };
+  return cachedComposerLayout;
 }
 
 export function getComposerBarLayout(): ComposerBarLayout {

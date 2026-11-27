@@ -164,7 +164,7 @@ const GIVEN_KEY_NAME: Record<string, Record<NoCallLanguage, string>> = {
 };
 /** French agrees with what is named: a key is refused as "refusée", an
  * account as "refusé", and a key and an account together as "refusés". */
-const MASCULINE_SOURCES = new Set(["org-account"]);
+const MASCULINE_SOURCES = new Set(["org-account", "grok-account"]);
 
 function credentialNames(rows: readonly { source: string }[], names: Record<string, Record<NoCallLanguage, string>>, language: NoCallLanguage): string {
   const listed = [...new Set(rows.map((row) => names[row.source]?.[language] ?? (language === "fr" ? "ta clé xAI" : "your xAI key")))];
@@ -214,12 +214,16 @@ function refusedWords(out: boolean, many: boolean, language: NoCallLanguage, mas
 /** What happened to what the organization gives, each credential with its own
  * state: its account and its key can both be tried, and one can be refused
  * while the other is out of credits. */
-function givenStateList(given: readonly { source: string; failure: string }[], language: NoCallLanguage): string[] {
-  const states = [...new Set(given.map((row) => row.failure === "quota"))];
+function stateList(tried: readonly { source: string; failure: string }[], names: Record<string, Record<NoCallLanguage, string>>, language: NoCallLanguage): string[] {
+  const states = [...new Set(tried.map((row) => row.failure === "quota"))];
   return states.map((out) => {
-    const rows = given.filter((row) => (row.failure === "quota") === out);
-    return `${credentialNames(rows, GIVEN_KEY_NAME, language)} ${refusedWords(out, rows.length > 1, language, rows.some((row) => MASCULINE_SOURCES.has(row.source)))}`;
+    const rows = tried.filter((row) => (row.failure === "quota") === out);
+    return `${credentialNames(rows, names, language)} ${refusedWords(out, rows.length > 1, language, rows.some((row) => MASCULINE_SOURCES.has(row.source)))}`;
   });
+}
+
+function givenStateList(given: readonly { source: string; failure: string }[], language: NoCallLanguage): string[] {
+  return stateList(given, GIVEN_KEY_NAME, language);
 }
 
 /** Clauses in one list with a single closing "et" / "and": never "a, et b, et c". */
@@ -243,21 +247,21 @@ export function realtimeKeyRefusedCallReason(tried: readonly { source: string; f
   const path = VOICE_SETTINGS[language];
   const own = tried.filter((row) => keyOwner(row.source) === "own");
   const given = tried.filter((row) => keyOwner(row.source) === "given");
-  const dryOf = (rows: readonly { failure: string }[]): boolean => rows.some((row) => row.failure === "quota");
+  // each state of the person's own keys with the keys it holds for: a refused
+  // key is never said out of credits beside a dry one (third review of #5427)
+  const ownStates = stateList(own, OWN_KEY_NAME, language);
   const givenAccount = given.some((row) => row.source === "org-account");
   const givenKey = given.some((row) => row.source !== "org-account");
   if (own.length && given.length) {
-    const left = `${credentialNames(own, OWN_KEY_NAME, language)} ${refusedWords(dryOf(own), own.length > 1, language)}`;
+    const all = clauseList([...ownStates, ...givenStateList(given, language)], language);
     if (givenAccount) {
-      const all = clauseList([left, ...givenStateList(given, language)], language);
       return language === "fr"
         ? `Aucun appel : ${all}. ${ownAction(own, "fr")} Pour ce qui vient de ton organisation, demande à un de ses administrateurs.`
         : `No call was placed: ${all}. ${ownAction(own, "en")} For what your organization provides, ask one of its administrators.`;
     }
-    const right = givenStates(given, language);
     return language === "fr"
-      ? `Aucun appel : ${left}, et ${right}. ${ownAction(own, "fr")} Pour la clé que tu as reçue, demande à un administrateur de ton organisation.`
-      : `No call was placed: ${left}, and ${right}. ${ownAction(own, "en")} A key you were given is for an administrator of your organization.`;
+      ? `Aucun appel : ${all}. ${ownAction(own, "fr")} Pour la clé que tu as reçue, demande à un administrateur de ton organisation.`
+      : `No call was placed: ${all}. ${ownAction(own, "en")} A key you were given is for an administrator of your organization.`;
   }
   if (given.length) {
     const what = givenStates(given, language);
@@ -278,12 +282,11 @@ export function realtimeKeyRefusedCallReason(tried: readonly { source: string; f
       ? `Aucun appel : ${what}. Ce n'est pas ta clé : demande à un administrateur de ton organisation. Tu peux aussi ajouter ta propre clé xAI dans ${path}, puis rappeler.`
       : `No call was placed: ${what}. That key is not yours to fix: ask an administrator of your organization. You can also add your own xAI key in ${path}, then call back.`;
   }
-  const who = credentialNames(own, OWN_KEY_NAME, language);
   // the lead-in is the one the client passes through untouched
   // (src/lib/voice-mode/failure.ts voiceErrorNote matches "Aucun appel :" and
   // "No call was placed: "), so its spacing is part of the rule
   const lead = language === "fr" ? "Aucun appel : " : "No call was placed: ";
-  return `${lead}${who} ${refusedWords(dryOf(own), own.length > 1, language)}. ${ownAction(own, language)}`;
+  return `${lead}${clauseList(ownStates, language)}. ${ownAction(own, language)}`;
 }
 
 /** A row of a chain: the credential's source, its provider (xAI when absent)

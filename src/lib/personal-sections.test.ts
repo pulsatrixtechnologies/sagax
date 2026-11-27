@@ -8,6 +8,7 @@ import { buildTeamMapSections } from "./team-map";
 import {
   EMPTY_PERSONAL_SECTIONS,
   PERSONAL_SECTIONS_KEY,
+  absorbOwnedBotSections,
   assignToPersonalSection,
   createPersonalSection,
   deletePersonalSection,
@@ -154,6 +155,35 @@ describe("unassigned items are always visible", () => {
   });
 });
 
+
+describe("absorbOwnedBotSections (#5344)", () => {
+  it("places an own bot whose server team is set into that personal folder when it was unplaced", () => {
+    const prefs = ok(createPersonalSection(EMPTY_PERSONAL_SECTIONS, "Clients"));
+    const bots = [
+      { id: "terminal", section: "Clients", ownerUserId: "pr_bob" },
+      { id: "loose", ownerUserId: "pr_bob" },
+      { id: "alice", section: "Clients", ownerUserId: "pr_alice" },
+    ];
+    const next = absorbOwnedBotSections(prefs, bots, "pr_bob");
+    expect(next.sections).toEqual([{ name: "Clients", items: ["bot:terminal"] }]);
+    const view = withPersonalSections(bots, [], next);
+    expect(view.bots.find((bot) => bot.id === "terminal")!.section).toBe("Clients");
+    expect(view.bots.find((bot) => bot.id === "loose")!.section).toBeUndefined();
+    expect(view.bots.find((bot) => bot.id === "alice")!.section).toBeUndefined();
+  });
+
+  it("creates the personal folder when the server team name is new", () => {
+    const next = absorbOwnedBotSections(EMPTY_PERSONAL_SECTIONS, [{ id: "t", section: "Clients", ownerUserId: "pr_bob" }], "pr_bob");
+    expect(next.sections).toEqual([{ name: "Clients", items: ["bot:t"] }]);
+  });
+
+  it("leaves a bot the person already filed or left in Unassigned alone", () => {
+    const filed = ok(assignToPersonalSection(ok(createPersonalSection(EMPTY_PERSONAL_SECTIONS, "Ops")), itemKey("bot", "a"), "Ops"));
+    expect(absorbOwnedBotSections(filed, [{ id: "a", section: "Clients", ownerUserId: "pr_bob" }], "pr_bob")).toBe(filed);
+    // never placed: empty prefs with a bot that has no server section stays empty
+    expect(absorbOwnedBotSections(EMPTY_PERSONAL_SECTIONS, [{ id: "b", ownerUserId: "pr_bob" }], "pr_bob")).toBe(EMPTY_PERSONAL_SECTIONS);
+  });
+});
 
 describe("personal view drops server sectionId (#2045)", () => {
   it("clears sectionId so a shared bot follows the viewer folder, not the owner team", () => {

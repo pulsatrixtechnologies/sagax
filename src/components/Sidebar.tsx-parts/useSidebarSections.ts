@@ -18,6 +18,7 @@ import {
   itemKey,
   personalSectionNames,
   renamePersonalSection,
+  absorbOwnedBotSections,
   seedPersonalSections,
   usePersonalSections,
   withPersonalSections,
@@ -126,6 +127,14 @@ export function useSidebarSections({
     if (!state.bots.length && !state.groups.length) return;
     writePersonalSections(seedPersonalSections({ bots: state.bots, groups: state.groups, sections: state.sections ?? [], viewerId: orgViewerId(state) }));
   }, [orgMode, personalStored, loaded, state.bots, state.groups, state.sections, state.config]);
+  // Own bots whose server team is set and that are not in any personal folder
+  // yet join that folder, so a create_bot / bot.section from a tool shows in
+  // the sidebar right away (#5344).
+  useEffect(() => {
+    if (!orgMode || personalStored === null || !loaded) return;
+    const next = absorbOwnedBotSections(personalStored, state.bots, orgViewerId(state));
+    if (next !== personalStored) writePersonalSections(next);
+  }, [orgMode, personalStored, loaded, state.bots, state.config]);
   // What the sidebar lays out: on an organization server each bot and group
   // sits in the viewer's own section (undefined: Unassigned), whatever the
   // server's section field says.
@@ -157,11 +166,24 @@ export function useSidebarSections({
     return null;
   };
   /** Files a bot or a group in a section ("" = Unassigned): the viewer's own on
-   * an organization server, the server's otherwise. */
+   * an organization server, the server's otherwise. On an organization server a
+   * bot's personal folder is also mirrored onto bot.section so a tool that
+   * reads the server team and the sidebar agree (#5344). */
   const assignSection = (kind: SectionItemKind, id: string, section: string) => {
     if (personal) {
       const failed = assignPersonalSection(kind, id, section, knownItems);
       if (failed) setTeamFeedback({ error: true, text: failed });
+      else if (kind === "bot") {
+        if (!remoteClient) dispatch({ type: "updateBot", botId: id, patch: { section } });
+        else {
+          void api("/api/sidebar-sections", {
+            method: "POST",
+            body: JSON.stringify({ name: section, botIds: [id] }),
+          })
+            .then(({ bots }) => bots.forEach((bot: Bot) => dispatch({ type: "botPatched", bot })))
+            .catch((cause) => dispatch({ type: "error", message: readableError(cause) }));
+        }
+      }
       return;
     }
     if (kind === "group") {

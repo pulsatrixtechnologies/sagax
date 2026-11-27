@@ -289,6 +289,18 @@ describe("the first real cause of a chain, then the others in one line", () => {
     );
   });
 
+  // the likeliest case once the account reaches the right host: it is refused,
+  // and the organization's xAI key behind it is dry. The sentence of #4567
+  // read "refusé, et la clé API xAI non plus", as if both were refused.
+  it("the connected account refused and the organization's xAI key dry: each with its own state", () => {
+    expect(chainCallReason([ROW("grok-account", "key"), ROW("org-key", "quota")], "fr")).toBe(
+      "Aucun appel : ton compte Grok connecté a été refusé. Vérifie ton compte Grok dans Réglages > Fournisseurs. La clé xAI de ton organisation n'a plus de crédits.",
+    );
+    expect(chainCallReason([ROW("grok-account", "quota"), ROW("voice-key", "key")], "en")).toBe(
+      "No call was placed: your connected Grok account is out of credits. Add credits on the connected Grok account, then call back. Your voice key was refused.",
+    );
+  });
+
   it("leaves a single refusal, and a chain of xAI credits and keys only, to the sentences that already say them", () => {
     expect(chainCallReason([ROW("grok-account", "voice")], "fr")).toBeNull();
     expect(chainCallReason([ROW("grok-account", "quota"), ROW("org-key", "quota")], "fr")).toBeNull();

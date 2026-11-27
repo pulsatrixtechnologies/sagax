@@ -707,6 +707,21 @@ describe("voice mode uses the key that has funds (2026-10-28)", () => {
     expect(acting.ok && acting.keys.map((key) => key.source)).toEqual(["org-account"]);
   });
 
+  // M-20261126-145: the failure now names the first cause (the person's account
+  // refused); the organization's account behind it ran dry, so the offer to go
+  // on with the paid key still comes with it
+  it("still offers the paid key when the first cause is a refusal and an account behind it is dry", async () => {
+    const policy = { aspect: "voice" as const, personalKeysEnabled: true, allowPersonalWhenActingAs: false, paidKeyConfirmed: false };
+    const { call, xai } = harness({ grokAccount: async () => ACCOUNT, orgAccount: async () => ORG_ACCOUNT, credentialPolicy: () => policy });
+    xai.synthesize.mockImplementation(async (_text, _voice, key) => {
+      throw new Error(key === ACCOUNT ? refusal(401) : CREDITS);
+    });
+    const out = await call({ method: "POST", path: "/api/bots/b-quasar/voice/speak?locale=en", body: { text: "Hello." } });
+    expect(out.status).toBe(502);
+    expect(out.body).toMatchObject({ failure: "key", key: { source: "grok-account", last4: "c4Dd" }, confirm: { to: "org-key", aspect: "voice" } });
+    expect(out.body.error).toMatch(/^No call was placed: your connected Grok account was refused\. /);
+  });
+
   it("speaks on the API key when the connected account is out of credits", async () => {
     const { call, xai } = harness({ grokAccount: async () => ACCOUNT, ownKeys: { "sub-ada": OWN_KEY } });
     xai.synthesize.mockImplementation(async (_text, _voice, key) => {

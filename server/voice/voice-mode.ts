@@ -1146,8 +1146,9 @@ async function handleVoiceModeRequest(env: any, ctx: Parameters<RouteHandler>[0]
     (deps.log ?? console.warn)(`[voice-mode] ${VOICE_PROVIDER_LABELS[candidateProvider(keys[0]!)]} ${what} failed (${keys[0]!.via}): ${message}`);
     return withConfirm(providerFailureBody(message, { key: voiceKeyRef(keys[0]!) }));
   };
-  const withConfirm = <T extends { out_of_credits?: true }>(body: T): T & { confirm?: NonNullable<Extract<VoiceKeys, { ok: true }>["confirm"]> } => (
-    body.out_of_credits && resolved.ok && resolved.confirm ? { ...body, confirm: resolved.confirm } : body
+  // credits anywhere in the chain, not only in the cause it leads with
+  const withConfirm = <T extends { out_of_credits?: true; tried?: VoiceKeyRefusal[] }>(body: T): T & { confirm?: NonNullable<Extract<VoiceKeys, { ok: true }>["confirm"]> } => (
+    (body.out_of_credits || body.tried?.some((entry) => entry.failure === "quota")) && resolved.ok && resolved.confirm ? { ...body, confirm: resolved.confirm } : body
   );
   /** run `attempt` on the first key that takes it (server/voice/voice-keys.ts),
    * another provider taking over silently when one fails */

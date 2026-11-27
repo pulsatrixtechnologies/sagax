@@ -377,15 +377,21 @@ function chainRest(rows: readonly ChainRow[], language: NoCallLanguage): string 
 
 /** One plain sentence when the whole chain failed and its refusals are not
  * all credits or keys of xAI (an unknown voice, a provider that did not
- * answer, another provider's keys): the first real cause comes first, named
- * with the credential closest to the person (`tried` in their order), then
- * one line for every credential behind it (M-20261126-145). The person used
- * to read only the last refusal ("no credits"). Null for a single refusal and
- * for a chain of xAI credits and keys only, which the sentences above already
- * say whole (noCallReason, realtimeKeyRefusedCallReason). */
+ * answer, another provider's keys), or the connected account's state is not
+ * the others' (refused while the key behind it is dry): the first real cause
+ * comes first, named with the credential closest to the person (`tried` in
+ * their order), then one line for every credential behind it
+ * (M-20261126-145). The person used to read only the last refusal ("no
+ * credits"). Null for a single refusal and for the other chains of xAI
+ * credits and keys, which the sentences above already say whole
+ * (noCallReason, realtimeKeyRefusedCallReason). */
 export function chainCallReason(tried: readonly ChainRow[], language: NoCallLanguage): string | null {
   if (tried.length < 2) return null;
-  if (tried.every((row) => finalFailure(row.failure) && (row.provider ?? "xai") === "xai")) return null;
+  const xaiFinal = tried.every((row) => finalFailure(row.failure) && (row.provider ?? "xai") === "xai");
+  // noCallReason says one state for the account and one for the rest ("non
+  // plus", "aussi"): right only when they agree
+  const accountApart = tried.some((row) => row.source === "grok-account") && new Set(tried.map((row) => row.failure)).size > 1;
+  if (xaiFinal && !accountApart) return null;
   const [first, ...rest] = tried;
   return `${chainHead(first!, language)} ${chainRest(rest, language)}`;
 }

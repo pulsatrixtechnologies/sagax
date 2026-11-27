@@ -29,7 +29,18 @@ import { parseSidebarDensity, setSidebarDensity, SIDEBAR_DENSITIES, useSidebarDe
 import { setStreamReplies, useStreamReplies } from "@/lib/stream-replies-preference";
 import { CHAT_WIDTHS, parseChatWidth, setChatWidth, useChatWidth, type ChatWidth } from "@/lib/chat-width-preference";
 import { COMPOSER_BOTTOM_SPACES, parseComposerBottomSpace, setComposerBottomSpace, useComposerBottomSpace, type ComposerBottomSpace } from "@/lib/composer-bottom-space";
-import { contextIndicator, parseUsagePillShape, USAGE_PILL_SHAPES, usagePillInBar, usagePillShape, type UsagePillShape } from "@/lib/usage-pill-preferences";
+import {
+  contextIndicator,
+  parseUsagePillPlacement,
+  parseUsagePillShape,
+  USAGE_PILL_PLACEMENTS,
+  USAGE_PILL_SHAPES,
+  usagePillInBar,
+  usagePillPlacement,
+  usagePillShape,
+  type UsagePillPlacement,
+  type UsagePillShape,
+} from "@/lib/usage-pill-preferences";
 import { CONVERSATION_HEADERS, parseConversationHeader, setConversationHeader, useConversationHeader, type ConversationHeader } from "@/lib/conversation-header";
 import { parseSendKey, SEND_KEYS, sendKeyLabel, setSendKey, useSendKey } from "@/lib/send-key";
 import { setShowSidebarLogo, useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
@@ -199,15 +210,30 @@ function ComposerBottomSpaceRow() {
   );
 }
 
-/** The usage pill of the message bar (M-20261126-106, M-20261126-108, #5406):
- * shown or not, its shape, and the conversation's context indicator. */
+/** The usage pill of the message bar (M-20261126-106, M-20261126-108, #5406;
+ * D-20261127-001): shown or not, where it sits, its shape, and the
+ * conversation's context indicator. */
 function UsagePillRows() {
   const inBar = usagePillInBar.use() === "on";
+  const placement = usagePillPlacement.use();
   const shape = usagePillShape.use();
   const context = contextIndicator.use() === "on";
   return (
     <>
       <SwitchLine label={t("settings.usagePill.inBar.title")} ariaLabel={t("settings.usagePill.inBar.show")} checked={inBar} onChange={(on) => usagePillInBar.set(on ? "on" : "off")} rowId="usagePillInBar" />
+      {inBar && (
+        <CompactRow label={t("settings.usagePill.placement.title")} rowId="usagePillPlacement">
+          <PillSelect<UsagePillPlacement>
+            value={placement}
+            ariaLabel={t("settings.usagePill.placement.chooseAria")}
+            onChange={(next) => usagePillPlacement.set(parseUsagePillPlacement(next))}
+            options={USAGE_PILL_PLACEMENTS.map((option) => ({
+              value: option,
+              label: t(`settings.usagePill.placement.${option}`),
+            }))}
+          />
+        </CompactRow>
+      )}
       <CompactRow label={t("settings.usagePill.shape.title")} rowId="usagePillShape">
         <PillSelect<UsagePillShape>
           value={shape}

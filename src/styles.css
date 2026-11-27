@@ -3203,6 +3203,87 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
   .overlay-scrollbar-thumb::before { background: CanvasText; }
 }
 
+/* Message bar customize mode (D-20261126-014): movable controls jiggle
+   like a phone's home-screen icons. Text field and Send stay outside
+   .composer-movable, so they never tremble. */
+@keyframes composer-movable-jiggle {
+  0%, 100% { transform: rotate(-2.8deg) translateX(-0.5px); }
+  50% { transform: rotate(2.8deg) translateX(0.5px); }
+}
+[data-composer-customize="1"] .composer-movable {
+  position: relative;
+  cursor: grab;
+  animation: composer-movable-jiggle 0.32s ease-in-out infinite;
+}
+[data-composer-customize="1"] .composer-movable:active,
+[data-composer-customize="1"] .composer-movable[aria-grabbed="true"] {
+  cursor: grabbing;
+  animation: none;
+  opacity: 0.85;
+  transform: scale(1.04) rotate(2.8deg);
+  z-index: 2;
+}
+[data-composer-customize="1"] .composer-movable[data-composer-movable="plus"] { animation-delay: 0ms; }
+[data-composer-customize="1"] .composer-movable[data-composer-movable="model"] { animation-delay: 50ms; }
+[data-composer-customize="1"] .composer-movable[data-composer-movable="usage"] { animation-delay: 100ms; }
+[data-composer-customize="1"] .composer-movable[data-composer-movable="voice"] { animation-delay: 150ms; }
+/* Headless capture freeze: mid-jiggle pose so a still PNG shows the tremble. */
+[data-composer-customize="1"][data-composer-jiggle-frame="1"] .composer-movable {
+  animation: none;
+  transform: rotate(2.8deg) translateX(0.5px);
+}
+[data-composer-customize="1"][data-composer-jiggle-frame="1"] .composer-movable[aria-grabbed="true"] {
+  transform: scale(1.04) rotate(2.8deg);
+}
+.composer-movable-handle {
+  pointer-events: none;
+  display: none;
+  color: var(--color-ink-tertiary);
+}
+[data-composer-customize="1"] .composer-movable-handle {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-end: 2px;
+}
+[data-composer-customize="1"] .composer-movable:hover .composer-movable-handle,
+[data-composer-customize="1"] .composer-movable:focus-visible .composer-movable-handle {
+  color: var(--color-ink-secondary);
+}
+/* Reduced motion (system or Apparence > Mouvement Réduit): no tremble,
+   dashed outline so the movable set still reads as rearrangeable. */
+@media (prefers-reduced-motion: reduce) {
+  [data-composer-customize="1"] .composer-movable {
+    animation: none;
+    outline: 1.5px dashed color-mix(in oklab, var(--color-ink-secondary) 55%, transparent);
+    outline-offset: 2px;
+  }
+  [data-composer-customize="1"] .composer-movable[aria-grabbed="true"] {
+    transform: scale(1.04);
+  }
+  [data-composer-customize="1"][data-composer-jiggle-frame="1"] .composer-movable {
+    transform: none;
+  }
+}
+:root[data-reduced-motion="true"] [data-composer-customize="1"] .composer-movable {
+  animation: none;
+  outline: 1.5px dashed color-mix(in oklab, var(--color-ink-secondary) 55%, transparent);
+  outline-offset: 2px;
+}
+:root[data-reduced-motion="true"] [data-composer-customize="1"] .composer-movable[aria-grabbed="true"] {
+  transform: scale(1.04);
+}
+:root[data-reduced-motion="true"] [data-composer-customize="1"][data-composer-jiggle-frame="1"] .composer-movable {
+  transform: none;
+}
+/* Drop zones above/below while rearranging the usage pill. */
+[data-composer-drop] {
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+[data-composer-drop][data-composer-drop-active="1"] {
+  border-color: color-mix(in oklab, var(--color-accent) 70%, var(--color-hairline));
+  background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+}
+
 @keyframes panel-in {
   from { transform: translateX(28px); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }

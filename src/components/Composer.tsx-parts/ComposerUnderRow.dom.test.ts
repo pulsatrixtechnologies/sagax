@@ -8,21 +8,19 @@ import { join } from "node:path";
 
 const read = (name: string) => readFileSync(join(import.meta.dirname, name), "utf8");
 
-describe("the chat bar: the model chip inside the box, the meter under it", () => {
-  it("M-20261126-104: the box's action bar holds the model chip, just before the voice button", () => {
+describe("the chat bar: the model chip inside the box, the meter by placement", () => {
+  it("M-20261126-104: the box's action bar can hold the model chip (orderable, D-20261126-014)", () => {
     const bar = read("ComposerActionBar.tsx");
     const chip = bar.indexOf("data-composer-model-chip");
     expect(chip).toBeGreaterThan(-1);
     expect(bar.slice(chip)).toMatch(/<ModelPicker inComposer/);
-    // after the Stop of a running turn, before the dictation chip and the seat of the voice button
-    expect(chip).toBeGreaterThan(bar.indexOf("data-composer-stop"));
-    expect(chip).toBeLessThan(bar.indexOf("<DictationChip"));
-    expect(chip).toBeLessThan(bar.indexOf("<ComposerVoiceButton"));
     // a narrow box folds it into the + menu's Model row, as before (#4093)
-    expect(bar.slice(chip, chip + 80)).toContain("COMPOSER_WIDE_ONLY");
+    expect(bar).toContain("COMPOSER_WIDE_ONLY");
+    // D-20261127-001: the meter can sit in the action bar after the model
+    expect(bar).toMatch(/meter|ComposerMeter/);
   });
 
-  it("the row under the box holds no model picker any more, only the meter at its end", () => {
+  it("the row under the box holds no model picker; the meter only when placement is below", () => {
     const row = read("ComposerUnderRow.tsx");
     expect(row).toMatch(/data-composer-under-row/);
     expect(row).not.toMatch(/ModelPicker/);

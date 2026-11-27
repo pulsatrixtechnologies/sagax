@@ -1,3 +1,4 @@
+import { useState, type ReactNode } from "react";
 import { t } from "@/lib/i18n";
 import { useChatComposerShellClass } from "@/lib/chat-bubble-width";
 import { useComposerBottomSpaceStyle } from "@/lib/composer-bottom-space";
@@ -23,6 +24,22 @@ import { ComposerMeter } from "../ComposerMeter";
 import { ComposerWarningDialogs } from "./ComposerWarningDialogs";
 import { composeMessage } from "@/lib/composer-attachments";
 import type { MemeAttachmentPick } from "../MemePicker";
+import { composerBarSlots, useComposerBarLayout, type ComposerBarItem } from "@/lib/composer-bar-layout";
+import { usagePillPlacement } from "@/lib/usage-pill-preferences";
+import {
+  ComposerBarContextMenu,
+  ComposerBelowDropZone,
+  ComposerCustomizeChrome,
+  ComposerMovable,
+  useComposerCustomize,
+} from "./ComposerCustomize";
+import { ComposerPlusCluster } from "./ComposerPlusCluster";
+import { ModelPicker } from "../ModelPicker";
+import { COMPOSER_WIDE_ONLY } from "../ComposerControls";
+import { CallButton } from "../CallView";
+import { ComposerVoiceButton } from "../ComposerVoiceButton";
+import { ComposerMicButton } from "../ComposerControls";
+import { noteVoiceModeUsed } from "@/lib/composer-voice";
 
 type AnyProps = Record<string, any>;
 
@@ -127,10 +144,86 @@ export function ComposerShell({
 
   const composerShellClass = useChatComposerShellClass();
   const composerBottomSpaceStyle = useComposerBottomSpaceStyle();
+  const layout = useComposerBarLayout();
+  const placement = usagePillPlacement.use();
+  const customize = useComposerCustomize();
+  const [memesOpen, setMemesOpen] = useState(false);
+  const showMeter = Boolean(bot && !group && !remoteClient);
+  const meter = showMeter ? <ComposerMeter bot={bot} threadId={threadId} /> : null;
+  const slots = composerBarSlots(layout, placement);
+  const plusCluster = (
+    <ComposerPlusCluster
+      locked={locked}
+      bot={bot}
+      group={group}
+      composerRowRef={composerRowRef}
+      fileInput={fileInput}
+      plusItems={plusItems}
+      plusRows={bot && !group && !remoteClient
+        ? (close) => <ComposerFoldedModelRow bot={bot} modelMenu={modelMenu} close={close} />
+        : undefined}
+      onSendMeme={locked ? undefined : sendMeme}
+      memesOpen={memesOpen}
+      setMemesOpen={setMemesOpen}
+      teachChooser={teachChooser}
+      setTeachChooser={setTeachChooser}
+      browserTeach={browserTeach}
+      showInBrowser={showInBrowser}
+      myChromeOffered={myChromeOffered}
+      myChromeRecord={myChromeRecord}
+      setMyChromeRecord={setMyChromeRecord}
+      myChromeTaught={myChromeTaught}
+      setMyChromeTaught={setMyChromeTaught}
+      learnAvailable={learnAvailable}
+      startDraftWith={startDraftWith}
+      engine={engine}
+      goalModeOn={goalModeOn}
+      leaveGoalMode={leaveGoalMode}
+      attachmentPending={attachmentPending}
+    />
+  );
+  const leadingVoice = !locked && !dictating && !voiceNoting ? (
+    <ComposerVoiceButton
+      engine={engine}
+      dictation={<ComposerMicButton onClick={clickMic} onPress={pressMic} onRelease={releaseMic} needsSetup={!engine} engine={engine} shortcut={dictationShortcut} />}
+      conversation={bot && !group ? <CallButton bot={bot} tone={ctaTone} onStart={() => noteVoiceModeUsed("conversation")} /> : undefined}
+    />
+  ) : null;
+  const leadingModel = bot && !group && !remoteClient ? (
+    <span data-composer-model-chip="" className={COMPOSER_WIDE_ONLY}>
+      <ModelPicker inComposer key={`lead-${bot.threadId}`} bot={bot} threadId={threadId}
+        menuControl={modelMenu}
+        fallbackAnchor={() => (composerRowRef.current?.querySelector("[data-composer-plus]") as HTMLElement | null) ?? null} />
+    </span>
+  ) : null;
+  const renderLeadingItem = (id: ComposerBarItem): ReactNode => {
+    const node = id === "plus" ? plusCluster
+      : id === "model" ? leadingModel
+      : id === "usage" ? (placement === "inBar" ? meter : null)
+      : id === "voice" ? leadingVoice
+      : null;
+    if (!node) return null;
+    return (
+      <ComposerMovable key={id} id={id} customizing={customize.customizing} api={customize}>
+        {node}
+      </ComposerMovable>
+    );
+  };
+  const leading = slots.left.map(renderLeadingItem);
+  const plusOnTrailing = slots.right.includes("plus");
+  const aboveMeter = showMeter && placement === "above" ? (
+    <div data-composer-above-row="" className="flex min-h-7 items-center justify-end px-2 pb-1">
+      <ComposerMovable id="usage" customizing={customize.customizing} api={customize}>{meter}</ComposerMovable>
+    </div>
+  ) : null;
+  const belowRow = showMeter && placement === "below" ? (
+    <ComposerUnderRow meter={
+      <ComposerMovable id="usage" customizing={customize.customizing} api={customize}>{meter}</ComposerMovable>
+    } />
+  ) : null;
   return (
     <div className={composerShellClass} style={composerBottomSpaceStyle}>
-      {/* No fill or hairline on this wrapper — those were the black frame
-          in the pill's top corners. The dock overlays the transcript. */}
+      {/* No fill or hairline on this wrapper. The dock overlays the transcript. */}
       <ComposerNotices
         dictationError={dictation.error}
         voiceNoteError={voiceNote.error}
@@ -217,93 +310,110 @@ export function ComposerShell({
             } : undefined}
           />
         )}
-        <ComposerEditor
-          bot={bot}
-          group={group}
-          members={members}
-          storeBots={storeBots}
-          roomPeople={roomPeople}
-          locked={locked}
-          replyTo={replyTo}
-          onClearReply={onClearReply}
-          composerRowRef={composerRowRef}
-          fileInput={fileInput}
-          onPickFiles={(files) => { void pickFiles(files); }}
-          onSendMeme={locked ? undefined : sendMeme}
-          plusItems={plusItems}
-          plusRows={bot && !group && !remoteClient
-            ? (close) => <ComposerFoldedModelRow bot={bot} modelMenu={modelMenu} close={close} />
-            : undefined}
-          teachChooser={teachChooser}
-          setTeachChooser={setTeachChooser}
-          browserTeach={browserTeach}
-          showInBrowser={showInBrowser}
-          myChromeOffered={myChromeOffered}
-          myChromeRecord={myChromeRecord}
-          setMyChromeRecord={setMyChromeRecord}
-          myChromeTaught={myChromeTaught}
-          setMyChromeTaught={setMyChromeTaught}
-          learnAvailable={learnAvailable}
-          startDraftWith={startDraftWith}
-          engine={engine}
-          goalModeOn={goalModeOn}
-          leaveGoalMode={leaveGoalMode}
-          inputRef={inputRef}
-          text={text}
-          onEditText={editText}
-          setCaret={setCaret}
-          setDismissedAt={setDismissedAt}
-          setDismissedSlashAt={setDismissedSlashAt}
-          handlePaste={handlePaste}
-          onKeyDown={onKeyDown}
-          micHold={voice.micHold}
-          dictation={dictation}
-          approval={pinnedApproval}
-          openQuestions={pinnedQuestions}
-          attachmentPending={attachmentPending}
-          recording={recording}
-          busy={busy}
-          channelMode={channelMode}
-          config={config}
-          composerAria={composerAria}
-          below={bot && !group && !remoteClient
-            ? <ComposerUnderRow meter={<ComposerMeter bot={bot} threadId={threadId} />} />
-            : undefined}
-        >
-          <ComposerActionBar
+        <ComposerCustomizeChrome customizing={customize.customizing} onReset={customize.reset} onDone={customize.end}>
+          {customize.customizing && !aboveMeter ? (
+            <div className="mb-1 flex min-h-7 items-center justify-end rounded-xl border border-dashed border-hairline px-2" {...customize.dropZoneProps("above")}>
+              <span className="text-[11px] text-ink-tertiary">{t("composer.customize.dropAbove")}</span>
+            </div>
+          ) : null}
+          <ComposerEditor
             bot={bot}
             group={group}
-            remoteClient={remoteClient}
+            members={members}
+            storeBots={storeBots}
+            roomPeople={roomPeople}
             locked={locked}
-            threadId={threadId}
-            modelMenu={modelMenu}
+            replyTo={replyTo}
+            onClearReply={onClearReply}
             composerRowRef={composerRowRef}
-            dictating={dictating}
-            voiceNoting={voiceNoting}
-            recording={recording}
+            fileInput={fileInput}
+            onPickFiles={(files) => { void pickFiles(files); }}
+            onSendMeme={locked ? undefined : sendMeme}
+            plusItems={plusItems}
+            plusRows={bot && !group && !remoteClient
+              ? (close) => <ComposerFoldedModelRow bot={bot} modelMenu={modelMenu} close={close} />
+              : undefined}
+            teachChooser={teachChooser}
+            setTeachChooser={setTeachChooser}
+            browserTeach={browserTeach}
+            showInBrowser={showInBrowser}
+            myChromeOffered={myChromeOffered}
+            myChromeRecord={myChromeRecord}
+            setMyChromeRecord={setMyChromeRecord}
+            myChromeTaught={myChromeTaught}
+            setMyChromeTaught={setMyChromeTaught}
+            learnAvailable={learnAvailable}
+            startDraftWith={startDraftWith}
             engine={engine}
-            dictationShortcut={dictationShortcut}
-            clickMic={clickMic}
-            pressMic={pressMic}
-            releaseMic={releaseMic}
+            goalModeOn={goalModeOn}
+            leaveGoalMode={leaveGoalMode}
+            inputRef={inputRef}
+            text={text}
+            onEditText={editText}
+            setCaret={setCaret}
+            setDismissedAt={setDismissedAt}
+            setDismissedSlashAt={setDismissedSlashAt}
+            handlePaste={handlePaste}
+            onKeyDown={onKeyDown}
+            micHold={voice.micHold}
             dictation={dictation}
-            voiceNote={voiceNote}
-            sendAfterDictation={sendAfterDictation}
-            ctaTone={ctaTone}
-            retroSkin={retroSkin}
-            send={send}
+            approval={pinnedApproval}
+            openQuestions={pinnedQuestions}
             attachmentPending={attachmentPending}
-            hasContent={hasContent}
-            sendBlock={sendBlock}
+            recording={recording}
             busy={busy}
-            canSteer={canSteer}
-            interruptTurn={interruptTurn}
-            sendLabelFor={sendLabelFor}
-            sendTitleFor={sendTitleFor}
-            nudgePeer={nudgePeer}
-            nudgeGroup={nudgeGroup}
-          />
-        </ComposerEditor>
+            channelMode={channelMode}
+            config={config}
+            composerAria={composerAria}
+            leading={leading}
+            above={aboveMeter}
+            below={!customize.customizing ? belowRow ?? undefined : undefined}
+          >
+            <ComposerActionBar
+              bot={bot}
+              group={group}
+              remoteClient={remoteClient}
+              locked={locked}
+              threadId={threadId}
+              modelMenu={modelMenu}
+              composerRowRef={composerRowRef}
+              dictating={dictating}
+              voiceNoting={voiceNoting}
+              recording={recording}
+              engine={engine}
+              dictationShortcut={dictationShortcut}
+              clickMic={clickMic}
+              pressMic={pressMic}
+              releaseMic={releaseMic}
+              dictation={dictation}
+              voiceNote={voiceNote}
+              sendAfterDictation={sendAfterDictation}
+              ctaTone={ctaTone}
+              retroSkin={retroSkin}
+              send={send}
+              attachmentPending={attachmentPending}
+              hasContent={hasContent}
+              sendBlock={sendBlock}
+              busy={busy}
+              canSteer={canSteer}
+              interruptTurn={interruptTurn}
+              sendLabelFor={sendLabelFor}
+              sendTitleFor={sendTitleFor}
+              nudgePeer={nudgePeer}
+              nudgeGroup={nudgeGroup}
+              meter={placement === "inBar" ? meter : undefined}
+              trailingOrder={slots.right}
+              plusSlot={plusOnTrailing ? plusCluster : undefined}
+              customize={customize}
+            />
+          </ComposerEditor>
+          {customize.customizing ? (
+            <ComposerBelowDropZone customizing api={customize}>
+              {belowRow}
+            </ComposerBelowDropZone>
+          ) : null}
+          <ComposerBarContextMenu anchorRef={composerRowRef} onCustomize={customize.begin} />
+        </ComposerCustomizeChrome>
       </div>
       <ComposerWarningDialogs
         dispatch={dispatch}

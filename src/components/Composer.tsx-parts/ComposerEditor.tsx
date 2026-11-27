@@ -1,8 +1,6 @@
-import { useState, type ClipboardEvent, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import type { ClipboardEvent, KeyboardEvent, ReactNode, RefObject } from "react";
 import type { DictationEngine } from "@/lib/composer-dictation";
 import type { ConfigStatus } from "@/state/store";
-import { ImagePlay, Target } from "lucide-react";
-import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { composerPlaceholder } from "@/lib/composer-placeholder";
 import { ultracodeFromSelection } from "@/lib/ultracode-chrome";
@@ -11,10 +9,8 @@ import type { Bot, Group } from "@/state/store";
 import type { RoomMentionPerson } from "@/lib/person-mentions";
 import { MentionTextarea } from "../MentionTextarea";
 import { ComposerReplyStrip } from "../ReplyQuote";
-import { COMPOSER_NARROW_ONLY, ComposerPlusMenu, type PlusMenuItem } from "../ComposerControls";
-import { MemePicker, type MemeAttachmentPick } from "../MemePicker";
-import { TeachChooserDialog, TeachStepsDialog } from "../TeachStepsDialog";
-import { MyChromeRecordDialog } from "../MyChromeRecordDialog";
+import type { PlusMenuItem } from "../ComposerControls";
+import type { MemeAttachmentPick } from "../MemePicker";
 import type { MyChromeRecordingResult } from "@/lib/my-chrome";
 import { groupComposerHint, jevRoomRoutingOn } from "@/lib/group-routing";
 import type { Message } from "@/state/store";
@@ -71,6 +67,8 @@ export function ComposerEditor({
   onSendMeme,
   plusRows,
   below,
+  above,
+  leading,
   children,
 }: {
   bot?: Bot;
@@ -121,29 +119,23 @@ export function ComposerEditor({
   onSendMeme?: (attachment: MemeAttachmentPick) => void;
   /** The + menu's rows that a narrow capsule folds into it (#4093). */
   plusRows?: (close: () => void) => ReactNode;
-  /** The quiet row under the box (the model chip, the context and usage meter). */
+  /** The quiet row under the box (context / usage when placement is below). */
   below?: ReactNode;
+  /** Row above the box (usage when placement is above). */
+  above?: ReactNode;
+  /** Left-of-field controls (D-20261126-014). Built by ComposerShell. */
+  leading?: ReactNode;
   children?: ReactNode;
 }) {
-  const [memesOpen, setMemesOpen] = useState(false);
-  // The GIF picker opens from the + menu's GIF row and anchors on the +.
-  const plusAnchorRef = {
-    get current() { return composerRowRef.current?.querySelector<HTMLElement>("[data-composer-plus]") ?? null; },
-  };
-  const items: PlusMenuItem[] = onSendMeme
-    ? plusItems.flatMap((item) => item.id === "attach"
-      ? [item, {
-        id: "gif",
-        group: "add" as const,
-        label: t("composer.plus.gif"),
-        icon: <ImagePlay size={16} aria-hidden="true" />,
-        disabled: attachmentPending || locked,
-        onSelect: () => setMemesOpen(true),
-      }]
-      : [item])
-    : plusItems;
+  // plusItems and related props stay on the signature so ComposerShell can
+  // keep passing them while the + cluster is composed outside; unused here.
+  void plusItems; void plusRows; void onSendMeme; void teachChooser; void setTeachChooser;
+  void browserTeach; void showInBrowser; void myChromeOffered; void myChromeRecord;
+  void setMyChromeRecord; void myChromeTaught; void setMyChromeTaught; void learnAvailable;
+  void startDraftWith; void engine; void goalModeOn; void leaveGoalMode;
   return (
     <div className="relative">
+      {above}
       {/* App-ground from the pill midline down, full-bleed. Bubbles may
           tuck into the top half of the radius; they must not show below
           center. End at the dock's pb-12 padding: a viewport-height
@@ -162,7 +154,7 @@ export function ComposerEditor({
         the reference's bar (#4152): the 32 px band, 5 px above and below,
         the hairline. */}
     <div
-      data-tour="composer"
+      data-surface="composer"
       // the message box: a level of the mode menu opened over it stops at the menu's bottom (ModeMenuLevel.tsx)
       data-composer-box=""
       data-ultracode={bot && ultracodeFromSelection(bot.modelSelection) ? "" : undefined}
@@ -184,51 +176,9 @@ export function ComposerEditor({
           e.target.value = "";
         }}
       />
-      {!locked && (
+      {!locked && leading && (
         <div className="composer-band flex flex-wrap items-center gap-2">
-          {/* One + (Grok Bot's): attach and teach a task, the modes
-              (goal, setup), then this conversation's model and approval
-              level as rows that open beside it (2026-10-15/16; the
-              model since 2026-10-18, no workspace row since #743). */}
-          <ComposerPlusMenu items={items} rows={plusRows} rowsClassName={COMPOSER_NARROW_ONLY} />
-          {onSendMeme && (
-            <>
-              <MemePicker
-                open={memesOpen}
-                onClose={() => setMemesOpen(false)}
-                anchorRef={plusAnchorRef}
-                onPick={onSendMeme}
-                onUploadLocal={() => fileInput.current?.click()}
-              />
-            </>
-          )}
-          {teachChooser && bot && <TeachChooserDialog botName={bot.name}
-            anchorRef={{ get current() { return composerRowRef.current?.querySelector<HTMLElement>("[data-composer-plus]") ?? null; } }}
-            onShow={browserTeach ? showInBrowser : undefined}
-            onShowInMyChrome={myChromeOffered ? () => setMyChromeRecord(true) : undefined}
-            onDescribe={learnAvailable ? () => startDraftWith("/learn ") : undefined} onClose={() => setTeachChooser(false)} />}
-          {myChromeRecord && bot && <MyChromeRecordDialog botId={bot.id} botName={bot.name} dictationEngine={engine}
-            anchorRef={{ get current() { return composerRowRef.current?.querySelector<HTMLElement>("[data-composer-plus]") ?? null; } }}
-            onDone={(result) => { setMyChromeTaught(result); setMyChromeRecord(false); }} onClose={() => setMyChromeRecord(false)} />}
-          {myChromeTaught && bot && <TeachStepsDialog botId={bot.id} botName={bot.name} steps={myChromeTaught.steps} recordedAt={myChromeTaught.recordedAt}
-            replay={myChromeTaught.replay} onClose={() => setMyChromeTaught(null)} />}
-          {/* /goal or the + menu's Goal mode starts it; the chip appears
-              only while it is on, says so, and turns it off
-              (2026-10-14: the chip only when it shows the current goal). */}
-          {((group && !group.dm) || !group) && goalModeOn && (
-            <button
-              type="button"
-              data-composer-goal
-              aria-pressed
-              aria-label={t("composer.goal.aria")}
-              title={t("composer.goal.title")}
-              onClick={leaveGoalMode}
-              className="flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border border-accent/35 bg-accent/10 px-3 text-[13px] text-accent transition-colors"
-            >
-              <Target size={14} aria-hidden="true" />
-              /goal
-            </button>
-          )}
+          {leading}
         </div>
       )}
       <MentionTextarea

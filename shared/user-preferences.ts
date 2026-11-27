@@ -122,12 +122,18 @@ export const USER_PREFERENCE_KEYS = [
   // (src/lib/conversation-header.ts, #4536)
   "sagax.conversationHeader.v1",
   // Settings > Appearance > Conversation: the usage pill in the message bar
-  // ("on" | "off"; absent is on), its shape (bars, circles (absent), battery,
-  // dots, text) and the conversation's context indicator ("on" | "off";
-  // absent is on) (src/lib/usage-pill-preferences.ts, #5406)
+  // ("on" | "off"; absent is on), where it sits (inBar (absent), above,
+  // below), its shape (bars, circles (absent), battery, dots, text) and the
+  // conversation's context indicator ("on" | "off"; absent is on)
+  // (src/lib/usage-pill-preferences.ts, #5406, D-20261127-001)
   "sagax.usagePillInBar.v1",
+  "sagax.usagePillPlacement.v1",
   "sagax.usagePillShape.v1",
   "sagax.contextIndicator.v1",
+  // Settings > Appearance > Conversation: order of the message bar's movable
+  // buttons (+, model, usage, voice) and how many sit left of the field
+  // (src/lib/composer-bar-layout.ts, D-20261126-014)
+  "sagax.composerBarLayout.v1",
   // single stream: hours away or quiet before a return opens a fresh topic
   // (shared/fresh-topic.ts; "0" never)
   "sagax.freshTopicAfter.v1",

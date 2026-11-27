@@ -1,5 +1,6 @@
 import type { KeyboardEvent } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { continueListOnEnter } from "@/lib/composer-list-continue";
 import { imeComposing, sendsMessage, type SendKey } from "@/lib/send-key";
 import { isMacPlatform } from "@/lib/keyboard-shortcuts";
 import { escapeCancelsReply } from "@/lib/replies";
@@ -38,6 +39,9 @@ export function useComposerKeyDown({
   micHold,
   pressMic,
   toggleMic,
+  text,
+  editText,
+  setCaret,
 }: {
   commandPickerOpen: boolean;
   mentionPickerOpen: boolean;
@@ -69,6 +73,10 @@ export function useComposerKeyDown({
   micHold: MutableRefObject<{ at: number; started: boolean } | null>;
   pressMic: () => void;
   toggleMic: () => void;
+  /** #5409: the draft and caret, for continuing a numbered or bullet list */
+  text: string;
+  editText: (next: string) => void;
+  setCaret: (caret: number) => void;
 }) {
   return (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // an input method's keys pick its own candidates: its confirming
@@ -158,6 +166,23 @@ export function useComposerKeyDown({
         return;
       }
       send();
+      return;
+    }
+    // #5409: Enter that inserts a newline continues a numbered or bullet list
+    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+      const field = e.currentTarget;
+      const caret = field.selectionStart ?? text.length;
+      const end = field.selectionEnd ?? caret;
+      if (caret === end) {
+        const continued = continueListOnEnter(text, caret);
+        if (continued) {
+          e.preventDefault();
+          editText(continued.value);
+          setCaret(continued.caret);
+          requestAnimationFrame(() => field.setSelectionRange(continued.caret, continued.caret));
+          return;
+        }
+      }
     }
     // handled here: an open page's Escape-to-close leaves it alone
     if (e.key === "Escape" && recording) { e.preventDefault(); dictation.stop(); }

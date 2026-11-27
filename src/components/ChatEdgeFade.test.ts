@@ -48,6 +48,15 @@ describe("ChatEdgeFade", () => {
     expect(read("./GroupView.tsx-parts/GroupRoomTranscriptPane.tsx")).toContain('"pt-14"');
   });
 
+  // #5359: a notice under the floating header was half hidden by the top fade.
+  it("keeps the banner stack below the top fade (#5359)", () => {
+    const banners = readFileSync(new URL("./ChatView.tsx-parts/ChatViewBanners.tsx", import.meta.url), "utf8");
+    expect(banners).toContain("CHAT_EDGE_FADE_PX");
+    expect(banners).toContain("BANNERS_TOP_PAD");
+    expect(banners).toMatch(/52 \+ CHAT_EDGE_FADE_PX\.top/);
+    expect(banners).not.toContain("pt-[52px]");
+  });
+
   it("stays off the flat navy header band of Pulsatrix Light (#3039)", () => {
     // There the header is a band with its own ground, not a pill floating over
     // the transcript: the fade would smear the light chat ground over it.

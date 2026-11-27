@@ -451,12 +451,51 @@ export async function resolveVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, thr
   return { ok: false, cause: "server_engine_not_allowed" };
 }
 
-/** The first key of the order above, for one person (the meeting notetaker). */
+/** The first xAI key of the order above, for a caller that still wants one key. */
 export async function resolveVoiceKey(deps: KeyDeps, speaker: VoiceSpeaker): Promise<VoiceKey> {
   const resolved = await resolveVoiceKeys(deps, speaker);
   if (!resolved.ok) return resolved;
   const first = resolved.keys[0]!;
   return { ok: true, key: first.key, via: first.via, ...(first.payerPrincipalId ? { payerPrincipalId: first.payerPrincipalId } : {}) };
+}
+
+/** Meeting notes speech to text (#5416 point 4): same provider choice and
+ * fallback as dictation (`POST /voice/transcribe`). The person's Settings >
+ * Voice `stt` (and the bot's own) pick who hears first; a refused key gives
+ * way to the next, another provider included. The refusal names that
+ * provider. */
+export async function resolveMeetingTranscriber(
+  deps: VoiceModeDeps,
+  args: { speaker: VoiceSpeaker; target: VoiceTarget },
+): Promise<{ transcribe(audio: Uint8Array, mime: string): Promise<string> } | { error: string }> {
+  // Temporary: still the old xAI-only path. The green commit replaces this
+  // with voiceKeysFor + withVoiceKeys (same as dictation).
+  try { deps.assertWithinBudget?.(); } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+  const key = await resolveVoiceKey(deps, args.speaker);
+  if (!key.ok) {
+    return {
+      error: key.cause === "no_credentials"
+        ? "Meeting notes need speech to text: add an xAI key in Settings > Providers > Models."
+        : `Speech to text is not available for you right now (${key.cause}).`,
+    };
+  }
+  const { speaker, target } = args;
+  return {
+    transcribe: async (audio, mime) => {
+      const heard = await deps.xai.transcribe(audio, mime, key.key);
+      deps.recordUsage({
+        target,
+        speaker,
+        via: key.via,
+        ...(key.payerPrincipalId ? { payerPrincipalId: key.payerPrincipalId } : {}),
+        model: "grok-stt",
+        input: audio.byteLength,
+      });
+      return heard.text;
+    },
+  };
 }
 
 const REFUSAL_TEXT: Record<VoiceModeRefusalCause, string> = {

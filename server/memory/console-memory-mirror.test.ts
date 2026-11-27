@@ -63,17 +63,17 @@ describe("#4461 console memory mirror", () => {
   });
 
   it("builds a console note with bot and written_at for a MEMORY.md entry", () => {
-    const note = noteFromBotEntry({ body: "Melonie is Eve's bot.", date: "2026-10-01" }, "Melonie", "sagax-bot", Date.parse("2026-11-16T12:00:00Z"));
+    const note = noteFromBotEntry({ body: "Nimbus is Eve's bot.", date: "2026-10-01" }, "Nimbus", "sagax-bot", Date.parse("2026-11-16T12:00:00Z"));
     expect(note).toEqual({
       scope: "me",
       topic: "sagax-bot",
-      title: "Melonie is Eve's bot.",
-      body: "Melonie is Eve's bot.",
-      bot: "Melonie",
+      title: "Nimbus is Eve's bot.",
+      body: "Nimbus is Eve's bot.",
+      bot: "Nimbus",
       written_at: "2026-10-01T12:00:00.000Z",
       tags: ["source:sagax", "kind:bot-index"],
     });
-    expect(noteFromBotEntry({ body: "   ", date: "2026-10-01" }, "Melonie")).toBeNull();
+    expect(noteFromBotEntry({ body: "   ", date: "2026-10-01" }, "Nimbus")).toBeNull();
   });
 
   it("builds a team-memory note for scope me with the bot that saved it", () => {
@@ -84,7 +84,7 @@ describe("#4461 console memory mirror", () => {
         detail: "ConnectWise",
         aliases: ["ConnectWise Manage"],
         updatedAt: Date.parse("2026-10-02T08:30:00Z"),
-        source: { botId: "b1", botName: "Melonie", threadId: "t1", at: Date.parse("2026-10-02T08:30:00Z") },
+        source: { botId: "b1", botName: "Nimbus", threadId: "t1", at: Date.parse("2026-10-02T08:30:00Z") },
       },
       undefined,
       "me",
@@ -95,7 +95,7 @@ describe("#4461 console memory mirror", () => {
       topic: "terms",
       title: "CW",
       body: "ConnectWise\n\nAlso: ConnectWise Manage",
-      bot: "Melonie",
+      bot: "Nimbus",
       written_at: "2026-10-02T08:30:00.000Z",
     });
   });
@@ -107,7 +107,7 @@ describe("#4461 console memory mirror", () => {
   it("a solo install (disabled) pushes nothing", async () => {
     const call = vi.fn();
     const mirror = new ConsoleMemoryMirror({ client: { call }, enabled: () => false });
-    const note = noteFromBotEntry({ body: "secret fact", date: "2026-10-01" }, "Melonie")!;
+    const note = noteFromBotEntry({ body: "secret fact", date: "2026-10-01" }, "Nimbus")!;
     expect(await mirror.push(PRINCIPAL, "bot:b1:MEMORY.md:1", note)).toEqual({ ok: false, error: "disabled" });
     expect(call).not.toHaveBeenCalled();
   });
@@ -130,16 +130,16 @@ describe("#4461 console memory mirror", () => {
       enabled: () => true,
       now: () => Date.parse("2026-11-16T12:00:00Z"),
     });
-    const text = `- 2026-10-01 · from chat "Names" · Melonie is Eve's bot.\n- 2026-10-02 · from chat "Names" · Ember is Eve's other bot.\n`;
-    const count = await mirror.bringInMemoryIndex(PRINCIPAL, "bot-melonie", "Melonie", text);
+    const text = `- 2026-10-01 · from chat "Names" · Nimbus is Eve's bot.\n- 2026-10-02 · from chat "Names" · Ember is Eve's other bot.\n`;
+    const count = await mirror.bringInMemoryIndex(PRINCIPAL, "bot-nimbus", "Nimbus", text);
     expect(count).toBe(2);
     expect([...store.values()].map((row) => row.body)).toEqual([
-      "Melonie is Eve's bot.",
+      "Nimbus is Eve's bot.",
       "Ember is Eve's other bot.",
     ]);
-    expect([...store.values()].every((row) => row.bot === "Melonie")).toBe(true);
+    expect([...store.values()].every((row) => row.bot === "Nimbus")).toBe(true);
     // second bring-in is idempotent (same hash)
-    expect(await mirror.bringInMemoryIndex(PRINCIPAL, "bot-melonie", "Melonie", text)).toBe(2);
+    expect(await mirror.bringInMemoryIndex(PRINCIPAL, "bot-nimbus", "Nimbus", text)).toBe(2);
   });
 
   it("a console edit and a console delete reach the bot's local keys", async () => {
@@ -167,7 +167,7 @@ describe("#4461 console memory mirror", () => {
       topic: "sagax-bot",
       title: "Old",
       body: "old body",
-      bot: "Melonie",
+      bot: "Nimbus",
     });
     // seed a second map entry as if n2 was mirrored
     const { readMirrorMap, writeMirrorMap } = await import("./console-memory-mirror.ts");
@@ -198,7 +198,7 @@ describe("#4461 console memory mirror", () => {
       },
     };
     const mirror = new ConsoleMemoryMirror({ client: remote, enabled: () => true });
-    await mirror.push("pr_eve", "k1", noteFromMemoryFile("fact", "Melonie", "sagax-bot", "fact", Date.parse("2026-10-01T00:00:00Z"))!);
+    await mirror.push("pr_eve", "k1", noteFromMemoryFile("fact", "Nimbus", "sagax-bot", "fact", Date.parse("2026-10-01T00:00:00Z"))!);
     expect(seen).toEqual(["POST:pr_eve"]);
     expect(seen.some((line) => line.includes("pr_other"))).toBe(false);
   });

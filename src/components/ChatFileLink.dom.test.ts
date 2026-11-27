@@ -44,7 +44,7 @@ beforeEach(() => {
     revealInFolder,
     localFilesExist: vi.fn(async (paths: string[]) => paths.map((path) => {
       if (path.startsWith("~/Desktop/pelican")) return "/Users/jc/Desktop/pelican-a-velo.html";
-      if (path.includes("Grains EPJ")) return path;
+      if (path.includes("Acme Corp")) return path;
       if (path === "/Users/jc/missing-file.drawio") return null;
       return null;
     })),
@@ -146,10 +146,10 @@ describe("matching a name to the thread's files", () => {
   });
 
   it("treats an absolute local path with spaces as a file path (#5393)", () => {
-    const spaced = "/Users/arioux/Documents/GOX/Onboarding/Grains EPJ inc/pages/GrainsEPJ_Sauvegardes.drawio";
+    const spaced = "/Users/ada/Documents/acme/Onboarding/Acme Corp inc/pages/AcmeCorp_Backups.drawio";
     expect(looksLikeAbsoluteLocalPath(spaced)).toBe(true);
     expect(looksLikeFileName(spaced)).toBe(true);
-    expect(looksLikeFileName("Grains EPJ inc")).toBe(false);
+    expect(looksLikeFileName("Acme Corp inc")).toBe(false);
   });
 
   it("rejects API-style absolute paths without a home or drive prefix", () => {
@@ -160,12 +160,12 @@ describe("matching a name to the thread's files", () => {
 });
 
 describe("absolute local paths in inline code (#5393)", () => {
-  const spaced = "/Users/arioux/Documents/GOX/Onboarding/Grains EPJ inc/pages/GrainsEPJ_Sauvegardes.drawio";
+  const spaced = "/Users/ada/Documents/acme/Onboarding/Acme Corp inc/pages/AcmeCorp_Backups.drawio";
 
   it("links an absolute path with spaces even when the thread never listed it", async () => {
     const host = await render(`Le fichier \`${spaced}\` est prêt.`);
     const link = host.querySelector<HTMLButtonElement>("[data-file-link]");
-    expect(link?.textContent).toContain("GrainsEPJ_Sauvegardes.drawio");
+    expect(link?.textContent).toContain("AcmeCorp_Backups.drawio");
     expect(host.querySelector("code")).toBeNull();
     await act(async () => link!.click());
     expect(openLocalFile).toHaveBeenCalledWith(spaced);
@@ -193,7 +193,7 @@ describe("absolute local paths in inline code (#5393)", () => {
   });
 
   it("opens a Markdown link whose target encodes spaces (#5393)", async () => {
-    const host = await render("[Sauvegardes](/Users/arioux/Documents/GOX/Onboarding/Grains%20EPJ%20inc/pages/GrainsEPJ_Sauvegardes.drawio)");
+    const host = await render("[Sauvegardes](/Users/ada/Documents/acme/Onboarding/Acme%20Corp%20inc/pages/AcmeCorp_Backups.drawio)");
     // Absolute Markdown destinations use the #5018 reveal control.
     expect(host.textContent).toMatch(/Finder|folder|Sauvegardes/i);
   });

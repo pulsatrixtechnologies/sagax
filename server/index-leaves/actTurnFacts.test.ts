@@ -52,4 +52,29 @@ describe("actTurnFacts routine owner (QA 0.8.67 G8)", () => {
     const { host, threadId } = hostWith({ automation: "schedule", bot: false });
     expect(routineOwnerFor(host, threadId)).toBeNull();
   });
+
+  // #5366: a Dispatch hand-off has no person line; the task owner is who acts.
+  it("a peer hand-off without a proven request person acts as the task owner", () => {
+    const threadId = "work";
+    const host = {
+      provenRequestPerson: () => null,
+      linePersonKey: () => null,
+      directRequestOwners: new Map([[threadId, { messageId: "m1", generations: new Set(["g"]) }]]),
+      guestDrivenTurns: new Map(),
+      store: {
+        messagesFor: () => [{ id: "m1", role: "bot" }],
+        botByThread: () => ({ id: "client" }),
+        taskByThread: () => ({ threadId, ownerPrincipalId: "pr_owner", openedBy: { botId: "dispatch", kind: "work", at: 1 } }),
+      },
+      effectiveBotOwner: () => "",
+      turnRoutineLineage: new Set(),
+      turnRoutinePayers: new Map(),
+      LOOPBACK: { trust: "service" },
+      IDENTITY: { kind: "perspicax" },
+      HOSTED_WORKSPACE: false,
+    };
+    const facts = createActTurnFacts(() => host)(threadId, "g");
+    expect(facts.provenPerson).toBe("pr_owner");
+    expect(actorForTurn(facts)).toEqual({ kind: "person", personKey: "pr_owner" });
+  });
 });

@@ -25,15 +25,27 @@ function actTurnFacts(threadId: string, generation: string) {
     : undefined;
   const provenPerson = provenRequestPerson(request, generation, (messageId) =>
     host.linePersonKey(host.store.messagesFor(threadId).find((row) => row.id === messageId)));
+  // #5366: a teammate hand-off has no person line on the request; the task's
+  // owner is who the person asked Dispatch to act for, so deletes and other
+  // settings can run under their Full access instead of "not signed in".
+  const taskOwner = (() => {
+    if (provenPerson) return null;
+    const bot = host.store.botByThread?.(threadId);
+    const task = bot ? host.store.taskByThread?.(bot.id, threadId) : null;
+    const owner = typeof task?.ownerPrincipalId === "string" ? task.ownerPrincipalId.trim().toLowerCase() : "";
+    return owner || null;
+  })();
+  const person = provenPerson ?? taskOwner;
   const rawSender = message?.role === "user" && typeof message.sender?.id === "string" && message.sender.id
     ? message.sender.id
     : undefined;
   return {
     automation: Boolean(request?.automation),
     guest: host.guestDrivenTurns.get(threadId) === generation,
-    requestUsable: Boolean(request?.messageId) && request?.stopped !== true && Boolean(request?.generations.has(generation)),
-    senderUnproven: Boolean(rawSender) && provenPerson === null,
-    provenPerson,
+    requestUsable: Boolean(request?.messageId) && request?.stopped !== true && Boolean(request?.generations.has(generation))
+      || Boolean(taskOwner),
+    senderUnproven: Boolean(rawSender) && person === null,
+    provenPerson: person,
     // #2701: a routine acts for the owner whose credentials it runs on
     routineOwner: request?.automation ? routineOwnerFor(host, threadId) : null,
     sharedServer: host.LOOPBACK.trust === "service" || host.IDENTITY.kind === "perspicax" || host.HOSTED_WORKSPACE

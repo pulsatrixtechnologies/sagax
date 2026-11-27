@@ -2499,10 +2499,22 @@
    shared `--app-topbar-height` (rule below the frame), holding its own ink/panel/hairline/raised tokens so
    every button and pill already built from them (CIRCLE_BUTTON, the bot
    pill, chips) recolors for navy without each needing its own class. */
-[data-skin="pulsatrix-light"] .content-topbar-strip {
+/* The chat strip is 36px whenever the sidebar also reserves that band: on
+   Pulsatrix Light (navy), and when the sidebar logo is on (#5379). */
+.content-topbar-strip {
   flex: none;
+}
+.app-shell-row:has([data-sidebar-logo]) .content-topbar-strip,
+[data-skin="pulsatrix-light"] .content-topbar-strip {
   height: 36px;
+}
+[data-skin="pulsatrix-light"] .content-topbar-strip {
   background: var(--color-sidebar);
+}
+/* Pulsatrix Light, no logo: the title-bar row sits under the same 36px band
+   the chat draws, so its circles land at 46px like the rest (#5379). */
+[data-skin="pulsatrix-light"] [data-sidebar-title-row] {
+  margin-top: 36px;
 }
 [data-skin="pulsatrix-light"] .content-topbar {
   position: relative;

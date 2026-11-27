@@ -2582,6 +2582,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
       // density above (src/lib/sidebar-preferences.ts)
       data-sidebar-layout={viewport === "phone" ? "drawer" : autoRail ? "auto-rail" : "own"}
       data-sidebar-density={density}
+      data-sidebar-logo={showLogo ? "" : undefined}
       data-sidebar-surface=""
       style={density === "icons" ? { width: SIDEBAR_RAIL_WIDTH } : { width: sidebarWidth }}
       className={cn(

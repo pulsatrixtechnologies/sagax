@@ -926,7 +926,7 @@ import { EmailOtpStore } from "./mail/email-otp.ts";
 import { resolveMailSettings } from "./mail/mail-config.ts";
 import { createCaptureMailer, createMailer, type Mailer } from "./mail/mailer.ts";
 import { createMailSettingsRoutes } from "./mail/mail-routes.ts";
-import { createVoiceModeRoutes, isVoiceSocketPath, resolveVoiceKey, resolveVoiceKeys, type VoiceModeDeps, type VoiceSpeaker } from "./voice/voice-mode.ts";
+import { createVoiceModeRoutes, isVoiceSocketPath, resolveMeetingTranscriber, resolveVoiceKey, resolveVoiceKeys, type VoiceModeDeps, type VoiceSpeaker } from "./voice/voice-mode.ts";
 import { soloGrokVoiceToken } from "./voice/grok-account-voice.ts";
 import { orgGrokAccess, type OrgGrokAccess } from "./voice/org-grok-account.ts";
 import { botSpeech, VOICE_MODE_STORAGE_KEY, VOICE_SERVER_ENGINE } from "../shared/voice-mode.ts";
@@ -24492,7 +24492,8 @@ const perspicaxNativeReview = async (text: string, capability: InternalCapabilit
 };
 // Meetings (server/meetings): the bot joins a meeting as a notetaker in a
 // private browser of its own, after the person's tap on the consent card.
-// Transcription takes the voice mode's xAI key path and usage ledger.
+// Transcription follows the person's speech to text choice and fallback
+// (same path as dictation: server/voice/voice-mode.ts resolveMeetingTranscriber).
 const meetingService: MeetingService = createMeetingService({
   store,
   dataDir: DATA_DIR,
@@ -24508,21 +24509,10 @@ const meetingService: MeetingService = createMeetingService({
     const bot = store.bot(botId);
     if (!bot) return { error: "unknown bot" };
     const who: VoiceSpeaker = (speaker as VoiceSpeaker | null | undefined) ?? { principalId: "" };
-    const key = await resolveVoiceKey(voiceModeDeps, who);
-    try { assertWithinBudget(cfg, DATA_DIR); } catch (error) { return { error: error instanceof Error ? error.message : String(error) }; }
-    if (!key.ok) {
-      return { error: key.cause === "no_credentials"
-        ? "Meeting notes need speech to text: add an xAI key in Settings > Providers > Models."
-        : `Speech to text is not available for you right now (${key.cause}).` };
-    }
-    const target = { botId, botName: bot.name, threadId };
-    return {
-      transcribe: async (audio, mime) => {
-        const heard = await grokVoice.transcribe(audio, mime, key.key);
-        voiceModeDeps.recordUsage({ target, speaker: who, via: key.via, ...(key.payerPrincipalId ? { payerPrincipalId: key.payerPrincipalId } : {}), model: "grok-stt", input: audio.byteLength });
-        return heard.text;
-      }
-    };
+    return resolveMeetingTranscriber(voiceModeDeps, {
+      speaker: who,
+      target: { botId, botName: bot.name, threadId },
+    });
   },
   summarize: (botId, threadId, prompt) => startMeetingSummary(botId, threadId, prompt),
   audit: (event) => console.log(`[meeting] ${event.kind} bot=${event.botId} request=${event.requestId}${event.detail ? ` ${event.detail.slice(0, 120)}` : ""}`)

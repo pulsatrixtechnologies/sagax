@@ -177,6 +177,11 @@ covered by `server/meetings/*.test.ts` and `server/routes/meetings.test.ts`:
   the text lives in memory, then in the bot's summary turn. Only
   `DATA_DIR/meetings/live.json` (ids of running meetings, 0600) is kept.
 - The transcript reaches the bot's summary turn behind `wrapUntrusted`.
+- Speech to text follows the person's Settings > Voice `stt` choice (and the
+  bot's own), with the same key order and fallback as dictation
+  (`resolveMeetingTranscriber` in `server/voice/voice-mode.ts`, #5416): xAI,
+  OpenAI and a connected Grok account. A refusal names the provider that was
+  missing. Tests: `server/voice/meeting-notetaker-stt.test.ts`.
 
 ## Voice mode (xAI)
 

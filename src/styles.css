@@ -3121,6 +3121,7 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
 :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]), textarea, select):focus,
 :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]), textarea, select):focus-visible {
   outline: none;
+  outline-offset: 0;
 }
 
 /* In its place a field shows focus on its own border, in the ring's colour.
@@ -5244,9 +5245,13 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
 /* The composer pill draws focus on its own border. A send puts the caret
    back with a programmatic focus(), which matches :focus-visible, and this
    high-contrast outline then frames the text in a light rectangle. The
-   pill's focus-within border stays (#4526). */
+   pill's focus-within border stays (#4526). The hook is data-tour="composer"
+   (ComposerEditor); #5435 briefly renamed it to data-surface and the
+   rectangle came back (#5444 / M-20261127-059). */
+:is(:root[data-contrast="high"], :root) [data-tour="composer"] textarea:focus,
 :is(:root[data-contrast="high"], :root) [data-tour="composer"] textarea:focus-visible {
   outline: none;
+  outline-offset: 0;
   border-color: transparent;
 }
 /* High contrast keeps a clearly visible keyboard focus: the pill itself, not

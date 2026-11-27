@@ -112,11 +112,13 @@ export function SidebarSectionList({
     draggingSectionId,
     dropTarget,
     itemDropId,
+    botDropLine,
     setItemDropId,
     setDraggingSectionId,
     sectionDragRef,
     acceptItemDrag,
     updateSectionDropTarget,
+    updateBotDropLine,
     dropItem,
     dropSection,
     resetSectionDrag,
@@ -170,8 +172,16 @@ export function SidebarSectionList({
             data-sidebar-section-id={id}
             data-sub-team-of={team?.parent}
             style={depth ? { paddingLeft: depth * 12 } : undefined}
-            onDragOver={(event) => { if (!acceptItemDrag(event, id)) updateSectionDropTarget(event, id); }}
-            onDragLeave={(event) => { if (itemDropId === id && !event.currentTarget.contains(event.relatedTarget as Node | null)) setItemDropId(null); }}
+            onDragOver={(event) => {
+              if (!acceptItemDrag(event, id)) updateSectionDropTarget(event, id);
+              else updateBotDropLine(event, id, [...sectionChiefItems, ...sectionBotItems].map((bot) => bot.id));
+            }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                if (itemDropId === id) setItemDropId(null);
+                if (botDropLine?.sectionId === id) updateBotDropLine(event, "", []);
+              }
+            }}
             onDrop={(event) => { if (!dropItem(event, id, team?.key ?? "")) dropSection(event); }}
             data-item-drop={itemDropId === id ? "" : undefined}
             className={cn(
@@ -222,6 +232,9 @@ export function SidebarSectionList({
               >
                 {sectionChiefItems.map((bot) => (
                   <div key={bot.id} {...itemDragProps("bot", bot.id)}>
+                    {botDropLine?.sectionId === id && botDropLine.beforeId === bot.id && (
+                      <div data-sidebar-bot-drop-line="" className="mx-2 h-0.5 rounded-full bg-accent" />
+                    )}
                     {renderBot({
                       bot,
                       density,
@@ -247,6 +260,9 @@ export function SidebarSectionList({
                 ))}
                 {sectionBotItems.map((bot) => (
                   <div key={bot.id} {...itemDragProps("bot", bot.id)}>
+                    {botDropLine?.sectionId === id && botDropLine.beforeId === bot.id && (
+                      <div data-sidebar-bot-drop-line="" className="mx-2 h-0.5 rounded-full bg-accent" />
+                    )}
                     {renderBot({
                       bot,
                       density,
@@ -259,6 +275,9 @@ export function SidebarSectionList({
                     })}
                   </div>
                 ))}
+                {botDropLine?.sectionId === id && botDropLine.beforeId === null && [...sectionChiefItems, ...sectionBotItems].length > 0 && (
+                  <div data-sidebar-bot-drop-line="" className="mx-2 h-0.5 rounded-full bg-accent" />
+                )}
               </div>
             )}
             {dropTarget?.id === id && dropTarget.place === "after" && draggingSectionId !== id && (

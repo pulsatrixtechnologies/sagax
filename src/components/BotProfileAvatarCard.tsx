@@ -17,6 +17,7 @@ import { useRef, useState } from "react";
 
 import { avatarImageFrom, dragMayCarryImage } from "@/lib/avatar-input";
 import { cn } from "@/lib/cn";
+import { generateBotShapeAvatar } from "@/lib/shape-avatar-generate-client";
 
 import type { Bot } from "@/state/store";
 import { useStoreDispatch } from "@/state/store-selector";
@@ -169,6 +170,7 @@ export function BotProfileAvatarCard({
           onPatch={onPatch}
           onClose={() => setDraftOpen(false)}
           onUseMascot={(bot.avatarCrop ?? "mascot") !== "mascot" ? () => onPatch({ avatarCrop: "mascot" }) : undefined}
+          onGenerate={bot.id ? (direction) => generateBotShapeAvatar(bot.id, direction) : undefined}
         />
       )}
     </div>

@@ -205,6 +205,40 @@ export function withPersonalSections<
   return { bots: bots.map((bot) => place(bot, "bot")), groups: groups.map((group) => place(group, "group")) };
 }
 
+/**
+ * Own bots that carry a server team and are not yet in any personal folder
+ * join that folder (created when new). A bot the person already filed, or
+ * left in Unassigned, is left alone: only the first placement follows the
+ * server (#5344). Shared bots stay out (their owner's teams are the owner's).
+ */
+export function absorbOwnedBotSections(
+  prefs: PersonalSections,
+  bots: readonly SeedBot[],
+  viewerId: string,
+): PersonalSections {
+  const me = viewerId.trim().toLowerCase();
+  const own = (bot: SeedBot) => {
+    const owner = bot.ownerUserId?.trim().toLowerCase();
+    return !owner || owner === "local-owner" || owner === me;
+  };
+  const placed = new Set(prefs.sections.flatMap((section) => section.items));
+  let next = prefs;
+  let changed = false;
+  for (const bot of bots) {
+    if (bot.hidden || !own(bot)) continue;
+    const name = bot.section?.trim();
+    if (!name || isReservedSectionName(name) || !validPersonalSectionName(name)) continue;
+    const key = itemKey("bot", bot.id);
+    if (placed.has(key)) continue;
+    const result = assignToPersonalSection(next, key, name);
+    if (!result.ok) continue;
+    next = result.prefs;
+    placed.add(key);
+    changed = true;
+  }
+  return changed ? next : prefs;
+}
+
 // ── the page's store ─────────────────────────────────────────────────────
 
 let session: PersonalSections | null = null;

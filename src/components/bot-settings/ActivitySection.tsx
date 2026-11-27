@@ -53,6 +53,7 @@ import {
   codeWorkWhen,
   codingKept,
   codingRetained,
+  currentChatTask,
   ignoredJobKey,
   codingWork,
   codingWorkEmpty,
@@ -211,11 +212,16 @@ export function CodeWorkList({ work, now, branchActions }: { work: CodingWork; n
 
 /** What Details shows for Coding and Activity, given the loaded list:
  * each section's entries, and whether it is drawn at all. Nothing loaded
- * yet (or a failed first load) draws neither. */
-export function panelSections(list: BotActivityList | null, live?: LiveView, advanced = true, archived?: ReadonlySet<string>, now = Date.now()) {
+ * yet (or a failed first load) draws neither.
+ * #5356: `openThreadId` is the conversation on screen; its own running turn
+ * joins Task even when it is not coding work. */
+export function panelSections(list: BotActivityList | null, live?: LiveView, advanced = true, archived?: ReadonlySet<string>, now = Date.now(), openThreadId?: string) {
   // #2148 (JC, 2026-11-06): a finished coding job stays 24 h, or until the
   // person picks Ignore (`archived` holds the ignored keys too).
-  const coding = list ? codingRetained(list.items, now, archived) : [];
+  const codingJobs = list ? codingRetained(list.items, now, archived) : [];
+  // #5356: the open chat's own turn in Task (owner 2026-11-26)
+  const chatTask = list ? currentChatTask(list.items, openThreadId, live) : [];
+  const coding = [...codingJobs, ...chatTask.filter((item) => !codingJobs.some((job) => job.id === item.id))];
   // The pull requests, branches and commits are for Advanced mode only.
   const work: CodingWork = list && advanced ? codingWork(list.items, archived) : { pullRequests: [], branches: [], commits: [] };
   // Launched agents split by their work: code under Coding, the rest (a
@@ -264,7 +270,7 @@ export function SectionHeader({ icon, title, name, onOpenHistory }: { icon?: Rea
  * keeps the history one click away. A first load that failed
  * is one quiet line; a later failed refresh keeps the last list. Split out so
  * it renders without the fetching. */
-export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunched, error = false, advanced = true, archived, branchActions, showAllHistory = true, onIgnore, codeWork = true, team }: {
+export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunched, error = false, advanced = true, archived, branchActions, showAllHistory = true, onIgnore, codeWork = true, team, openThreadId }: {
   list: BotActivityList | null;
   live?: LiveView;
   actions: CardActions;
@@ -288,8 +294,10 @@ export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunch
   /** #3462: an orchestrator's work; it draws the Coding section, its work
    * rows leading the agent rows' card (#3575), the code work under it. */
   team?: (rows: (lead: ReactNode) => ReactNode) => ReactNode;
+  /** #5356: the conversation on screen; its own running turn joins Task. */
+  openThreadId?: string;
 }) {
-  const sections = panelSections(list, live, advanced, archived, actions.now);
+  const sections = panelSections(list, live, advanced, archived, actions.now, openThreadId);
   const { coding, work, launched } = sections;
   const showCoding = codeWork ? sections.showCoding : coding.length > 0 || launched.length > 0;
   if (team) {
@@ -471,7 +479,7 @@ export function ActivitySectionBody({ bot, panel, codeWork = true, streaming, op
 
   return (
     <>
-      <PanelSections list={list} live={feed.live} actions={actions} onOpenHistory={setAll} onOpenLaunched={openLaunched} error={error} advanced={advanced} archived={archived} branchActions={branchActions} showAllHistory={showAllHistory} onIgnore={ignore} codeWork={codeWork} team={team} />
+      <PanelSections list={list} live={feed.live} actions={actions} onOpenHistory={setAll} onOpenLaunched={openLaunched} error={error} advanced={advanced} archived={archived} branchActions={branchActions} showAllHistory={showAllHistory} onIgnore={ignore} codeWork={codeWork} team={team} openThreadId={bot.threadId} />
       {all && (
         <ActivityListModal
           botId={bot.id}

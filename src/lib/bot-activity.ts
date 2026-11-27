@@ -333,6 +333,7 @@ const VIA_KEYS: Record<NonNullable<BotActivityDetail["via"]>, LocaleKey> = {
   "speaker-key": "botPanel.activity.via.speakerKey",
   server: "botPanel.activity.via.server",
   "org-key": "botPanel.activity.via.orgKey",
+  "org-account": "botPanel.activity.via.orgAccount",
 };
 
 export function activityViaLabel(via: NonNullable<BotActivityDetail["via"]>): string {

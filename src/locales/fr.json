@@ -15933,5 +15933,6 @@
   "voiceMode.provider.busy.namedOther": "{provider} limite le débit de {key}. Ça revient tout seul; les réponses restent dans le chat.",
   "listening.otherProvider": "Une clé {providers} transcrit aussi : ajoutes-en une dans Réglages > Fournisseurs et l'écoute continue avec elle d'elle-même.",
   "image.error.payerDisabled": "Ton accès est coupé dans ton organisation.",
-  "image.error.orgXaiNotGiven": "Ton organisation ne t'a pas donné la génération d'images et de vidéos sur sa clé xAI. Demande à un admin de te la donner dans Perspicax."
+  "image.error.orgXaiNotGiven": "Ton organisation ne t'a pas donné la génération d'images et de vidéos sur sa clé xAI. Demande à un admin de te la donner dans Perspicax.",
+  "botPanel.activity.via.orgAccount": "Compte Grok de l'organisation"
 }

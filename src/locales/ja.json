@@ -3582,5 +3582,6 @@
   "settings.consoleLink": "Perspicax でさらに",
   "settings.intro.general": "アカウント、アプリの見た目、通知、起動。",
   "settings.intro.updates": "このアプリのバージョンとアップデート、情報、詳細オプション。",
-  "settings.intro.security": "ボットが確認なしにできること、プライバシー、キー。"
+  "settings.intro.security": "ボットが確認なしにできること、プライバシー、キー。",
+  "sandboxDesktop.ownComputerNotice": "The bot is already working on this computer. There is nothing to mirror here."
 }

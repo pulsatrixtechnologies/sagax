@@ -53,8 +53,12 @@ vi.mock("@/state/store-selector", () => ({
 }));
 
 vi.mock("../computer/SandboxDesktopModal", () => ({
-  SandboxDesktopModal: (props: { title: string; onClose: () => void }) =>
-    createElement("div", { "data-sandbox-takeover": "", "data-title": props.title },
+  SandboxDesktopModal: (props: { title: string; onClose: () => void; ownComputer?: boolean }) =>
+    createElement("div", {
+      "data-sandbox-takeover": "",
+      "data-title": props.title,
+      "data-own-computer": props.ownComputer ? "" : undefined,
+    },
       createElement("button", { type: "button", "data-takeover-close": "", onClick: props.onClose }, "close")),
 }));
 
@@ -186,6 +190,18 @@ describe("ComputerCard", () => {
     act(() => host!.querySelector<HTMLButtonElement>("[data-computer-card]")!.click());
     expect(host!.querySelector("[data-sandbox-takeover]")).toBeTruthy();
     expect(host!.querySelector("[data-sandbox-takeover]")!.getAttribute("data-title")).toContain("Scout");
+  });
+
+  it("#5355: This computer in the desktop app opens without a remote mirror Take control", () => {
+    (window as { ogb?: { screenFrame: () => Promise<string | null> } }).ogb = {
+      screenFrame: async () => "data:image/png;base64,xx",
+    };
+    const localBot = { ...bot, computer: "local" } as never as Bot;
+    act(() => root!.render(createElement(ComputerCard, { bot: localBot, onPatch: vi.fn() })));
+    act(() => host!.querySelector<HTMLButtonElement>("[data-computer-card]")!.click());
+    const takeover = host!.querySelector("[data-sandbox-takeover]")!;
+    expect(takeover).toBeTruthy();
+    expect(takeover.hasAttribute("data-own-computer")).toBe(true);
   });
 
   it("patches the bot computer from the row's right-click menu", () => {

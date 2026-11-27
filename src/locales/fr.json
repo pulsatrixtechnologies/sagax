@@ -4785,6 +4785,7 @@
   "sandboxDesktop.show": "Afficher le bureau",
   "sandboxDesktop.stopped": "Le bureau s'est arrêté (ton environnement serveur était inactif). Affiche-le de nouveau pour le redémarrer.",
   "sandboxDesktop.takeControl": "Prendre le contrôle",
+  "sandboxDesktop.ownComputerNotice": "Le bot travaille déjà sur cet ordinateur. Il n'y a pas de miroir distant ici.",
   "sandboxDesktop.title": "Bureau de ton environnement serveur",
   "sandboxDesktop.unavailable": "Le bureau n'est pas disponible pour le moment. Réessaye dans un instant.",
   "sandboxDesktop.controlMode": "Qui conduit l'ordinateur",

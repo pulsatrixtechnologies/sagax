@@ -3466,5 +3466,6 @@
   "settings.consoleLink": "在 Perspicax 中查看更多",
   "settings.intro.general": "你的帳戶、應用程式外觀、通知方式和啟動方式。",
   "settings.intro.updates": "此應用程式的版本和更新、關於以及進階選項。",
-  "settings.intro.security": "你的機器人無需詢問即可做的事、你的隱私和你的金鑰。"
+  "settings.intro.security": "你的機器人無需詢問即可做的事、你的隱私和你的金鑰。",
+  "sandboxDesktop.ownComputerNotice": "The bot is already working on this computer. There is nothing to mirror here."
 }

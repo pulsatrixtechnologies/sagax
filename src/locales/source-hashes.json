@@ -1803,7 +1803,8 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da"
     },
     "es": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -3589,7 +3590,8 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da"
     },
     "fr": {
       "model.specialAccess": "a7f5116bb6f723bcabbb5a215a5906f0d0366259367b3294406a0a21ce5f84fb",
@@ -7532,6 +7534,7 @@
       "sandboxDesktop.show": "84180ebd70c6115b64f76651852433527ede130814dcf156f669f2251140028f",
       "sandboxDesktop.stopped": "9e50b39c82a686acbf3b3a216956f261ab7682383c1b93ea0db9142b7d400a1e",
       "sandboxDesktop.takeControl": "fbf728c3c3bbd9166ea4557fb267479b842217ac50573a3d11ed1b2ce6b354cb",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da",
       "sandboxDesktop.title": "b74077e899cb6276bc86ecfe672d163f1b0ca89255aef40b44163aca4c75c253",
       "sandboxDesktop.unavailable": "e1c080272ed1466df6260580692f0809351a90d76e57548f28cb2b5a77402902",
       "sandboxDesktop.watching": "fbc594054d512e5d877fd840baa6f8742d5891de3f488306a6b915de395f5707",
@@ -21246,7 +21249,8 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da"
     },
     "ja": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -24832,7 +24836,8 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da"
     },
     "pt-br": {
       "achievements.panel.all": "e2adb0c3b5f28a7c9d5bdac240382201b39376dd11671aedc93e8a73b6468f19",
@@ -27392,7 +27397,8 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da"
     },
     "uk": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -29652,7 +29658,8 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da"
     },
     "zh": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -32170,7 +32177,8 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da"
     },
     "zh-tw": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -35640,7 +35648,8 @@
       "listening.couldNotStart": "e5a6ecaf4844bc89dff310d6876813597d3afef233ce7b384a58fa00f8ab32a7",
       "listening.computerDenied": "32857acf494293d099510d6f0c2ce742078220d9f734c8f84f9748dfc3f5b26d",
       "listening.openSettings": "ca381c1e76e681b6c18fa984a2e2fda6ed4a9f28e914f539db34a6dcb3737149",
-      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311"
+      "listening.unreadable": "004ef692dce6e15ebd73b1a1660464fd1e9c0372164f9d8f00e6c18347de3311",
+      "sandboxDesktop.ownComputerNotice": "251c0054320ae564be672f88bf851b25efb806104643eb5e102788eb7bc2f6da"
     }
   }
 }

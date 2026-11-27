@@ -2556,5 +2556,6 @@
   "listening.back": "Voltar para a escuta",
   "listening.couldNotStart": "Não foi possível começar a ouvir: {error}",
   "listening.computerDenied": "O som do computador precisa da permissão do sistema de gravação de tela e áudio do sistema.",
-  "listening.openSettings": "Abrir ajustes"
+  "listening.openSettings": "Abrir ajustes",
+  "sandboxDesktop.ownComputerNotice": "The bot is already working on this computer. There is nothing to mirror here."
 }

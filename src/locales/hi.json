@@ -1772,5 +1772,6 @@
   "listening.back": "सुनने पर वापस जाएं",
   "listening.couldNotStart": "सुनना शुरू नहीं हो सका: {error}",
   "listening.computerDenied": "कंप्यूटर की आवाज़ के लिए सिस्टम की स्क्रीन और सिस्टम ऑडियो रिकॉर्डिंग अनुमति चाहिए।",
-  "listening.openSettings": "सेटिंग्स खोलें"
+  "listening.openSettings": "सेटिंग्स खोलें",
+  "sandboxDesktop.ownComputerNotice": "The bot is already working on this computer. There is nothing to mirror here."
 }

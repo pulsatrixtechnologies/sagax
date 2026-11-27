@@ -2256,5 +2256,6 @@
   "listening.back": "Назад до прослуховування",
   "listening.couldNotStart": "Не вдалося почати прослуховування: {error}",
   "listening.computerDenied": "Для звуку комп'ютера потрібен системний дозвіл на запис екрана й системного звуку.",
-  "listening.openSettings": "Відкрити налаштування"
+  "listening.openSettings": "Відкрити налаштування",
+  "sandboxDesktop.ownComputerNotice": "The bot is already working on this computer. There is nothing to mirror here."
 }

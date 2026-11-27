@@ -113,6 +113,7 @@ export class BotCreationDraft {
       requires: input.requires === undefined ? previous?.requires : input.requires ?? undefined,
       precheck: input.precheck === undefined ? previous?.precheck : input.precheck ?? undefined,
       access: input.access === undefined ? previous?.access : input.access ?? undefined,
+      outcome: input.outcome === undefined ? previous?.outcome : input.outcome ?? undefined,
       enabled: input.enabled ?? previous?.enabled ?? true, target: "bot", botId: this.id,
       timeoutMinutes: input.timeoutMinutes ?? undefined,
       postResults: input.postResults ?? undefined,

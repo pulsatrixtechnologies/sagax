@@ -154,7 +154,7 @@ describe("GET /api/team-board", () => {
 
   it("refuses a caller with no person", async () => {
     const board = world();
-    const anon = await serve(board, { kind: "none" } as RequestAuth);
+    const anon = await serve(board, { kind: "none" } as unknown as RequestAuth);
     const answer = await anon.get();
     expect(answer.status).toBe(401);
     expect(answer.body.code).toBe("sign_in");

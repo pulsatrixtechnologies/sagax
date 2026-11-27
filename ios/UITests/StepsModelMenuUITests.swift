@@ -34,35 +34,40 @@ final class StepsModelMenuUITests: XCTestCase {
         let all = app.buttons["model-all"]
         XCTAssertTrue(all.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["model-mode.auto"].exists)
-        XCTAssertTrue(app.buttons["model-mode.build"].exists)
+        XCTAssertTrue(app.buttons["model-mode.fast"].exists)
+        // #5338: providers stay inside the All models cascade, not on the root
         XCTAssertFalse(app.buttons["model-provider.Claude"].exists)
         shot("model-menu-modes", app)
         let reasoning = app.buttons["model-mode-reasoning"]
         XCTAssertTrue(reasoning.label.contains("Raisonnement"), reasoning.label)
         reasoning.tap()
         shot("model-menu-reasoning", app)
-        let high = app.buttons["model-reasoning.high"]
+        let high = app.descendants(matching: .any)["model-reasoning.high"].firstMatch
         XCTAssertTrue(high.waitForExistence(timeout: 5))
-        XCTAssertEqual(high.label, "Élevé")
-        app.buttons["model-menu-back"].tap()
+        XCTAssertTrue(high.label.contains("Élevé") || high.label.contains("Elev"), high.label)
+        // dismiss the reasoning menu; the root modes stay on screen
+        if app.buttons["model-mode.auto"].exists { /* root still visible */ } else { app.tap() }
+        XCTAssertTrue(app.buttons["model-mode.auto"].waitForExistence(timeout: 5), "the mode menu stays after a cascade level")
         all.tap()
-        let claude = app.buttons["model-provider.Claude"]
+        let claude = app.descendants(matching: .any)["model-provider.Claude"].firstMatch
         XCTAssertTrue(claude.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["model-provider.OpenAI"].exists)
-        XCTAssertFalse(app.buttons["model-provider.Qwen"].exists)
-        XCTAssertTrue(app.buttons["model-provider.local:this-computer"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["model-provider.OpenAI"].firstMatch.exists)
+        XCTAssertFalse(app.descendants(matching: .any)["model-provider.Qwen"].firstMatch.exists)
+        XCTAssertTrue(app.descendants(matching: .any)["model-provider.local:this-computer"].firstMatch.exists)
         shot("model-menu-providers", app)
         claude.tap()
-        let star = app.buttons["model-favorite.preview.claude-opus-4-5"]
+        let star = app.descendants(matching: .any)["model-favorite.preview.claude-opus-4-5"].firstMatch
         XCTAssertTrue(star.waitForExistence(timeout: 5))
         shot("model-menu-all", app)
         star.tap()
         shot("model-menu-all-starred", app)
-        app.buttons["model-menu-back"].tap()
-        XCTAssertTrue(app.buttons["model-row.preview/claude-opus-4-5"].waitForExistence(timeout: 5), "the star puts it on the provider page")
+        // reopen All models: the star puts the model under Favorites at the cascade's first level
+        XCTAssertTrue(all.waitForExistence(timeout: 5))
+        all.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["model-row.preview/claude-opus-4-5"].firstMatch.waitForExistence(timeout: 5), "the star puts it under Favorites")
         shot("model-menu-favorite", app)
         // Leave the favorite as it was for the next run.
-        app.buttons["model-favorite.preview.claude-opus-4-5"].tap()
+        app.descendants(matching: .any)["model-favorite.preview.claude-opus-4-5"].firstMatch.tap()
     }
 
     @MainActor

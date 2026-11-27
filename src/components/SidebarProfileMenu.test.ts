@@ -177,7 +177,7 @@ describe("outward links", () => {
 describe("profileMenuItems (the reference design's account menu, 2026-10-16)", () => {
   const noop = () => {};
   const handlers = {
-    onAutomations: noop, onMemory: noop, onTeamMap: noop, onRemoteSessions: noop, onSettings: noop, onAchievements: noop, onShortcuts: noop, onReleaseNotes: noop, onAbout: noop,
+    onAutomations: noop, onMemory: noop, onTeamMap: noop, onRemoteSessions: noop, onSettings: noop, onCustomize: noop, onAchievements: noop, onShortcuts: noop, onReleaseNotes: noop, onAbout: noop,
     onViewUsage: noop, onSwitch: noop, onRename: noop, onAddOrganization: noop, onSignOut: noop, onMobile: noop,
   };
   const items = (patch: Partial<Parameters<typeof profileMenuItems>[0]> = {}) => profileMenuItems({
@@ -198,8 +198,12 @@ describe("profileMenuItems (the reference design's account menu, 2026-10-16)", (
 
   const toolsOf = (menu: ReturnType<typeof items>) => menu.find((entry) => entry.key === "tools")!;
 
-  it("is Usage, Help, Settings, then Tools, in that order", () => {
-    expect(items().map((entry) => entry.key)).toEqual(["usage", "help", "settings", "tools"]);
+  it("is Usage, Help, Settings, Customize, then Tools, in that order", () => {
+    expect(items().map((entry) => entry.key)).toEqual(["usage", "help", "settings", "customize", "tools"]);
+  });
+
+  it("hides the Usage row when hideAccountUsage is set (#5443)", () => {
+    expect(items({ hideAccountUsage: true }).map((entry) => entry.key)).toEqual(["help", "settings", "customize", "tools"]);
   });
 
   it("puts Automations, Memory, Team map, Remote sessions and Achievements under Tools, in that order", () => {

@@ -20,6 +20,7 @@ import { MIN_QUERY } from "../SearchResults";
 import type { SidebarDensity } from "@/lib/sidebar-preferences";
 import { GENERAL_SECTION_ID, isAutomaticSidebarSection, sectionLabel } from "./helpers";
 import type { MenuState, SectionListDrag, SelectionFor, TeamMapEntry } from "./types";
+import { UiMovable } from "@/components/ui-customize";
 
 type BotRowProps = {
   bot: Bot;
@@ -73,6 +74,7 @@ export function SidebarSectionList({
   drag,
   renderBot,
   renderGroup,
+  customizeSections = false,
 }: {
   density: SidebarDensity;
   quietRows: boolean;
@@ -106,6 +108,8 @@ export function SidebarSectionList({
   drag: SectionListDrag;
   renderBot: (props: BotRowProps) => ReactNode;
   renderGroup: (props: GroupRowProps) => ReactNode;
+  /** Whole-app customize mode: wrap each section block as a movable component. */
+  customizeSections?: boolean;
 }) {
   const renameStarted = useCallback(() => setRenameBotId(null), [setRenameBotId]);
   const {
@@ -166,23 +170,28 @@ export function SidebarSectionList({
               sectionGroupItems,
             )
           : undefined;
-        return (
+        const sectionBlock = (
           <div
-            key={id}
+            key={customizeSections ? undefined : id}
             data-sidebar-section-id={id}
             data-sub-team-of={team?.parent}
             style={depth ? { paddingLeft: depth * 12 } : undefined}
             onDragOver={(event) => {
+              if (customizeSections) return;
               if (!acceptItemDrag(event, id)) updateSectionDropTarget(event, id);
               else updateBotDropLine(event, id, [...sectionChiefItems, ...sectionBotItems].map((bot) => bot.id));
             }}
             onDragLeave={(event) => {
+              if (customizeSections) return;
               if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
                 if (itemDropId === id) setItemDropId(null);
                 if (botDropLine?.sectionId === id) updateBotDropLine(event, "", []);
               }
             }}
-            onDrop={(event) => { if (!dropItem(event, id, team?.key ?? "")) dropSection(event); }}
+            onDrop={(event) => {
+              if (customizeSections) return;
+              if (!dropItem(event, id, team?.key ?? "")) dropSection(event);
+            }}
             data-item-drop={itemDropId === id ? "" : undefined}
             className={cn(
               "flex flex-col gap-1",
@@ -284,6 +293,18 @@ export function SidebarSectionList({
               <div className="mx-2 h-0.5 rounded-full bg-accent" />
             )}
           </div>
+        );
+        if (!customizeSections) return sectionBlock;
+        return (
+          <UiMovable
+            key={id}
+            zoneId="sidebar"
+            id={id}
+            label={sectionDisplayName}
+            className="block w-full"
+          >
+            {sectionBlock}
+          </UiMovable>
         );
       })}
 

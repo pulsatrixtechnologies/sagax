@@ -1056,6 +1056,7 @@ export function RecordCard({ record, label, kindName, product, read, window: lay
     return providers(
         <RecordWindow
           type={type}
+          frameRef={wrap}
           data={data}
           busy={card ? loading : !miss}
           head={<>{head(!card && !miss, narrowHead ? chips.slice(0, 1) : chips)}{title ?? (!card && !miss ? <div className="shrink-0 px-6 pb-5 pt-2.5"><Bar className="h-7 w-3/5" /></div> : <div className="pb-4" />)}</>}

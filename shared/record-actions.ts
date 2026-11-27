@@ -131,7 +131,7 @@ export function parseRecordAction(body: unknown): RecordAction | null {
   const raw = body as { action?: unknown; id?: unknown; set?: unknown };
   if (!isRecordActionName(raw.action)) return null;
   const shape = SHAPES[raw.action];
-  const id = raw.id === undefined ? undefined : typeof raw.id === "string" && ENTRY_ID.test(raw.id) ? raw.id : null;
+  const id = raw.id === undefined ? undefined : typeof raw.id === "string" && ENTRY_ID.test(raw.id) && !/^\.+$/.test(raw.id) ? raw.id : null;
   if (id === null || Boolean(id) !== shape.id) return null;
   const given = raw.set === undefined ? {} : raw.set;
   if (!given || typeof given !== "object" || Array.isArray(given)) return null;
@@ -146,6 +146,8 @@ export function parseRecordAction(body: unknown): RecordAction | null {
   }
   if ((shape.required ?? []).some((key) => set[key] === undefined)) return null;
   if (shape.some && !Object.keys(set).length) return null;
+  // a planned entry changed says what changes beside its kind
+  if (raw.action === "schedule.update" && Object.keys(set).every((key) => key === "kind")) return null;
   if (set.start !== undefined && set.end !== undefined && Date.parse(String(set.end)) < Date.parse(String(set.start))) return null;
   return { action: raw.action, ...(id ? { id } : {}), set };
 }

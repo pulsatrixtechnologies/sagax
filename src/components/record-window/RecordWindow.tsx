@@ -18,7 +18,7 @@
 // window (`placeRecordWindow`) and the frame sits at its own place inside.
 // Painted from the popover tokens and the menu family's surface, as the
 // opened card was; nothing here writes a colour of its own.
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type Ref } from "react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { RECORD_CARD_MARGIN, RECORD_CARD_MIN, keepRecordWindow, recordWindowBox, recordWindowView, useRecordWindow, type RecordWindowBox } from "@/lib/record-window-layout";
@@ -132,10 +132,12 @@ export interface RecordWindowProps {
   /** the data attributes of the record's card (its layout, its state), kept on the frame */
   data?: Record<string, string>;
   className?: string;
+  /** the frame's box (the container a kind's narrow layout reads) */
+  frameRef?: Ref<HTMLDivElement>;
 }
 
 /** The frame. In a test renderer with no layout the box is the default one. */
-export function RecordWindow({ type, head, tabs, children, foot, busy, data, className }: RecordWindowProps) {
+export function RecordWindow({ type, head, tabs, children, foot, busy, data, className, frameRef }: RecordWindowProps) {
   const kept = useRecordWindow(type);
   const [view, setView] = useState(recordWindowView);
   const [live, setLive] = useState<RecordWindowBox | null>(null);
@@ -165,6 +167,7 @@ export function RecordWindow({ type, head, tabs, children, foot, busy, data, cla
   };
   return (
     <div
+      ref={frameRef}
       className={cn("@container absolute flex flex-col overflow-hidden rounded-xl popover-surface menu-surface [background-color:var(--float-fill)] [box-shadow:var(--float-shadow)] text-[15px] leading-[22px] text-popover-ink", className)}
       style={style}
       data-record-window={type}

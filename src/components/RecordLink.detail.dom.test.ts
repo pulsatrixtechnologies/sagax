@@ -255,6 +255,83 @@ describe("the ticket window through its chip", () => {
     expect(card()!.querySelector("[data-record-composer]")).not.toBeNull();
   });
 
+  it("never writes a note twice: a retry after a refused time entry sends the time only", async () => {
+    let refuseTime = true;
+    detail = ((base) => (url, method, body) => {
+      if (method === "POST") {
+        const ask = JSON.parse(body!);
+        if (ask.action === "time.add" && refuseTime) return json({ state: "unavailable", code: "action_unknown" }, 400);
+        return json({ updated: true });
+      }
+      return base(url, method, body);
+    })(detail);
+    await open();
+    await act(async () => card()!.querySelector<HTMLElement>("[data-record-note-new]")!.click());
+    const zone = card()!.querySelector<HTMLFormElement>("[data-record-composer]")!;
+    await act(async () => setValue(zone.querySelector("textarea")!, "Diagnosis"));
+    await act(async () => zone.querySelector<HTMLElement>("[data-record-composer-addtime]")!.click());
+    await act(async () => setValue(zone.querySelector<HTMLInputElement>("[data-record-composer-time] input")!, "0.5"));
+    await act(async () => zone.querySelector<HTMLElement>("[data-record-composer-send]")!.click());
+    await settle();
+    expect(writes().map((one) => one.action)).toEqual(["note.add", "time.add"]);
+    expect(zone.querySelector('[role="alert"]')!.textContent).toBe("Your console does not take this change yet.");
+    expect(zone.querySelector("[data-record-composer-partial]")).not.toBeNull();
+    refuseTime = false;
+    await act(async () => zone.querySelector<HTMLElement>("[data-record-composer-send]")!.click());
+    await settle();
+    expect(writes().map((one) => one.action)).toEqual(["note.add", "time.add", "time.add"]);
+    expect(card()!.querySelector("[data-record-composer]")).toBeNull();
+  });
+
+  it("marks an entry done once at a time and says why when it is refused", async () => {
+    let answer!: (response: Response) => void;
+    detail = ((base) => (url, method, body) => {
+      const section = url.searchParams.get("section");
+      if (method === "POST") return new Promise<Response>((done) => { answer = done; }) as unknown as Response;
+      if (section === "activities") return json({ lines: [{ id: "20", subject: "Call back", type: "Task", date: "Dec 2", dateStart: "2026-12-02T14:00:00Z", assigned: "Noor Haddad", done: false }] });
+      return base(url, method, body);
+    })(detail);
+    await open();
+    await act(async () => tab("plan").click());
+    await settle();
+    const button = () => card()!.querySelector<HTMLButtonElement>('[data-record-mark-done="done"]')!;
+    await act(async () => button().click());
+    expect(button().disabled).toBe(true);
+    await act(async () => button().click());
+    expect(writes()).toHaveLength(1);
+    await act(async () => answer(json({ state: "unavailable", code: "action_unknown" }, 400)));
+    await settle();
+    expect(button().disabled).toBe(false);
+    expect(button().parentElement!.querySelector('[role="alert"]')!.textContent).toBe("Your console does not take this change yet.");
+  });
+
+  it("changes a time entry's note without touching a billing the console did not send, and says why a billing change is refused", async () => {
+    detail = ((base) => (url, method, body) => {
+      const section = url.searchParams.get("section");
+      if (method === "POST") return JSON.parse(body!).set?.billing ? json({ state: "unavailable", code: "action_unknown" }, 400) : json({ updated: true });
+      if (section === "time") return json({ lines: [
+        { id: "81", start: "2026-11-26T21:10:00Z", member: "Noor Haddad", hours: "0.5 h", hours_value: 0.5, note: "Invitation sent" },
+        { id: "82", start: "2026-11-25T21:10:00Z", member: "Noor Haddad", hours: "1 h", hours_value: 1, billing: "B", note: "Follow-up" },
+      ], next: null });
+      return base(url, method, body);
+    })(detail);
+    await open();
+    await act(async () => tab("time").click());
+    await settle();
+    const first = card()!.querySelector<HTMLElement>('[data-record-entry="time"]')!;
+    await act(async () => first.querySelector<HTMLElement>("[data-record-edit]")!.click());
+    const form = card()!.querySelector<HTMLFormElement>('[data-record-time-form="time"]')!;
+    await act(async () => setValue(form.querySelector("textarea")!, "Invitation sent again"));
+    await act(async () => form.querySelector<HTMLElement>("[data-record-form-submit]")!.click());
+    await settle();
+    expect(writes()).toEqual([{ action: "time.update", id: "81", set: { note: "Invitation sent again" } }]);
+    const second = [...card()!.querySelectorAll<HTMLElement>('[data-record-entry="time"]')][1]!;
+    await act(async () => second.querySelector<HTMLElement>("[data-billing]")!.click());
+    await act(async () => card()!.querySelector<HTMLElement>('[data-billing-choice="NC"]')!.click());
+    await settle();
+    expect(card()!.querySelector('[data-record-entry="time"] [role="alert"], [data-record-day] [role="alert"]')!.textContent).toBe("Your console does not take this change yet.");
+  });
+
   it("downloads an attachment through the authenticated detail path", async () => {
     const { downloadBlob } = await import("@/lib/diagram-view");
     detail = (url) => url.searchParams.get("section") === "download" && url.searchParams.get("field") === "77"

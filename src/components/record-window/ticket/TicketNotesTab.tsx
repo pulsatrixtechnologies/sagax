@@ -13,7 +13,7 @@ import { RecordMarkdown } from "@/components/RecordMarkdown";
 import { RECORD_ACTION, RECORD_PRIMARY, RecordAvatar, RecordEntryForm, RecordRowActions } from "@/components/record-window/RecordBlocks";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { attachmentOf, RecordActionRefused, type TicketNote } from "@/lib/record-detail";
+import { actionFailure, attachmentOf, type TicketNote } from "@/lib/record-detail";
 import type { RecordDetail } from "@/components/useRecordDetail";
 import { RECORD_NOTE_KINDS, RECORD_NOTE_MAX, RECORD_BILLING, type RecordNoteKind } from "../../../../shared/record-actions";
 import { BillingTag, NoteKindTag, RecordName } from "./parts";
@@ -110,18 +110,31 @@ function Composer({ initial, detail, onDone }: { initial: RecordNoteKind; detail
   const id = useId();
   const hoursValue = Number(hours.replace(",", "."));
   const ready = text.trim().length > 0 && (!withTime || (Number.isFinite(hoursValue) && hoursValue > 0 && hoursValue <= 24));
+  // what this zone already wrote: a retry after a failed file or time never writes the note again
+  const [written, setWritten] = useState<{ note?: boolean; file?: boolean; time?: boolean }>({});
   const send = async () => {
     if (!ready || busy) return;
     setBusy(true);
     setError("");
     try {
-      await detail.write({ action: "note.add", set: { kind, text } });
+      // the file is read and checked before anything is written
+      const attachment = file && !written.file ? await attachmentOf(file) : undefined;
+      if (!written.note) {
+        await detail.write({ action: "note.add", set: { kind, text } });
+        setWritten((now) => ({ ...now, note: true }));
+      }
       // the file and the time go with the note, each its own write
-      if (file) await detail.write({ action: "attachment.add", set: await attachmentOf(file) });
-      if (withTime) await detail.write({ action: "time.add", set: { hours: hoursValue, note: text.slice(0, 4000), billing } });
+      if (attachment) {
+        await detail.write({ action: "attachment.add", set: attachment });
+        setWritten((now) => ({ ...now, file: true }));
+      }
+      if (withTime && !written.time) {
+        await detail.write({ action: "time.add", set: { hours: hoursValue, note: text.slice(0, 4000), billing } });
+        setWritten((now) => ({ ...now, time: true }));
+      }
       onDone();
     } catch (failure) {
-      setError(failure instanceof RecordActionRefused ? failure.message : t("recordWindow.saveFailed"));
+      setError(actionFailure(failure));
     } finally {
       setBusy(false);
     }
@@ -132,14 +145,14 @@ function Composer({ initial, detail, onDone }: { initial: RecordNoteKind; detail
     <form className="flex min-w-0 flex-col gap-2 rounded-xl bg-popover-field p-3" data-record-composer="" onSubmit={(event) => { event.preventDefault(); void send(); }}
       onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onDone(); } }}>
       <label htmlFor={`${id}-text`} className="sr-only">{placeholder}</label>
-      <textarea id={`${id}-text`} autoFocus rows={3} maxLength={RECORD_NOTE_MAX} value={text} dir="auto" placeholder={placeholder}
+      <textarea id={`${id}-text`} autoFocus rows={3} maxLength={RECORD_NOTE_MAX} value={text} dir="auto" placeholder={placeholder} readOnly={written.note}
         className="min-h-20 w-full resize-y bg-transparent text-[15px] leading-[22px] text-popover-ink placeholder:text-popover-placeholder focus-visible:outline-none [field-sizing:content]"
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void send(); } }} />
       {withTime && (
         <div className="flex min-w-0 flex-wrap items-center gap-2" data-record-composer-time="">
           <label className="flex items-center gap-2 text-[13px] text-popover-ink-secondary">{t("recordWindow.time.hours")}
-            <input type="number" inputMode="decimal" min={0.01} max={24} step={0.05} value={hours} onChange={(event) => setHours(event.target.value)}
+            <input type="number" inputMode="decimal" min={0.01} max={24} step="any" value={hours} onChange={(event) => setHours(event.target.value)}
               className="w-24 rounded-lg bg-popover px-2.5 py-1.5 text-[14px] text-popover-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" />
           </label>
           <BillingTag billing={billing} onChange={async (next) => setBilling(next)} />
@@ -148,7 +161,7 @@ function Composer({ initial, detail, onDone }: { initial: RecordNoteKind; detail
       {file && <span className="text-[13px] leading-[18px] text-popover-ink-secondary" data-record-composer-file="">{t("recordWindow.notes.attached", { name: file.name })}</span>}
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <label className="sr-only" htmlFor={`${id}-kind`}>{t("recordWindow.notes.kind")}</label>
-        <select id={`${id}-kind`} value={kind} onChange={(event) => setKind(event.target.value as RecordNoteKind)} className={cn(pill, "bg-popover-hover pe-2")} data-record-composer-kind="">
+        <select id={`${id}-kind`} value={kind} disabled={written.note} onChange={(event) => setKind(event.target.value as RecordNoteKind)} className={cn(pill, "bg-popover-hover pe-2")} data-record-composer-kind="">
           {RECORD_NOTE_KINDS.map((value) => <option key={value} value={value}>{t(`recordWindow.notes.${value}` as "recordWindow.notes.internal")}</option>)}
         </select>
         {detail.can("attachment.add") && (
@@ -161,6 +174,7 @@ function Composer({ initial, detail, onDone }: { initial: RecordNoteKind; detail
           <button type="button" className={cn(pill, withTime && "bg-popover-hover")} aria-pressed={withTime} onClick={() => setWithTime(!withTime)} data-record-composer-addtime=""><Clock size={14} aria-hidden="true" />{t("recordWindow.time.add")}</button>
         )}
         <span className="ms-auto flex items-center gap-2">
+          {written.note && error && <span className="text-[13px] leading-[18px] text-popover-ink-secondary" data-record-composer-partial="">{t("recordWindow.notes.writtenRest")}</span>}
           {error && <span role="alert" className="text-[13px] leading-[18px] text-danger">{error}</span>}
           <button type="button" className={RECORD_ACTION} onClick={onDone} disabled={busy}>{t("recordWindow.cancel")}</button>
           <button type="submit" className={RECORD_PRIMARY} disabled={!ready || busy} data-record-composer-send="">{t("recordWindow.notes.send")}</button>

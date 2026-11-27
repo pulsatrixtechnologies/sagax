@@ -22,6 +22,7 @@ import { MENU_ROW, MENU_SURFACE } from "@/components/menu-look";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { actionFailure } from "@/lib/record-detail";
 
 /** A tab or a block with nothing in it where nothing can be added is hidden (M-20261127-143). Unknown counts are shown. */
 export function recordShown(count: number | undefined, canAdd: boolean): boolean {
@@ -122,7 +123,7 @@ export function RecordRowActions({ name, onEdit, onRemove }: {
           onClick={() => {
             setBusy(true);
             setError("");
-            onRemove().then(() => setAsking(false), () => setError(t("recordWindow.saveFailed"))).finally(() => setBusy(false));
+            onRemove().then(() => setAsking(false), (failure: unknown) => setError(actionFailure(failure))).finally(() => setBusy(false));
           }}><Check size={16} aria-hidden="true" /></button>
         <button type="button" disabled={busy} className={RECORD_ICON_BUTTON} aria-label={t("recordWindow.cancel")} title={t("recordWindow.cancel")} onClick={() => { setAsking(false); setError(""); }}
           onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setAsking(false); } }}><X size={16} aria-hidden="true" /></button>
@@ -197,7 +198,7 @@ export function RecordEntryForm({ fields, submitLabel, onSubmit, onCancel, extra
     if (busy || missing) return;
     setBusy(true);
     setError("");
-    onSubmit(values).catch((failure: unknown) => setError(failure instanceof Error && failure.message && failure.name === "RecordActionRefused" ? failure.message : t("recordWindow.saveFailed"))).finally(() => setBusy(false));
+    onSubmit(values).catch((failure: unknown) => setError(actionFailure(failure))).finally(() => setBusy(false));
   };
   const set = (key: string, value: string | File | undefined) => setValues((now) => ({ ...now, [key]: value }));
   return (

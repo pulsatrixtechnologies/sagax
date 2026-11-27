@@ -257,6 +257,8 @@ describe("the record window's actions", () => {
       { action: "configuration.add", set: { configuration: "abc" } },
       { action: "attachment.add", set: { name: "a.txt", base64: "not base64!" } },
       { action: "note.remove", id: "../77" },
+      { action: "note.remove", id: ".." },
+      { action: "schedule.update", id: "501", set: { kind: "meeting" } },
     ];
     for (const ask of bad) {
       expect(recordWrite(ask), JSON.stringify(ask)).toBeNull();

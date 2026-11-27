@@ -17,7 +17,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { ExpenseRow, RecordChoice, TimeRow, TimeTotals } from "@/lib/record-detail";
 import { RECORD_BILLING, RECORD_LINE_NOTE_MAX, type RecordBilling } from "../../../../shared/record-actions";
-import { BILLING_FILL, BillingTag, billingLabel, clockOf, dayOf, decimal, RecordName } from "./parts";
+import { BILLING_FILL, BillingTag, billingLabel, clockOf, dayOf, decimal, localInput, RecordName } from "./parts";
 
 const SHOWN = ["all", "time", "expenses"] as const;
 type Shown = (typeof SHOWN)[number];
@@ -61,24 +61,32 @@ function TimeForm({ kind, entry, detail, onDone }: { kind: "time" | "expense"; e
     choices(kind === "time" ? "work_type" : "expense_type").then((list) => { if (current) setTypes(list); }, () => { if (current) setTypes([]); });
     return () => { current = false; };
   }, [choices, kind]);
-  const billing: RecordFormField = { key: "billing", label: t("recordWindow.billing.label"), kind: "choice", required: true, value: entry?.row.billing ?? "B", choices: RECORD_BILLING.map((value) => ({ value, label: `${value} · ${billingLabel(value)}` })) };
+  // a new entry is billable unless the person says otherwise; a change keeps the entry's own billing, unknown stays unset
+  const billing: RecordFormField = { key: "billing", label: t("recordWindow.billing.label"), kind: "choice", required: !entry, value: entry ? entry.row.billing ?? "" : "B", choices: RECORD_BILLING.map((value) => ({ value, label: `${value} · ${billingLabel(value)}` })) };
   const typeField: RecordFormField[] = types?.length ? [{ key: kind === "time" ? "work_type" : "type", label: t(kind === "time" ? "recordWindow.time.workType" : "recordWindow.time.expenseType"), kind: "choice", choices: types }] : [];
   const fields: RecordFormField[] = kind === "time"
     ? [
-      { key: "hours", label: t("recordWindow.time.hours"), kind: "number", required: !entry, min: 0.01, max: 24, step: 0.05, value: entry?.kind === "time" && entry.row.value !== undefined ? String(entry.row.value) : "" },
-      { key: "start", label: t("recordWindow.time.start"), kind: "datetime" },
+      { key: "hours", label: t("recordWindow.time.hours"), kind: "number", required: !entry, min: 0.01, max: 24, value: entry?.kind === "time" && entry.row.value !== undefined ? String(entry.row.value) : "" },
+      { key: "start", label: t("recordWindow.time.start"), kind: "datetime", value: localInput(entry?.row.at) },
       ...typeField, billing,
       { key: "note", label: t("recordWindow.time.note"), kind: "textarea", max: RECORD_LINE_NOTE_MAX, value: entry?.row.note ?? "" },
     ]
     : [
-      { key: "amount", label: t("recordWindow.time.amount"), kind: "number", required: !entry, min: 0.01, max: 10_000_000, step: 0.01, value: entry?.kind === "expense" && entry.row.value !== undefined ? String(entry.row.value) : "" },
+      { key: "amount", label: t("recordWindow.time.amount"), kind: "number", required: !entry, min: 0.01, max: 10_000_000, value: entry?.kind === "expense" && entry.row.value !== undefined ? String(entry.row.value) : "" },
       { key: "date", label: t("recordWindow.time.date"), kind: "date" },
       ...typeField, billing,
       { key: "note", label: t("recordWindow.time.note"), kind: "textarea", max: RECORD_LINE_NOTE_MAX, value: entry?.row.note ?? "" },
     ];
+  const initial = Object.fromEntries(fields.map((field) => [field.key, "value" in field ? field.value ?? "" : ""]));
   const submit = async (values: RecordFormValues) => {
     const set: Record<string, string> = {};
-    for (const [key, value] of Object.entries(values)) if (typeof value === "string" && value) set[key] = key === "hours" || key === "amount" ? value.replace(",", ".") : value;
+    // a change sends only what the person changed (never a billing she did not choose); an addition what she filled
+    for (const [key, value] of Object.entries(values)) {
+      if (typeof value !== "string" || (entry ? value === initial[key] : !value)) continue;
+      if (!value && key !== "note") continue;
+      set[key] = key === "hours" || key === "amount" ? value.replace(",", ".") : value;
+    }
+    if (entry && !Object.keys(set).length) { onDone(); return; }
     const id = entry?.row.id;
     if (kind === "time") await detail.write(id ? { action: "time.update", id, set } : { action: "time.add", set });
     else await detail.write(id ? { action: "expense.update", id, set } : { action: "expense.add", set });

@@ -15844,6 +15844,7 @@
   "recordWindow.notes.attach": "Attach",
   "recordWindow.notes.attached": "Attached: {name}",
   "recordWindow.notes.send": "Send",
+  "recordWindow.notes.writtenRest": "The note is written: Send again sends the rest.",
   "recordWindow.schedule.meeting": "Meeting",
   "recordWindow.schedule.resource": "Resource",
   "recordWindow.schedule.activity": "Activity",

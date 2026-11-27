@@ -128,9 +128,14 @@ export { RECORD_TITLE_FIELD, RECORD_TITLE_MAX, recordTitleValue as titleValue } 
 /** Raised when the server has no detail route: the original card is shown. */
 export class RecordDetailMissing extends Error {}
 
-/** A write the console does not take (yet): its words say so. */
+/** A write the console does not take (yet), or the organization refuses: its words say so. */
 export class RecordActionRefused extends Error {
   override name = "RecordActionRefused";
+}
+
+/** What a failed write says: the refusal's own words, else that the change could not be saved. */
+export function actionFailure(failure: unknown): string {
+  return failure instanceof RecordActionRefused ? failure.message : t("recordWindow.saveFailed");
 }
 
 export interface RecordDetailCounts {

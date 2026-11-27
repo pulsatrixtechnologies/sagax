@@ -8,6 +8,7 @@ import { MENU_ROW, MENU_ROW_ACTIVE, MENU_SURFACE } from "@/components/menu-look"
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
+import { actionFailure } from "@/lib/record-detail";
 import type { RecordRef } from "../../../../shared/record-cards";
 import { RECORD_BILLING, type RecordBilling } from "../../../../shared/record-actions";
 
@@ -57,7 +58,7 @@ export function BillingTag({ billing, onChange }: { billing?: RecordBilling; onC
                 if (choice === billing) return;
                 setBusy(true);
                 setError("");
-                onChange(choice).catch(() => setError(t("recordWindow.saveFailed"))).finally(() => setBusy(false));
+                onChange(choice).catch((failure: unknown) => setError(actionFailure(failure))).finally(() => setBusy(false));
               }}>
               <span className={cn("inline-flex h-5 min-w-9 items-center justify-center rounded px-1 text-[12px] font-medium text-popover-ink", BILLING_TINT[choice])}>{choice}</span>
               <span>{billingLabel(choice)}</span>
@@ -94,4 +95,12 @@ export function clockOf(at: string | undefined, tz?: string): string {
 /** A number of hours or an amount, two decimals, in the person's language. */
 export function decimal(value: number): string {
   return new Intl.NumberFormat(activeLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+}
+
+/** An instant as a local date-time field's value ("2026-12-14T14:30"). */
+export function localInput(at: string | undefined): string {
+  const date = at ? new Date(at) : null;
+  if (!date || !Number.isFinite(date.getTime())) return "";
+  const two = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}T${two(date.getHours())}:${two(date.getMinutes())}`;
 }

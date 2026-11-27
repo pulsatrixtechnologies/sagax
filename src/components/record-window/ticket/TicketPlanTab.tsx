@@ -14,10 +14,10 @@ import { ScheduleCell, ScheduleTypeChip, scheduleKindLabel, type ScheduleKind } 
 import type { RecordDetail } from "@/components/useRecordDetail";
 import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
-import type { RecordChoice } from "@/lib/record-detail";
+import { actionFailure, type RecordChoice } from "@/lib/record-detail";
 import { RECORD_PLAN_KINDS, RECORD_SUBJECT_MAX, type RecordPlanKind } from "../../../../shared/record-actions";
 import type { RecordRef } from "../../../../shared/record-cards";
-import { RecordName } from "./parts";
+import { localInput, RecordName } from "./parts";
 
 export interface PlanRow {
   key: string;
@@ -32,6 +32,8 @@ export interface PlanRow {
   when: string;
   where: string;
   at?: string;
+  endAt?: string;
+  subject?: string;
   done: boolean;
 }
 
@@ -60,7 +62,7 @@ export function planRows(detail: RecordDetail): { open: PlanRow[]; done: PlanRow
       ...(row.resourceRef && !(row.kind === "meeting" && row.subject) ? { titleRef: row.resourceRef } : {}),
       ...(row.kind === "meeting" && row.subject && row.resource ? { detail: row.resource, ...(row.resourceRef ? { detailRef: row.resourceRef } : {}) } : {}),
       when: rangeOf(row.at, row.endAt, row.start, row.end),
-      where: row.where, ...(row.at ? { at: row.at } : {}), done: row.done === true,
+      where: row.where, ...(row.at ? { at: row.at } : {}), ...(row.endAt ? { endAt: row.endAt } : {}), ...(row.subject ? { subject: row.subject } : {}), done: row.done === true,
     })),
     ...(activities.page?.lines ?? []).map((row, index) => ({
       key: `a-${row.id ?? index}`, ...(row.id ? { id: row.id } : {}), kind: "activity" as const,
@@ -89,15 +91,15 @@ function fieldsFor(kind: RecordPlanKind, row?: PlanRow): RecordFormField[] {
   if (kind === "activity") {
     return [
       { key: "subject", label: t("recordWindow.schedule.subject"), kind: "text", required: true, max: RECORD_SUBJECT_MAX, value: row?.title ?? "" },
-      { key: "start", label: t("recordWindow.schedule.due"), kind: "datetime" },
+      { key: "start", label: t("recordWindow.schedule.due"), kind: "datetime", value: localInput(row?.at) },
       member,
     ];
   }
   return [
     member,
-    { key: "start", label: t("recordWindow.schedule.start"), kind: "datetime", required: !row },
-    { key: "end", label: t("recordWindow.schedule.end"), kind: "datetime" },
-    ...(kind === "meeting" ? [{ key: "subject", label: t("recordWindow.schedule.subject"), kind: "text" as const, max: RECORD_SUBJECT_MAX }] : []),
+    { key: "start", label: t("recordWindow.schedule.start"), kind: "datetime", required: !row, value: localInput(row?.at) },
+    { key: "end", label: t("recordWindow.schedule.end"), kind: "datetime", value: localInput(row?.endAt) },
+    ...(kind === "meeting" ? [{ key: "subject", label: t("recordWindow.schedule.subject"), kind: "text" as const, max: RECORD_SUBJECT_MAX, value: row?.subject ?? "" }] : []),
     { key: "where", label: t("recordWindow.schedule.where"), kind: "choice", choices: [], value: "" },
   ];
 }
@@ -116,15 +118,37 @@ function PlanForm({ kind, row, detail, onDone }: { kind: RecordPlanKind; row?: P
   const fields = fieldsFor(kind, row).map((field) => field.kind === "choice" && (field.key === "member" || field.key === "where") ? { ...field, choices: choices[field.key] ?? [] } : field)
     // a list the console has nothing in is left out rather than shown empty
     .filter((field) => field.kind !== "choice" || field.choices.length > 0 || choices[field.key as "member" | "where"] === undefined);
+  const initial = Object.fromEntries(fieldsFor(kind, row).map((field) => [field.key, "value" in field ? field.value ?? "" : ""]));
   const submit = async (values: RecordFormValues) => {
     const set: Record<string, string> = { kind };
-    for (const [key, value] of Object.entries(values)) if (typeof value === "string" && value) set[key] = value;
+    // a change sends only what the person changed; an addition what she filled
+    for (const [key, value] of Object.entries(values)) if (typeof value === "string" && value && (!row || value !== initial[key])) set[key] = value;
     await detail.write(row?.id ? { action: "schedule.update", id: row.id, set } : { action: "schedule.add", set });
     onDone();
   };
   return (
     <RecordEntryForm data-record-plan-form={kind} fields={fields}
       submitLabel={t(row ? "recordWindow.save" : "recordWindow.schedule.addKind", { kind: scheduleKindLabel(kind) })} onCancel={onDone} onSubmit={submit} />
+  );
+}
+
+/** "Mark done" (or "Reopen") on a row: busy while it writes, the refusal's words on the row when it fails. */
+function MarkDone({ row, detail }: { row: PlanRow; detail: RecordDetail }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <span className="inline-flex flex-col items-end">
+      <button type="button" disabled={busy} aria-busy={busy || undefined} className={cn(RECORD_ACTION, "h-7 bg-transparent px-2 hover:bg-popover-hover")} data-record-mark-done={row.done ? "reopen" : "done"}
+        onClick={() => {
+          if (busy || !row.id) return;
+          setBusy(true);
+          setError("");
+          detail.write({ action: "schedule.done", id: row.id, set: { kind: row.kind, done: !row.done } }).catch((failure: unknown) => setError(actionFailure(failure))).finally(() => setBusy(false));
+        }}>
+        {row.done ? <RotateCcw size={14} aria-hidden="true" /> : <Check size={14} aria-hidden="true" />}{t(row.done ? "recordWindow.schedule.reopen" : "recordWindow.schedule.markDone")}
+      </button>
+      {error && <span role="alert" className="max-w-56 text-end text-[12px] leading-4 text-danger">{error}</span>}
+    </span>
   );
 }
 
@@ -154,12 +178,7 @@ export function TicketPlanTab({ detail, type, onScheduleMe, onDispatch }: {
       id: "actions", label: "", fixed: true, width: 216, text: () => "", className: "text-end",
       cell: (row) => (
         <span className="flex items-center justify-end gap-1">
-          {row.id && detail.can("schedule.done") && (
-            <button type="button" className={cn(RECORD_ACTION, "h-7 bg-transparent px-2 hover:bg-popover-hover")} data-record-mark-done={row.done ? "reopen" : "done"}
-              onClick={() => { void detail.write({ action: "schedule.done", id: row.id!, set: { kind: row.kind, done: !row.done } }); }}>
-              {row.done ? <RotateCcw size={14} aria-hidden="true" /> : <Check size={14} aria-hidden="true" />}{t(row.done ? "recordWindow.schedule.reopen" : "recordWindow.schedule.markDone")}
-            </button>
-          )}
+          {row.id && detail.can("schedule.done") && <MarkDone row={row} detail={detail} />}
           <RecordRowActions name={`${scheduleKindLabel(row.kind)} ${row.title}`}
             onEdit={row.id && detail.can("schedule.update") ? () => { setAdding(null); setEditing(row); } : undefined}
             onRemove={row.id && detail.can("schedule.remove") ? () => detail.write({ action: "schedule.remove", id: row.id!, set: { kind: row.kind } }) : undefined} />

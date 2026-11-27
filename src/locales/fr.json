@@ -15829,6 +15829,7 @@
   "recordWindow.notes.attach": "Joindre",
   "recordWindow.notes.attached": "Joint : {name}",
   "recordWindow.notes.send": "Envoyer",
+  "recordWindow.notes.writtenRest": "La note est écrite : Envoyer de nouveau envoie le reste.",
   "recordWindow.schedule.meeting": "Rencontre",
   "recordWindow.schedule.resource": "Ressource",
   "recordWindow.schedule.activity": "Activité",

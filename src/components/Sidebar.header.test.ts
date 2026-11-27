@@ -244,6 +244,8 @@ describe("chat header bot panel button", () => {
     expect(src).toContain("CIRCLE_BUTTON");
     expect(src).toContain("onClick={onTogglePanel}");
     expect(src.indexOf("data-chat-bot-panel")).toBeLessThan(src.indexOf("<ExportTranscriptMenu"));
-    expect(src).toMatch(/\{!remoteClient && <button/);
+    // Hidden for a remote client: assigned before the ordered control map so
+    // UiCustomize can reorder the header without losing the remoteClient gate.
+    expect(src).toMatch(/botPanelButton = !remoteClient \? \(\s*<button/);
   });
 });

@@ -36963,6 +36963,7 @@ ROUTES.push(createBotsCoreRoutes({
   githubCredentialsFor,
   orgAvatarImageConfig,
   requesterPrincipal,
+  personLanguage: (principalId) => personLanguageCode(languageOfPerson(principalId)),
   takeTemporaryCreateToken,
   botCreationAllowed,
   personBotsReadOnly,
@@ -37663,7 +37664,11 @@ const widgetRenderer = new WidgetRenderer({
   log: (line) => console.log(line)
 });
 const widgetCheckAttempts = new WidgetCheckAttempts();
-ROUTES.push(createBotAvatarGenerateRoutes({ store, ownerOrAdminOf, requesterPrincipal, orgAvatarImageConfig, orgXaiRefusal, wireBot, broadcast }));
+ROUTES.push(createBotAvatarGenerateRoutes({
+  store, ownerOrAdminOf, requesterPrincipal, orgAvatarImageConfig, orgXaiRefusal,
+  personLanguage: (principalId) => personLanguageCode(languageOfPerson(principalId)),
+  wireBot, broadcast,
+}));
 ROUTES.push(createBotObservabilityRoutes({ store, DATA_DIR, EVENTS_DIR, ownerOrAdminOf, computerOwner, outboundCounts }));
 ROUTES.push(createFleetRoutes({ entitled, fleetSocketPath, fleetAvailable, fleetRequest }));
 ROUTES.push(createBotSecretCardRoutes({

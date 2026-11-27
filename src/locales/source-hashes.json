@@ -19470,7 +19470,9 @@
       "image.error.avatarInvalidResponse": "873d67df07a220635934a2fc9197fc42d7c54eabc7206e680257c125ba96dba2",
       "image.error.avatarNeedsBase64": "3ec890d92729ca11eabce7a347c7b8e4d757a916d919fd27c900ec836cedfb96",
       "image.error.avatarInvalidData": "8a1a292108f38a4fd9cd15f833472aade2a6aec894abd297b0cc556e4fb4d6d8",
-      "image.error.avatarOversized": "a4cd251773c956d5eaa9706d8a3a70a7581660d0f605373fc872eb1230fff9ed"
+      "image.error.avatarOversized": "a4cd251773c956d5eaa9706d8a3a70a7581660d0f605373fc872eb1230fff9ed",
+      "image.error.payerDisabled": "56cb64f33f1eba04ea594951945b1f6cd52991c9ebf1d385c2944e4b3b8b2180",
+      "image.error.orgXaiNotGiven": "cb8c48b7d4b860e0cf971fe14815ed5487d9cb0f44e040e6fd572cf1e1d6fe59"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

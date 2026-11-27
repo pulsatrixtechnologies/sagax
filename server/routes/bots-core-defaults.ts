@@ -11,6 +11,7 @@ import { githubSkillFetch } from "../github/github-access.ts";
 import { pickBotName } from "../names.ts";
 import { botSkillTemplateSchema, newBotDefaultsSchema } from "../bots/new-bot-defaults.ts";
 import { orgXaiRefusal } from "../org/org-xai-media.ts";
+import { personLanguageCode } from "../people/person-words.ts";
 import { sessionPrincipal } from "../auth/request-auth.ts";
 import { fetchSkillFromSource } from "../skills/skill-fetch.ts";
 import { prepareSkillFolder } from "../skills/skill-folder.ts";
@@ -29,6 +30,7 @@ export function createBotsCoreDefaultsRoutes(deps: BotsCoreRouteDeps): RouteHand
       githubCredentialsFor,
       orgAvatarImageConfig,
       requesterPrincipal,
+      personLanguage,
     } = deps;
 
     if (method === "GET" && path === "/api/bot-defaults") {
@@ -86,8 +88,13 @@ export function createBotsCoreDefaultsRoutes(deps: BotsCoreRouteDeps): RouteHand
       const checked = avatarGenerationRequestSchema.safeParse({ prompt: body.prompt });
       if (!checked.success) return json(res, 400, { error: checked.error.message });
       const { prompt } = checked.data;
-      const imageCfg = await orgAvatarImageConfig(requesterPrincipal(auth));
-      if (!imageCfg) return json(res, 403, orgXaiRefusal("image"));
+      const principalId = requesterPrincipal(auth);
+      const imageCfg = await orgAvatarImageConfig(principalId);
+      // #5223: refusal in the asking person's language
+      if (!imageCfg) {
+        const language = personLanguage?.(principalId) ?? personLanguageCode(undefined);
+        return json(res, 403, orgXaiRefusal("image", language));
+      }
       const generated = await generateAvatarImage(imageCfg as never, {
         name: profile.patch.name ?? "", title: profile.patch.title ?? "", description: profile.patch.description ?? "",
       }, prompt);

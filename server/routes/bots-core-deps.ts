@@ -141,6 +141,8 @@ export interface BotsCoreRouteDeps {
   githubCredentialsFor(actor: string | null | undefined): readonly GithubCredential[];
   orgAvatarImageConfig(principalId: string | null): Promise<{ imageGen?: { provider?: string; key?: string; customApiKey?: string; customModel?: string; customUrl?: string }; xai?: { key?: string }; xaiAccount?: string; credentials?: unknown; refusalText?: unknown; language?: unknown; chain?: unknown } | null>;
   requesterPrincipal(auth: RequestAuth): string | null;
+  /** #5223: the asking person's language for an image refusal. */
+  personLanguage?(principalId: string | null): "fr" | "en";
   takeTemporaryCreateToken(token: unknown, auth: RequestAuth): TemporaryAgent | null;
   botCreationAllowed(auth: RequestAuth): boolean;
   personBotsReadOnly(principalId: string | undefined | null): boolean;

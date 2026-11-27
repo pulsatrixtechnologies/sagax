@@ -15877,5 +15877,7 @@
   "image.error.avatarInvalidResponse": "{provider} a renvoyé une réponse d'image invalide",
   "image.error.avatarNeedsBase64": "La génération d'image de {provider} doit renvoyer l'image en base64 (b64_json)",
   "image.error.avatarInvalidData": "{provider} a renvoyé une image invalide",
-  "image.error.avatarOversized": "{provider} a renvoyé une image invalide ou trop lourde; formats attendus : PNG, JPEG ou WebP"
+  "image.error.avatarOversized": "{provider} a renvoyé une image invalide ou trop lourde; formats attendus : PNG, JPEG ou WebP",
+  "image.error.payerDisabled": "Ton accès est coupé dans ton organisation.",
+  "image.error.orgXaiNotGiven": "Ton organisation ne t'a pas donné la génération d'images et de vidéos sur sa clé xAI. Demande à un admin de te la donner dans Perspicax."
 }

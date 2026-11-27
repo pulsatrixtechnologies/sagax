@@ -195,7 +195,14 @@ export async function generateAvatarImage(
     organizationXaiKey: () => cfg.xai?.key,
   });
   // the voice's verdict for a person turned off, in the voice's words
-  if (!Array.isArray(all)) throw Object.assign(new Error(cfg.refusalText?.(all.refused) ?? all.refused), { status: 403, code: all.refused });
+  if (!Array.isArray(all)) {
+    // #5223: payer_disabled in the person's language; other causes still
+    // reuse the voice's own words until those catalogs land.
+    const message = all.refused === "payer_disabled"
+      ? imageWord(language, "payerDisabled")
+      : (cfg.refusalText?.(all.refused) ?? all.refused);
+    throw Object.assign(new Error(message), { status: 403, code: all.refused });
+  }
   // A provider chosen in the image settings keeps the avatar on that provider
   // and on the person's own Grok account: no other provider's key is
   // borrowed. Nothing chosen: the whole chain, as in the chat.

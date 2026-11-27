@@ -125,8 +125,8 @@ importers:
         specifier: 11.0.1
         version: 11.0.1
       emojibase-data:
-        specifier: 16.0.3
-        version: 16.0.3(emojibase@17.0.0)
+        specifier: 18.0.0
+        version: 18.0.0(emojibase@17.0.0)
       hls.js:
         specifier: ^1.7.4
         version: 1.7.4
@@ -3172,8 +3172,8 @@ packages:
   emoji-regex@8.0.0:
     resolution: {integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==}
 
-  emojibase-data@16.0.3:
-    resolution: {integrity: sha512-MopInVCDZeXvqBMPJxnvYUyKw9ImJZqIDr2sABo6acVSPev5IDYX+mf+0tsu96JJyc3INNvgIf06Eso7bdTX2Q==}
+  emojibase-data@18.0.0:
+    resolution: {integrity: sha512-TPPRRYv2zPd0jKI+pTpMquwWNZXYAsC3IVsCMeg2X8y8fEzKwOks4/5bz0YavF5r6d71aGPpb6oDnUEwSLLMoA==}
     peerDependencies:
       emojibase: '*'
 
@@ -7871,7 +7871,7 @@ snapshots:
 
   emoji-regex@8.0.0: {}
 
-  emojibase-data@16.0.3(emojibase@17.0.0):
+  emojibase-data@18.0.0(emojibase@17.0.0):
     dependencies:
       emojibase: 17.0.0
 

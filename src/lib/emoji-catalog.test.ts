@@ -57,4 +57,16 @@ describe("emoji catalogue", () => {
     expect(searchCatalog(catalog, "pouce vers le haut")[0]?.emoji).toBe("👍");
     expect(searchCatalog(catalog, "thumbs up")[0]?.emoji).toBe("👍");
   });
+
+  it("a reaction stored with emojibase 16's FE0F form still resolves under 18", async () => {
+    const catalog = await loadEmojiCatalog();
+    // 16 wrote 👍️ for thumbs up; 18's unicode field is the bare 👍.
+    expect(catalog.some((entry) => entry.emoji === "👍")).toBe(true);
+    expect(catalog.some((entry) => entry.emoji === "👍️")).toBe(false);
+    expect(canonicalEmoji("👍️")).toBe("👍");
+    expect(searchCatalog(catalog, "👍️")[0]?.emoji).toBe("👍");
+    // ❤️ still needs the selector; both the stored and the catalogue form keep it.
+    expect(canonicalEmoji("❤️")).toBe("❤️");
+    expect(searchCatalog(catalog, "❤️")[0]?.emoji).toBe("❤️");
+  });
 });

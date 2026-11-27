@@ -22,8 +22,11 @@ describe("usage pill placement in the composer (D-20261127-001)", () => {
 
   it("supports above and below placements beside the show/hide switch", () => {
     const prefs = readFileSync(join(import.meta.dirname, "../../lib/usage-pill-preferences.ts"), "utf8");
+    const types = readFileSync(join(import.meta.dirname, "../../lib/ui-layout/types.ts"), "utf8");
+    // Placement values live on the unified layout types; the prefs module re-exports them.
+    expect(types).toMatch(/\["inBar", "above", "below"\]/);
     expect(prefs).toMatch(/USAGE_PILL_PLACEMENTS/);
-    expect(prefs).toMatch(/"inBar".*"above".*"below"|inBar.*above.*below/s);
+    expect(prefs).toMatch(/USAGE_PLACEMENTS|ui-layout\/types/);
     expect(prefs).toMatch(/usagePillPlacement/);
     expect(prefs).toMatch(/usagePillInBar/);
   });

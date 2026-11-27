@@ -4454,8 +4454,11 @@ const orgMemoryCache = () => (orgMemoryCacheInstance ??= createOrgMemoryCache({
   userData: app.getPath("userData"),
   run: runQuiet,
   fetch: (url, init) => net.fetch(url, init),
-  encrypt: (text) => safeStorage.encryptString(text),
-  decrypt: (data) => safeStorage.decryptString(data),
+  encrypt: (text) => safeStorage.encryptStringAsync(text),
+  decrypt: async (data) => {
+    const decrypted = await safeStorage.decryptStringAsync(data);
+    return typeof decrypted === "string" ? decrypted : decrypted?.result;
+  },
   orgServer: orgMemoryServerCall,
   source: () => currentBundledOrigin,
 }));

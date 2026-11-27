@@ -130,7 +130,7 @@ describe("loading the binding", () => {
 
   it("names the directory and an action when the binding is missing, in one line, without throwing", async () => {
     const missing = join(root, "no-binding-here");
-    const e = engine({ env: { ...process.env, SAGAX_DUCKDB_DIR: missing } });
+    const e = engine({ env: { ...process.env, SAGAX_DUCKDB_DIR: missing, SAGAX_RESOURCES_PATH: undefined } });
     const reason = e.unavailable();
     expect(reason).toContain(missing);
     expect(reason).toMatch(/SAGAX_DUCKDB_DIR/);

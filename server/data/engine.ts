@@ -139,7 +139,29 @@ export function nativeRequire(directory: string | null = duckdbDirectory()): Nod
   return createRequire(directory ? join(directory, "node_modules", "openmausbot-duckdb-anchor.js") : import.meta.url);
 }
 
+/** When SAGAX_DUCKDB_DIR (or a staged resources tree) is set, the binding
+ * must live under that tree. createRequire would otherwise walk NODE_PATH
+ * and parent installs and pick up another DuckDB (wrong ABI, wrong
+ * extensions folder). */
+function stagedBindingPath(directory: string): string {
+  return join(directory, "node_modules", "@duckdb", "node-api");
+}
+
+function resolveBinding(directory: string | null): string {
+  if (directory && !existsSync(stagedBindingPath(directory))) {
+    const error = new Error(`Cannot find module '@duckdb/node-api'`);
+    (error as NodeJS.ErrnoException).code = "MODULE_NOT_FOUND";
+    throw error;
+  }
+  return nativeRequire(directory).resolve("@duckdb/node-api");
+}
+
 function loadBinding(directory: string | null): Binding {
+  if (directory && !existsSync(stagedBindingPath(directory))) {
+    const error = new Error(`Cannot find module '@duckdb/node-api'`);
+    (error as NodeJS.ErrnoException).code = "MODULE_NOT_FOUND";
+    throw error;
+  }
   return nativeRequire(directory)("@duckdb/node-api") as Binding;
 }
 
@@ -868,7 +890,7 @@ class Engine implements DataEngine {
     if (this.located) return null;
     const directory = duckdbDirectory(this.env);
     try {
-      nativeRequire(directory).resolve("@duckdb/node-api");
+      resolveBinding(directory);
       this.located = true;
       return null;
     } catch (error) {

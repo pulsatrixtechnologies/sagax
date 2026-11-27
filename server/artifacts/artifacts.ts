@@ -41,6 +41,9 @@ export interface ArtifactStore {
   remove(id: string, botId?: string): boolean;
   /** Forget every artifact of a bot that is gone. */
   removeBot(botId: string): number;
+  /** A conversation is gone (#5396): favorite and popped artifacts stay with
+   * the bot, no longer tied to that thread. Others keep their threadId. */
+  detachThread(threadId: string): number;
   /** The refresher's result for one run. */
   recordRun(id: string, run: ArtifactRun): Artifact | null;
   /** Clear a pause so the next tick runs it (Refresh now). */
@@ -241,6 +244,21 @@ export function createArtifactStore(options: {
       }
       if (removed) changed(null, botId);
       return removed;
+    },
+    detachThread(threadId) {
+      if (!threadId) return 0;
+      let detached = 0;
+      const at = now();
+      for (const artifact of Array.from(artifacts.values())) {
+        if (artifact.threadId !== threadId) continue;
+        if (!artifact.favorite && !artifact.popped) continue;
+        const { threadId: _gone, ...rest } = artifact;
+        const next: Artifact = { ...rest, updatedAt: at, rev: artifact.rev + 1 };
+        artifacts.set(artifact.id, next);
+        changed(next, next.botId);
+        detached += 1;
+      }
+      return detached;
     },
     recordRun(id, run) {
       const current = artifacts.get(id);

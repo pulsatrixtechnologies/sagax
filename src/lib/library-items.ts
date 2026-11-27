@@ -32,6 +32,19 @@ export function libraryItems(files: readonly ThreadFile[] | null, artifacts: rea
   ];
 }
 
+/** A group's Library (#5396): artifacts of its open conversations, plus every
+ * favorite or popped artifact of its bots even when that conversation is gone. */
+export function artifactsKeptForThreads(
+  artifacts: readonly ArtifactSummary[],
+  threadIds: ReadonlySet<string>,
+): ArtifactSummary[] {
+  return artifacts.filter((artifact) =>
+    artifact.favorite
+    || artifact.popped
+    || (artifact.threadId !== undefined && threadIds.has(artifact.threadId))
+    || artifact.threadId === undefined);
+}
+
 /** Older shows this many rows first; "Show more" reveals the rest. */
 export const OLDER_PREVIEW = 5;
 

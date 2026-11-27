@@ -1,0 +1,14 @@
+{
+  "meeting-pending-daylight-en": {
+    "alwaysAllow": 1
+  },
+  "meeting-pending-midnight-en": {
+    "alwaysAllow": 1
+  },
+  "meeting-pending-daylight-fr": {
+    "alwaysAllow": 1
+  },
+  "meeting-pending-midnight-fr": {
+    "alwaysAllow": 1
+  }
+}

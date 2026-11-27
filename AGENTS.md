@@ -82,7 +82,7 @@ Rules only. How the code works (files, routes, tests, history) lives in
 ## Approvals and access
 
 - Every approval card offers Always allow, which saves an owner rule the person lists and revokes in Settings > Security; never a card without it (2026-10-19, 2026-11-05).
-- Always allow never answers for another person's environment, a guest's turn, a question or a meeting's consent, and never a security key the person chose (step-up wins) (2026-10-19).
+- Always allow never answers for another person's environment, a guest's turn or a question, and never a security key the person chose (step-up wins); a meeting join card offers it for that provider (2026-10-19, 2026-11-26, #3367).
 - Full access is one decision, `server/approvals/full-access-gate.ts`: never fix a Full card on one surface alone; add the surface to the gate and a regression to `full-access-gate.regressions.test.ts` (2026-11-02, #1905).
 - Full acts without asking: never a typed GO or a confirmation; only Refuse and Ask first rules, isolation, sensitive paths, the shared server and a real question hold a call (2026-10-28).
 - Approve for me and ask-before-contact never invent a may-I card (2026-10-30, #1819).

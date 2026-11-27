@@ -52,7 +52,8 @@ describe("TurnTimingLine", () => {
 
   it("a bot conversation draws the line inside the banner stack, below the floating header and its fade", () => {
     const banners = readFileSync(new URL("./ChatView.tsx-parts/ChatViewBanners.tsx", import.meta.url), "utf8");
-    const stack = banners.indexOf('<div className="chat-banners pt-[52px]');
+    // #5359: pad is 52 + top fade via BANNERS_TOP_PAD, not a hard-coded pt-[52px].
+    const stack = banners.indexOf('className="chat-banners empty:hidden"');
     expect(stack).toBeGreaterThan(-1);
     expect(banners.indexOf("<TurnTimingLine")).toBeGreaterThan(stack);
   });

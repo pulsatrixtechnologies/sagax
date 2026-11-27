@@ -22,17 +22,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/context/delta-context.e2e.test.ts",
-      "test": "runs each teammate turn a restart cut again once, in place, and resumes the Chief told so (SIGKILL)",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/voice-call-latency.e2e.test.ts",
       "test": "keeps one engine process for a whole call, its tools working on every turn",
       "platforms": [
@@ -683,18 +672,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "scripts/testing/function-size-client.guard.test.ts",
-      "test": "src function size (#1383) > no non-test function in src/ exceeds 400 lines",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "src/lib/composer-placeholder.test.ts",
       "test": "composerPlaceholder > invites an answer to a waiting question, and says it stays open",
       "platforms": [
@@ -707,34 +684,12 @@
       "since": "2026-11-11"
     },
     {
-      "file": "src/components/shape-set.regression.test.ts",
-      "test": "every shape holds together and keeps its face > through every move, at five moments, the body stays one whole outline with its two eyes, and comes back to rest",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "shared/plain-time-zone.test.ts",
       "test": "plainTimeZone in French (#2805) > says the zone in French, never Eastern time nor an abbreviation",
       "platforms": [
         "macos-latest",
         "ubuntu-latest",
         "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "scripts/testing/function-size-server.guard.test.ts",
-      "test": "function size server/shared (#1383) > no production function exceeds 400 lines",
-      "platforms": [
-        "macos-latest",
-        "ubuntu-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",

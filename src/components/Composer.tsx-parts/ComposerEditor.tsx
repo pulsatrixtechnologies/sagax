@@ -154,7 +154,7 @@ export function ComposerEditor({
         the reference's bar (#4152): the 32 px band, 5 px above and below,
         the hairline. */}
     <div
-      data-surface="composer"
+      data-tour="composer"
       // the message box: a level of the mode menu opened over it stops at the menu's bottom (ModeMenuLevel.tsx)
       data-composer-box=""
       data-ultracode={bot && ultracodeFromSelection(bot.modelSelection) ? "" : undefined}

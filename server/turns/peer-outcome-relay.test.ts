@@ -121,6 +121,16 @@ describe("settlePeerOutcome (#4238)", () => {
     expect(personWaitCues("Tout est fait, rien pour toi.")).toEqual([]);
   });
 
+  it("does not treat the harness Full-access level line as a confirm cue (#5431)", () => {
+    expect(personWaitCues("Your level for this is Full access: nothing it allows needs confirmation.")).toEqual([]);
+    expect(personWaitCues(
+      "Your level for this is Full access: nothing it allows needs confirmation. If something genuinely needs the user (a credential, a decision only they can make, a step their request does not cover), end your reply with NEEDS INPUT: and the exact question.",
+    )).toEqual([]);
+    expect(personWaitCues("Please leave this to confirm with the client tomorrow.")).toEqual([
+      { kind: "confirm", line: "Please leave this to confirm with the client tomorrow." },
+    ]);
+  });
+
   it("a silent end whose words leave something on the person: the server asks the bot once, nothing is drawn yet", () => {
     const w = world();
     w.say("work", SWEEP_ANSWER);

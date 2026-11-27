@@ -1,6 +1,6 @@
 // Pure pieces of sagax-runner: masking, secrets on disk, the diff contract,
 // protocol parsing, the engine event mapping and the driver plan.
-import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,7 +11,7 @@ import { removeTempDir } from "../testing/cleanup.ts";
 import { capDiff, parseUnifiedDiff } from "./diff.ts";
 import { decisionFor, mapRuntimeEvent } from "./engine.ts";
 import { driverPlan } from "./engine-drivers.ts";
-import { bundleHeads, gitEnv, runBranchProblem } from "./git.ts";
+import { bundleHeads, gitEnv, runBranchProblem, runGit } from "./git.ts";
 import { MASK, Masker } from "./mask.ts";
 import { controlBase, parseBootstrap, parseCommands, parseSecrets, sameControlOrigin } from "./protocol.ts";
 import { firstTurn } from "./runner.ts";
@@ -222,6 +222,26 @@ describe("git helpers", () => {
     const bytes = Buffer.from(`# v2 git bundle\n-${"b".repeat(40)} base\n${sha} refs/heads/px/x\n\nPACK`);
     expect(bundleHeads(bytes)).toEqual([{ sha, ref: "refs/heads/px/x" }]);
     expect(bundleHeads(Buffer.from("not a bundle"))).toEqual([]);
+  });
+
+  it("owns stdin EPIPE when git exits before reading input (#5438)", async () => {
+    // A fake git that exits at once with the pipe still open: end() would
+    // otherwise raise an unhandled EPIPE and make vitest exit 1 with no
+    // failing assertion (CI shard that runs runner.test.ts).
+    const dir = mkdtempSync(join(tmpdir(), "runner-git-epipe-"));
+    dirs.push(dir);
+    const fake = join(dir, "git-exit");
+    writeFileSync(fake, "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+    chmodSync(fake, 0o755);
+    await expect(runGit(["commit", "-F", "-"], {
+      cwd: dir,
+      env: { PATH: "/usr/bin:/bin", HOME: dir },
+      git: fake,
+      input: "message that never arrives\n",
+      allowFail: true,
+    })).resolves.toMatchObject({ code: 1 });
+    // Let a late EPIPE (if any) surface as an unhandled rejection here.
+    await new Promise((resolve) => setTimeout(resolve, 50));
   });
 });
 

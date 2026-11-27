@@ -1381,8 +1381,11 @@ export class Store {
     };
     for (const task of botTasks) if (repair(task)) botsDirty = true;
     for (const task of groupTasks) if (repair(task)) groupsDirty = true;
-    if (botsDirty) this.saveBots();
-    if (groupsDirty) this.saveGroups();
+    // #5343 deferred this off the constructor; section registration already
+    // ran (or soft-failed) during boot. A malformed teams file must not
+    // crash the deferred repair (team-lifecycle.e2e).
+    if (botsDirty) this.saveBots(this.bots, false);
+    if (groupsDirty) this.saveGroups(this.groups, false);
   }
 
   /** Where a person last wrote in a thread from before builds kept it
@@ -1466,7 +1469,9 @@ export class Store {
   }
 
   /** Bookkeeping: a value that can be rebuilt, or whose last second lost in a crash harms nobody (activity, unread,
-   * titles, pins, usage, engine sessions). Written later and off the event loop, newest state first (OwnedFile.writeSoon). */
+   * titles, pins, usage). Written later and off the event loop, newest state first (OwnedFile.writeSoon).
+   * Engine sessions are also deferred here, then flushed when a restart must
+   * read them (persistEngineSessions: session.started, steer-queue claim). */
   private saveBotsSoon() {
     this.botsWritable();
     this.botsFile.writeSoon(() => this.botsText());
@@ -1475,7 +1480,8 @@ export class Store {
   /** The bookkeeping still waiting for its deferred save (engine sessions,
    * what each was handed), written now on the loop: for a step a restart
    * reads it back for, such as a queued send claimed for its turn
-   * (server/turns/steer-queue.ts). Nothing waiting: nothing written. */
+   * (server/turns/steer-queue.ts) or a session.started cursor a crash must
+   * --resume (#5402). Nothing waiting: nothing written. */
   persistEngineSessions() {
     this.botsFile.flushSync();
   }

@@ -11,10 +11,12 @@ import { hostTimeout } from "../../server/testing/host-timeout.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const require = createRequire(path.join(ROOT, "package.json"));
-const parser = require(path.join(
-  ROOT,
-  "node_modules/.pnpm/@babel+parser@7.29.9/node_modules/@babel/parser",
-));
+// Resolve via @babel/core so a pnpm version bump cannot break CI with a
+// hardcoded .pnpm/@babel+parser@X path, and so a non-hoisted nested parser
+// still loads (#5431).
+const parser = require(require.resolve("@babel/parser", {
+  paths: [path.dirname(require.resolve("@babel/core/package.json"))],
+}));
 
 const MAX_LINES = 400;
 const FN_TYPES = new Set([
@@ -25,19 +27,35 @@ const FN_TYPES = new Set([
   "ObjectMethod",
 ]);
 
-// Base debt still over 400 after this branch's remaining useful splits
-// (other #1383 slices already landed on feat/next-0828). Tracked so the
-// guard stays a ratchet: new oversizers fail, these named leftovers do not.
+// Base debt still over 400. Tracked so the guard stays a ratchet: new
+// oversizers fail, these named leftovers do not. Refresh after the #5431
+// babel resolve fix made the guard load again on every host.
 const ALLOWED_OVERSIZED = new Set([
-  "server/usage/limit-failover-host.ts::createLimitFailoverHost",
-  "server/drivers/muse-code.ts::create",
-  "server/desktop-trusted-approval.ts::createHandleDesktopTrustedApprovalMessage",
-  "server/desktop-trusted-approval.ts::handleDesktopTrustedApprovalMessage",
-  "server/turns/start-turn-prepare-validate.ts::createPrepareValidateStartTurn",
-  "server/turns/start-turn-setup.ts::createSetupStartTurn",
   "server/agent-api.ts::createAgentApiHandlers",
   "server/capabilities/capabilities.ts::resolveBotCapabilities",
+  "server/desktop-trusted-approval.ts::createHandleDesktopTrustedApprovalMessage",
+  "server/desktop-trusted-approval.ts::handleDesktopTrustedApprovalMessage",
+  "server/drivers/chat-mcp-tools.ts::mountChatTools",
+  "server/drivers/claude/create-instance.ts::createClaudeInstance",
   "server/drivers/claude/turn-prepare-mcp.ts::prepareClaudeTurnMcp",
+  "server/drivers/codex/stream.ts::attachCodexStream",
+  "server/drivers/muse-code.ts::create",
+  "server/drivers/openai-chat-completion.ts::createChatCompletions",
+  "server/drivers/openai-chat-turn.ts::executeOpenAIChatTurn",
+  "server/memory/memory-upkeep.ts::createMemoryUpkeep",
+  "server/org/org-member-routes.ts::memberRoutesWrite",
+  "server/remote-support/host-computer-router.ts::createHostComputerRouter",
+  "server/routes/bots-mutate-patch-build-access.ts::buildBotPatchAccess",
+  "server/routes/internal-integrations.ts::(anon)",
+  "server/routes/internal-integrations.ts::createInternalIntegrationsRoutes",
+  "server/routines/routines.ts::tick",
+  "server/runtime-events/request-opened-present.ts::presentRequestOpened",
+  "server/settings-actions.ts::createSettingsActions",
+  "server/turns/start-turn-prepare-admit.ts::createPrepareAdmitStartTurn",
+  "server/turns/start-turn-prepare-validate.ts::createPrepareValidateStartTurn",
+  "server/turns/start-turn-setup.ts::createSetupStartTurn",
+  "server/turns/start-turn-setup.ts::setupStartTurn",
+  "server/usage/limit-failover-host.ts::createLimitFailoverHost",
 ]);
 
 type Oversized = { lines: number; file: string; line: number; name: string };

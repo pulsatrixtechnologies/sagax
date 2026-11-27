@@ -15977,5 +15977,12 @@
   "composer.customize.item.plus": "Move the plus button",
   "composer.customize.item.model": "Move the model choice",
   "composer.customize.item.usage": "Move the usage pill",
-  "composer.customize.item.voice": "Move the voice button"
+  "composer.customize.item.voice": "Move the voice button",
+  "settings.usagePill.shape.messageBar.title": "Usage pill shape in the message bar",
+  "settings.usagePill.shape.messageBar.chooseAria": "Choose the shape of the usage pill in the message bar",
+  "settings.usagePill.shape.accountMenu.title": "Usage pill shape in the account menu",
+  "settings.usagePill.shape.accountMenu.chooseAria": "Choose the shape of the usage pill in the account menu",
+  "settings.usagePill.shape.menuBar.title": "Usage pill shape for the menu bar",
+  "settings.usagePill.shape.menuBar.chooseAria": "Choose the shape of the usage pill for the menu bar or notification area",
+  "usageTrayDetail.empty": "No account reports a usage window yet."
 }

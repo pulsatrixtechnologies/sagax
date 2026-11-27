@@ -480,6 +480,8 @@ const __BUILD_DATE__: string;
        * the channel, and the bridge is absent in the browser. "cloud" is the
        * sagax://cloud link (Settings → OMB Cloud, opened by the link). */
       onOpenAppSettings?(cb: (section?: "organization" | "usage" | "cloud" | "cloud-settings") => void): () => void;
+      /** The usage tray icon's click: open the pill's accounts detail (M-20261126-104). */
+      onOpenUsageDetail?(cb: () => void): () => void;
       /** Sagax → About / Help → About: the in-app About modal. Absent in the browser. */
       onOpenAbout?(cb: () => void): () => void;
       /** Help → Release notes. Absent in the browser and on a remote page. */

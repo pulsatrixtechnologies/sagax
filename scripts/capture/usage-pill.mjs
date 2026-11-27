@@ -112,7 +112,7 @@ try {
     page.setDefaultTimeout(120_000);
     await page.route((url) => url.pathname.startsWith("/api/"), (route) => route.fulfill({ status: 404, contentType: "application/json", body: '{"error":"not found"}' }));
     await page.goto(`${origin}/src/gallery/panel-visibility.html?skin=${skin}&lang=${lang}`, { waitUntil: "networkidle", timeout: 180_000 });
-    const row = page.locator('[data-settings-row="usagePillShape"]');
+    const row = page.locator('[data-settings-row="usagePillShape.messageBar"]');
     await row.waitFor();
     const group = page.locator('[data-settings-group="conversation"]');
     const target = (await group.count()) ? group : row;
@@ -120,7 +120,7 @@ try {
     await target.screenshot({ path: join(outDir, `settings-${lang}-${scheme}.png`) });
     notes.push({
       file: `settings-${lang}-${scheme}.png`,
-      rows: await Promise.all(["usagePillInBar", "usagePillShape", "contextIndicator"].map(async (id) => (await page.locator(`[data-settings-row="${id}"]`).innerText()).replace(/\s+/g, " ").trim())),
+      rows: await Promise.all(["usagePillInBar", "usagePillShape.messageBar", "usagePillShape.accountMenu", "usagePillShape.menuBar", "contextIndicator"].map(async (id) => (await page.locator(`[data-settings-row="${id}"]`).innerText()).replace(/\s+/g, " ").trim())),
     });
     await page.close();
   }

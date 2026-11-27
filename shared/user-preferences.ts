@@ -123,12 +123,15 @@ export const USER_PREFERENCE_KEYS = [
   "sagax.conversationHeader.v1",
   // Settings > Appearance > Conversation: the usage pill in the message bar
   // ("on" | "off"; absent is on), where it sits (inBar (absent), above,
-  // below), its shape (bars, circles (absent), battery, dots, text) and the
-  // conversation's context indicator ("on" | "off"; absent is on)
-  // (src/lib/usage-pill-preferences.ts, #5406, D-20261127-001)
+  // below), its shape per place (message bar keeps sagax.usagePillShape.v1;
+  // account menu and menu bar have their own keys) and the conversation's
+  // context indicator ("on" | "off"; absent is on)
+  // (src/lib/usage-pill-preferences.ts, #5406, D-20261127-001, M-20261126-108)
   "sagax.usagePillInBar.v1",
   "sagax.usagePillPlacement.v1",
   "sagax.usagePillShape.v1",
+  "sagax.usagePillShape.accountMenu.v1",
+  "sagax.usagePillShape.menuBar.v1",
   "sagax.contextIndicator.v1",
   // Settings > Appearance > Conversation: order of the message bar's movable
   // buttons (+, model, usage, voice) and how many sit left of the field

@@ -175,6 +175,17 @@ test("the usage icon's click opens Settings on Usage; a section main never names
   unsubscribe();
 });
 
+test("onOpenUsageDetail opens the pill's accounts detail from the tray click", () => {
+  let opened = 0;
+  const unsubscribe = exposed.api.onOpenUsageDetail(() => { opened += 1; });
+  emit("app:open-usage-detail");
+  emit("app:open-usage-detail");
+  assert.equal(opened, 2);
+  unsubscribe();
+  emit("app:open-usage-detail");
+  assert.equal(opened, 2);
+});
+
 test("usageTray hands the page's figures to main and hears main's request for fresh ones", () => {
   const sent = [];
   const send = fakeIpcRenderer.send;

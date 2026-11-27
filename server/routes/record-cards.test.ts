@@ -270,6 +270,24 @@ describe("the record window's actions", () => {
     expect(h.calls).toEqual([]);
   });
 
+  // M-20261127-140: a company's window adds a note with its words only, a contact and a site, each changed or removed
+  it("takes a company's note, contact and site, and refuses one missing its name or carrying another's field", () => {
+    expect(recordWrite({ action: "note.add", set: { text: "  Relancer en janvier  " } })).toEqual({ action: "note.add", set: { text: "Relancer en janvier" } });
+    expect(recordWrite({ action: "contact.add", set: { first_name: "Mira", last_name: "Novak", email: "mira@acme.example", phone: "" } }))
+      .toEqual({ action: "contact.add", set: { first_name: "Mira", last_name: "Novak", email: "mira@acme.example" } });
+    expect(recordWrite({ action: "contact.update", id: "2204", set: { phone: "418 555-0199" } })).toEqual({ action: "contact.update", id: "2204", set: { phone: "418 555-0199" } });
+    expect(recordWrite({ action: "site.add", set: { name: "Chantier", city: "Québec, QC" } })).toEqual({ action: "site.add", set: { name: "Chantier", city: "Québec, QC" } });
+    expect(recordWrite({ action: "site.remove", id: "52" })).toEqual({ action: "site.remove", id: "52", set: {} });
+    for (const ask of [
+      { action: "contact.add", set: { last_name: "Novak" } },
+      { action: "contact.add", set: { first_name: "Mira", hours: 1 } },
+      { action: "contact.update", id: "2204", set: {} },
+      { action: "contact.remove", set: {} },
+      { action: "site.add", set: { name: "x".repeat(51) } },
+      { action: "site.update", set: { name: "Bureau" } },
+    ]) expect(recordWrite(ask), JSON.stringify(ask)).toBeNull();
+  });
+
   it("holds an action to the organization's Refuse rules on writing that product, a file by its size, never its bytes", async () => {
     const rule: CustomRule = { id: "o1", ownerId: "p-admin", botId: null, when: "modifier Nimbus Desk", behavior: "deny", riskScope: [], enabled: true, createdAt: 1, updatedAt: 1, org: true, products: ["nimbus_desk"] };
     const note = recordWrite({ action: "note.add", set: { kind: "discussion", text: "Bonjour" } })!;

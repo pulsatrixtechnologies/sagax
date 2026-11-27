@@ -5,10 +5,12 @@
  * and invented records: nothing here names a real product, company or person.
  * ?lang=fr|en &skin=<id> &scene=<name>
  *   ticket    a chat with the ticket's chip: a click opens the ticket window (default)
- *   company   the same with the company's chip: the window of a kind with no body of its own
+ *   company   the same chat: its company's chip opens the company's window, its contact's chip the contact's
+ *             (src/lib/record-account-fixtures.ts; a contact named in the company opens in the same window)
  *   frame     the shared pieces of the frame on their own (pods, the filtered grid, the list,
  *             the schedule cells, the add menu, a form), for the lots that build other kinds
- *   &console=old  the console answers as before the window: no entry ids, no billing, no actions list
+ *   &console=old  the console answers as before the window: no entry ids, no billing, no actions list,
+ *             and no section for a company or a contact (their window is drawn from the card)
  * The time is held still. */
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -19,7 +21,8 @@ import { RecordSplit } from "../components/record-window/RecordSplit";
 import { RecordWindow } from "../components/record-window/RecordWindow";
 import { ScheduleCell, ScheduleTypeChip, type ScheduleKind } from "../components/record-window/ScheduleCell";
 import { loadLocale, t } from "../lib/i18n";
-import { NIMBUS_PRODUCT, companyCard, nimbusProduct, nimbusProductRaw, answer, type Lang } from "../lib/record-card-fixtures";
+import { NIMBUS_PRODUCT, nimbusProduct, nimbusProductRaw, answer, type Lang } from "../lib/record-card-fixtures";
+import { accountCompanyCard, accountConsole, accountContactCard } from "../lib/record-account-fixtures";
 import { seedPersonProducts } from "../lib/person-products";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider } from "../state/store";
@@ -186,11 +189,24 @@ function take(body: { field?: string; value?: string; action?: string; id?: stri
 }
 
 seedPersonProducts([nimbusProduct()]);
+const accounts = accountConsole(lang, NOW);
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   if (url.includes("/api/me/perspicax/products")) return json({ products: [nimbusProductRaw()] });
+  const account = /\/api\/me\/records\/nimbus_desk\/(company|contact)\/\d+\/detail\?/.exec(url)?.[1];
+  if (account) {
+    // a console older than the company's sections: it has no detail for the kind
+    if (oldConsole) return json({ state: "unavailable", code: "kind_unknown" }, 404);
+    const query = new URL(url, window.location.href).searchParams;
+    if (init?.method === "POST") { accounts.take(account, JSON.parse(String(init.body))); return json({ updated: true }); }
+    const section = query.get("section") ?? "counts";
+    if (section === "counts") return json(accounts.counts(account));
+    if (section === "choices") return json({ choices: accounts.choices[query.get("field") ?? ""] ?? [], next: null });
+    if (section === "download") return json({ name: "contrat-adhesion.pdf", contentType: "application/pdf", base64: btoa("PDF") });
+    return json({ ...accounts.section(account, section), next: null });
+  }
   if (url.includes("/detail?")) {
     const query = new URL(url, window.location.href).searchParams;
     if (!url.includes(`/ticket/${TICKET_ID}/`)) return new Response(null, { status: 404 });
@@ -209,7 +225,8 @@ window.fetch = async (input, init) => {
   const match = /\/api\/me\/records\/nimbus_desk\/(\w+)\/([^?]+)/.exec(url);
   if (match) {
     if (match[1] === "ticket") return json(answer(ticketCard()));
-    if (match[1] === "company") return json(answer(companyCard(NOW, lang)));
+    if (match[1] === "company") return json(answer(accountCompanyCard(NOW, lang)));
+    if (match[1] === "contact") return json(answer(accountContactCard(NOW, lang)));
     return json({ state: "unknown" });
   }
   // the app's other routes are not this gallery's: answered as a server without them
@@ -218,8 +235,8 @@ window.fetch = async (input, init) => {
 };
 
 const CHAT = lang === "fr"
-  ? `Le billet [#${TICKET_ID}](sagax://record/nimbus_desk/ticket/${TICKET_ID}) attend la rencontre du 14 décembre avec [Acme Fabrication](sagax://record/nimbus_desk/company/7310).`
-  : `Ticket [#${TICKET_ID}](sagax://record/nimbus_desk/ticket/${TICKET_ID}) waits for the December 14 meeting with [Acme Fabrication](sagax://record/nimbus_desk/company/7310).`;
+  ? `Le billet [#${TICKET_ID}](sagax://record/nimbus_desk/ticket/${TICKET_ID}) attend la rencontre du 14 décembre avec [Acme Fabrication](sagax://record/nimbus_desk/company/7310) et [Ada Lindqvist](sagax://record/nimbus_desk/contact/2204).`
+  : `Ticket [#${TICKET_ID}](sagax://record/nimbus_desk/ticket/${TICKET_ID}) waits for the December 14 meeting with [Acme Fabrication](sagax://record/nimbus_desk/company/7310) and [Ada Lindqvist](sagax://record/nimbus_desk/contact/2204).`;
 
 type Row = { id: string; kind: ScheduleKind; who: string; when: string; where: string };
 const ROWS: Row[] = [

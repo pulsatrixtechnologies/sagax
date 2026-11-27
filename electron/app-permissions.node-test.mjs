@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { readFileSync } from "node:fs";
-import { appPermissionAllowed, appPermissionHandlers, connectorSetupUrl, externalMailUrl, externalOpenUrl, externalWebUrl, remoteClipboardWriteAllowed } from "./app-permissions.mjs";
+import { appPermissionAllowed, appPermissionHandlers, connectorSetupUrl, externalMailUrl, externalOpenUrl, externalTelUrl, externalWebUrl, remoteClipboardWriteAllowed } from "./app-permissions.mjs";
 
 const LOCAL_ORIGIN = "http://127.0.0.1:5199";
 const LOCAL_PAGE = "http://127.0.0.1:5199/chat?botId=bot-1";
@@ -111,6 +111,14 @@ test("window.open also hands a bounded mailto: draft to the mail client, nothing
     assert.throws(() => externalOpenUrl(url));
   // the IPC entry point stays web-only
   assert.throws(() => externalWebUrl(draft), /Only web/);
+});
+
+test("window.open hands a phone number to the phone app, its separators dropped, nothing else", () => {
+  assert.equal(externalTelUrl("tel:+1 (450) 555-0100"), "tel:+14505550100");
+  assert.equal(externalOpenUrl("tel:450.555.0100;ext=12"), "tel:4505550100;ext=12");
+  for (const url of ["tel:", "tel:12", "tel:450-555-0100?x=1", "tel:450 555 0100\nX", "tel:abc", "tel:+1;phone-context=evil", `tel:${"1".repeat(60)}`])
+    assert.throws(() => externalOpenUrl(url), /phone/);
+  assert.throws(() => externalWebUrl("tel:4505550100"), /Only web/);
 });
 
 test("fails closed on unparsable or opaque origins", () => {

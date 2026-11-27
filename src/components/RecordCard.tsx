@@ -30,7 +30,7 @@
 //
 // Every word of a card is the console's data: this file names no product and
 // no kind, branches on neither, and reads only the tones, the levels, the two
-// roles `contact` and `owner` (for their icons), the date keys and the nine
+// roles `contact` and `owner` (for their icons), the date keys and the
 // types of a field (#4572): a ticket, a company, a project, an invoice or an
 // agreement are the same renderer over different data. The layout is the data's:
 // a kind with a text, a list or an activity is the two-pane landscape card, a
@@ -213,13 +213,13 @@ export function useOpenRef(ref: RecordRef | undefined): ((ref: RecordRef, label:
 
 // A chip's words are in the popover ink over the tone's own tint (4.5:1 in
 // every skin, scripts/check-skin-contrast.mjs); the tone is a dot or a glyph.
-const TONE_CLASS: Record<RecordTone, string> = {
+export const TONE_CLASS: Record<RecordTone, string> = {
   open: "bg-popover-field",
   waiting: "bg-warning/15",
   done: "bg-success/15",
   alert: "bg-danger/15",
 };
-const TONE_DOT: Record<RecordTone, string> = {
+export const TONE_DOT: Record<RecordTone, string> = {
   open: "bg-popover-ink-secondary",
   waiting: "bg-warning",
   done: "bg-success",

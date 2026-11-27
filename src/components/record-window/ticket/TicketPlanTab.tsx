@@ -105,7 +105,7 @@ function fieldsFor(kind: RecordPlanKind, row?: PlanRow): RecordFormField[] {
 }
 
 /** A form whose pickers load their choices from the console once it opens. */
-function PlanForm({ kind, row, detail, onDone }: { kind: RecordPlanKind; row?: PlanRow; detail: RecordDetail; onDone: () => void }) {
+export function PlanForm({ kind, row, detail, onDone }: { kind: RecordPlanKind; row?: PlanRow; detail: RecordDetail; onDone: () => void }) {
   const [choices, setChoices] = useState<Partial<Record<"member" | "where", RecordChoice[]>>>({});
   const { choices: read } = detail;
   useEffect(() => {

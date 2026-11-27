@@ -1,6 +1,7 @@
 // What a person writes from a record window (M-20261127-101): a note, a time
-// entry, an expense, a planned entry, a configuration, an attachment, each
-// added, changed or removed, and a planned entry marked done. The app sends
+// entry, an expense, a planned entry, a configuration, an attachment, a
+// company's contact or site, each added, changed or removed, and a planned
+// entry marked done. The app sends
 // one action through the record's detail route
 // (`POST /api/me/records/:product/:kind/:id/detail { action, id?, set }`),
 // the server checks it here, applies the organization's rules to it as a
@@ -19,6 +20,8 @@ export const RECORD_ACTIONS = [
   "schedule.add", "schedule.update", "schedule.remove", "schedule.done",
   "configuration.add", "configuration.remove",
   "attachment.add", "attachment.remove",
+  "contact.add", "contact.update", "contact.remove",
+  "site.add", "site.update", "site.remove",
 ] as const;
 export type RecordActionName = (typeof RECORD_ACTIONS)[number];
 
@@ -38,6 +41,10 @@ export const RECORD_NOTE_MAX = 20_000;
 export const RECORD_LINE_NOTE_MAX = 4_000;
 export const RECORD_SUBJECT_MAX = 200;
 export const RECORD_FILE_NAME_MAX = 255;
+/** A contact's or a site's name, title, phone and address line. */
+export const RECORD_NAME_MAX = 50;
+export const RECORD_PHONE_MAX = 30;
+export const RECORD_EMAIL_MAX = 250;
 /** An attachment, in bytes (25 MiB). */
 export const RECORD_FILE_MAX = 25 * 1024 * 1024;
 /** Its base64, in characters. */
@@ -71,10 +78,15 @@ const DAY: Rule = { type: "day" };
 const BILLING: Rule = { type: "one", of: RECORD_BILLING };
 const NOTE_KIND: Rule = { type: "one", of: RECORD_NOTE_KINDS };
 const PLAN_KIND: Rule = { type: "one", of: RECORD_PLAN_KINDS };
+/** A company's contact (M-20261127-101): the console writes it under the company it was added from. */
+const CONTACT_FIELDS: Record<string, Rule> = { first_name: TEXT(RECORD_NAME_MAX, 1), last_name: TEXT(RECORD_NAME_MAX), title: TEXT(RECORD_NAME_MAX), phone: TEXT(RECORD_PHONE_MAX), email: TEXT(RECORD_EMAIL_MAX) };
+/** A company's site. */
+const SITE_FIELDS: Record<string, Rule> = { name: TEXT(RECORD_NAME_MAX, 1), address: TEXT(RECORD_NAME_MAX), city: TEXT(RECORD_NAME_MAX), phone: TEXT(RECORD_PHONE_MAX) };
 
 /** Each action: whether it names an entry, the fields it may set, the ones it must. */
 const SHAPES: Record<RecordActionName, { id: boolean; fields: Record<string, Rule>; required?: readonly string[]; some?: boolean }> = {
-  "note.add": { id: false, fields: { text: TEXT(RECORD_NOTE_MAX, 1), kind: NOTE_KIND }, required: ["text", "kind"] },
+  // a ticket's note says its kind; a company's or a contact's note has none (the console keeps its own default)
+  "note.add": { id: false, fields: { text: TEXT(RECORD_NOTE_MAX, 1), kind: NOTE_KIND }, required: ["text"] },
   "note.update": { id: true, fields: { text: TEXT(RECORD_NOTE_MAX, 1), kind: NOTE_KIND }, some: true },
   "note.remove": { id: true, fields: {} },
   "time.add": { id: false, fields: { hours: HOURS, note: TEXT(RECORD_LINE_NOTE_MAX), billing: BILLING, work_type: ID, start: WHEN }, required: ["hours"] },
@@ -91,6 +103,12 @@ const SHAPES: Record<RecordActionName, { id: boolean; fields: Record<string, Rul
   "configuration.remove": { id: true, fields: {} },
   "attachment.add": { id: false, fields: { name: TEXT(RECORD_FILE_NAME_MAX, 1), content_type: TEXT(100), base64: { type: "base64" } }, required: ["name", "base64"] },
   "attachment.remove": { id: true, fields: {} },
+  "contact.add": { id: false, fields: CONTACT_FIELDS, required: ["first_name"] },
+  "contact.update": { id: true, fields: CONTACT_FIELDS, some: true },
+  "contact.remove": { id: true, fields: {} },
+  "site.add": { id: false, fields: SITE_FIELDS, required: ["name"] },
+  "site.update": { id: true, fields: SITE_FIELDS, some: true },
+  "site.remove": { id: true, fields: {} },
 };
 
 const ENTRY_ID = /^[A-Za-z0-9._:-]{1,64}$/;

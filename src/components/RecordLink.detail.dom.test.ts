@@ -497,8 +497,8 @@ describe("the ticket window through its chip", () => {
     expect(action.querySelector("svg")).toBeNull();
   });
 
-  it("asks nothing of the detail route for a record that is not a ticket", async () => {
-    await open("sagax://record/nimbus_desk/company/7310", "Acme");
+  it("asks nothing of the detail route for a record with no window of its own (a ticket, a company and a contact have one)", async () => {
+    await open("sagax://record/nimbus_desk/invoice/5150", "INV-1042");
     expect(card()).not.toBeNull();
     expect(calls.some((call) => call.url.includes("/detail"))).toBe(false);
   });

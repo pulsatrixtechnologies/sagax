@@ -567,8 +567,10 @@ export type RecordNotesState = typeof RECORD_NOTES_STATES[number];
 export const RECORD_DATE_KEYS = ["opened", "updated", "due", "closed"] as const;
 export type RecordDateKey = typeof RECORD_DATE_KEYS[number];
 /** How a field of a card is drawn (#4572). A field without a type, or with a
- * type this app does not know, is text: its `value` is always ready to show. */
-export const RECORD_FIELD_TYPES = ["text", "date", "ago", "money", "duration", "percent", "person", "ref", "state"] as const;
+ * type this app does not know, is text: its `value` is always ready to show.
+ * `phone` and `email` are text too, ready to show; they say what a record
+ * window's call and write buttons reach (M-20261127-101). */
+export const RECORD_FIELD_TYPES = ["text", "date", "ago", "money", "duration", "percent", "person", "ref", "state", "phone", "email"] as const;
 export type RecordFieldType = typeof RECORD_FIELD_TYPES[number];
 export const RECORD_LINES_STATES = ["ok", "none", "forbidden", "unavailable"] as const;
 export type RecordLinesState = typeof RECORD_LINES_STATES[number];

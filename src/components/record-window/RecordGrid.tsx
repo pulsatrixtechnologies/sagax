@@ -209,8 +209,15 @@ export function RecordGrid<R>({ type, grid, columns, rows, rowKey, rowAttributes
   );
 }
 
-/** Rows of any shape under the one filter (a ticket's attachments, its configurations). */
-export function RecordList<R>({ columns, rows, rowKey, row, toolbar, empty, label }: {
+/** How a list lays its entries: rows parted by a hairline, blocks one under the other, or blocks side by side. */
+const LIST_LAYOUT = {
+  rows: { list: "flex min-w-0 flex-col divide-y divide-popover-hairline", item: "flex min-w-0 items-center gap-3 py-2.5" },
+  stack: { list: "flex min-w-0 flex-col gap-2.5", item: "flex min-w-0 flex-col gap-2 rounded-xl bg-popover-field p-3.5" },
+  cards: { list: "grid min-w-0 grid-cols-1 gap-3 @min-[40rem]:grid-cols-2 @min-[64rem]:grid-cols-3 @min-[84rem]:grid-cols-4", item: "flex min-w-0 flex-col gap-2.5 rounded-xl bg-popover-field p-4" },
+} as const;
+
+/** Entries of any shape under the one filter (a ticket's attachments, its configurations; a company's contacts as cards). */
+export function RecordList<R>({ columns, rows, rowKey, row, toolbar, empty, label, layout = "rows" }: {
   columns: readonly RecordColumn<R>[];
   rows: readonly R[];
   rowKey: (row: R) => string;
@@ -218,6 +225,7 @@ export function RecordList<R>({ columns, rows, rowKey, row, toolbar, empty, labe
   toolbar?: ReactNode;
   empty?: ReactNode;
   label: string;
+  layout?: keyof typeof LIST_LAYOUT;
 }) {
   const [value, setValue] = useState<DataFilterValue>({ text: "" });
   const kept = filterRecordRows(rows, columns, value);
@@ -228,8 +236,8 @@ export function RecordList<R>({ columns, rows, rowKey, row, toolbar, empty, labe
         {toolbar && <span className="ms-auto flex flex-wrap items-center gap-1.5">{toolbar}</span>}
       </div>
       {kept.length ? (
-        <ul className="flex min-w-0 flex-col divide-y divide-popover-hairline" aria-label={label}>
-          {kept.map((one) => <li key={rowKey(one)} className="flex min-w-0 items-center gap-3 py-2.5">{row(one)}</li>)}
+        <ul className={LIST_LAYOUT[layout].list} aria-label={label}>
+          {kept.map((one) => <li key={rowKey(one)} className={LIST_LAYOUT[layout].item}>{row(one)}</li>)}
         </ul>
       ) : (
         <p className="py-2 text-popover-ink-secondary" role="status">{rows.length ? t("recordWindow.noMatch") : empty ?? t("recordCard.related.empty")}</p>

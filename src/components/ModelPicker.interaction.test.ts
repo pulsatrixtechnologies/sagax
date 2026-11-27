@@ -680,6 +680,12 @@ describe("the composer's model menu (2026-10-12)", () => {
     expect(listed(other)).not.toContain("anthropic");
     expect(row(other, "claude-opus-5-5")).toBeUndefined();
     expect(row(other, "gpt-5.6")?.props).toMatchObject({ kind: "model", modelId: "gpt-5.6" });
+    // a conversation of a bot on the hidden provider that went to a backup can go back to it
+    fixture.values = [];
+    fixture.own = 0;
+    fixture.bots = [bot("claude", "claude-opus-5-5")];
+    const onBackup = open(bot("codex", "gpt-5.6"), composer);
+    expect(row(onBackup, "claude-opus-5-5")?.props).toMatchObject({ kind: "model", modelId: "claude-opus-5-5" });
   });
 });
 

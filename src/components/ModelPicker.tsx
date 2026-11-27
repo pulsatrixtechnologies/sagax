@@ -239,10 +239,12 @@ export function ModelPicker({
   const notAllowed = (instance: typeof state.instances[number]) => engineOffer(offerContext, instance.instanceId) === "notAllowed";
   const notGiven = (instance: typeof state.instances[number]) => engineOffer(offerContext, instance.instanceId) === "notGiven";
   // D-20261126-018: a provider the organization hid stays only in the menu
-  // of what is already on it, as its model in use
+  // of what is already on it, as its model in use; a conversation on a
+  // backup can still go back to its bot's own engine
+  const ownEngine = state.own?.modelSelection.instanceId;
   const pickerInstances = offerContext.organization
     ? configured.filter((instance) => !notAllowed(instance) &&
-      (instance.instanceId === selection.instanceId || (!engineHidden(offerContext, instance.instanceId) && !orgRefusesEngine(instance) && !notGiven(instance))))
+      (instance.instanceId === selection.instanceId || (!engineHidden(offerContext, instance.instanceId) || instance.instanceId === ownEngine) && !orgRefusesEngine(instance) && !notGiven(instance)))
     : configured;
   // #4329 lot 6: "Runs with", the bot's own setting (src/components/RunsWith.tsx):
   // the engines offered here that may run its model; a pick writes the bot's choice

@@ -124,7 +124,9 @@ export interface LimitFailoverHostDeps {
   /** The thread still runs a turn (the failed one settling, or a newer one). */
   busy: (botId: string, threadId: string) => boolean;
   /** Moves the thread (not the bot); the refusal in words, or null once done. */
-  switchThread: (botId: string, threadId: string, to: ModelSelection) => string | null;
+  /** `back`: the conversation goes back to the engine it left (a hidden
+   * provider it was on stays its own, D-20261126-018). */
+  switchThread: (botId: string, threadId: string, to: ModelSelection, back?: boolean) => string | null;
   /** One row in the thread. A switch and a return are transparent (the maintainer,
    * 2026-10-29): a hidden `notice:` row and a line in the Events lens; only
    * a wait the person must know of reads in the chat. Auto's own switch is
@@ -576,7 +578,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     if (run) {
       if (backup && store.takeResend(`routine:${run.id}`)) {
         if (backHome && backLine) {
-          const refused = deps.switchThread(dispatch.botId, threadId, backHome);
+          const refused = deps.switchThread(dispatch.botId, threadId, backHome, true);
           if (!refused) {
             store.forget(threadId);
             deps.replaceFailure(threadId, turnId, backLine, dispatch.at);
@@ -1034,7 +1036,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         if (!row || !same(deps.threadSelection(botId, threadId), row.to)) return null;
         const payer = deps.payer(botId, speaker);
         store.block(payer, row.to.instanceId, deps.now() + BACKUP_REFUSED_MS);
-        const refused = deps.switchThread(botId, threadId, row.from);
+        const refused = deps.switchThread(botId, threadId, row.from, true);
         if (refused) console.warn(`[limit-failover] ${threadId}: could not go back to ${row.from.instanceId}: ${refused}`);
         store.forget(threadId);
         return { from: deps.engineName(row.from.instanceId), to: deps.engineName(row.to.instanceId) };
@@ -1122,7 +1124,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
           const current = deps.threadSelection(botId, threadId);
           if (!same(current, row.to)) store.forget(threadId);
           else if (store.due(row) && store.blockedUntil(payer, row.from.instanceId) === null && !limitRefusal(botId, threadId, speaker, row.from.instanceId)) {
-            const refused = deps.switchThread(botId, threadId, row.from);
+            const refused = deps.switchThread(botId, threadId, row.from, true);
             if (!refused) {
               store.forget(threadId);
               deps.note(threadId, { kind: "back", engine: deps.engineName(row.from.instanceId) });

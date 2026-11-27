@@ -348,11 +348,14 @@ Covered by `src/components/SettingsModal.orgCleanup.test.ts`,
   a catalog engine is hidden in `organization.hiddenEngines`, with
   `allowedEngines` and `disabledModels` left as stored. Hidden is for new
   choices only (D-20261126-018): `orgEngineHidden` in `server/index.ts`
-  refuses it in `checkedModelSelection` (engine changed), the selection
+  refuses it in `checkedModelSelection` (engine changed, unless `alsoOn`
+  names it: the bot's own engine, a failover's return), the selection
   contexts (new bot, move target, team setup and import), the console's
-  model change and Auto's pool (`autoEnginesFor`, the bot's own engine
-  kept); turns, `allowedEngines` and `applyOrgEngineAllowList` never read
-  it, so no bot moves. The app gets `hiddenEngines` in its config and
+  model change and copy, the target of `applyOrgEngineAllowList`, Auto's
+  pool (`autoEnginesFor`), `run_with_engine` (`relayEnginesFor`) and the
+  startup recovery's backups (`start-turn-finish.ts`), the bot's own engine
+  kept each time; turns and `allowedEngines` never read it, so no bot
+  moves. The app gets `hiddenEngines` in its config and
   `offeredEngines` (`shared/offered-engines.ts`) leaves it out of every list
   but the one of a bot already on it (`keep`). On a managed workspace the
   rows say `removable: false` and `takesKey: false`; an engine not here is

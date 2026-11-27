@@ -12,6 +12,9 @@ function relayEnginesFor(bot: BotRecord, speaker: TurnSpeaker, guestConfined = f
   for (const instance of host.registry.instances()) {
     if (!instance.enabled || host.providerInstancesChanging.has(instance.instanceId) || host.policyModelRefusal(instance)) continue;
     if (host.orgEngineTurnRefusal(bot, instance, speaker)) continue;
+    // D-20261126-018: a provider the organization hid is no new choice; the
+    // bot's own engine stays
+    if (instance.instanceId !== bot.modelSelection.instanceId && host.orgEngineHidden(instance.instanceId)) continue;
     if (guestConfined && instance.adapter.capabilities.guestTurns !== "confined") continue;
     let via: AutoEngine["via"] = "server";
     const switches = host.modelSwitchesFor(host.effectiveBotOwner(bot));

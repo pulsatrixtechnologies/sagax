@@ -8845,6 +8845,8 @@ const IDENTITY = identityConfigFromEnv();
 setSharedHost(IDENTITY.kind === "perspicax");
 /** A model on an engine the organization's admin does not allow (allowedEngines). */
 const ORG_ENGINE_NOT_ALLOWED = "Your organization does not allow this model provider.";
+/** D-20261126-018: a provider the organization hid, picked as a new choice. */
+const ORG_ENGINE_HIDDEN = "Your organization does not offer this model provider for a new choice. A bot already on it keeps it.";
 /** 2026-10-30 (lot 2): a model turned off, by the organization or by the person. */
 const MODEL_TURNED_OFF_BY_ORG = "Your organization turned this model off. Pick another model or Auto.";
 const MODEL_TURNED_OFF_BY_PERSON = "You turned this model off in Settings > Providers > Models. Turn it back on there, or pick another model.";
@@ -16787,16 +16789,19 @@ const limitFailover = createLimitFailoverHost({
   },
   threadSelection: (botId, threadId) => store.projectBotForTask(botId, threadId)?.modelSelection ?? null,
   busy: threadBusy,
-  switchThread: (botId, threadId, to) => {
+  switchThread: (botId, threadId, to, back) => {
     const current = store.projectBotForTask(botId, threadId);
     if (!current) return "the conversation is gone";
     if (threadBusy(botId, threadId)) return "the conversation is working";
     const target = registry.get(to.instanceId);
     if (!target?.enabled) return "the engine is unavailable";
+    // D-20261126-018: going back to the engine it left, or to its bot's own,
+    // is no new choice of a hidden provider
+    const alreadyOn = back === true || to.instanceId === current.modelSelection.instanceId || to.instanceId === store.bot(botId)?.modelSelection.instanceId;
     const refusal = policyModelRefusal(target) ?? orgEngineAllowRefusal(to.instanceId, effectiveBotOwner(current))
-      ?? (to.instanceId === current.modelSelection.instanceId ? undefined : orgEngineHiddenRefusal(to.instanceId));
+      ?? (alreadyOn ? undefined : orgEngineHiddenRefusal(to.instanceId));
     if (refusal) return refusal;
-    const checked = checkedTaskModelSwitch(current, to, false, true);
+    const checked = checkedTaskModelSwitch(current, to, false, true, { returning: back === true });
     if (!checked.ok) return checked.error;
     if (!store.switchTaskModel(botId, threadId, checked.selection, false, {
       ...hostedModels?.resetTask(current.modelSelection, checked.selection), rewound: true
@@ -22691,7 +22696,8 @@ const chiefPeerTargetRule = (noun: string) => (proposerBotId: string, targetBotI
  * selection must resolve, and the destination driver must still support the
  * bot's existing approval setup. */
 const validateModelProposal = (selection: ModelSelection, current?: BotRecord): string | null => {
-  const checked = checkedModelSelection(selection, undefined, true, current ? effectiveBotOwner(current) : undefined);
+  // the bot's own selection, as every model switch: its engine is no new choice (D-20261126-018)
+  const checked = checkedModelSelection(selection, current ? { selection: current.modelSelection, busy: false } : undefined, true, current ? effectiveBotOwner(current) : undefined);
   if (!checked.ok) return checked.error;
   if (current?.approvalGrant) return "Wait for the approval-level confirmation before changing this bot's model";
   if (current) {
@@ -33555,7 +33561,10 @@ const orgBotsDeps: BotsDeps = {
     const sourceMode = approvalModeFor(source);
     const mode = memberAutoRefused(copy, ["ask"], sourceMode) ? "ask" : sourceMode;
     store.patchBot(copy.id, {
-      modelSelection: structuredClone(source.modelSelection),
+      // D-20261126-018: a copy is a new bot, never started on a provider the
+      // organization hid: it keeps the start the import gave it, as the app's
+      // Duplicate does
+      ...(orgEngineHidden(source.modelSelection.instanceId) ? {} : { modelSelection: structuredClone(source.modelSelection) }),
       ...(input.name ? { name: input.name } : {}),
       ...(mode !== "full" && mode !== "custom" ? { approvalMode: mode, autoApprove: mode === sourceMode ? source.autoApprove : false } : {}),
       ...(source.speakReplies !== undefined ? { speakReplies: source.speakReplies } : {}),
@@ -34405,7 +34414,7 @@ function orgHiddenEnginesFor(person?: string | null): string[] {
 /** A new choice of this engine (a model picked by name, a new bot's start, a
  * move target, Auto's pick) while the organization hid it. */
 function orgEngineHiddenRefusal(instanceId: string): string | undefined {
-  return orgEngineHidden(instanceId) ? ORG_ENGINE_NOT_ALLOWED : undefined;
+  return orgEngineHidden(instanceId) ? ORG_ENGINE_HIDDEN : undefined;
 }
 /** Why a model choice may not use this engine here, if it may not.
  * 2026-10-30: an engine outside the organization's list is refused to
@@ -38547,6 +38556,7 @@ const startTurnRunner = createStartTurn({
   officeTurnText,
   orgEngineRefusal,
   orgEngineTurnRefusal,
+  orgEngineHidden,
   orgSpeakerPrincipal,
   principals,
   releaseVersion,

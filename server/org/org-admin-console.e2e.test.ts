@@ -181,6 +181,8 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
         own: { driver: "claudeAgent", config: { cli: FAKE_CLAUDE, fullAuto: true } },
         // An account added beside the first one, on no bot: C5 removes it (#5351).
         spare: { driver: "claudeAgent", config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        // Signed out before the prompt: C5's startup recovery (D-20261126-018).
+        signedout: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_MODE: "not-logged-in" }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
       },
     }));
     await start();
@@ -829,6 +831,54 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     expect(picked.status, picked.text).toBe(200);
     expect(await selectionOf(comet.id)).toMatchObject({ instanceId: "claude", model: "fake-model" });
   }, 60_000);
+
+  it("C5: while a provider is hidden no automatic path puts another bot on it: an allowedEngines change, a startup recovery, a console copy (D-20261126-018, #5351)", async () => {
+    const alice = await signIn(ALICE);
+    type Bot = { id: string; modelSelection: Record<string, unknown>; tasks?: Array<{ threadId: string; modelSelection: Record<string, unknown> }> };
+    const botOf = async (id: string) => ((await api("GET", "/api/bots", alice)).body.bots as Bot[]).find((bot) => bot.id === id)!;
+    // Relay starts on an engine that is signed out, its backups the hidden provider then another
+    const relay = await createBot(alice, "Relay", "signedout");
+    const listed = (await api("GET", "/api/instances", alice)).body.instances as Array<{ instanceId: string; models: { default: string } }>;
+    const modelOf = (instanceId: string) => listed.find((row) => row.instanceId === instanceId)!.models.default;
+    const backups = [{ instanceId: "claude", model: modelOf("claude") }, { instanceId: "broken", model: modelOf("broken") }];
+    expect((await api("PATCH", `/api/bots/${relay.id}`, alice, { fallback: backups })).status).toBe(200);
+    const recovery = await api("PATCH", `/api/bots/${relay.id}/runtime-settings`, alice, { automaticRecovery: { enabled: true, backup: backups[0] } });
+    expect(recovery.status, recovery.text).toBe(200);
+    const probe = await createBot(alice, "Probe", "broken");
+
+    const hid = await admin("POST", "engines/claude/hide", ALICE, {});
+    expect(hid.status, hid.text).toBe(200);
+    try {
+      // the startup recovery skips the hidden backup and tries the next one
+      const sent = await api("POST", `/api/bots/${relay.id}/messages`, alice, { text: "recover past the hidden one", threadId: relay.threadId });
+      expect(sent.status, sent.text).toBe(202);
+      const lines = await waitFor(async () => {
+        const got = (await api("GET", `/api/threads/${relay.threadId}/messages?limit=100`, alice)).body.messages as Array<{ tool?: { name?: string } }>;
+        const recoveryLines = got.map((message) => message.tool?.name ?? "").filter((name) => name.startsWith("recovery:"));
+        return recoveryLines.length ? recoveryLines : null;
+      }, 30_000);
+      expect(lines[0]).toMatch(new RegExp(`Trying .+ · ${backups[1]!.model} once in this thread\\.$`));
+      const failures = ((await api("GET", `/api/threads/${relay.threadId}/messages?limit=100`, alice)).body.messages as Array<{ text?: string }>).map((message) => message.text ?? "");
+      expect(failures.join("\n")).not.toContain("Automatic recovery unavailable");
+      expect((await botOf(relay.id)).tasks?.find((task) => task.threadId === relay.threadId)?.modelSelection).toMatchObject({ instanceId: "broken" });
+
+      // a change of allowedEngines moves a bot off the list, never onto the hidden provider
+      const narrowed = await admin("POST", "settings", ALICE, { allowedEngines: ["claude", "hold", "signedout"] });
+      expect(narrowed.status, narrowed.text).toBe(200);
+      expect((await botOf(probe.id)).modelSelection).toMatchObject({ instanceId: "hold", auto: true });
+      // Atlas, on the hidden provider and still allowed, does not move
+      expect((await botOf(bots.atlas!.id)).modelSelection).toMatchObject({ instanceId: "claude", model: "fake-model" });
+
+      // a console copy of a bot on the hidden provider is a new bot: it never starts there
+      const copied = await admin("POST", `bots/${bots.atlas!.id}/clone`, ALICE, { name: "Atlas copy" });
+      expect(copied.status, copied.text).toBe(201);
+      expect(copied.body.bot.engine.instanceId).not.toBe("claude");
+    } finally {
+      await admin("POST", "settings", ALICE, { allowedEngines: null });
+      const back = await admin("POST", "engines/claude/restore", ALICE, {});
+      expect(back.status, back.text).toBe(200);
+    }
+  }, 90_000);
 
   it("C5: the vault export policy (2026-10-18), and a pairing code is no recent sign-in", async () => {
     // on by default; the console and Settings > Organization both carry it

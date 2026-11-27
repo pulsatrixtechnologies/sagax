@@ -296,6 +296,8 @@ export type StartTurnHost = {
   officeTurnText: any,
   orgEngineRefusal: any,
   orgEngineTurnRefusal: any,
+  /** D-20261126-018: a provider the organization hid (no new choice). */
+  orgEngineHidden: any,
   orgSpeakerPrincipal: any,
   principals: any,
   releaseVersion: any,

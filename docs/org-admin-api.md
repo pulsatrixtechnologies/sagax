@@ -1031,11 +1031,14 @@ that were on come back with it.
 Hidden is for new choices only (D-20261126-018). The app reads the list in
 its config (`hiddenEngines`) and leaves the engine out of every menu, New
 bot, backups and Settings; a model on it is refused when picked by name for
-a bot or conversation that is not on it; a new bot never starts on it; Auto
-and a limit failover never pick it for a bot whose own engine it is not.
-A bot or conversation already on it keeps its engine and model, runs its
-turns there and still shows it as its model in use in its own menu. Neither
-`hide` nor `restore` moves a bot: nothing to count, nothing to put back.
+a bot or conversation that is not on it; a new bot, a copy of a bot and a
+bot moved off `allowedEngines` never start on it; Auto, `run_with_engine`, a
+limit failover and a startup recovery never pick it for a bot whose own
+engine it is not (a backup on it is skipped for the next one). A bot or
+conversation already on it keeps its engine and model, runs its turns there
+and still shows it as its model in use in its own menu; a conversation of
+that bot that went to a backup can go back to it. Neither `hide` nor
+`restore` moves a bot: nothing to count, nothing to put back.
 
 Answers `{ "ok": true, "hidden", "engines" }`; hiding a hidden engine or
 restoring a shown one changes nothing. An added account is

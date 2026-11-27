@@ -8,7 +8,10 @@ export type Host = Record<string, any>;
 export function createCheckedModelSelection(getHost: () => Host): any {
 function checkedModelSelection(
   raw: unknown,
-  current?: { selection: ModelSelection; busy: boolean },
+  /** `alsoOn`: engines this bot or conversation is already on besides its
+   * selection (its bot's own, the one a failover returns to): never a new
+   * choice of a hidden provider (D-20261126-018). */
+  current?: { selection: ModelSelection; busy: boolean; alsoOn?: readonly string[] },
   requireAvailableModel = false,
   /** #1098: the person choosing, who may pick an engine outside the
    * organization's list that they pay for themselves. */
@@ -45,10 +48,13 @@ function checkedModelSelection(
   // stays writable (its effort) until the fallback moves it. A provider the
   // organization hid is refused as a new choice only: a bot already on it
   // keeps it, its models included (D-20261126-018).
-  if ((!current || current.selection.instanceId !== selection.instanceId)
-    && (host.orgEngineAllowRefusal(selection.instanceId, payer) || host.orgEngineHiddenRefusal(selection.instanceId))) {
+  const engineChanged = !current || current.selection.instanceId !== selection.instanceId;
+  const alreadyOn = !engineChanged || (current?.alsoOn?.includes(selection.instanceId) ?? false);
+  if (engineChanged && host.orgEngineAllowRefusal(selection.instanceId, payer)) {
     return { ok: false, status: 403, error: host.ORG_ENGINE_NOT_ALLOWED };
   }
+  const hiddenRefusal = alreadyOn ? undefined : host.orgEngineHiddenRefusal(selection.instanceId);
+  if (hiddenRefusal) return { ok: false, status: 403, error: hiddenRefusal };
   // 2026-10-30 (lot 2): a model turned off is never picked by name (Auto
   // then starts from a model still on); the one a bot already runs stays
   // writable until applyModelSwitches moves it.

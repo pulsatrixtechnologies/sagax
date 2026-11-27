@@ -39,7 +39,7 @@ import { usePersonalSections } from "@/lib/personal-sections";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { useStore, type Bot } from "@/state/store";
 import { fallbackWithModel } from "../../../shared/handoff-model";
-import { engineOffer } from "../../../shared/offered-engines";
+import { engineHidden, engineOffer } from "../../../shared/offered-engines";
 import { AnchoredPopover, enclosingWindowBounds, useAnchoredDismissRoot } from "../AnchoredPopover";
 import { ModelPicker, type ComposerModelMenuControl } from "../ModelPicker";
 import { DefaultBotSettings, newBotDefaultsSummary } from "../NewBotDialog";
@@ -67,21 +67,24 @@ type Backup = NonNullable<Bot["fallback"]>[number];
 
 /** The backups this viewer may still use: an engine the organization no
  * longer offers is dropped (the server skips it too); one the person pays
- * for stays when the organization lets own accounts through (#1098). */
-function useBackupFilter(): (entry: Backup) => boolean {
+ * for stays when the organization lets own accounts through (#1098). A
+ * backup on a provider the organization hid is dropped too, unless it is
+ * the bot's own engine (D-20261126-018, the server skips it the same way). */
+function useBackupFilter(): (entry: Backup, botEngine: string) => boolean {
   const { state } = useStore();
   const org = usePerspicaxOrg();
   const mine = useMyEngines();
   const offerContext = engineOfferContext(state.config, org !== null, mine);
-  return useCallback((entry: Backup) => {
+  return useCallback((entry: Backup, botEngine: string) => {
+    if (entry.instanceId !== botEngine && engineHidden(offerContext, entry.instanceId)) return false;
     const offer = engineOffer(offerContext, entry.instanceId);
     return offer === "offered" || (offer === "notGiven" && mine?.find((row) => row.instanceId === entry.instanceId)?.orgNotAllowed !== true);
   }, [offerContext, mine]);
 }
 
 /** "Grok 4", or "Grok 4 · default" when it comes from the server default. */
-function backupsText(bot: Bot, config: Parameters<typeof effectiveBackups>[1], keep: (entry: Backup) => boolean, instances: Parameters<typeof formatBotBackups>[1]): string {
-  const { chain, source } = effectiveBackups(bot, config, keep);
+function backupsText(bot: Bot, config: Parameters<typeof effectiveBackups>[1], keep: (entry: Backup, botEngine: string) => boolean, instances: Parameters<typeof formatBotBackups>[1]): string {
+  const { chain, source } = effectiveBackups(bot, config, (entry) => keep(entry, bot.modelSelection.instanceId));
   const text = formatBotBackups(chain, instances);
   return text && source === "org" ? t("botModels.backup.auto", { backups: text }) : text;
 }
@@ -165,7 +168,7 @@ function BotBackupCell({ bot, disabled }: { bot: Bot; disabled: boolean }) {
 
   // the effective chain (own list, own single backup, else the server
   // default): a change writes it as the bot's own list
-  const { chain } = effectiveBackups(bot, state.config, keep);
+  const { chain } = effectiveBackups(bot, state.config, (entry) => keep(entry, bot.modelSelection.instanceId));
   const available = offered.filter(
     (instance) =>
       instance.snapshot.state === "available" &&

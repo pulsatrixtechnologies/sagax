@@ -2,6 +2,7 @@ import { equalRows, peerBots, peerGroups } from "@/state/view-slices";
 import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { useThreadPrefetch, type ThreadPrefetchIntent } from "@/state/thread-prefetch";
 import {
+  Fragment,
   memo,
   useEffect,
   useId,
@@ -2594,7 +2595,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
   const wrapHead = (id: string, node: ReactNode) => {
     if (!node) return null;
     if (sidebarComponentHidden(sidebarZone, id)) return null;
-    if (!uiCustomize.active) return node;
+    if (!uiCustomize.active) return <Fragment key={id}>{node}</Fragment>;
     return (
       <UiMovable
         key={id}

@@ -5,8 +5,9 @@
 // and the collapsed icon rail. The cause: the mascot's tap reaction ran on
 // pointerdown and, for a shape, swapped the still image under the pointer
 // for the moving one, so the press and the release no longer shared a target
-// and the browser sent no click to the row. The reaction now plays on the
-// click itself, after the row has it. The row keeps its keyboard, its "..."
+// and the browser sent no click to the row. Since #5454 (M-20261127-080) a
+// click to open the bot plays no reaction at all: the mascot keeps its
+// drawing and the row keeps the click. The row keeps its keyboard, its "..."
 // menu, its context menu and its drag.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -133,13 +134,14 @@ describe("a click on a bot's mascot opens its chat (#4433)", () => {
     expect(opened("milo")).toBe(true);
   });
 
-  it("still plays the mascot's reaction on that click", async () => {
+  it("plays no poke on that click: the mascot keeps its drawing (M-20261127-080)", async () => {
     await draw();
     const row = host.querySelector('[data-sidebar-bot-row="iris"][role="button"]')!;
     const before = row.querySelector("[data-sidebar-mascot]")!.innerHTML;
     await press(mascotTarget(row));
-    // the shape's tap move replaced its still once the row had the click
-    expect(host.querySelector('[data-sidebar-bot-row="iris"][role="button"] [data-sidebar-mascot]')!.innerHTML).not.toBe(before);
+    expect(opened("iris")).toBe(true);
+    // #5454: no wink, squish or egg on open; the shape keeps its still
+    expect(host.querySelector('[data-sidebar-bot-row="iris"][role="button"] [data-sidebar-mascot]')!.innerHTML).toBe(before);
   });
 
   it("keeps the keyboard: Enter on the row opens the chat", async () => {

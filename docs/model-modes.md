@@ -197,9 +197,9 @@ providers against each other.
 - **Fast**: the person's own fast model when they set one, else the quickest good
   model (the cheapest of the fast tier). Effort low.
 - **Expert**: the strongest model of the strongest provider. Effort high.
-- **Heavy**: Expert's model leads. The team is the best model of each provider
-  (at most five, strongest first). With one provider, `HEAVY_SINGLE_PROVIDER_AGENTS`
-  agents on its strongest model.
+- **Heavy**: Expert's model leads. The team's seats are each account's best
+  model, strongest first, then each one's second (at most eight,
+  `HEAVY_MAX_EXPERTS`); with fewer seats than experts they share them.
 - A mode with no usable model is not shown. A mode with nothing to run falls back
   on Auto.
 
@@ -252,9 +252,17 @@ Heavy works the Grok way. One engine, in the Sagax server, for every client
 called from `startTurn` before the leader's prompt is built.
 
 - **The team.** The bot is the leader (the turn itself, on Expert's pick). A
-  short hidden ask lets it choose how many experts the task needs, 2 to 5, and
-  a persona for each (a skeptic, security, cost, the user's advocate, or what
-  the task calls for). A reply that does not read gives three default personas.
+  short hidden ask lets it choose how many experts the task needs, 2 to 8
+  (D-20261126-023, `HEAVY_MAX_EXPERTS`): the fewest that suffice, 2 for a
+  simple question, more only for a big, risky or many-part request; and a
+  persona for each (a skeptic, security, cost, the user's advocate, or what
+  the task calls for). Its count is held between 2 and 8 (9 reads as 8, 1 as
+  2 with a default persona beside it); a reply that does not read gives three
+  default personas. The seats, the person's Heavy experts in Settings > Modes
+  and a solo server's stored modes keep up to 8 too. The experts of a round
+  speak at once: a round lasts as long as its slowest expert (4 minutes at
+  most), whatever the team's size; a team of 8 makes 8 calls per round and
+  each critique reads the 7 others.
 - **Seats.** `heavySeats` (server/models/model-mode.ts) lists the person's own
   accounts, each one's strongest model, then each one's second strongest;
   `assignSeats` gives the experts different accounts first, then different

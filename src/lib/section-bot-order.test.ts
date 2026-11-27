@@ -1,7 +1,7 @@
 // The order of bots inside a sidebar team (#5024).
 import { describe, expect, it } from "vitest";
 
-import { orderedBots, parseSectionBotOrder, placeBotInSection } from "./section-bot-order";
+import { botDropLineAt, orderedBots, parseSectionBotOrder, placeBotInSection } from "./section-bot-order";
 
 const bots = (ids: string[]) => ids.map((id) => ({ id }));
 
@@ -29,5 +29,11 @@ describe("section bot order", () => {
     const next = placeBotInSection({ Ops: ["a", "b"], Desk: ["c"] }, "Desk", "b", "c");
     expect(next.Ops).toEqual(["a"]);
     expect(next.Desk).toEqual(["b", "c"]);
+  });
+
+  it("names where the insertion line sits while a bot is dragged (#5392)", () => {
+    expect(botDropLineAt("Ops", null, 0, "a", ["a", "b"])).toEqual({ sectionId: "Ops", beforeId: null });
+    expect(botDropLineAt("", null, 0, "a", ["a", "b"])).toBeNull();
+    expect(botDropLineAt("Ops", null, 0, "a", ["a"])).toBeNull();
   });
 });

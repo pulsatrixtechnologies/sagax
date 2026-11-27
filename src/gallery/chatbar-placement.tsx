@@ -112,13 +112,13 @@ function Bar({ placement, customizing }: { placement: UsagePillPlacement; custom
     );
   };
   return (
-    <ComposerCustomizeChrome customizing={customizing} onReset={() => undefined} onDone={() => undefined}>
-      {placement === "above" && (
-        <div data-composer-above-row="" className="mb-1 flex min-h-7 items-center justify-end px-2">
-          <ComposerMovable id="usage" customizing={customizing} api={api}>{meter}</ComposerMovable>
-        </div>
-      )}
-      <div data-gallery-sample="bar" className="w-[720px]">
+    <div data-gallery-sample="bar" className="w-[720px]">
+      <ComposerCustomizeChrome customizing={customizing} onReset={() => undefined} onDone={() => undefined}>
+        {placement === "above" && (
+          <div data-composer-above-row="" className="mb-1 flex min-h-7 items-center justify-end px-2">
+            <ComposerMovable id="usage" customizing={customizing} api={api}>{meter}</ComposerMovable>
+          </div>
+        )}
         <div className={COMPOSER_PILL}>
           <div data-composer-row className="flex items-end gap-1">
             <div className="composer-band flex items-center gap-2">{slots.left.map(render)}</div>
@@ -136,8 +136,8 @@ function Bar({ placement, customizing }: { placement: UsagePillPlacement; custom
             <ComposerMovable id="usage" customizing={customizing} api={api}>{meter}</ComposerMovable>
           </div>
         )}
-      </div>
-    </ComposerCustomizeChrome>
+      </ComposerCustomizeChrome>
+    </div>
   );
 }
 

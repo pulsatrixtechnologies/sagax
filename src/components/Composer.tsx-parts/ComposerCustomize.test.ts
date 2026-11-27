@@ -42,4 +42,13 @@ describe("composer customize behaviours (D-20261126-014, D-20261127-001)", () =>
     usagePillPlacement.set("inBar");
     expect(usagePillPlacement.get()).toBe("inBar");
   });
+
+  it("Escape leaves customize mode (handler is registered while customizing)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const src = readFileSync(join(import.meta.dirname, "ComposerCustomize.tsx"), "utf8");
+    expect(src).toMatch(/key !== "Escape"/);
+    expect(src).toMatch(/setCustomizing\(false\)/);
+    expect(src).toMatch(/addEventListener\("keydown"/);
+  });
 });

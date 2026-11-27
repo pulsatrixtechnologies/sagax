@@ -37,7 +37,10 @@ export type BackgroundOrigin =
   /** A teammate's hand-off: a "work" or "pair" conversation another bot drives. */
   | "handoff"
   /** A thread a bot opened itself (start_thread on itself or a peer, run_with_engine). */
-  | "bot-opened";
+  | "bot-opened"
+  /** A hidden thread a bot opened (routine investigation, #5100): stays out of
+   * sight and never relays its turns into the chat; only its card does. */
+  | "bot-hidden";
 
 /** Why a thread is in the background, or null for one of the person's own
  * conversations. A thread a bot opened stays the person's once they wrote in
@@ -46,7 +49,13 @@ export type BackgroundOrigin =
 export function backgroundOrigin(task: BackgroundTaskFacts): BackgroundOrigin | null {
   if (task.routineRunId) return "routine-run";
   if (task.routineResults === true) return "routine-results";
-  if (task.hidden === true) return "ai-client";
+  // #291: a bare hidden conversation (no bot opener) is an AI client's.
+  // #5100: a hidden thread a bot opened (routine investigation) is not.
+  if (task.hidden === true) {
+    const opener = task.openedBy;
+    if (opener?.botId && opener.kind !== "agent") return "bot-hidden";
+    return "ai-client";
+  }
   const opener = task.openedBy;
   if (!opener) return null;
   if (opener.kind === "agent") return "ai-client";

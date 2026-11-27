@@ -52,6 +52,14 @@ describe("relayViaOf (#2915)", () => {
   it("keeps the label of an archived thread an AI client continues", () => {
     expect(relayViaOf(deps({ mcp: { hidden: true, archivedAt: 5 } as RelayTask }), "bot", "mcp")).toBe("mcp");
   });
+
+  // #5100: a routine investigation is hidden with the bot as opener; its
+  // turns must not land in the chat as relayed mcp text.
+  it("leaves a bot's hidden investigation alone", () => {
+    expect(relayViaOf(deps({
+      investigate: { hidden: true, openedBy: { botId: "bot", name: "Scout", at: 1 } },
+    }), "bot", "investigate")).toBeUndefined();
+  });
 });
 
 describe("backgroundCardPeople (#2915)", () => {

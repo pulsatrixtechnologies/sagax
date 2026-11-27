@@ -17736,7 +17736,10 @@ const routineProblemCards = new RoutineProblemCards<Routine>({
     if (!bot || !latest) { unavailable(""); return; }
     const person = effectiveRunAs(routine);
     const words = serverApprovalWords(languageOfPerson(person));
-    const task = store.createTask(bot.id, routine.name, false, undefined, undefined, undefined, person, runTaskModelFor(bot.id, latest), true);
+    // #5100: openedBy marks this as a bot's hidden investigation, not a #291
+    // AI-client conversation, so its turns are never relayed into the chat.
+    const task = store.createTask(bot.id, routine.name, false, undefined,
+      { botId: bot.id, name: bot.name, at: Date.now() }, undefined, person, runTaskModelFor(bot.id, latest), true);
     if (!task) { unavailable(""); return; }
     const threadId = task.threadId;
     const prompt = investigationPrompt(routine, runs, words.locale, words.t("routine.problemCard.pause"),

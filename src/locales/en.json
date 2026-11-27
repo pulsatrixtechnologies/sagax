@@ -10524,7 +10524,6 @@
   "artifacts.updated": "Updated {when}",
   "artifacts.openAria": "Open {title}",
   "artifacts.moreAria": "More for {title}",
-  "artifacts.open": "Open",
   "artifacts.openBeside": "Open on the side",
   "artifacts.openWindow": "Open in a window",
   "artifacts.detach": "Detach",

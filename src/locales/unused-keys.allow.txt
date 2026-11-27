@@ -26,7 +26,6 @@ apps.subtitle
 apps.title
 apps.usedBy
 apps.viewAll
-artifacts.open
 attach.file
 attach.gallery
 attach.video

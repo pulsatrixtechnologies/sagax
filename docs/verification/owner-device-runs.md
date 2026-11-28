@@ -32,9 +32,10 @@ quietly deleted.
 
 Slots A and B sit beside the release checks that already run live on the same
 candidate: the connector live check
-([connectors-live.md](connectors-live.md)) and the voice acceptance recipe
-([voice-acceptance.md](voice-acceptance.md)). Neither claims audio, a phone or
-a real line, which is exactly what A and B add.
+([connectors-live.md](connectors-live.md)), the voice acceptance recipe
+([voice-acceptance.md](voice-acceptance.md)) and the inbound call synthetic
+harness ([inbound-call-harness.md](inbound-call-harness.md)). Those claim no
+audio, no phone and no real line, which is exactly what A and B add.
 
 ## Before any slot
 
@@ -101,8 +102,13 @@ What green means on the line only: `pnpm voice:acceptance` already runs the
 32-turn full-duplex call on an isolated server, and the synthetic profile is
 gated in CI
 ([voice-acceptance.md](voice-acceptance.md)); the harness call leaves its rows
-in the chat as a real call does ([live-calls.md](live-calls.md)). Slot B is
-the carrier, the verified number, real audio and the interruption.
+in the chat as a real call does ([live-calls.md](live-calls.md)). The inbound
+synthetic harness of [#5535](https://github.com/pulsatrixtechnologies/sagax/issues/5535)
+already proves V-1 through V-4 on fixtures with a fake `perspicax-voice`
+assertion, spoken-register checks, fixture timings and the same card /
+refusal path as writing
+([inbound-call-harness.md](inbound-call-harness.md)). Slot B is still the
+carrier, the verified number, real audio and the live interruption.
 
 ## Slot C. Blind pairs (P-1 to P-4)
 

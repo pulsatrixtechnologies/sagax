@@ -103,6 +103,7 @@ Use only mapped, tested commands:
 - [Owner device runs: blind pairs, phone, inbound voice (#5536): the calendar and the rows](owner-device-runs.md)
 - [Blind-pair harness (#5533): frozen grid, scripted pair, fixture judge](blind-pair-harness.md)
 - [Fixture phone session: M-1 to M-4 on a simulated phone (#5534)](fixture-phone-session.md)
+- [Inbound call synthetic harness (V-1 to V-4, #5535)](inbound-call-harness.md)
 
 `control-omb ui` ([Chat UI, driven headlessly](chat-ui.md)) drives the real
 renderer in a headless Chrome by accessible name, so composer sends, transcript

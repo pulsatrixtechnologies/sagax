@@ -487,9 +487,20 @@ it("lets the opener find and close the completed task", () => fixture(async f =>
   const inspection = f.evidence().at(-1).evidence;
   const listed = inspection.filter((entry: any) => entry.step?.tool === "list_threads");
   expect(listed).toHaveLength(2);
-  expect(listed[0].response.result.content[0].text).toContain(child.threadId);
-  expect(listed[0].response.result.content[0].text).not.toContain(f.lead.activeTaskId);
-  expect(listed[1].response.result.content[0].text).toContain("closed");
+  // Each listing is read row by row: a thread that lost its id is a thread no
+  // one can act on (#5366). The opener came for the completed task, so its row
+  // must be there, with the id to close it by.
+  const rowOf = (listing: string, threadId: string) => listing.split("\n").find((line: string) => line.includes(`[thread id: ${threadId}]`)) ?? "";
+  const before = listed[0].response.result.content[0].text;
+  const after = listed[1].response.result.content[0].text;
+  expect(rowOf(before, child.threadId)).not.toBe("");
+  // #5366 widened what a chief-of-staff bot may list: every person-facing
+  // thread of the teammates it can reach, so the lead's own conversation with
+  // its person is a row of this listing too. It is not the work the opener
+  // came for: closing the task leaves that conversation open.
+  expect(rowOf(before, f.lead.activeTaskId)).not.toBe("");
+  expect(rowOf(after, child.threadId)).toContain("closed");
+  expect(rowOf(after, f.lead.activeTaskId)).not.toContain("closed");
   const closedLead = (await f.api("/api/bots")).bots.find((bot: any) => bot.id === f.lead.id);
   expect(closedLead.tasks.find((task: any) => task.threadId === child.threadId).closedBy).toMatchObject({ botId: f.chief.id });
   expect((await f.messages(child.threadId)).some((message: any) => message.text === "Implemented and reviewer confirmed checks")).toBe(true);

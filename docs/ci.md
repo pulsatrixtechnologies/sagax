@@ -232,11 +232,13 @@ How a run decides (`scripts/testing/known-failures.mjs`):
    error annotation and a row of the job summary. The `CI` gate requires
    this job.
 3. The list shrinks runner by runner: a listed test that passed on one of
-   its runners, and failed on none of them, leaves that runner, and its
-   entry leaves the list once no runner is left. The job uploads the shrunk
-   file as the `known-failures` artifact and names the entries in its
-   summary. Commit that file. A runner the run did not reach (a push runs
-   Linux only, a job got no runner) sent no row, so it stays on its entries.
+   its runners leaves that runner, even when the same run saw it fail on
+   another, and its entry leaves the list once no runner is left. The job
+   uploads the shrunk file as the `known-failures` artifact and names the
+   entries in its summary. Commit that file. A runner the run did not reach
+   (a push runs Linux only, the nightly is the only run that reaches Windows
+   and macOS, a job got no runner or was cancelled) sent no row, so it stays
+   on its entries: what a run clears is a floor, not the whole state.
    The list can only shrink: on a push, `check-shrink` compares the list at
    the commit before the push and turns the run red if an entry was added,
    or gained a runner, by hand.

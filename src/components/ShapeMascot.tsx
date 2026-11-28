@@ -637,9 +637,10 @@ export function ShapeMascot({
   let drawing: ReactNode = null;
   if (material) {
     // at rest: a painted still image; canvas only while live or moving (#5414)
+    // live canvas and still both take pose through mountPose (#5539, #5540)
     drawing = looping
-      ? <ShapeCanvas definition={definition} material={material} color={body} ink={ink} depth={chosenDepth} state={pose.state} mood={pose.mood} followPointer={followPointer && settings.followPointer} live reduced={reduced} view={view} holdGaze={onStage && stage.holdGaze} />
-      : <ShapeMaterialStill definition={definition} material={material} color={body} ink={ink} depth={chosenDepth} state={pose.state} mood={pose.mood} size={drawSize ?? size} />;
+      ? <ShapeCanvas definition={definition} material={material} color={body} ink={ink} depth={chosenDepth} pose={pose} followPointer={followPointer && settings.followPointer} live reduced={reduced} view={view} holdGaze={onStage && stage.holdGaze} />
+      : <ShapeMaterialStill definition={definition} material={material} color={body} ink={ink} depth={chosenDepth} pose={pose} size={drawSize ?? size} />;
   } else if (frame) {
     drawing = looping || !flatSkin
       ? <ShapeSvg uid={uid} frame={frame} color={body} ink={ink} layers={flatSkin ? null : layers} paint={paint} faceD={faceD} refs={refs} live={looping} />

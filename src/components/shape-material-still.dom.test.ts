@@ -70,7 +70,7 @@ describe("a material mascot at rest vs live (#5414)", () => {
     const img = still!.querySelector("img");
     expect(img).not.toBeNull();
     expect(img!.getAttribute("src")).toMatch(/^data:image\/png;base64,[0-9a-f]{6}$/);
-    expect(asked[0]).toMatchObject({ material: { id: "fluffy" }, state: "idle" });
+    expect(asked[0]).toMatchObject({ material: { id: "fluffy" }, pose: { state: "idle" } });
     expect(asked[0]!.color).toBe(`#${img!.getAttribute("src")!.slice("data:image/png;base64,".length)}`);
   });
 

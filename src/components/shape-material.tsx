@@ -10,10 +10,13 @@
 //   editor does not offer the materials (materialsSupported).
 // - At rest a material body is a painted still image (shape-material-still.ts,
 //   #5414): the canvas mounts only while the mascot is live or moving.
+// - The six agent states and the mood reach mountAvatar through mountPose
+//   (#5539, #5540): thinking keeps the body (never three dots, #5415).
 import { useEffect, useRef, useState } from "react";
-import type { AvatarDefinition, AvatarMood, AvatarState } from "open-bot-avatar";
+import type { AvatarDefinition } from "open-bot-avatar";
 import { mountAvatar, type AvatarOptions, type CanvasMaterial, type MountedAvatar } from "open-bot-avatar/dom";
 import type { ShapeMaterial } from "../../shared/mascot-look";
+import { AT_WORK, mountPose, type EnginePose } from "./shape-avatar";
 import { materialStill, type MaterialStill } from "./shape-material-still";
 
 type CanvasMaterialName = Exclude<ShapeMaterial, "flat">;
@@ -83,8 +86,8 @@ export interface ShapeCanvasProps {
   color: string;
   ink: string;
   depth: number | undefined;
-  state: AvatarState;
-  mood: AvatarMood;
+  /** The app's engine pose (activity + mood); mountPose maps it for the engine (#5539). */
+  pose: EnginePose;
   followPointer: boolean;
   /** Off mounts the engine's still: one painted canvas, no loop. */
   live: boolean;
@@ -96,18 +99,25 @@ export interface ShapeCanvasProps {
 }
 
 /** What the engine is asked to mount for a body in a material. */
-export function canvasOptions({ definition, material, color, ink, depth, state, mood, followPointer, live, reduced, view, holdGaze }: ShapeCanvasProps): AvatarOptions {
+export function canvasOptions({ definition, material, color, ink, depth, pose, followPointer, live, reduced, view, holdGaze }: ShapeCanvasProps): AvatarOptions {
+  const mounted = mountPose(pose);
+  const follow = live && followPointer;
+  // at work: the app's lean on idle (body stays); a fixed look when the pointer is not followed
+  const lean = mounted.atWork
+    ? { yaw: AT_WORK.yaw + (view?.yaw ?? 0), pitch: AT_WORK.pitch + (view?.pitch ?? 0) }
+    : view;
   return {
     definition,
     material,
     color,
     eyeColor: ink,
     ...(depth === undefined ? {} : { depth }),
-    state,
-    mood,
-    followPointer: live && followPointer,
+    state: mounted.state,
+    mood: mounted.mood,
+    followPointer: follow,
     holdGaze: Boolean(holdGaze),
-    ...(view ? { view } : {}),
+    ...(lean ? { view: lean } : {}),
+    ...(mounted.atWork && !follow ? { lookAt: { x: AT_WORK.gazeX, y: AT_WORK.gazeY } } : {}),
     // the person's choice, resolved by the app: the engine alone would follow the device even under Full
     reducedMotion: reduced,
     still: !live,
@@ -145,25 +155,24 @@ export interface ShapeMaterialStillProps {
   color: string;
   ink: string;
   depth: number | undefined;
-  state: AvatarState;
-  mood: AvatarMood;
+  pose: EnginePose;
   /** The mascot's laid-out size in CSS pixels (the body's 0..100 box is 84% of it). */
   size: number;
 }
 
 /** A material body at rest: one PNG of the engine's painting, no canvas (#5414). */
-export function ShapeMaterialStill({ definition, material, color, ink, depth, state, mood, size }: ShapeMaterialStillProps) {
+export function ShapeMaterialStill({ definition, material, color, ink, depth, pose, size }: ShapeMaterialStillProps) {
   const px = Math.ceil(size * 0.84);
   const [still, setStill] = useState<MaterialStill | null>(null);
   useEffect(() => {
     let alive = true;
-    void materialStill({ definition, material, color, ink, depth, state, mood, px }).then((own) => {
+    void materialStill({ definition, material, color, ink, depth, pose, px }).then((own) => {
       if (alive) setStill(own);
     });
     return () => {
       alive = false;
     };
-  }, [definition, material, color, ink, depth, state, mood, px]);
+  }, [definition, material, color, ink, depth, pose, px]);
   return (
     <span className="relative block h-[84%] w-[84%] overflow-visible" data-shape-material-still={material.id} aria-hidden="true">
       {still ? (

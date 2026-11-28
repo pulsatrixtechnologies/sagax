@@ -97,7 +97,7 @@ describe("a state previewed on the stage (#5384)", () => {
 });
 
 describe("a body in a material, on the engine's own canvas (#5384)", () => {
-  const base = { definition: shapeDefinition("cup"), material: { id: "glass" } as never, color: "#1f7cf2", ink: "#151515", depth: undefined, state: "idle" as const, mood: "neutral" as const, followPointer: true, live: true, reduced: false };
+  const base = { definition: shapeDefinition("cup"), material: { id: "glass" } as never, color: "#1f7cf2", ink: "#151515", depth: undefined, pose: { state: "idle" as const, mood: "neutral" as const, motion: "idle" as const }, followPointer: true, live: true, reduced: false };
 
   it("hands the engine the view and the held gaze of the stage", () => {
     const options = canvasOptions({ ...base, view: { yaw: 0.8, pitch: -0.3 }, holdGaze: true });
@@ -118,6 +118,22 @@ describe("a body in a material, on the engine's own canvas (#5384)", () => {
     // reduced and off a stage: the engine's still, as before
     expect(canvasOptions({ ...base, reduced: true, live: false }).still).toBe(true);
     expect(canvasOptions({ ...base, reduced: true, live: false }).followPointer).toBe(false);
+  });
+
+  it("maps activity through mountPose: thinking keeps the body, mood stays apart (#5539, #5540)", () => {
+    const thinking = canvasOptions({ ...base, pose: { state: "thinking", mood: "neutral", motion: "thinking" }, live: false, followPointer: false });
+    expect(thinking.state).toBe("idle");
+    expect(thinking.mood).toBe("neutral");
+    expect(thinking.view).toEqual({ yaw: 0.12, pitch: 0.08 });
+    expect(thinking.lookAt).toEqual({ x: 0.55, y: -0.8 });
+    const happyWork = canvasOptions({ ...base, pose: { state: "working", mood: "happy", motion: null } });
+    expect(happyWork.state).toBe("working");
+    expect(happyWork.mood).toBe("happy");
+    expect(happyWork.lookAt).toBeUndefined();
+    const busyHappy = canvasOptions({ ...base, pose: { state: "thinking", mood: "happy", motion: "happy" }, live: false, followPointer: false });
+    expect(busyHappy.state).toBe("idle");
+    expect(busyHappy.mood).toBe("happy");
+    expect(busyHappy.lookAt).toBeUndefined();
   });
 });
 

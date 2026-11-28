@@ -789,6 +789,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         <BotProfileBanner
           bot={bot}
           wash={banner}
+          accent={bannerAccent}
           palette={bannerPalette}
           scrollRef={scrollRef}
           dragProps={dragProps}

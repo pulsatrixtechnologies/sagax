@@ -11,6 +11,7 @@ import type { Bot } from "@/state/store";
 export function BotProfileBanner({
   bot,
   wash,
+  accent,
   palette,
   scrollRef,
   dragProps,
@@ -18,6 +19,8 @@ export function BotProfileBanner({
 }: {
   bot: Bot;
   wash: { from: string; to: string };
+  /** Raw bot accent before the soft wash (mascot / mascot-deep presets). */
+  accent: string;
   palette: string;
   scrollRef: RefObject<HTMLElement | null>;
   dragProps: { style?: CSSProperties; [key: string]: unknown };
@@ -36,7 +39,7 @@ export function BotProfileBanner({
     return () => scroller.removeEventListener("scroll", onScroll);
   }, [profile.effects.parallax, reduceMotion, scrollRef]);
 
-  const layers = bannerLayerStyle({ profile, wash, scrollY, reduceMotion });
+  const layers = bannerLayerStyle({ profile, wash, accent, scrollY, reduceMotion });
   const { style: dragStyle, ...dragRest } = dragProps;
 
   return (

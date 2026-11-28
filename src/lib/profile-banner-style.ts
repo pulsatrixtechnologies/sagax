@@ -8,25 +8,52 @@ import {
   type BotBannerProfile,
   bannerEffectsActive,
 } from "../../shared/bot-banner";
-import { profileBannerColors } from "./profile-banner";
+import { BANNER_BASE } from "./profile-banner";
+import { normalizeHex } from "./bot-accent-colors";
 
 export type BannerDrawInput = {
   profile: BotBannerProfile;
   /** Soft wash colours from the mascot accent (profile-banner.ts). */
   wash: { from: string; to: string };
+  /** Raw bot accent (before the soft wash). Drives mascot / mascot-deep. */
+  accent?: string;
   /** Scroll offset of the page, for parallax (px). */
   scrollY?: number;
   /** System or in-app reduce-motion. */
   reduceMotion?: boolean;
 };
 
-/** Stronger / patterned washes for ready-made presets. */
-export function presetWash(preset: BotBannerPreset, wash: { from: string; to: string }): { from: string; to: string } {
-  if (preset === "mascot") {
-    return profileBannerColors(wash.from, null);
+function mixAccent(accent: string, share: number): string {
+  const hex = normalizeHex(accent) ?? "#8e949e";
+  const a = parseInt(hex.slice(1), 16);
+  const b = parseInt(BANNER_BASE.slice(1), 16);
+  const ch = (n: number, shift: number) => Math.round(((n >> shift) & 255) * share + ((b >> shift) & 255) * (1 - share));
+  return `#${[ch(a, 16), ch(a, 8), ch(a, 0)].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function shadeAccent(accent: string, factor: number): string {
+  const hex = normalizeHex(accent) ?? "#8e949e";
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (shift: number) => Math.round(Math.min(255, Math.max(0, ((n >> shift) & 255) * factor)));
+  return `#${[ch(16), ch(8), ch(0)].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/**
+ * Ready-made washes. `default` keeps the soft page wash. `mascot` is a
+ * stronger mix of the raw accent; `mascot-deep` darkens that accent. Pattern
+ * presets keep the soft wash (the pattern layer sits on top).
+ */
+export function presetWash(
+  preset: BotBannerPreset,
+  wash: { from: string; to: string },
+  accent?: string,
+): { from: string; to: string } {
+  const raw = normalizeHex(accent) ?? null;
+  if (preset === "mascot" && raw) {
+    return { from: mixAccent(raw, 0.82), to: mixAccent(raw, 0.55) };
   }
-  if (preset === "mascot-deep") {
-    return { from: wash.from, to: wash.to };
+  if (preset === "mascot-deep" && raw) {
+    return { from: shadeAccent(raw, 0.42), to: shadeAccent(raw, 0.62) };
   }
   return wash;
 }
@@ -48,8 +75,8 @@ export function bannerLayerStyle(input: BannerDrawInput): {
   veil: boolean;
   parallaxY: number;
 } {
-  const { profile, wash, scrollY = 0, reduceMotion = false } = input;
-  const colours = presetWash(profile.preset, wash);
+  const { profile, wash, accent, scrollY = 0, reduceMotion = false } = input;
+  const colours = presetWash(profile.preset, wash, accent);
   const showImage = Boolean(profile.url);
   const showPattern = !showImage && (profile.preset === "dots" || profile.preset === "grid" || profile.preset === "waves");
   const parallax = !reduceMotion && profile.effects.parallax === true;

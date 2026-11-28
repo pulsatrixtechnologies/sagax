@@ -86,44 +86,43 @@ async function openPanel(ctx, section) {
 
 /** English nav labels (captures run with omb-language=en). Used to check the
  * page that is drawn, not only the store: Simple mode and a missing updater
- * fall back to Account while the store still names the requested section. */
+ * fall back to General while the store still names the requested section. */
+// #4457 / #5527: seven rail entries. Former section ids open their host; the
+// label below is what aria-current must show for the capture to keep the shot.
 export const SETTINGS_NAV_LABEL = {
-  account: "Account",
-  appearance: "Appearance",
-  organization: "Organization",
-  notifications: "Notifications",
-  privacy: "Notifications",
-  memory: "Organization",
-  // retired ids: openSettings remaps or falls back; the label is what would
-  // have to be current for the capture to keep the shot.
-  cloudAccount: "Account",
-  // #2729: Experimental is a card of Developer; its old id opens Developer.
-  experimental: "Developer",
-  developer: "Developer",
-  connections: "Providers",
-  providers: "Providers",
-  decisionModel: "Models",
-  engines: "Models",
-  companion: "Pair devices",
+  general: "General",
+  account: "General",
+  appearance: "General",
+  notifications: "General",
+  backups: "General",
+  import: "General",
+  developer: "General",
+  experimental: "General",
+  companion: "General",
+  cloudAccount: "General",
   computer: "Computer",
+  security: "Permissions",
+  privacy: "Permissions",
+  credentials: "Vault",
+  providers: "Providers",
+  connections: "Providers",
+  engines: "Providers",
+  decisionModel: "Providers",
+  voice: "Providers",
   usage: "Usage",
+  updates: "Updates",
+  about: "Updates",
+  organization: "Organization",
+  memory: "Organization",
   people: "People",
   mail: "Email",
   activity: "Activity",
-  backups: "Backups",
   workspaces: "Installations",
   myConnections: "My connections",
-  voice: "Voice",
-  updates: "Updates",
-  about: "About",
-  security: "Security",
-  credentials: "Vault",
-  import: "Import",
-  general: "Account",
 };
 
 /** Sections Simple mode hides (`simpleHidesSettingsSection`). Their captures
- * force Advanced so the page is the one named, not Account. */
+ * force Advanced so the host page is the one named (#4457), not General. */
 export const SETTINGS_NEEDS_ADVANCED = new Set([
   "experimental", "connections", "providers", "decisionModel", "engines",
   "voice", "computer", "mail", "activity", "backups", "import", "workspaces", "people",

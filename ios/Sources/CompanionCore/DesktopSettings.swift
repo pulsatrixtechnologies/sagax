@@ -26,8 +26,13 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
     public var keywords: [String] {
         switch self {
         case .general:
+            // #4457: General hosts Account, Appearance, Notifications, Backups,
+            // Developer / Experimental (Advanced).
             ["profile", "name", "email", "about me", "about", "effort", "new bots", "reasoning", "threads", "parallel",
-             "concurrency", "routines", "conversation", "group", "turns", "language"]
+             "concurrency", "routines", "conversation", "group", "turns", "language", "skin", "theme", "appearance",
+             "notifications", "sound", "sounds", "mascot", "owl", "app icon", "icon", "logo", "backups", "export",
+             "import", "importer", "restore", "developer", "développeur", "technical", "technique", "experimental",
+             "expérimental", "early", "preview", "data window", "fenêtre data", "advanced", "avancé"]
         case .organization:
             ["company", "organization", "organisation", "sign in", "managed", "server", "servers", "connect", "pair", "switch", "computer"]
         case .appearance:
@@ -45,13 +50,10 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
             ["github", "mcp", "mcp servers", "connections", "connexions", "token", "oauth", "gh", "git", "my connections",
              "mes connexions", "server", "plugins"]
         case .decisionModel: ["decision", "jev", "typesafe", "routing", "auto", "rooms", "who answers"]
-        // Models and voice (2026-10-14): API keys and the Decision model are
-        // cards of this page
         case .engines:
             ["models", "model providers", "engines", "claude", "codex", "grok", "providers", "sign in", "subscription",
              "keys", "api", "api key", "api keys", "connections", "xai", "mistral", "router",
              "openrouter", "openai", "anthropic", "decision", "jev", "typesafe", "routing", "who answers", "voice", "voix"]
-        // #1098: the person's own subscription sign-in on each engine
         case .myEngines:
             ["my engines", "mes moteurs", "engines", "models", "subscription", "abonnement", "sign in", "connect",
              "claude", "codex", "chatgpt", "grok", "kimi", "gemini", "keys"]
@@ -61,19 +63,22 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
         case .people: ["people", "users", "invite", "members", "admins", "access"]
         case .mail: ["email", "mail", "smtp", "sender", "invitations", "sign-in codes"]
         case .activity: ["activity", "audit", "log", "history", "who changed", "admin"]
-        // #2080 (L0): Import is a card of Backups and import.
         case .backups: ["export", "import", "importer", "restore", "restaurer", "full backup", "password", "recovery",
                         "grok", "grok bot", "share link", "preferences", "préférences", "sauvegarde", "sauvegardes"]
         case .providers:
+            // #4457: Providers hosts Models, Voice, Decision model and keys.
             ["providers", "fournisseurs", "model providers", "accounts", "comptes", "claude", "codex", "grok", "sign in",
-             "subscription", "keys", "api", "api key", "api keys", "xai", "mistral", "openrouter", "openai", "anthropic"]
+             "subscription", "keys", "api", "api key", "api keys", "xai", "mistral", "openrouter", "openai", "anthropic",
+             "models", "engines", "voice", "voix", "tts", "speech", "decision", "jev", "typesafe", "routing", "who answers"]
         case .voice: ["voice", "voix", "tts", "speech", "parole", "speed", "language", "microphone", "micro", "audio"]
-        case .updates: ["updates", "update", "version", "mise à jour", "testflight", "app store"]
-        // #2080 (L0): App (id "about") holds Updates as its first card.
+        case .updates: ["updates", "update", "version", "mise à jour", "testflight", "app store", "about", "à propos",
+                        "license", "licence", "github", "documentation", "release notes", "prerelease", "beta"]
         case .about: ["about", "à propos", "app", "application", "version", "updates", "update", "mise à jour",
                       "mises à jour", "license", "licence", "github", "documentation", "release notes",
                       "testflight", "app store", "prerelease", "beta"]
-        case .security: ["security", "sécurité", "security key", "passkey", "approval rules", "règles d'approbation", "tool access", "always allow", "always deny"]
+        // #4457: rail label is Permissions; id stays "security".
+        case .security: ["security", "sécurité", "permissions", "permission", "security key", "passkey",
+                         "approval rules", "règles d'approbation", "tool access", "always allow", "always deny"]
         case .vault: ["vault", "coffre", "password", "mot de passe", "credentials", "identifiants", "login", "card", "carte"]
         case .notifications: ["notifications", "sound", "son", "badge", "chime", "nudge", "blocked", "bloqué"]
         case .importBot: ["import", "importer", "grok", "grok bot", "share link", "preferences", "préférences"]
@@ -106,33 +111,32 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
         // My engines (#1098): the person's own subscription sign-in, on an
         // organization server (`SurfaceFeature.myEngines`).
         let engines: [DesktopSettingsSection] = gate.allows(.myEngines) ? [.myEngines] : []
-        // #2080 (L0, 2026-11-05): the desktop's final rail. Personal: Account,
-        // Appearance, Notifications, Security, Vault. AI: Providers, Models,
-        // Voice, Usage. Installation: Organization, Computer, Backups and
-        // import. App: App (id "about", Updates is its first card) and
-        // Developer, which holds the Experimental features card (#2729).
-        // Import, Updates and Experimental are cards (settings-sections.ts
-        // MERGED), never rows of the rail.
+        // #4457 / #5527: seven rail entries, no group titles (General,
+        // Computer, Permissions, Vault, Providers, Usage, Updates).
+        // Organization is off the rail (console link on desktop); a sidecar
+        // still lists it so the person can reach their Mac pairing. Former
+        // pages (Appearance, Voice, Developer, …) open through `host`.
         switch gate.scope {
         case .sidecar, .serverClient:
-            return [.appearance, .notifications] + engines + mine + [.organization, .about]
+            return [.general] + engines + mine + [.organization, .updates]
         case .serverAdmin:
-            return [.general, .security, .vault, .appearance, .notifications, .providers, .engines] + engines + mine
-                + [.voice, .usage, .organization, .computer, .backups, .developer, .about]
+            return [.general, .computer, .security, .vault, .providers, .usage, .updates]
         }
     }
 
     /// A section that is a card of another page now: the page that shows it.
     public var host: DesktopSettingsSection {
         switch self {
-        case .connections: .providers
-        case .decisionModel: .engines
-        case .companion, .mail, .activity, .people: .organization
-        // #2080 (L0): Import → Backups and import; Updates → App (about).
-        case .importBot: .backups
-        case .updates: .about
-        // #2729: Experimental features is a card of Developer.
-        case .experimental: .developer
+        // #4457: Appearance, Notifications, Backups, Import, Developer and
+        // Experimental live on General (Advanced for the last two).
+        case .appearance, .notifications, .backups, .importBot, .developer, .experimental,
+             .companion, .mail, .activity, .people:
+            .general
+        // Models, Voice, Decision model, API keys → Providers.
+        case .connections, .engines, .voice, .decisionModel, .myEngines, .myConnections:
+            .providers
+        // About is a card of Updates; Updates is its own rail page.
+        case .about: .updates
         default: self
         }
     }
@@ -149,36 +153,33 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
     }
 }
 
-/// The iPad Settings nav's groups: the desktop's `NAV_GROUPS` (Personal,
-/// AI, Installation, App), each page under its desktop heading.
+/// The iPad Settings nav's groups. #4457 removed group titles on the desktop
+/// rail; `grouped` keeps one flat block so callers still get ordered sections
+/// without Personal / AI / Installation / App headings.
 public enum DesktopSettingsNavGroup: String, CaseIterable, Hashable, Sendable {
     case personal, ai, installation, app
+    /// Single flat rail block (#4457 / #5527).
+    case rail
 
-    /// The group a section sits in.
+    /// The group a section sits in (kept for search / older callers).
     public static func of(_ section: DesktopSettingsSection) -> DesktopSettingsNavGroup {
         switch section {
         case .general, .security, .vault, .appearance, .notifications: .personal
-        // #2080: Usage sits under AI (the cost of the models).
         case .providers, .engines, .myEngines, .myConnections, .voice, .connections, .decisionModel, .usage: .ai
         case .organization, .computer, .backups, .importBot, .companion, .people, .mail, .activity: .installation
         case .developer, .experimental, .updates, .about: .app
         }
     }
 
-    /// `sections` in group order, each group in the desktop rail's order;
-    /// empty groups are left out.
+    /// #4457: one flat list in rail order, no group titles.
     public static func grouped(_ sections: [DesktopSettingsSection]) -> [(group: DesktopSettingsNavGroup, sections: [DesktopSettingsSection])] {
-        // #2080 (L0): Usage under AI; Import and Updates are hosted cards, so
-        // they stay out of the rail order (host resolves deep links).
         let order: [DesktopSettingsSection] = [
-            .general, .security, .vault, .appearance, .notifications, .providers, .engines, .myEngines, .myConnections, .voice,
-            .usage, .organization, .computer, .backups, .developer, .about,
+            .general, .computer, .security, .vault, .providers, .usage, .updates,
+            .myEngines, .myConnections, .organization,
+            .appearance, .notifications, .engines, .voice, .backups, .developer, .about,
         ]
         let ranked = sections.sorted { (order.firstIndex(of: $0) ?? 99) < (order.firstIndex(of: $1) ?? 99) }
-        return allCases.compactMap { group in
-            let members = ranked.filter { of($0) == group }
-            return members.isEmpty ? nil : (group, members)
-        }
+        return ranked.isEmpty ? [] : [(group: .rail, sections: ranked)]
     }
 }
 

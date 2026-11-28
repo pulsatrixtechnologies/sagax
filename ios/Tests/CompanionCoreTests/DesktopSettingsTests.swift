@@ -12,54 +12,57 @@ final class DesktopSettingsTests: XCTestCase {
     // MARK: Sections per pairing
 
     func testAnAdminSessionListsTheDesktopSectionsInOrder() {
-        // #2080 (L0): Import and Updates are cards; Usage sits under AI before
-        // Organization; App (about) is the rail page that holds Updates.
+        // #4457 / #5527: seven rail entries, no group titles. Organization is
+        // off the rail (console link). Former pages open through host.
         let expected: [DesktopSettingsSection] = [
-            .general, .security, .vault, .appearance, .notifications, .providers, .engines, .voice, .usage,
-            .organization, .computer, .backups, .developer, .about,
+            .general, .computer, .security, .vault, .providers, .usage, .updates,
         ]
         XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: .serverAdmin)), expected)
-        // an organization server adds My engines (#1098) and My connections
-        // after Models
-        var organization = expected
-        organization.insert(contentsOf: [.myEngines, .myConnections], at: 7)
-        XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: .serverAdmin, organization: true)), organization)
+        // organization server: same rail (My engines / My connections are
+        // hosted under Providers, not extra rail rows)
+        XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: .serverAdmin, organization: true)), expected)
     }
 
-    func testExperimentalIsACardOfDeveloper() {
-        // #2729: no separate Experimental row; old links open Developer.
+    func testExperimentalAndDeveloperOpenGeneralAdvanced() {
+        // M-20261127-068 / #4457: Developer and Experimental live under General.
         let admin = DesktopSettingsSection.available(for: SurfaceGate(scope: .serverAdmin))
         XCTAssertFalse(admin.contains(.experimental))
-        XCTAssertTrue(admin.contains(.developer))
-        XCTAssertEqual(DesktopSettingsSection.experimental.host, .developer)
-        XCTAssertEqual(DesktopSettingsSection.resolve(.experimental, available: admin, visible: admin), .developer)
-        XCTAssertTrue(DesktopSettingsSection.developer.matches("expérimental", label: "Developer"))
+        XCTAssertFalse(admin.contains(.developer))
+        XCTAssertEqual(DesktopSettingsSection.experimental.host, .general)
+        XCTAssertEqual(DesktopSettingsSection.developer.host, .general)
+        XCTAssertEqual(DesktopSettingsSection.resolve(.experimental, available: admin, visible: admin), .general)
+        XCTAssertTrue(DesktopSettingsSection.general.matches("expérimental", label: "General"))
     }
 
     func testAClientOnAnOrganizationServerGetsMyConnections() {
         XCTAssertEqual(
             DesktopSettingsSection.available(for: SurfaceGate(scope: .serverClient, organization: true)),
-            [.appearance, .notifications, .myEngines, .myConnections, .organization, .about]
+            [.general, .myEngines, .myConnections, .organization, .updates]
         )
         XCTAssertTrue(DesktopSettingsSection.myConnections.matches("mes connexions", label: "My connections"))
     }
 
     func testASidecarAndAClientSessionGetTheRemoteClientSections() {
         for scope in [PairingScope.sidecar, .serverClient] {
-            XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: scope)), [.appearance, .notifications, .organization, .about])
+            XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: scope)), [.general, .organization, .updates])
         }
     }
 
     func testAFormerSectionOpensThePageThatHoldsItsCard() {
         let all = DesktopSettingsSection.available(for: SurfaceGate(scope: .serverAdmin))
         XCTAssertEqual(DesktopSettingsSection.resolve(.connections, available: all, visible: all), .providers)
-        XCTAssertEqual(DesktopSettingsSection.resolve(.decisionModel, available: all, visible: all), .engines)
-        XCTAssertEqual(DesktopSettingsSection.resolve(.companion, available: all, visible: all), .organization)
-        // #2080 (L0)
-        XCTAssertEqual(DesktopSettingsSection.resolve(.importBot, available: all, visible: all), .backups)
-        XCTAssertEqual(DesktopSettingsSection.resolve(.updates, available: all, visible: all), .about)
-        XCTAssertTrue(DesktopSettingsSection.engines.matches("jev", label: "Models and voice"))
-        XCTAssertTrue(DesktopSettingsSection.engines.matches("OpenRouter", label: "Models and voice"))
+        XCTAssertEqual(DesktopSettingsSection.resolve(.decisionModel, available: all, visible: all), .providers)
+        XCTAssertEqual(DesktopSettingsSection.resolve(.engines, available: all, visible: all), .providers)
+        XCTAssertEqual(DesktopSettingsSection.resolve(.voice, available: all, visible: all), .providers)
+        XCTAssertEqual(DesktopSettingsSection.resolve(.appearance, available: all, visible: all), .general)
+        XCTAssertEqual(DesktopSettingsSection.resolve(.notifications, available: all, visible: all), .general)
+        XCTAssertEqual(DesktopSettingsSection.resolve(.companion, available: all, visible: all), .general)
+        XCTAssertEqual(DesktopSettingsSection.resolve(.importBot, available: all, visible: all), .general)
+        XCTAssertEqual(DesktopSettingsSection.resolve(.backups, available: all, visible: all), .general)
+        XCTAssertEqual(DesktopSettingsSection.resolve(.about, available: all, visible: all), .updates)
+        XCTAssertEqual(DesktopSettingsSection.resolve(.updates, available: all, visible: all), .updates)
+        XCTAssertTrue(DesktopSettingsSection.providers.matches("jev", label: "Providers"))
+        XCTAssertTrue(DesktopSettingsSection.providers.matches("OpenRouter", label: "Providers"))
     }
 
     func testSearchMatchesTheLabelOrAKeywordIgnoringCase() {
@@ -67,17 +70,26 @@ final class DesktopSettingsTests: XCTestCase {
         XCTAssertTrue(DesktopSettingsSection.engines.matches("model prov", label: "Model providers"))
         XCTAssertTrue(DesktopSettingsSection.general.matches("  ", label: "General"))
         XCTAssertFalse(DesktopSettingsSection.backups.matches("skin", label: "Backups and storage"))
-        XCTAssertTrue(DesktopSettingsSection.about.matches("updates", label: "App"))
+        XCTAssertTrue(DesktopSettingsSection.updates.matches("about", label: "Updates"))
         XCTAssertTrue(DesktopSettingsSection.backups.matches("importer", label: "Backups and storage"))
+        XCTAssertTrue(DesktopSettingsSection.security.matches("permissions", label: "Permissions"))
     }
 
     func testResolveKeepsTheRequestOrFallsToTheFirstMatch() {
         let all = DesktopSettingsSection.available(for: SurfaceGate(scope: .serverAdmin))
         XCTAssertEqual(DesktopSettingsSection.resolve(.usage, available: all, visible: all), .usage)
-        XCTAssertEqual(DesktopSettingsSection.resolve(.usage, available: all, visible: [.appearance]), .appearance)
+        XCTAssertEqual(DesktopSettingsSection.resolve(.usage, available: all, visible: [.general]), .general)
         // a section the pairing does not list opens its first one
         let remote = DesktopSettingsSection.available(for: SurfaceGate(scope: .sidecar))
-        XCTAssertEqual(DesktopSettingsSection.resolve(.general, available: remote, visible: []), .appearance)
+        XCTAssertEqual(DesktopSettingsSection.resolve(.computer, available: remote, visible: []), .general)
+    }
+
+    func testRailHasNoGroupTitles() {
+        // #4457: flat rail, one block, no Personal / AI / Installation / App headings.
+        let admin = DesktopSettingsSection.available(for: SurfaceGate(scope: .serverAdmin))
+        let groups = DesktopSettingsNavGroup.grouped(admin)
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].sections, admin)
     }
 
     func testPluginsTabsFollowTheConnectorGates() {

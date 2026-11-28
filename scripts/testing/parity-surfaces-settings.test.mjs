@@ -3,17 +3,24 @@ import { describe, expect, it } from "vitest";
 import { SETTINGS_NAV_LABEL, SETTINGS_NEEDS_ADVANCED, SURFACES } from "../../ios/parity/desktop/surfaces.mjs";
 
 describe("SETTINGS_NAV_LABEL", () => {
-  it("names the English nav for Updates and Vault", () => {
+  it("names the English nav for Updates, Vault, and #4457 hosts", () => {
     expect(SETTINGS_NAV_LABEL.updates).toBe("Updates");
     expect(SETTINGS_NAV_LABEL.credentials).toBe("Vault");
-    expect(SETTINGS_NAV_LABEL.account).toBe("Account");
+    expect(SETTINGS_NAV_LABEL.account).toBe("General");
+    expect(SETTINGS_NAV_LABEL.computer).toBe("Computer");
+    expect(SETTINGS_NAV_LABEL.security).toBe("Permissions");
+    expect(SETTINGS_NAV_LABEL.usage).toBe("Usage");
   });
 
   it("maps merged section ids to the host page label", () => {
     expect(SETTINGS_NAV_LABEL.memory).toBe("Organization");
-    expect(SETTINGS_NAV_LABEL.privacy).toBe("Notifications");
+    expect(SETTINGS_NAV_LABEL.privacy).toBe("Permissions");
     expect(SETTINGS_NAV_LABEL.connections).toBe("Providers");
-    expect(SETTINGS_NAV_LABEL.general).toBe("Account");
+    expect(SETTINGS_NAV_LABEL.general).toBe("General");
+    expect(SETTINGS_NAV_LABEL.appearance).toBe("General");
+    expect(SETTINGS_NAV_LABEL.notifications).toBe("General");
+    expect(SETTINGS_NAV_LABEL.engines).toBe("Providers");
+    expect(SETTINGS_NAV_LABEL.about).toBe("Updates");
   });
 });
 

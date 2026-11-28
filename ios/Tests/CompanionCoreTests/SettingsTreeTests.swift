@@ -111,18 +111,17 @@ final class SettingsTreeTests: XCTestCase {
     }
 }
 
-/// The iPad nav keeps every section, grouped as the desktop's rail.
+/// The iPad nav keeps every section on the flat #4457 rail.
 final class DesktopSettingsNavGroupTests: XCTestCase {
     func testAdminSectionsAllShowInGroupOrder() {
         let sections = DesktopSettingsSection.available(for: SurfaceGate(scope: .serverAdmin))
         let grouped = DesktopSettingsNavGroup.grouped(sections)
         XCTAssertEqual(Set(grouped.flatMap(\.sections)), Set(sections), "no section lost")
-        XCTAssertEqual(grouped.map(\.group), [.personal, .ai, .installation, .app])
-        XCTAssertEqual(grouped.first?.sections, [.general, .security, .vault, .appearance, .notifications])
-        // #2080 (L0): Usage under AI; App holds Updates as a card.
-        XCTAssertEqual(grouped.first { $0.group == .ai }?.sections.suffix(2), [.voice, .usage])
-        XCTAssertEqual(grouped.first { $0.group == .installation }?.sections, [.organization, .computer, .backups])
-        XCTAssertEqual(grouped.last?.sections, [.developer, .about])
+        // #4457 / #5527: one flat block, no Personal / AI / Installation / App headings.
+        XCTAssertEqual(grouped.map(\.group), [.rail])
+        XCTAssertEqual(grouped.first?.sections, [
+            .general, .computer, .security, .vault, .providers, .usage, .updates,
+        ])
     }
 
     func testMemberSections() {

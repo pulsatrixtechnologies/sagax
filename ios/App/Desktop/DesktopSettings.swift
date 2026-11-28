@@ -103,7 +103,7 @@ struct DesktopSettingsModal: View {
     }
 
     private var section: DesktopSettingsSection {
-        DesktopSettingsSection.resolve(shell.settingsSection, available: available, visible: visible) ?? .appearance
+        DesktopSettingsSection.resolve(shell.settingsSection, available: available, visible: visible) ?? .general
     }
 
     var body: some View {
@@ -176,7 +176,8 @@ extension DesktopSettingsSection {
     /// The nav label (the desktop's `settings.section.*`, as the references read).
     var label: LocalizedStringKey {
         switch self {
-        case .general: "Account"
+        // #4457 / #5527: rail labels match the desktop (General, Permissions, …).
+        case .general: "General"
         case .organization: "Organization"
         case .appearance: "Appearance"
         case .experimental: "Experimental"
@@ -192,13 +193,12 @@ extension DesktopSettingsSection {
         case .people: "People"
         case .mail: "Email"
         case .activity: "Activity"
-        // #2080 (L0): Backups and import; App (id "about").
         case .backups: "Backups and storage"
         case .providers: "Providers"
         case .voice: "Voice"
         case .updates: "Updates"
         case .about: "App"
-        case .security: "Security"
+        case .security: "Permissions"
         case .vault: "Vault"
         case .notifications: "Notifications"
         case .importBot: "Import"
@@ -208,7 +208,7 @@ extension DesktopSettingsSection {
     /// The label as a string, for search (in the app's language).
     var labelString: String {
         switch self {
-        case .general: AppStrings.localized("Account")
+        case .general: AppStrings.localized("General")
         case .organization: AppStrings.localized("Organization")
         case .appearance: AppStrings.localized("Appearance")
         case .experimental: AppStrings.localized("Experimental")
@@ -229,7 +229,7 @@ extension DesktopSettingsSection {
         case .voice: AppStrings.localized("Voice")
         case .updates: AppStrings.localized("Updates")
         case .about: AppStrings.localized("App")
-        case .security: AppStrings.localized("Security")
+        case .security: AppStrings.localized("Permissions")
         case .vault: AppStrings.localized("Vault")
         case .notifications: AppStrings.localized("Notifications")
         case .importBot: AppStrings.localized("Import")
@@ -239,12 +239,13 @@ extension DesktopSettingsSection {
     /// The page's one-sentence intro under the title (#2080, settings.intro.*).
     var intro: LocalizedStringKey? {
         switch self {
-        case .general: "Your identity in Sagax."
+        // #4457 / #5527: intros match the desktop rail pages.
+        case .general: "Your account, appearance, notifications, backups and advanced options."
         case .appearance: "Theme, conversations and mascots."
         case .notifications: "On this computer: what alerts you and who sees you."
         case .security: "What your bots may do without asking you, your privacy and your keys."
         case .vault: "What your bots can use for you. Encrypted on this computer with the system keychain, or with the server's key."
-        case .providers: "Where models and services come from."
+        case .providers: "Where models, voice and services come from."
         case .engines: "Which model each bot uses."
         case .voice: "How your bots speak and listen."
         case .usage: "What your bots used and what it costs."
@@ -254,8 +255,9 @@ extension DesktopSettingsSection {
         case .about: "This app's version, updates and help."
         case .experimental: "Features still being tried out."
         case .developer: "Technical options: run details, timeouts, telemetry, logs and diagnostics."
+        case .updates: "This app's version, updates and help."
         case .connections, .myConnections, .decisionModel, .myEngines, .companion,
-             .people, .mail, .activity, .updates, .importBot:
+             .people, .mail, .activity, .importBot:
             nil
         }
     }
@@ -298,6 +300,8 @@ extension DesktopSettingsNavGroup {
         case .ai: "AI"
         case .installation: "Installation"
         case .app: "App"
+        // #4457: flat rail draws no heading for this block.
+        case .rail: ""
         }
     }
 }
@@ -339,15 +343,8 @@ struct DesktopSettingsNav: View {
                             .padding(.horizontal, 10)
                             .padding(.vertical, 16)
                     }
-                    // #2080 (L0): App (id "about") is a page of the rail; the
-                    // centred About window opens from its "Open About" row.
+                    // #4457 / #5527: flat rail, no Personal / AI / Installation / App headings.
                     ForEach(DesktopSettingsNavGroup.grouped(sections), id: \.group) { entry in
-                        DesktopText(Text(entry.group.label), size: 11.5, weight: .medium, line: 16, color: \.inkTertiary)
-                            .padding(.horizontal, 9)
-                            .padding(.top, 12)
-                            .padding(.bottom, 4)
-                            .accessibilityAddTraits(.isHeader)
-                            .accessibilityIdentifier("desktop-settings.nav-group.\(entry.group.rawValue)")
                         ForEach(entry.sections, id: \.self) { section in
                             navRow(section)
                         }
@@ -439,37 +436,64 @@ struct DesktopSettingsPage: View {
 
     var body: some View {
         switch section {
-        case .general: AnyView(DesktopGeneralSettings())
+        // #4457 / #5527: General hosts Appearance, Notifications, Backups and Developer.
+        case .general: AnyView(DesktopGeneralHubSettings())
         case .organization: AnyView(DesktopOrganizationSettings())
         case .appearance: AnyView(DesktopAppearanceSettings())
-        // #2729: Developer as on the desktop, Experimental features one of its cards.
         case .experimental, .developer: AnyView(DesktopDeveloperSettings())
         case .connections: AnyView(DesktopAPIKeysSettings())
-        // 2026-10-27: GitHub and the person's MCP servers live in Connect
-        // apps (Sources, Providers); this page links there
         case .myConnections: AnyView(DesktopMyConnectionsLinks())
         case .decisionModel: AnyView(DesktopDecisionModelSettings())
-        // Models and voice (#518): the providers, then API keys and the
-        // Decision model as cards of the page
-        case .providers: AnyView(DesktopProvidersSettings())
+        // #4457: Providers hosts Models and Voice.
+        case .providers: AnyView(DesktopProvidersHubSettings())
         case .engines: AnyView(DesktopBotModelsPage())
         case .voice: AnyView(DesktopVoiceSettings())
-        // #2080 (L0): Updates is a card of App; Import a card of Backups.
-        case .updates: AnyView(DesktopUpdatesSettings())
+        // #4457: Updates hosts About.
+        case .updates: AnyView(DesktopUpdatesHubSettings())
         case .about: AnyView(DesktopAppSettings())
         case .security: AnyView(DesktopSecuritySettings())
         case .vault: AnyView(DesktopVaultSettings())
         case .notifications: AnyView(DesktopNotificationsSettings())
         case .importBot: AnyView(DesktopImportSettings())
-        // #1098: the person's own subscription sign-in on each engine
         case .myEngines: AnyView(MyEnginesSection(style: .desktop))
         case .companion: AnyView(DesktopPairDevicesSettings())
         case .computer: AnyView(DesktopComputerSettings())
         case .usage: AnyView(DesktopUsageSettings())
-        // not drawn on the iPad yet; `available` never lists them
         case .people, .activity, .mail: AnyView(EmptyView())
         case .backups: AnyView(DesktopBackupsAndImportSettings())
         }
+    }
+}
+
+/// Settings > General (#4457): the former Account page plus the hosted cards
+/// (Appearance, Notifications, Backups and import, Developer / Advanced).
+struct DesktopGeneralHubSettings: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            DesktopGeneralSettings()
+            DesktopAppearanceSettings()
+            DesktopNotificationsSettings()
+            DesktopBackupsAndImportSettings()
+            DesktopDeveloperSettings()
+        }
+    }
+}
+
+/// Settings > Providers (#4457): accounts and keys, then Models and Voice.
+struct DesktopProvidersHubSettings: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            DesktopProvidersSettings()
+            DesktopBotModelsPage()
+            DesktopVoiceSettings()
+        }
+    }
+}
+
+/// Settings > Updates (#4457): version / channel, then About (DesktopAppSettings).
+struct DesktopUpdatesHubSettings: View {
+    var body: some View {
+        DesktopAppSettings()
     }
 }
 
@@ -541,31 +565,28 @@ extension IPadParityScreen {
         case .pluginsMcp: (.plugins, nil, .mcp)
         case .capabilities: (.plugins, nil, nil)
         case .settingsGeneral, .settingsGeneralScrolled: (.settings, .general, nil)
-        // the desktop opens Account for its former Cloud account section
         case .settingsCloudAccount: (.settings, .general, nil)
         case .settingsOrganization: (.settings, .organization, nil)
-        case .settingsAppearance: (.settings, .appearance, nil)
-        // #2729: Experimental features is a card of Developer.
-        case .settingsDeveloper, .settingsDeveloperScrolled: (.settings, .developer, nil)
-        case .settingsConnections: (.settings, .connections, nil)
+        // #4457 / #5527: former pages open their host on the seven-entry rail.
+        case .settingsAppearance: (.settings, .general, nil)
+        case .settingsDeveloper, .settingsDeveloperScrolled: (.settings, .general, nil)
+        case .settingsConnections: (.settings, .providers, nil)
         case .settingsMyConnections: (.settings, .myConnections, nil)
-        case .settingsDecisionModel: (.settings, .decisionModel, nil)
-        case .settingsEngines: (.settings, .engines, nil)
-        case .settingsCompanion: (.settings, .companion, nil)
+        case .settingsDecisionModel: (.settings, .providers, nil)
+        case .settingsEngines: (.settings, .providers, nil)
+        case .settingsCompanion: (.settings, .general, nil)
         case .settingsComputer: (.settings, .computer, nil)
         case .settingsUsage: (.settings, .usage, nil)
-        case .settingsBackups: (.settings, .backups, nil)
-        // 2026-11-03: the desktop's pages of 2026-10-28 and 2026-10-30
+        case .settingsBackups: (.settings, .general, nil)
         case .settingsAccount: (.settings, .general, nil)
         case .settingsProviders: (.settings, .providers, nil)
-        case .settingsVoice: (.settings, .voice, nil)
-        // #2080 (L0): Updates opens App (host); Import opens Backups and import.
+        case .settingsVoice: (.settings, .providers, nil)
         case .settingsUpdates: (.settings, .updates, nil)
-        case .settingsAbout: (.about, nil, nil)
+        case .settingsAbout: (.settings, .updates, nil)
         case .settingsSecurity: (.settings, .security, nil)
         case .settingsCredentials: (.settings, .vault, nil)
-        case .settingsNotifications: (.settings, .notifications, nil)
-        case .settingsImport: (.settings, .importBot, nil)
+        case .settingsNotifications: (.settings, .general, nil)
+        case .settingsImport: (.settings, .general, nil)
         default: nil
         }
     }

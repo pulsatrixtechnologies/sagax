@@ -62,7 +62,7 @@ export function RecordLink({ record, draftId, children }: { record: RecordRef; d
   // Schedule me and Dispatch the ticket go to the conversation the record was named in; in a room, to the
   // person's Primary Bot; with neither, they are not offered (nothing would take them)
   const [surface, surfaceBot, surfaceThread] = (draftId ?? "").split(":");
-  const askTo = surface === "bot" && surfaceBot ? surfaceBot : store?.state.bots.find((one) => one.chiefOfStaff && !one.hidden)?.id;
+  const askTo = surface === "bot" && surfaceBot ? surfaceBot : store?.state.bots?.find((one) => one.chiefOfStaff && !one.hidden)?.id;
   const askBot = store && askTo ? (text: string) => store.dispatch({ type: "send", botId: askTo, text, ...(surface === "bot" && surfaceThread ? { threadId: surfaceThread } : {}) }) : undefined;
   // a console that cannot serve cards: the chip reads as plain words. The same
   // button stays mounted, so an open card and the focus are not lost under it.

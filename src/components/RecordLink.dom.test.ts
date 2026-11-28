@@ -15,6 +15,8 @@ import * as drafts from "@/lib/drafts";
 import { HOVER_EXIT_MS, HOVER_OPEN_DELAY_MS, HOVER_INTENT_MS } from "./LinkHoverCard";
 import { RECORD_CARD_WIDTH_KEY, RECORD_WINDOWS_KEY } from "@/lib/record-window-layout";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { RecordLink } from "./RecordLink";
+import { BotEditorStore, type useStore } from "@/state/store";
 
 vi.mock("@/lib/app-links", async (original) => ({ ...(await original<typeof import("@/lib/app-links")>()), openExternalLink: vi.fn(async () => {}) }));
 vi.mock("@/lib/drafts", async (original) => ({ ...(await original<typeof import("@/lib/drafts")>()), appendComposerDraft: vi.fn() }));
@@ -82,6 +84,15 @@ describe("the chip", () => {
     await render("[#9](sagax://record/other_desk/ticket/9)");
     expect(chips()).toHaveLength(1);
     expect(chips()[0]!.querySelector("svg")).not.toBeNull();
+  });
+
+  it("stays a chip on a surface whose store has no bots read yet", async () => {
+    // Schedule me and Dispatch the ticket fall back to the person's Primary Bot:
+    // a store with no bots read yet has none, and the chip is still drawn (#5563)
+    const store = { state: {}, dispatch: vi.fn() } as unknown as ReturnType<typeof useStore>;
+    const chip = createElement(RecordLink, { record: { product: "nimbus_desk", kind: "ticket", id: "481516" } }, "#481516");
+    await act(async () => root.render(createElement(BotEditorStore, { value: store, children: chip })));
+    expect(chips()[0]?.textContent).toBe("#481516");
   });
 
   it("keeps a malformed link as its text, and an inert surface too", async () => {

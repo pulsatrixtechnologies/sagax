@@ -125,7 +125,7 @@ describe("a company's window", () => {
     await settle();
     expect(win().querySelector("[data-record-account-tab]")!.getAttribute("data-record-account-tab")).toBe("tickets");
     const heads = [...win().querySelectorAll("[data-record-grid=tickets] th")].map((head) => head.textContent);
-    expect(heads).toEqual(["Ticket", "Subject", "Status", "Type", "Next scheduling", "Owner", "Opened"]);
+    expect(heads).toEqual(["Ticket", "Subject", "Status", "Type", "Next scheduled", "Owner", "Opened"]);
     expect(win().querySelectorAll("[data-ticket-row]")).toHaveLength(5);
     const next = win().querySelector<HTMLElement>('[data-ticket-row="300124"] [data-ticket-next]')!;
     expect(next.getAttribute("data-ticket-next")).toBe("planned");
@@ -246,7 +246,7 @@ describe("a console with no sections for a company yet", () => {
     expect(profile.querySelector("[data-record-facts-pod]")!.textContent).toContain("Identifier");
     expect(profile.querySelectorAll("[data-record-quick]")).toHaveLength(1);
     await tab("tickets");
-    expect([...win().querySelectorAll("[data-record-grid=tickets] th")].map((head) => head.textContent)).toEqual(["Ticket", "Subject", "Status", "Type", "Next scheduling", "Owner", "Opened"]);
+    expect([...win().querySelectorAll("[data-record-grid=tickets] th")].map((head) => head.textContent)).toEqual(["Ticket", "Subject", "Status", "Type", "Next scheduled", "Owner", "Opened"]);
     expect(win().querySelectorAll("[data-ticket-row]")).toHaveLength(3);
     expect(writes()).toEqual([]);
   });

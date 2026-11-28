@@ -88,7 +88,7 @@ describe("the board window", () => {
     // one plain grid, never grouped by status (M-20261127-145)
     expect(all("[data-board-list] table")).toHaveLength(1);
     expect(rows()).toHaveLength(8);
-    expect(all("[data-board-list] th").map((th) => th.textContent)).toEqual(["Ticket", "Subject", "Status", "Type", "Next scheduling", "Owner", "Opened"]);
+    expect(all("[data-board-list] th").map((th) => th.textContent)).toEqual(["Ticket", "Subject", "Status", "Type", "Next scheduled", "Owner", "Opened"]);
     const row = q('[data-ticket-row="300124"]')!;
     expect(row.querySelector("[data-ticket-priority]")!.getAttribute("aria-label")).toBe("3: Medium");
     expect(row.querySelector("[data-ticket-subject]")!.textContent).toBe("Acme Fabrication partnershipAcme Fabrication");

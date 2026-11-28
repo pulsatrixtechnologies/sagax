@@ -231,6 +231,36 @@ describe("Grok voice", () => {
     expect(auto.get("language")).toBeNull();
   });
 
+  it("sorts a mid-socket speech-to-text error frame without repeating xAI's words (#5416)", async () => {
+    const grok = await import("./grok.ts");
+    expect(grok.sttErrorMessage({ type: "error", code: "out_of_credits", error: "out_of_credits" })).toContain("out_of_credits");
+    expect(grok.grokVoiceFailure(grok.sttErrorMessage({ type: "error", code: "out_of_credits" }))).toBe("quota");
+    expect(grok.grokVoiceFailure(grok.sttErrorMessage({ type: "error", error: { code: "insufficient_quota", message: "secret-key-xyz" } }))).toBe("quota");
+    expect(grok.sttErrorMessage({ type: "error", error: { code: "insufficient_quota", message: "secret-key-xyz" } })).not.toContain("secret-key");
+    expect(grok.grokVoiceFailure(grok.sttErrorMessage({ type: "error", error: { code: "invalid_api_key" } }))).toBe("key");
+    expect(grok.grokVoiceFailure(grok.sttErrorMessage({ type: "error", message: "rate limit exceeded" }))).toBe("busy");
+    expect(grok.grokVoiceFailure(grok.sttErrorMessage({ type: "error", message: "something else" }))).toBe("other");
+
+    const sockets: EventTarget[] = [];
+    class FakeSocket extends EventTarget {
+      readyState = 1;
+      binaryType = "";
+      constructor() { super(); sockets.push(this); }
+      send() {}
+      close() { this.dispatchEvent(new Event("close")); }
+    }
+    let failed = "";
+    const stream = grok.openTranscriptionStream("fixture-xai-key", {}, {
+      onTranscript() {}, onError: (message) => { failed = message; }, onClose() {},
+    }, FakeSocket as unknown as import("./grok.ts").HeaderWebSocket);
+    sockets[0]!.dispatchEvent(Object.assign(new Event("message"), {
+      data: JSON.stringify({ type: "error", code: "out_of_credits", error: `dry for fixture-xai-key` }),
+    }));
+    expect(grok.grokVoiceFailure(failed)).toBe("quota");
+    expect(failed).not.toContain("fixture-xai-key");
+    stream.close();
+  });
+
   it("voice mode: passes xAI's end of turn confidence through", async () => {
     const grok = await import("./grok.ts");
     const sockets: EventTarget[] = [];

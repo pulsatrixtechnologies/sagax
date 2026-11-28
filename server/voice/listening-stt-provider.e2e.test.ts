@@ -166,6 +166,7 @@ beforeEach(() => {
   preference = undefined;
   xai.stt.refuse = null;
   xai.stt.failOnAudio = false;
+  xai.stt.closeOnAudio = false;
   openai.dry = false;
   usage.length = 0;
   notices.length = 0;
@@ -289,7 +290,27 @@ describe("who transcribes a Listening session (#5377)", () => {
     // then the page's socket is closed for it to reconnect (1011)
     await until("the page socket closed", () => first.closed(), 8000);
     expect(first.closed()).toBe(1011);
-    expect(notices.filter((line) => line.includes("went on with"))).toEqual(["Voice: speech to text went on with OpenAI after xAI (an error)"]);
+    // mid-socket credits sort as quota (held 5 min), not "an error" (#5416)
+    expect(notices.filter((line) => line.includes("went on with"))).toEqual(["Voice: speech to text went on with OpenAI after xAI (no credits left)"]);
+    const next = await listen(path);
+    if ("refused" in next) throw new Error(`refused ${next.refused}`);
+    const ready = await until("ready", () => next.frames.find((f) => f.type === "ready"));
+    expect((ready.key as { provider?: string }).provider).toBe("openai");
+    expect((await say(next)).text).toBe("heard by the other provider");
+    next.ws.close();
+  }, 15_000);
+
+  it("leaves xAI for the next socket when the listen socket closes with no error frame (#5416)", async () => {
+    xai.stt.closeOnAudio = true;
+    const path = LISTEN.replace("threadId=t-1", "threadId=t-3");
+    const first = await listen(path);
+    if ("refused" in first) throw new Error(`refused ${first.refused}`);
+    await until("ready", () => first.frames.find((f) => f.type === "ready"));
+    first.ws.send(Buffer.alloc(3200));
+    first.ws.on("message", (data) => { if (String(data).includes('"reconnected"')) first.ws.send(Buffer.alloc(3200)); });
+    await until("the page socket closed", () => first.closed(), 8000);
+    expect(first.closed()).toBe(1011);
+    expect(notices.filter((line) => line.includes("went on with"))).toEqual(["Voice: speech to text went on with OpenAI after xAI (not reachable)"]);
     const next = await listen(path);
     if ("refused" in next) throw new Error(`refused ${next.refused}`);
     const ready = await until("ready", () => next.frames.find((f) => f.type === "ready"));

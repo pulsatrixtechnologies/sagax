@@ -153,6 +153,32 @@ const NOT_SERVED = "xAI does not serve this voice request for this key or sign-i
  * found"); a path that merely contains "voices" is not one. */
 const VOICE_REFUSED = /\b(?:unknown|invalid) voice\b|\bvoice(?:_id)?\b[^/]{0,60}\bnot (?:found|exist)/i;
 
+/** An in-stream speech-to-text error frame in this side's words. xAI's
+ * payload may name the request; only its category is read, never passed
+ * on (#5416). */
+export function sttErrorMessage(frame: Record<string, unknown>): string {
+  const nested = typeof frame.error === "object" && frame.error ? frame.error as Record<string, unknown> : {};
+  const said = [
+    typeof frame.code === "string" ? frame.code : "",
+    typeof frame.message === "string" ? frame.message : "",
+    typeof frame.error === "string" ? frame.error : "",
+    typeof nested.code === "string" ? nested.code : "",
+    typeof nested.type === "string" ? nested.type : "",
+    typeof nested.error === "string" ? nested.error : "",
+    typeof nested.message === "string" ? nested.message : "",
+  ].join(" ");
+  if (/out_of_credits|needs credits|spending limit|insufficient_quota|billing|exhausted/i.test(said)) {
+    return "The xAI account needs credits to generate speech. out_of_credits";
+  }
+  if (/incorrect[_ ]?api[_ ]?key|invalid[_ ]?api[_ ]?key|api[_ ]?key|unauthenticated|permission|rejected the key/i.test(said)) {
+    return "xAI rejected the key or its TTS permissions. Check the xAI key in Settings.";
+  }
+  if (/rate.?limit|too many requests/i.test(said)) {
+    return "xAI is rate-limiting speech. Wait a moment and try again.";
+  }
+  return "Grok speech to text reported an error. Try again.";
+}
+
 export function refusal(status: number, detail: { code?: string; error?: string } = {}, asked: RefusalAsked = {}): string {
   const said = `${detail.code ?? ""} ${detail.error ?? ""}`;
   if (status === 401 || status === 403 || /incorrect api key|invalid api key|api key (?:is )?(?:invalid|disabled|blocked|revoked)|unauthenticated|permission/i.test(said)) {
@@ -513,8 +539,10 @@ export function openTranscriptionStream(
         ...(typeof endOfTurn === "number" && Number.isFinite(endOfTurn) ? { endOfTurnConfidence: Math.min(1, Math.max(0, endOfTurn)) } : {}),
       });
     } else if (frame.type === "error") {
-      // xAI's message may echo request details; never pass it on verbatim
-      fail("Grok speech to text reported an error. Try again.");
+      // xAI's message may echo request details; never pass it on verbatim.
+      // Credits / key / rate-limit in the frame still sort the refusal
+      // (held 5 min for credits, next key of the same provider) (#5416).
+      fail(sttErrorMessage(frame));
     }
   });
   socket.addEventListener("error", (event) => fail(socketFailure(event)));

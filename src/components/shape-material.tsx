@@ -8,12 +8,13 @@
 //   own), never with the page.
 // - Without WebGL2 the mascot is drawn flat, by the app's drawing, and the
 //   editor does not offer the materials (materialsSupported).
-// - Small avatars and reduced motion mount the engine's still: one painted
-//   canvas, no animation loop.
+// - At rest a material body is a painted still image (shape-material-still.ts,
+//   #5414): the canvas mounts only while the mascot is live or moving.
 import { useEffect, useRef, useState } from "react";
 import type { AvatarDefinition, AvatarMood, AvatarState } from "open-bot-avatar";
 import { mountAvatar, type AvatarOptions, type CanvasMaterial, type MountedAvatar } from "open-bot-avatar/dom";
 import type { ShapeMaterial } from "../../shared/mascot-look";
+import { materialStill, type MaterialStill } from "./shape-material-still";
 
 type CanvasMaterialName = Exclude<ShapeMaterial, "flat">;
 
@@ -136,4 +137,45 @@ export function ShapeCanvas(props: ShapeCanvasProps) {
     avatar.current?.update(props.view ? latest.current : { ...latest.current, view: { yaw: 0, pitch: 0 } });
   });
   return <span ref={host} className="block h-[84%] w-[84%]" data-shape-canvas={props.material.id} />;
+}
+
+export interface ShapeMaterialStillProps {
+  definition: AvatarDefinition;
+  material: CanvasMaterial;
+  color: string;
+  ink: string;
+  depth: number | undefined;
+  state: AvatarState;
+  mood: AvatarMood;
+  /** The mascot's laid-out size in CSS pixels (the body's 0..100 box is 84% of it). */
+  size: number;
+}
+
+/** A material body at rest: one PNG of the engine's painting, no canvas (#5414). */
+export function ShapeMaterialStill({ definition, material, color, ink, depth, state, mood, size }: ShapeMaterialStillProps) {
+  const px = Math.ceil(size * 0.84);
+  const [still, setStill] = useState<MaterialStill | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void materialStill({ definition, material, color, ink, depth, state, mood, px }).then((own) => {
+      if (alive) setStill(own);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [definition, material, color, ink, depth, state, mood, px]);
+  return (
+    <span className="relative block h-[84%] w-[84%] overflow-visible" data-shape-material-still={material.id} aria-hidden="true">
+      {still ? (
+        <img
+          src={still.href}
+          alt=""
+          draggable={false}
+          decoding="async"
+          className="pointer-events-none absolute max-w-none select-none"
+          style={{ left: `${still.x}%`, top: `${still.y}%`, width: `${still.size}%`, height: `${still.size}%` }}
+        />
+      ) : null}
+    </span>
+  );
 }

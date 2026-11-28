@@ -14,6 +14,8 @@ import { useStoreSelector } from "@/state/store-selector";
 import { openBotThread, startNewTopic, type Action, type Bot, type ConfigStatus, type Message } from "@/state/store";
 import type { SideChat } from "./sideChat";
 import { ChatHeaderBar } from "@/components/ChatHeaderBar";
+import { ChatPinnedPages } from "@/components/ChatPinnedPages";
+import { useWebPanels } from "@/lib/web-panel-preferences";
 
 /** Call overlay strip and the floating bot-pill header (or a side header). */
 export function ChatViewHeader({
@@ -66,6 +68,9 @@ export function ChatViewHeader({
 }) {
   const bots = useStoreSelector((current) => current.bots);
   const conversationHeader = useConversationHeader();
+  // Only mount the start slot when a page is pinned, so an empty wrapper
+  // does not push the title (#5463).
+  const pinnedPages = useWebPanels();
   return (
     <>
       {/* The older call mode covers the thread while the bot is on the line;
@@ -82,6 +87,9 @@ export function ChatViewHeader({
         // this bar, on the bar's own ground, which hides whatever scrolls
         // there. The transcript keeps its room under the bar either way.
         align={conversationHeader === "title" ? "start" : "center"}
+        // Pinned published pages (#5463): chips on the left of the top bar,
+        // separate from Library pin / favorite.
+        start={pinnedPages.length > 0 ? <ChatPinnedPages /> : undefined}
         // @container/chathead lets the chips on the right fold to icon
         // bubbles when the column is narrow. Pulsatrix Light makes it
         // `relative`.

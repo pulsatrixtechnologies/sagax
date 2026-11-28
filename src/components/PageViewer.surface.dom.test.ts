@@ -156,9 +156,10 @@ describe("top bar: chat toggle and download (#4099)", () => {
   const rightButtons = () => [...header().querySelectorAll<HTMLElement>("button")].map((node) =>
     node.hasAttribute("data-page-chat-toggle") ? "chat"
       : node.hasAttribute("data-page-download") ? "download"
-        : node.hasAttribute("data-page-share") ? "share"
-          : node.hasAttribute("data-page-more") ? "more"
-            : null).filter(Boolean);
+        : node.hasAttribute("data-page-pin-bar") ? "pin"
+          : node.hasAttribute("data-page-share") ? "share"
+            : node.hasAttribute("data-page-more") ? "more"
+              : null).filter(Boolean);
 
   it("download is an icon button of the bar, before Share, and saves the shown version", async () => {
     const createObjectURL = vi.fn(() => "blob:page");
@@ -170,13 +171,34 @@ describe("top bar: chat toggle and download (#4099)", () => {
     const download = header().querySelector<HTMLButtonElement>("[data-page-download]");
     expect(download).not.toBeNull();
     expect(download!.getAttribute("aria-label")).toBe(t("pages.download"));
-    expect(rightButtons()).toEqual(["download", "more", "share"]);
+    expect(rightButtons()).toEqual(["download", "pin", "more", "share"]);
     await act(async () => { download!.click(); });
     await flush();
     expect(calls.some((call) => call.path.endsWith("/api/pages/abcdefgh12345678/versions/1/export?theme=dark") && call.init?.method === "GET")).toBe(true);
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(clicked).toHaveBeenCalledTimes(1);
     clicked.mockRestore();
+  });
+
+  it("pins the page to the chat top bar and unpins it again (#5463)", async () => {
+    const { resetWebPanelsForTests, latestWebPanels } = await import("@/lib/web-panel-preferences");
+    resetWebPanelsForTests();
+    render({});
+    await flush();
+    const pin = header().querySelector<HTMLButtonElement>("[data-page-pin-bar]")!;
+    expect(pin).not.toBeNull();
+    expect(pin.getAttribute("aria-pressed")).toBe("false");
+    expect(pin.getAttribute("aria-label")).toBe(t("pages.pinToBar"));
+    act(() => pin.click());
+    expect(latestWebPanels()).toEqual([{
+      id: "panel-1",
+      name: "Bilan",
+      page: { pageId: "abcdefgh12345678", botId: "b1", threadId: "t1" },
+    }]);
+    expect(pin.getAttribute("aria-pressed")).toBe("true");
+    act(() => pin.click());
+    expect(latestWebPanels()).toEqual([]);
+    resetWebPanelsForTests();
   });
 
   it("the menu no longer repeats download (one place for each action)", async () => {
@@ -216,7 +238,7 @@ describe("top bar: chat toggle and download (#4099)", () => {
     const onToggle = vi.fn();
     render({ chat: { open: false, onToggle } });
     await flush();
-    expect(rightButtons()).toEqual(["chat", "download", "more", "share"]);
+    expect(rightButtons()).toEqual(["chat", "download", "pin", "more", "share"]);
     const toggle = header().querySelector<HTMLButtonElement>("[data-page-chat-toggle]")!;
     expect(toggle.getAttribute("aria-pressed")).toBe("false");
     expect(toggle.getAttribute("aria-label")).toBe(t("pages.showConversation"));
@@ -232,7 +254,7 @@ describe("top bar: chat toggle and download (#4099)", () => {
     render({ chat: { open: false, disabled: true, onToggle } });
     await flush();
     expect(header().querySelector("[data-page-chat-toggle]")).toBeNull();
-    expect(rightButtons()).toEqual(["download", "more", "share"]);
+    expect(rightButtons()).toEqual(["download", "pin", "more", "share"]);
     render({ chat: { open: true, disabled: true, onToggle } });
     await flush();
     expect(header().querySelector<HTMLButtonElement>("[data-page-chat-toggle]")!.disabled).toBe(false);

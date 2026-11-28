@@ -19706,7 +19706,13 @@
       "recordWindow.attachments.openShort": "ed077f3d8125d60dca1979c7133601bd187d47c73ed9975028f677e49e709942",
       "recordWindow.schedule.range": "c72e51fdcb01a6213c788a9ca09ff2747acff350f40634bd0e56feb477e1b1e8",
       "recordWindow.notes.writtenRest": "5e39bf0533e621f17665d13f64f13b454d8b94bc45ad231eb93e226425b5f3a9",
-      "recordWindow.choose": "7ca41615c19be38d63b5defd85e2db57712e18014c8d9e985f449245c0fdabc4"
+      "recordWindow.choose": "7ca41615c19be38d63b5defd85e2db57712e18014c8d9e985f449245c0fdabc4",
+      "pages.pinToBar": "e24e15aced7fe785251e08d1997d5854956182d8d7007d6045761319c2f07955",
+      "pages.unpinFromBar": "d23685419122619601557374e0854034f326aa8a69a2cad17710d2703536e3ae",
+      "pages.pinToBarHint": "c591a313b7371520b586a0b296af690a340d61d9b0af44fcfec97d07affa5a32",
+      "pages.unpinFromBarHint": "7888280052dd7c5a62cc36b070a8c19da3f775f6eca0ba9cc4bd95397554bb72",
+      "pages.pinToBarFull": "5c9092b27e40f3758a5bd9775fae4dc61be951fffa804d34a821171623a33714",
+      "chat.pinnedPages.label": "5fb5163e2ea0fbcfb865c89904a7043162b5d9a05988af42eb97d12c1723a7bf"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

@@ -16111,5 +16111,11 @@
   "ui.customize.item.new": "Nouveau",
   "ui.customize.item.pinnedTiles": "Bots épinglés",
   "ui.customize.item.accountUsage": "Utilisation du menu du compte",
-  "ui.customize.item.section": "Section"
+  "ui.customize.item.section": "Section",
+  "pages.pinToBar": "Épingler dans la barre du haut",
+  "pages.unpinFromBar": "Retirer de la barre du haut",
+  "pages.pinToBarHint": "Garder cette page à un clic dans la barre du haut du chat",
+  "pages.unpinFromBarHint": "Retirer cette page de la barre du haut du chat",
+  "pages.pinToBarFull": "Tu as déjà épinglé le maximum de {max} pages. Retire-en une pour en épingler une autre.",
+  "chat.pinnedPages.label": "Pages épinglées"
 }

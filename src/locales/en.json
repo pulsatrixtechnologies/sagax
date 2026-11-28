@@ -16126,5 +16126,11 @@
   "ui.customize.item.new": "New",
   "ui.customize.item.pinnedTiles": "Pinned bots",
   "ui.customize.item.accountUsage": "Account menu Usage",
-  "ui.customize.item.section": "Section"
+  "ui.customize.item.section": "Section",
+  "pages.pinToBar": "Pin to top bar",
+  "pages.unpinFromBar": "Unpin from top bar",
+  "pages.pinToBarHint": "Keep this page one click away in the chat top bar",
+  "pages.unpinFromBarHint": "Remove this page from the chat top bar",
+  "pages.pinToBarFull": "You've pinned the maximum of {max} pages. Unpin one to pin this one.",
+  "chat.pinnedPages.label": "Pinned pages"
 }

@@ -1,5 +1,6 @@
 // Bot page zone order helpers (D-20261127-004, #5443 PR2).
 
+import { orderedOf } from "./ordered-of";
 import type { ZoneLayout } from "./types";
 import { BOT_PAGE_COMPONENT_IDS } from "./types";
 
@@ -9,16 +10,6 @@ const PANEL_TAB_IDS = ["panel:activity", "panel:library", "panel:coding"] as con
 
 export function botPageHidden(zone: ZoneLayout, id: string): boolean {
   return zone.hidden.includes(id);
-}
-
-function orderedOf(zone: ZoneLayout, known: readonly string[]): string[] {
-  const hidden = new Set(zone.hidden);
-  const knownSet = new Set(known);
-  const ordered = zone.order.filter((id) => knownSet.has(id) && !hidden.has(id));
-  for (const id of known) {
-    if (!hidden.has(id) && !ordered.includes(id)) ordered.push(id);
-  }
-  return ordered;
 }
 
 /** Profile tab component ids still visible, in zone order. */

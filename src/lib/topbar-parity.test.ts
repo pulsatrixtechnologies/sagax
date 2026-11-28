@@ -54,7 +54,9 @@ describe("round controls, as the reference measures them (#4163)", () => {
     expect(head).toContain("new: newButton");
     expect(head).toContain("sidebarHeadOrder(sidebarZone).map((id) => wrapHead(id, headById[id] ?? null))");
     const orderSrc = read("./ui-layout/sidebar-order.ts");
-    expect(orderSrc).toContain('for (const id of ["collapse", "search", "new"])');
+    // Missing head ids return to default place via shared orderedOf (#5443).
+    expect(orderSrc).toContain('const HEAD_IDS = ["collapse", "search", "new"] as const');
+    expect(orderSrc).toContain("return orderedOf(zone, HEAD_IDS)");
     expect(CIRCLE_ICON).toEqual({ size: 18, strokeWidth: 1.75 });
   });
 

@@ -1,5 +1,5 @@
 // Zone registry for customize mode (D-20261127-004, #5443).
-// PR1: composerBar + sidebar. PR2: conversationHeader + botPage.
+// Zones: composerBar, sidebar, conversationHeader, botPage (whole app per D-20261127-004).
 
 import {
   BOT_CHATS_SECTION_ID,

@@ -70,4 +70,19 @@ describe("ui-layout PR2 registry (conversationHeader + botPage)", () => {
     expect(botGeneralCardOrder(zone)).toEqual(["card:more", "card:settings", "card:notifications", "card:accounts"]);
     expect(botPanelTabOrder(zone)).toEqual(["panel:library", "panel:activity"]);
   });
+
+  it("puts a card missing from a saved order back at its default place", () => {
+    // Saved before card:notifications existed: only more.
+    const zone = {
+      order: ["card:more"],
+      hidden: [] as string[],
+    };
+    expect(botGeneralCardOrder(zone)).toEqual([
+      "card:settings",
+      "card:notifications",
+      "card:channels",
+      "card:accounts",
+      "card:more",
+    ]);
+  });
 });

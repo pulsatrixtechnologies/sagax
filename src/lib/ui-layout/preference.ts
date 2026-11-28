@@ -3,6 +3,7 @@
 // read; mirrors them on every save so Appearance rows and old readers keep working.
 import { useSyncExternalStore } from "react";
 
+import { fillMissingAtDefault } from "./ordered-of";
 import { defaultZoneOrder } from "./registry";
 import type { UiLayoutV1, UsagePlacement, ZoneId, ZoneLayout } from "./types";
 import {
@@ -81,14 +82,21 @@ function normalizeZone(zoneId: ZoneId, raw: unknown, fallback: ZoneLayout): Zone
   let order = normalizeStringList(record.order);
   let hidden = normalizeStringList(record.hidden);
   if (zoneId === "composerBar") {
-    // Hidden composer items stay out of order; fill missing visibles from the default set.
+    // Hidden composer items stay out of order; fill missing visibles at default place.
     const hiddenSet = new Set(hidden.filter((id) => (COMPOSER_BAR_COMPONENT_IDS as readonly string[]).includes(id)));
     hidden = [...hiddenSet];
-    const fromRaw = normalizeComposerOrder(record.order).filter((id) => !hiddenSet.has(id));
-    order = fromRaw;
-    for (const id of COMPOSER_BAR_COMPONENT_IDS) {
-      if (!hiddenSet.has(id) && !order.includes(id)) order.push(id);
+    const seen = new Set<string>();
+    const fromRaw: string[] = [];
+    if (Array.isArray(record.order)) {
+      for (const entry of record.order) {
+        if (typeof entry !== "string") continue;
+        if (!(COMPOSER_BAR_COMPONENT_IDS as readonly string[]).includes(entry)) continue;
+        if (hiddenSet.has(entry) || seen.has(entry)) continue;
+        seen.add(entry);
+        fromRaw.push(entry);
+      }
     }
+    order = fillMissingAtDefault(fromRaw, hidden, COMPOSER_BAR_COMPONENT_IDS);
     const leftRaw = typeof record.left === "number" && Number.isFinite(record.left)
       ? Math.trunc(record.left)
       : (fallback.left ?? 1);
@@ -101,9 +109,13 @@ function normalizeZone(zoneId: ZoneId, raw: unknown, fallback: ZoneLayout): Zone
   if (order.length === 0 && hidden.length === 0) {
     order = [...fallback.order];
   }
-  // Drop ids that appear in both lists (hidden wins).
+  // Drop ids that appear in both lists (hidden wins); fill missing known defaults at default place.
   const hiddenSet = new Set(hidden);
-  order = order.filter((id) => !hiddenSet.has(id));
+  order = fillMissingAtDefault(
+    order.filter((id) => !hiddenSet.has(id)),
+    hidden,
+    fallback.order,
+  );
   return { order, hidden };
 }
 

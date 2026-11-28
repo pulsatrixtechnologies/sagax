@@ -228,14 +228,17 @@ const BUDGET_BASELINE: Record<string, number> = {
   // soft ceiling (examples the refusal gives, prose restating a schema,
   // shorter shared routine texts; each tool stays complete on its own);
   // every profile set to the measured wire so the saving cannot creep back.
-  "direct": 102904,
-  "direct+voice": 103868,
-  "direct+shared": 104798,
-  "direct+shared+voice": 105762,
-  "direct+skills": 104265,
-  "direct+skills+voice": 105229,
-  "direct+skills+shared": 106159,
-  "direct+skills+shared+voice": 107123,
+  // 2026-11-27 (#5461): show_html and update_html document the capabilities
+  // block and optional uses. Rooms omit both tools. Direct profiles, chief
+  // and not, move to the measured wire (+2,620 chief, +2,614 non-chief).
+  "direct": 105524,
+  "direct+voice": 106488,
+  "direct+shared": 107418,
+  "direct+shared+voice": 108382,
+  "direct+skills": 106885,
+  "direct+skills+voice": 107849,
+  "direct+skills+shared": 108779,
+  "direct+skills+shared+voice": 109743,
   "room": 94594,
   "room+voice": 95558,
   "room+shared": 96488,
@@ -253,14 +256,15 @@ const BUDGET_BASELINE: Record<string, number> = {
   "room+own-thread+skills+shared": 99545,
   "room+own-thread+skills+shared+voice": 100509,
   // #2048: choose_page_target joins the catalog (measured wire).
-  "direct+non-chief": 92397,
-  "direct+voice+non-chief": 93361,
-  "direct+shared+non-chief": 94291,
-  "direct+shared+voice+non-chief": 95255,
-  "direct+skills+non-chief": 93758,
-  "direct+skills+voice+non-chief": 94722,
-  "direct+skills+shared+non-chief": 95652,
-  "direct+skills+shared+voice+non-chief": 96616,
+  // #5461: same show_html / update_html text as the chief direct profiles.
+  "direct+non-chief": 95011,
+  "direct+voice+non-chief": 95975,
+  "direct+shared+non-chief": 96905,
+  "direct+shared+voice+non-chief": 97869,
+  "direct+skills+non-chief": 96372,
+  "direct+skills+voice+non-chief": 97336,
+  "direct+skills+shared+non-chief": 98266,
+  "direct+skills+shared+voice+non-chief": 99230,
   // 2026-11-06 #2519 (#2204 port): assignment_status joins the room catalog (measured wire).
   "room+non-chief": 84081,
   "room+voice+non-chief": 85045,

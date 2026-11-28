@@ -1255,6 +1255,7 @@ import { teamWorkClearSteps } from "../shared/team-work.ts";
 import { createPersonNote, setPersonNoteSink } from "./team-work/person-note.ts";
 import { queueTeamWorkFrames } from "./team-work/frames.ts";
 import { createPageDataRoutes } from "./routes/page-data.ts";
+import { createAppConnectorRoutes } from "./routes/app-connectors.ts";
 import { PageStore } from "./pages/page-store.ts";
 import { PageFiles } from "./pages/page-files.ts";
 import { PageDataWatch, PageSources } from "./pages/page-sources.ts";
@@ -13102,6 +13103,36 @@ const pageDataWatch = new PageDataWatch(pageLive);
 store.onChange((change) => {
   if (change.type === "bot") pageDataWatch.botChanged(change.botId);
 });
+// #3413 lot 7: the reader's own connectors, through the same hub and
+// reading as call_connector, judged by their bot's own approval path
+// (owner decision of 2026-11-10): their own rules and the organization's
+// (rulesOf), the one Full access decision with its holds (an org rule,
+// their own rule, a security key they set), as myChromeHeldLevel reads
+// it; every call in their action journal. Chat apps (R6) use this same
+// object: one verdict, one journal.
+const pageReaderConnectors = {
+  principal: (viewer: { principalId?: string }) => (IDENTITY.kind === "perspicax" ? viewer.principalId ?? "" : localPrincipalId()).trim().toLowerCase(),
+  accounts: (principalId: string) => connectorRegistry.accounts(principalId),
+  hub: () => connectorHub,
+  verdict: (viewer: { principalId?: string }, call: { tool: string; mcpTool: string; summary: string; input: string; readOnly: boolean }) => {
+    const bot = pageReaderBot(viewer);
+    const reader = bot ? approvalOwnerId(bot, bot.threadId) : (viewer.principalId ?? "").trim().toLowerCase();
+    const rules = reader || bot ? customRules.rulesOf(reader, bot?.id) : customRules.orgRules().filter((rule) => rule.enabled);
+    return pageActVerdict({
+      rules,
+      call: { tool: call.tool, mcpTool: call.mcpTool, summary: call.summary, input: call.input, hints: { readOnly: call.readOnly } },
+      botId: bot?.id ?? "",
+      level: bot ? approvalModeForTurn(store.projectBotForTask(bot.id, bot.threadId) ?? bot, false, bot.threadId) : undefined,
+      keyed: bot ? autoAnswerStepUp(bot, bot.threadId, { tool: call.mcpTool, summary: call.summary }).length > 0 : false,
+      home: serverHome(),
+      context: bot ? ruleProductsOf(bot.id) : {},
+    });
+  },
+  journal: ({ viewer, pageId, mcpTool, summary, decision, source }: { viewer: { principalId?: string; computerOwner?: boolean }; pageId: string; mcpTool: string; summary: string; decision: "auto-approved" | "user-approved" | "auto-denied"; source: "connector-read" | "full-access" | "user" | "custom-rule" | "custom-rule-deny" }) => {
+    const bot = pageReaderBot(viewer);
+    appendDecision(DATA_DIR, { threadId: bot?.threadId ?? `page:${pageId}`, ...(bot ? { botId: bot.id, botName: bot.name } : {}), tool: mcpTool, summary: `A page: ${summary}`, decision, source });
+  },
+};
 ROUTES.push(createPageDataRoutes({
   pages: publishedPages,
   reader: (auth) => pageReaderFor(auth),
@@ -13142,35 +13173,24 @@ ROUTES.push(createPageDataRoutes({
       return engine.generateText(text, { noThinking: true });
     },
   },
-  // #3413 lot 7: the reader's own connectors, through the same hub and
-  // reading as call_connector, judged by their bot's own approval path
-  // (owner decision of 2026-11-10): their own rules and the organization's
-  // (rulesOf), the one Full access decision with its holds (an org rule,
-  // their own rule, a security key they set), as myChromeHeldLevel reads
-  // it; every call in their action journal
-  connectors: {
-    principal: (viewer) => (IDENTITY.kind === "perspicax" ? viewer.principalId ?? "" : localPrincipalId()).trim().toLowerCase(),
-    accounts: (principalId) => connectorRegistry.accounts(principalId),
-    hub: () => connectorHub,
-    verdict: (viewer, call) => {
-      const bot = pageReaderBot(viewer);
-      const reader = bot ? approvalOwnerId(bot, bot.threadId) : (viewer.principalId ?? "").trim().toLowerCase();
-      const rules = reader || bot ? customRules.rulesOf(reader, bot?.id) : customRules.orgRules().filter((rule) => rule.enabled);
-      return pageActVerdict({
-        rules,
-        call: { tool: call.tool, mcpTool: call.mcpTool, summary: call.summary, input: call.input, hints: { readOnly: call.readOnly } },
-        botId: bot?.id ?? "",
-        level: bot ? approvalModeForTurn(store.projectBotForTask(bot.id, bot.threadId) ?? bot, false, bot.threadId) : undefined,
-        keyed: bot ? autoAnswerStepUp(bot, bot.threadId, { tool: call.mcpTool, summary: call.summary }).length > 0 : false,
-        home: serverHome(),
-        context: bot ? ruleProductsOf(bot.id) : {},
-      });
-    },
-    journal: ({ viewer, pageId, mcpTool, summary, decision, source }) => {
-      const bot = pageReaderBot(viewer);
-      appendDecision(DATA_DIR, { threadId: bot?.threadId ?? `page:${pageId}`, ...(bot ? { botId: bot.id, botName: bot.name } : {}), tool: mcpTool, summary: `A page: ${summary}`, decision, source });
-    },
-  }
+  // #3413 lot 7, and a chat app's connector.call (R6): the same hub,
+  // verdict, approvals and journal. A chat app is not a second path.
+  connectors: pageReaderConnectors,
+}));
+ROUTES.push(createAppConnectorRoutes({
+  bot: (id) => store.bot(id),
+  room: (threadId) => Boolean(store.groupByThread(threadId)),
+  messages: (threadId) => store.messagesFor(threadId),
+  mayRead: (auth, botId, threadId) => {
+    const bot = store.bot(botId);
+    if (!bot) return false;
+    const viewerId = channelFilterViewerId(auth);
+    return !viewerId || botThreadReadable(bot, threadId, viewerId, "thread.read");
+  },
+  reader: (auth) => pageReaderFor(auth),
+  botAct: (auth) => auth.kind === "session" && isBotActSession(auth.session),
+  approvals: pageDataApprovals,
+  connectors: pageReaderConnectors,
 }));
 /** The reader's own Primary Bot (else their first visible bot), #3413: whose
  * engine answers a page's model question and whose level a page's change follows. */

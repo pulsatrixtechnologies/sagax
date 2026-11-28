@@ -135,6 +135,18 @@ describe("widget documents", () => {
     expect(buildWidgetDocument("", "dark")).toContain("color-scheme:dark");
   });
 
+  it("keeps the CSP and adds no bytes when the capability bridge is empty", () => {
+    const plain = buildWidgetDocument("<p>x</p>", "light");
+    const same = buildWidgetDocument("<p>x</p>", "light", "", "");
+    expect(same).toBe(plain);
+    expect(plain).not.toContain("window.sagax");
+    const doc = buildWidgetDocument("<p>x</p>", "light", "", "window.sagax=1");
+    expect(doc).toContain("connect-src 'none'");
+    expect(doc.indexOf("Content-Security-Policy")).toBeLessThan(doc.indexOf("window.sagax=1"));
+    expect(doc.indexOf("window.sagax=1")).toBeLessThan(doc.indexOf("<body>"));
+    expect(WIDGET_SANDBOX).toBe("allow-scripts");
+  });
+
   it("embeds the open-link bridge without allow-popups (#1799)", () => {
     const doc = buildWidgetDocument('<a href="https://example.com" target="_blank">Go</a>', "light");
     expect(doc).toContain(WIDGET_OPEN_MESSAGE);

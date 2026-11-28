@@ -53,6 +53,22 @@ describe("AppMessage", () => {
     expect(srcdoc).toContain("default-src 'none'");
     expect(srcdoc).toContain("connect-src 'none'");
     expect(srcdoc).toContain("frame-src 'none'");
+    expect(srcdoc).not.toContain("sagax-cap");
+    expect(srcdoc).not.toContain("window.sagax");
+  });
+
+  it("injects the capability bridge when the page declares a connector, and keeps the sandbox", () => {
+    const html = '<script type="application/sagax-capabilities+json">{"connectors":{"GitHub":["search"]}}</script><p>x</p>';
+    const host = mount(appRow("abc-123", html));
+    const iframe = host.querySelector("iframe")!;
+    expect(iframe.getAttribute("sandbox")).toBe("allow-scripts");
+    expect(iframe.getAttribute("sandbox")).not.toContain("allow-same-origin");
+    const srcdoc = iframe.getAttribute("srcdoc") ?? "";
+    expect(srcdoc).toContain("sagax-cap-ready");
+    expect(srcdoc).toContain('defineProperty(window,"sagax"');
+    expect(srcdoc).toContain("connect-src 'none'");
+    expect(srcdoc.indexOf("Content-Security-Policy")).toBeLessThan(srcdoc.indexOf("sagax-cap-ready"));
+    expect(srcdoc.indexOf("sagax-cap-ready")).toBeLessThan(srcdoc.indexOf("<body>"));
   });
 
   it("shows the bot's human title and never the raw message id", () => {

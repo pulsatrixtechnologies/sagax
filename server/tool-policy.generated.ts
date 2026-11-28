@@ -492,6 +492,8 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"GET","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/activity$","tier":"read","readOnly":true,"scope":"bots:read","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/always-allow$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/analytics$","tier":"read","readOnly":true,"scope":"bots:read","defaultEnabled":true},
+  {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/apps\\/([\\w-]+)\\/approvals\\/([\\w-]+)$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":false},
+  {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/apps\\/([\\w-]+)\\/connector$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":false},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/artifacts(?:\\/([\\w-]+)(\\/refresh)?)?$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/auto-model$","tier":"read","readOnly":true,"scope":"bots:read","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/avatar\\/generate$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},

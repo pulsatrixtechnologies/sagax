@@ -257,8 +257,10 @@ export const WIDGET_OPEN_BRIDGE = `(function(){function ok(u){if(typeof u!=="str
  * policy is in force before the first widget script parses; a widget that
  * adds its own CSP can only narrow it further. The size reporter is ours and
  * posts only a number. The open bridge posts an http(s)/mailto URL so the
- * parent can open the system browser without allow-popups (#1799). */
-export function buildWidgetDocument(source: string, theme: WidgetTheme | "light" | "dark", font = ""): string {
+ * parent can open the system browser without allow-popups (#1799).
+ * `bridge` is an optional inline script of ours (a chat app's capability
+ * bridge). It runs in the head, before the page, and does not change the CSP. */
+export function buildWidgetDocument(source: string, theme: WidgetTheme | "light" | "dark", font = "", bridge = ""): string {
   const resolved = typeof theme === "string" ? widgetThemeFromTokens({ "--code-color-scheme": theme }) : theme;
   // the body's own height, not the viewport's: the frame shrinks to a short
   // widget instead of keeping the empty space of its first height
@@ -266,7 +268,8 @@ export function buildWidgetDocument(source: string, theme: WidgetTheme | "light"
     + "addEventListener('load',send);if(typeof ResizeObserver!=='undefined'){var o=new ResizeObserver(send);o.observe(document.documentElement);addEventListener('DOMContentLoaded',function(){if(document.body)o.observe(document.body);});}setTimeout(send,50);setTimeout(send,500);})();";
   // theme first, kit second, the widget's own <style> last: a widget that
   // sets its own colors still wins over the kit
-  return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="${WIDGET_CSP}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style id="sagax-theme">${resolved.css}</style><style id="sagax-kit">${font}${WIDGET_KIT_CSS}</style><script>${reporter}${WIDGET_THEME_LISTENER}${WIDGET_OPEN_BRIDGE}</script></head><body>${source}</body></html>`;
+  const extra = bridge ? `<script>${bridge}</script>` : "";
+  return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="${WIDGET_CSP}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style id="sagax-theme">${resolved.css}</style><style id="sagax-kit">${font}${WIDGET_KIT_CSS}</style><script>${reporter}${WIDGET_THEME_LISTENER}${WIDGET_OPEN_BRIDGE}</script>${extra}</head><body>${source}</body></html>`;
 }
 
 // ---------------------------------------------------------------------------

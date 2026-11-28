@@ -79,6 +79,17 @@ describe("show_html", () => {
     expect(fake.appendMessage).not.toHaveBeenCalled();
   });
 
+  it("stores uses as the capabilities block, and an existing block wins", () => {
+    const fake = fakeStore();
+    expect(showHtml(fake, { html: "<p>x</p>", uses: ["GitHub:search"] })).toEqual({ ok: true, messageId: "m1" });
+    const stored = rowOf(fake, "m1").app!.html;
+    expect(stored).toContain('type="application/sagax-capabilities+json"');
+    expect(stored).toContain('"GitHub":["search"]');
+    const block = '<script type="application/sagax-capabilities+json">{"connectors":{"Keep":["a"]}}</script><p>y</p>';
+    expect(showHtml(fake, { html: block, uses: ["Other:b"] })).toEqual({ ok: true, messageId: "m2" });
+    expect(rowOf(fake, "m2").app!.html).toBe(block);
+  });
+
   it("refuses html past the byte limit", () => {
     const fake = fakeStore();
     const result = showHtml(fake, { html: "a".repeat(APP_LIMITS.htmlBytes + 1) });

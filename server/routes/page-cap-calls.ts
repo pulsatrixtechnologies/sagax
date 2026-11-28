@@ -283,58 +283,17 @@ export function createPageCapCalls(deps: PageCapCallDeps): { handle(ctx: PageCap
   };
 
   const connectorCall = async (ctx: PageCapCallContext): Promise<void> => {
-    const fr = ctx.lang === "fr";
-    const body = await ctx.readBody(ctx.req) as Record<string, unknown> | null;
-    const connector = body?.connector;
-    const tool = body?.tool;
-    const args = body?.arguments ?? {};
-    if (typeof connector !== "string" || typeof tool !== "string") return ctx.refuse(400, "bad_request");
-    if (!ctx.caps?.connectors || !Object.prototype.hasOwnProperty.call(ctx.caps.connectors, connector) || !ctx.caps.connectors[connector]!.includes(tool) || !deps.connectors || ctx.version === undefined) return ctx.refuse(403, "not_declared");
-    if (!args || typeof args !== "object" || Array.isArray(args)) return ctx.refuse(400, "bad_request");
-    const hub = deps.connectors.hub();
-    const principalId = deps.connectors.principal(ctx.viewer);
-    if (!principalId) return ctx.refuse(503, "unavailable");
-    // the reader's own accounts, never the page owner's
-    const target = findConnectorCall(hub, deps.connectors.accounts(principalId), connector, tool);
-    if (!target.ok) {
-      const said = target.reason === "no_connector" ? (fr ? `Tu n'as pas de connecteur ${connector}.` : `You have no connector named ${connector}.`)
-        : target.reason === "no_tool" ? (fr ? `${connector} n'a pas d'outil ${tool}.` : `${connector} has no tool named ${tool}.`)
-          : target.reason === "needs_sign_in" ? (fr ? `${connector} attend que tu te connectes de nouveau.` : `${connector} is waiting for you to sign in again.`)
-            : (fr ? `${connector} ne peut pas encore être appelé d'une page.` : `${connector} cannot be called from a page yet.`);
-      return ctx.refuse(target.reason === "no_connector" || target.reason === "no_tool" ? 404 : 503, target.reason === "no_connector" || target.reason === "no_tool" ? "not_found" : "unavailable", { error: said });
-    }
-    const { account, entry, toolId, mcpTool, outbound } = target;
-    const summary = `${entry.name}: ${toolId} (${account.label})`;
-    const journal = (decision: "auto-approved" | "user-approved" | "auto-denied", source: "connector-read" | "full-access" | "user" | "custom-rule" | "custom-rule-deny") => {
-      try {
-        deps.connectors?.journal?.({ viewer: ctx.viewer, pageId: ctx.page.id, mcpTool, summary, decision, source });
-      } catch { /* the journal never fails the call */ }
-    };
-    const verdict = deps.connectors.verdict(ctx.viewer, { tool: "call_connector", mcpTool, summary, input: JSON.stringify(args), readOnly: !outbound });
-    if (verdict.rule === "deny") {
-      journal("auto-denied", "custom-rule-deny");
-      const org = verdict.by === "org";
-      return ctx.refuse(403, "denied", { reason: org ? "org_rule" : "person_rule", error: org ? (fr ? "Ton organisation refuse cet appel." : "Your organization refuses this call.") : (fr ? "Ta propre règle refuse cet appel." : "Your own rule refuses this call.") });
-    }
-    // a change starts from the reader's own click in the page
-    if (outbound && body?.click !== true) return ctx.refuse(400, "bad_request", { error: fr ? "Un changement part d'un clic dans la page." : "A change starts from a click in the page." });
-    // as for their bot: a rule's Ask first, else a change below Full access
-    // (or held at Full) asks; an Allow rule of theirs lets it run
-    const card = verdict.rule === "ask" || (outbound && verdict.rule !== "allow" && !verdict.acts);
-    if (card) {
-      const ask = { person: ctx.who.by, pageId: ctx.page.id, version: ctx.version, source: `connector:${mcpTool}` };
-      if (!deps.approvals || !deps.approvals.use(ask)) {
-        if (!deps.approvals) return ctx.refuse(503, "unavailable");
-        const answer: PageActAskFirst = { error: fr ? `Cette page veut utiliser ${entry.name} avec ton compte : ${toolId}.` : `This page wants to use ${entry.name} with your account: ${toolId}.`, code: "ask_first", approvalId: deps.approvals.open(ask), source: ask.source, label: summary, version: ctx.version, by: verdict.rule === "ask" && verdict.by ? verdict.by : "page", always: deps.approvals.alwaysOffered() };
-        return ctx.json(ctx.res, 409, answer);
-      }
-    }
-    journal(card ? "user-approved" : "auto-approved", card ? "user" : verdict.rule === "allow" ? "custom-rule" : outbound ? "full-access" : "connector-read");
-    const result = await hub.call({ principalId, account, connector: entry, tool: toolId, arguments: args as Record<string, unknown>, engine: "page" });
-    if (result.needsSignIn) return ctx.refuse(503, "unavailable", { error: fr ? `${entry.name} attend que tu te connectes de nouveau.` : `${entry.name} is waiting for you to sign in again.` });
-    if (result.isError) return ctx.refuse(502, "unavailable", { error: result.text.slice(0, 2_000) });
-    // the call ran (a change is made): an answer too large is cut, never refused
-    return ctx.json(ctx.res, 200, fitAnswer({ connector: entry.name, account: account.label, tool: toolId, text: result.text }));
+    const outcome = await runPageConnectorCall(deps, {
+      caps: ctx.caps,
+      version: ctx.version,
+      scopeId: ctx.page.id,
+      person: ctx.who.by,
+      viewer: ctx.viewer,
+      lang: ctx.lang,
+    }, await ctx.readBody(ctx.req) as Record<string, unknown> | null);
+    if (outcome.kind === "ok") return ctx.json(ctx.res, 200, outcome.body);
+    if (outcome.kind === "ask") return ctx.json(ctx.res, 409, outcome.body);
+    return ctx.refuse(outcome.status, outcome.code, outcome.extra);
   };
 
   return {
@@ -346,6 +305,83 @@ export function createPageCapCalls(deps: PageCapCallDeps): { handle(ctx: PageCap
       return pageStoreCall(deps, ctx);
     },
   };
+}
+
+/** What one connector.call decided. The published-page route and a chat
+ * app's route both return this. The rules live here, once. */
+export type PageConnectorCallOutcome =
+  | { kind: "ok"; body: PageConnectorAnswer }
+  | { kind: "ask"; body: PageActAskFirst }
+  | { kind: "refuse"; status: number; code: PageCapError; extra?: Record<string, unknown> };
+
+/** One connector.call (#3413 lot 7): the reader's own connection, the same
+ * verdict as their bot, a click for a change, the same journal. `scopeId`
+ * is the page id, or a chat app's stable id. The caller already checked
+ * who the reader is. */
+export async function runPageConnectorCall(
+  deps: Pick<PageCapCallDeps, "connectors" | "approvals">,
+  env: {
+    caps: PageCapabilities | null;
+    version: number | undefined;
+    scopeId: string;
+    person: string;
+    viewer: NonNullable<PageViewer>;
+    lang: "fr" | "en";
+  },
+  body: Record<string, unknown> | null,
+): Promise<PageConnectorCallOutcome> {
+  const fr = env.lang === "fr";
+  const connector = body?.connector;
+  const tool = body?.tool;
+  const args = body?.arguments ?? {};
+  if (typeof connector !== "string" || typeof tool !== "string") return { kind: "refuse", status: 400, code: "bad_request" };
+  if (!env.caps?.connectors || !Object.prototype.hasOwnProperty.call(env.caps.connectors, connector) || !env.caps.connectors[connector]!.includes(tool) || !deps.connectors || env.version === undefined) return { kind: "refuse", status: 403, code: "not_declared" };
+  if (!args || typeof args !== "object" || Array.isArray(args)) return { kind: "refuse", status: 400, code: "bad_request" };
+  const version = env.version;
+  const hub = deps.connectors.hub();
+  const principalId = deps.connectors.principal(env.viewer);
+  if (!principalId) return { kind: "refuse", status: 503, code: "unavailable" };
+  // the reader's own accounts, never the page owner's and never another person's
+  const target = findConnectorCall(hub, deps.connectors.accounts(principalId), connector, tool);
+  if (!target.ok) {
+    const said = target.reason === "no_connector" ? (fr ? `Tu n'as pas de connecteur ${connector}.` : `You have no connector named ${connector}.`)
+      : target.reason === "no_tool" ? (fr ? `${connector} n'a pas d'outil ${tool}.` : `${connector} has no tool named ${tool}.`)
+        : target.reason === "needs_sign_in" ? (fr ? `${connector} attend que tu te connectes de nouveau.` : `${connector} is waiting for you to sign in again.`)
+          : (fr ? `${connector} ne peut pas encore être appelé d'une page.` : `${connector} cannot be called from a page yet.`);
+    return { kind: "refuse", status: target.reason === "no_connector" || target.reason === "no_tool" ? 404 : 503, code: target.reason === "no_connector" || target.reason === "no_tool" ? "not_found" : "unavailable", extra: { error: said } };
+  }
+  const { account, entry, toolId, mcpTool, outbound } = target;
+  const summary = `${entry.name}: ${toolId} (${account.label})`;
+  const journal = (decision: "auto-approved" | "user-approved" | "auto-denied", source: "connector-read" | "full-access" | "user" | "custom-rule" | "custom-rule-deny") => {
+    try {
+      deps.connectors?.journal?.({ viewer: env.viewer, pageId: env.scopeId, mcpTool, summary, decision, source });
+    } catch { /* the journal never fails the call */ }
+  };
+  const verdict = deps.connectors.verdict(env.viewer, { tool: "call_connector", mcpTool, summary, input: JSON.stringify(args), readOnly: !outbound });
+  if (verdict.rule === "deny") {
+    journal("auto-denied", "custom-rule-deny");
+    const org = verdict.by === "org";
+    return { kind: "refuse", status: 403, code: "denied", extra: { reason: org ? "org_rule" : "person_rule", error: org ? (fr ? "Ton organisation refuse cet appel." : "Your organization refuses this call.") : (fr ? "Ta propre règle refuse cet appel." : "Your own rule refuses this call.") } };
+  }
+  // a change starts from the reader's own click in the page
+  if (outbound && body?.click !== true) return { kind: "refuse", status: 400, code: "bad_request", extra: { error: fr ? "Un changement part d'un clic dans la page." : "A change starts from a click in the page." } };
+  // as for their bot: a rule's Ask first, else a change below Full access
+  // (or held at Full) asks; an Allow rule of theirs lets it run
+  const card = verdict.rule === "ask" || (outbound && verdict.rule !== "allow" && !verdict.acts);
+  if (card) {
+    const ask = { person: env.person, pageId: env.scopeId, version, source: `connector:${mcpTool}` };
+    if (!deps.approvals || !deps.approvals.use(ask)) {
+      if (!deps.approvals) return { kind: "refuse", status: 503, code: "unavailable" };
+      const answer: PageActAskFirst = { error: fr ? `Cette page veut utiliser ${entry.name} avec ton compte : ${toolId}.` : `This page wants to use ${entry.name} with your account: ${toolId}.`, code: "ask_first", approvalId: deps.approvals.open(ask), source: ask.source, label: summary, version, by: verdict.rule === "ask" && verdict.by ? verdict.by : "page", always: deps.approvals.alwaysOffered() };
+      return { kind: "ask", body: answer };
+    }
+  }
+  journal(card ? "user-approved" : "auto-approved", card ? "user" : verdict.rule === "allow" ? "custom-rule" : outbound ? "full-access" : "connector-read");
+  const result = await hub.call({ principalId, account, connector: entry, tool: toolId, arguments: args as Record<string, unknown>, engine: "page" });
+  if (result.needsSignIn) return { kind: "refuse", status: 503, code: "unavailable", extra: { error: fr ? `${entry.name} attend que tu te connectes de nouveau.` : `${entry.name} is waiting for you to sign in again.` } };
+  if (result.isError) return { kind: "refuse", status: 502, code: "unavailable", extra: { error: result.text.slice(0, 2_000) } };
+  // the call ran (a change is made): an answer too large is cut, never refused
+  return { kind: "ok", body: fitAnswer({ connector: entry.name, account: account.label, tool: toolId, text: result.text }) };
 }
 
 /** A connector's answer within PAGE_CAP_LIMITS.answerBytes: its text cut

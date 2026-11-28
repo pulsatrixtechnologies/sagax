@@ -166,6 +166,15 @@ describe("show_html", () => {
     expect(result.text).toContain('call update_html with app_id "m42"');
   });
 
+  it("forwards uses when the model names them, and omits the field when it does not", async () => {
+    const { apiResponse, context } = harness();
+    await callTool("show_html", { html: "<p>x</p>", uses: ["GitHub:search"] }, context);
+    expect(JSON.parse(String(apiResponse.mock.calls[0][1]?.body))).toEqual({ tool: "show_html", html: "<p>x</p>", uses: ["GitHub:search"] });
+    apiResponse.mockClear();
+    await callTool("update_html", { app_id: "m7", html: "<p>y</p>", uses: ["state"] }, context);
+    expect(JSON.parse(String(apiResponse.mock.calls[0][1]?.body))).toEqual({ tool: "update_html", app_id: "m7", html: "<p>y</p>", uses: ["state"] });
+  });
+
   it("omits an absent title and refuses empty html without a round trip", async () => {
     const { apiResponse, context } = harness();
     await callTool("show_html", { html: "<p>x</p>" }, context);

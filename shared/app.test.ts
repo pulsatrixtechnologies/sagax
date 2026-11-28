@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { pageCapabilitiesAny, pageCapabilitiesOf } from "./page-capabilities.ts";
 import { APP_LIMITS, appExcerpt, appToText, parseAppInput } from "./app.ts";
 
 describe("parseAppInput", () => {
@@ -44,7 +45,48 @@ describe("parseAppInput", () => {
   it("refuses a non-string title", () => {
     expect(parseAppInput({ html: "<p>x</p>", title: 5 }).ok).toBe(false);
   });
+
+  it("compiles uses into the capabilities block when the HTML has none", () => {
+    const parsed = parseAppInput({ html: "<p>x</p>", uses: ["GitHub:search", "GitHub:search", "state"] });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.html.startsWith('<script type="application/sagax-capabilities+json">')).toBe(true);
+    expect(pageCapabilitiesOf(parsed.html)?.connectors).toEqual({ GitHub: ["search"] });
+    const bot = parseAppInput({ html: "<p>x</p>", uses: ["bot"] });
+    expect(bot.ok && bot.html).toContain('"data":["bot"]');
+    if (bot.ok) {
+      expect(pageCapabilitiesOf(bot.html)?.data).toEqual([]);
+      expect(pageCapabilitiesAny(pageCapabilitiesOf(bot.html))).toBe(false);
+    }
+    expect(parseAppInput({ html: "<p>x</p>", uses: ["state"] })).toEqual({ ok: true, html: "<p>x</p>" });
+    expect(parseAppInput({ html: "<p>x</p>", uses: undefined })).toEqual({ ok: true, html: "<p>x</p>" });
+  });
+
+  it("keeps an existing capabilities block and ignores uses", () => {
+    const html = '<script type="application/sagax-capabilities+json">{"connectors":{"Keep":["a"]}}</script><p>y</p>';
+    expect(parseAppInput({ html, uses: ["Other:b"] })).toEqual({ ok: true, html });
+    const broken = '<script type="application/sagax-capabilities+json">{nope</script><p>y</p>';
+    expect(parseAppInput({ html: broken, uses: ["GitHub:search"] })).toEqual({ ok: true, html: broken });
+  });
+
+  it("refuses a uses list that is not connector:tool, bot or state", () => {
+    expect(parseAppInput({ html: "<p>x</p>", uses: "GitHub:search" }).ok).toBe(false);
+    expect(parseAppInput({ html: "<p>x</p>", uses: ["foo"] }).ok).toBe(false);
+    expect(parseAppInput({ html: "<p>x</p>", uses: ["GitHub:*"] }).ok).toBe(false);
+    expect(parseAppInput({ html: "<p>x</p>", uses: ["GitHub:search".padEnd(400, "x")] }).ok).toBe(false);
+  });
+
+  it("refuses a page that only crosses the byte limit once uses is compiled", () => {
+    const almost = `<p>${"a".repeat(APP_LIMITS.htmlBytes - 20)}</p>`;
+    expect(byteLengthOf(almost)).toBeLessThanOrEqual(APP_LIMITS.htmlBytes);
+    expect(parseAppInput({ html: almost }).ok).toBe(true);
+    expect(parseAppInput({ html: almost, uses: ["GitHub:search"] }).ok).toBe(false);
+  });
 });
+
+function byteLengthOf(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
 
 describe("appExcerpt", () => {
   it("strips tags, script and style to visible text", () => {

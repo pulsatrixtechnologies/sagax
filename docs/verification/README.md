@@ -100,6 +100,7 @@ Use only mapped, tested commands:
 - [Edition loading: every feature on, and the optional enterprise layer](enterprise-license.md)
 - [Reliability qualification harness](qualification.md)
 - [Owed validation after 0.8.22 (#1895): local automation vs device remainder](owed-0.8.22-validation.md)
+- [Owner device runs: blind pairs, phone, inbound voice (#5536): the calendar and the rows](owner-device-runs.md)
 
 `control-omb ui` ([Chat UI, driven headlessly](chat-ui.md)) drives the real
 renderer in a headless Chrome by accessible name, so composer sends, transcript

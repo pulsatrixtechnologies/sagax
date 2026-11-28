@@ -77,4 +77,55 @@ describe("background threads (shared vectors, also run by the phone)", () => {
       expect(backgroundThreads(all, { botThreads: true }).map((task) => task.threadId)).toEqual(["res", "client", "hidden", "investigate"]);
     });
   });
+
+  // #5289 D-20261127-040: Person-work threads lists hand-offs and bot-opened
+  // threads as regular rows without turning on Show Bot threads.
+  describe("with the person's Person-work threads choice", () => {
+    const own = { threadId: "own" };
+    const handoff = { threadId: "ticket", title: "#1234 - Order script", openedBy: { botId: "dispatch", name: "Dispatch", kind: "work" } };
+    const pair = { threadId: "pair", openedBy: { botId: "dispatch", name: "Dispatch", kind: "pair" } };
+    const self = { threadId: "self", title: "Thread Test", openedBy: { botId: "nimbus", name: "Nimbus" } };
+    const run = { threadId: "run", routineRunId: "r" };
+    const results = { threadId: "res", routineResults: true as const };
+    const client = { threadId: "client", openedBy: { botId: "agent:acme", name: "Acme", kind: "agent" } };
+    const hidden = { threadId: "hidden", hidden: true as const };
+    const investigate = { threadId: "investigate", hidden: true as const, openedBy: { botId: "nimbus", name: "Nimbus", at: 1 } };
+    const all = [own, handoff, pair, self, run, results, client, hidden, investigate];
+
+    it("off (the default) keeps them out of the list, with Show Bot threads still off", () => {
+      expect(personThreads(all, undefined, { personWorkThreads: false, botThreads: false }).map((task) => task.threadId)).toEqual(["own"]);
+      expect(backgroundThreads(all, { personWorkThreads: false }).map((task) => task.threadId)).toEqual(["ticket", "pair", "self", "res", "client", "hidden", "investigate"]);
+    });
+
+    it("on lists hand-offs and bot-opened threads beside the person's own, with Show Bot threads still off", () => {
+      expect(personThreads(all, undefined, { personWorkThreads: true, botThreads: false }).map((task) => task.threadId)).toEqual(["own", "ticket", "pair", "self"]);
+    });
+
+    it("on never lists a routine run, a results thread, an AI client's conversation or a bot's hidden investigation", () => {
+      const listed = personThreads(all, undefined, { personWorkThreads: true }).map((task) => task.threadId);
+      for (const id of ["run", "res", "client", "hidden", "investigate"]) expect(listed).not.toContain(id);
+    });
+
+    it("on shows a bot thread the sweep archived as an open row, never one the person archived", () => {
+      const swept = { ...handoff, threadId: "swept", archivedAt: 5, autoArchived: true as const };
+      const putAway = { ...handoff, threadId: "put-away", archivedAt: 7 };
+      const ownSwept = { threadId: "own-archived", archivedAt: 8 };
+      const sweptClient = { ...client, threadId: "swept-client", archivedAt: 9, autoArchived: true as const };
+      const rows = [swept, putAway, ownSwept, sweptClient];
+      const archived = (list: Array<{ threadId: string; archivedAt?: number }>) => list.filter((task) => task.archivedAt !== undefined).map((task) => task.threadId);
+      expect(archived(listedRows(rows, { personWorkThreads: true, botThreads: false }))).toEqual(["put-away", "own-archived", "swept-client"]);
+      expect(isListedBotThread(swept, { personWorkThreads: true })).toBe(true);
+      expect(isListedBotThread(swept, { personWorkThreads: false, botThreads: false })).toBe(false);
+      expect(isListedBotThread(client, { personWorkThreads: true })).toBe(false);
+    });
+
+    it("on, a listed thread is not repeated under Show background", () => {
+      expect(backgroundThreads(all, { personWorkThreads: true, botThreads: false }).map((task) => task.threadId)).toEqual(["res", "client", "hidden", "investigate"]);
+    });
+
+    it("either choice alone is enough to list them", () => {
+      expect(personThreads(all, undefined, { personWorkThreads: true }).map((task) => task.threadId)).toEqual(["own", "ticket", "pair", "self"]);
+      expect(personThreads(all, undefined, { botThreads: true }).map((task) => task.threadId)).toEqual(["own", "ticket", "pair", "self"]);
+    });
+  });
 });

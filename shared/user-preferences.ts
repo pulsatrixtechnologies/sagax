@@ -79,6 +79,10 @@ export const USER_PREFERENCE_KEYS = [
   // Settings > Appearance > Sidebar: show the Bot threads section, "on" |
   // "off"; absent is off (src/lib/sidebar-bot-threads.ts, #5239)
   "sagax.sidebarBotThreads.v1",
+  // Settings > Appearance > Sidebar: list person-work threads (hand-offs,
+  // start_thread) as regular rows, "on" | "off"; absent is off
+  // (src/lib/person-work-threads.ts, #5289, D-20261127-040)
+  "sagax.personWorkThreads.v1",
   // Settings > Appearance > Sidebar: the Primary Bot as a large tile or a regular
   // row (src/lib/primary-bot-style.ts, #4588). "tile" | "row"; absent is tile.
   "sagax.primaryBotStyle.v1",

@@ -77,7 +77,11 @@ extension Chat {
     /// there is a list (a second thread or a folder).
     var desktopHasThreadList: Bool {
         guard case let .bot(bot) = self else { return false }
-        return (bot.tasks?.filter { !$0.isHiddenFromPerson }.count ?? 1) > 1 || !(bot.projects ?? []).isEmpty
+        // Count as if Person-work threads were on so the disclosure stays
+        // available when hand-offs exist; the list itself reads the prefs.
+        // (This Chat property is nonisolated; SidebarPrefsModel is MainActor.)
+        return bot.visibleTasks(personWorkThreads: true).count > 1
+            || !(bot.projects ?? []).isEmpty
     }
 }
 
@@ -706,7 +710,14 @@ struct DesktopThreadList: View {
 
     var body: some View {
         if let bot = session.state.bot(botId) {
-            let groups = bot.threadGroups(queuedThreadIds: session.state.queuedThreadIds, includingEmptyFolders: true)
+            let workThreads = SidebarPrefsModel.shared.prefs.personWorkThreads
+            let botThreads = SidebarPrefsModel.shared.prefs.showBotThreads
+            let groups = bot.threadGroups(
+                queuedThreadIds: session.state.queuedThreadIds,
+                includingEmptyFolders: true,
+                personWorkThreads: workThreads,
+                botThreads: botThreads
+            )
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(groups) { group in
                     if let folder = group.project {

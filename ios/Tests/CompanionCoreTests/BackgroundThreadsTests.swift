@@ -47,4 +47,33 @@ final class BackgroundThreadsTests: XCTestCase {
         XCTAssertEqual(makeBot(threadId: "work", tasks: [work, run]).visibleTasks.map(\.threadId), ["work"])
         XCTAssertEqual(makeBot(threadId: "run", tasks: [work, run]).visibleTasks.map(\.threadId), [])
     }
+
+    /// #5289 D-20261127-040: Person-work threads lists hand-offs and bot-opened
+    /// threads without Show Bot threads.
+    func testPersonWorkThreadsListsHandOffsIndependently() throws {
+        var own = BotTask(threadId: "own", title: "Own", createdAt: 1)
+        var handoff = BotTask(threadId: "ticket", title: "#1234", createdAt: 2)
+        handoff.openedBy = ThreadOpener(botId: "dispatch", name: "Dispatch", at: 2, kind: "work")
+        var selfOpened = BotTask(threadId: "self", title: "Thread Test", createdAt: 3)
+        selfOpened.openedBy = ThreadOpener(botId: "nimbus", name: "Nimbus", at: 3)
+        var client = BotTask(threadId: "client", title: "From a client", createdAt: 4)
+        client.openedBy = ThreadOpener(botId: "agent:acme", name: "Acme", at: 4, kind: "agent")
+        var run = BotTask(threadId: "run", title: "Nightly", createdAt: 5)
+        run.routineRunId = "r1"
+        let bot = makeBot(threadId: "own", tasks: [own, handoff, selfOpened, client, run])
+
+        XCTAssertEqual(bot.visibleTasks.map(\.threadId), ["own"])
+        XCTAssertEqual(
+            bot.visibleTasks(personWorkThreads: true, botThreads: false).map(\.threadId),
+            ["own", "ticket", "self"]
+        )
+        XCTAssertEqual(
+            bot.backgroundTasks(personWorkThreads: true, botThreads: false).map(\.threadId),
+            ["client"]
+        )
+        XCTAssertTrue(handoff.isListedBotThread(personWorkThreads: true))
+        XCTAssertFalse(client.isListedBotThread(personWorkThreads: true))
+        XCTAssertFalse(handoff.isListedBotThread(personWorkThreads: false, botThreads: false))
+        XCTAssertTrue(handoff.isListedBotThread(botThreads: true))
+    }
 }

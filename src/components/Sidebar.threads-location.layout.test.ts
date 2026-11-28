@@ -3,8 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { StoreProvider, type Bot } from "@/state/store";
 
-const prefs = vi.hoisted(() => ({ show: true, location: "header" as "header" | "sidebar", botThreads: false }));
+const prefs = vi.hoisted(() => ({ show: true, location: "header" as "header" | "sidebar", botThreads: false, personWorkThreads: false }));
 vi.mock("@/lib/sidebar-bot-threads", () => ({ useSidebarBotThreads: () => prefs.botThreads }));
+vi.mock("@/lib/person-work-threads", () => ({ usePersonWorkThreads: () => prefs.personWorkThreads }));
 vi.mock("./DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({}) }));
 vi.mock("@/lib/thread-preferences", async (original) => ({ ...await original<typeof import("@/lib/thread-preferences")>(),
   useShowThreads: () => prefs.show,
@@ -31,7 +32,7 @@ const sidebar = () => renderToStaticMarkup(createElement(StoreProvider, null,
   createElement(BotListItem, { bot, density: "comfortable", query: "earl", onMenu: () => undefined })));
 const header = () => renderToStaticMarkup(createElement(StoreProvider, null, createElement(TaskPicker, { bot })));
 
-beforeEach(() => { prefs.show = true; prefs.location = "header"; prefs.botThreads = false; });
+beforeEach(() => { prefs.show = true; prefs.location = "header"; prefs.botThreads = false; prefs.personWorkThreads = false; });
 
 describe("threads location: one place at a time", () => {
   it("In the chat header: the header button is there and the sidebar lists nothing under the bot", () => {
@@ -93,6 +94,24 @@ describe("threads location: one place at a time", () => {
     expect(on).toContain("#1234 - Order script");
     expect(on).toContain("Thread Test");
     expect(on).toContain("opened by Nimbus");
+    for (const id of ["run", "client"]) expect(on).not.toContain(`data-sidebar-thread-row="${id}"`);
+  });
+
+  // #5289 D-20261127-040: Person-work threads lists them with Show Bot threads off
+  it("lists person-work threads under the bot when Person-work threads is on, with Show Bot threads off", () => {
+    prefs.location = "sidebar";
+    prefs.personWorkThreads = true;
+    const busy: Bot = { ...bot, projects: [], tasks: [
+      { threadId: "current", title: "Current", createdAt: 1 },
+      { threadId: "ticket", title: "#1234 - Order script", createdAt: 2, openedBy: { botId: "nimbus", name: "Nimbus", kind: "work", at: 2 } },
+      { threadId: "self", title: "Thread Test", createdAt: 3, openedBy: { botId: "atlas", name: "Atlas", at: 3 } },
+      { threadId: "run", title: "Nightly", createdAt: 4, routineRunId: "run-1" },
+      { threadId: "client", title: "From a client", createdAt: 5, openedBy: { botId: "agent:acme", name: "Acme", kind: "agent", at: 5 } },
+    ] };
+    const on = renderToStaticMarkup(createElement(StoreProvider, null, createElement(BotThreadList, { bot: busy, selected: true })));
+    for (const id of ["current", "ticket", "self"]) expect(on).toContain(`data-sidebar-thread-row="${id}"`);
+    expect(on).toContain("#1234 - Order script");
+    expect(on).toContain("Thread Test");
     for (const id of ["run", "client"]) expect(on).not.toContain(`data-sidebar-thread-row="${id}"`);
   });
 

@@ -7095,6 +7095,8 @@
   "settings.allHistory.title": "Show All history",
   "settings.sidebarBotThreads.show": "Show the Bot threads section in the sidebar, and the threads bots opened in each bot's thread list",
   "settings.sidebarBotThreads.title": "Show Bot threads",
+  "settings.personWorkThreads.show": "Show threads bots opened for your work as regular threads, even when Show Bot threads is off",
+  "settings.personWorkThreads.title": "Person-work threads",
   "settings.showSuggestions.show": "Show the Suggestions card in the bot panel",
   "settings.showSuggestions.title": "Show suggestions",
   "settings.showPermissions.show": "Show the Permissions section in the bot panel",

@@ -1095,11 +1095,41 @@ public struct BotTask: Codable, Hashable, Sendable {
         if openedBy.kind == "agent" { return true }
         return personWrote != true
     }
+    /// shared/background-threads.ts `listedBotThread`: a hand-off or a thread
+    /// a bot opened that Person-work threads or Show Bot threads puts in the
+    /// normal list (#5289, D-20261127-040).
+    public func isListedBotThread(personWorkThreads: Bool = false, botThreads: Bool = false) -> Bool {
+        guard personWorkThreads || botThreads else { return false }
+        if routineRunId != nil || routineResults == true || hidden == true { return false }
+        guard let openedBy else { return false }
+        if openedBy.kind == "agent" { return false }
+        if personWrote == true { return false }
+        return true
+    }
     /// What "Show background" lists: background threads but routine runs,
-    /// whose home is the run card.
-    public var isListedBackground: Bool { isBackground && routineRunId == nil }
-    /// Out of the person's thread list: every background thread.
-    public var isHiddenFromPerson: Bool { isBackground }
+    /// whose home is the run card, and except threads the listing choice
+    /// already shows as regular rows.
+    public func isListedBackground(personWorkThreads: Bool = false, botThreads: Bool = false) -> Bool {
+        isBackground && routineRunId == nil && !isListedBotThread(personWorkThreads: personWorkThreads, botThreads: botThreads)
+    }
+    public var isListedBackground: Bool { isListedBackground() }
+    /// Out of the person's thread list: every background thread, except one
+    /// the listing choice promotes to a regular row.
+    public func isHiddenFromPerson(personWorkThreads: Bool = false, botThreads: Bool = false) -> Bool {
+        if isListedBotThread(personWorkThreads: personWorkThreads, botThreads: botThreads) { return false }
+        return isBackground
+    }
+    public var isHiddenFromPerson: Bool { isHiddenFromPerson() }
+    /// shared/background-threads.ts `listedRows`: a sweep-archived bot thread
+    /// is drawn open when the listing choice shows it.
+    public func listedForDisplay(personWorkThreads: Bool = false, botThreads: Bool = false) -> BotTask {
+        guard archivedAt != nil, autoArchived == true,
+              isListedBotThread(personWorkThreads: personWorkThreads, botThreads: botThreads) else { return self }
+        var copy = self
+        copy.archivedAt = nil
+        copy.autoArchived = nil
+        return copy
+    }
     /// A confidential thread ("Fil confidentiel"): never remembered,
     /// exported or shared beyond its owner. Permanent once set; only
     /// deleting the thread ends it. Absent means an ordinary thread.
@@ -1434,16 +1464,28 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
 
     /// The person's own conversations: background threads (runs, hand-offs,
     /// threads a bot opened, an AI client's) are left out, except the one on
-    /// screen when it is not a routine run (opened from its card).
-    public var visibleTasks: [BotTask] {
-        (tasks ?? []).filter { !$0.isHiddenFromPerson || ($0.threadId == threadId && $0.routineRunId == nil) }
+    /// screen when it is not a routine run (opened from its card). With
+    /// Person-work threads or Show Bot threads on, hand-offs and bot-opened
+    /// threads are regular rows too (#5289, D-20261127-040).
+    public func visibleTasks(personWorkThreads: Bool = false, botThreads: Bool = false) -> [BotTask] {
+        (tasks ?? []).filter {
+            !$0.isHiddenFromPerson(personWorkThreads: personWorkThreads, botThreads: botThreads)
+                || ($0.threadId == threadId && $0.routineRunId == nil)
+        }.map { $0.listedForDisplay(personWorkThreads: personWorkThreads, botThreads: botThreads) }
     }
 
+    public var visibleTasks: [BotTask] { visibleTasks() }
+
     /// "Show background": the bot's background threads but routine runs,
-    /// newest first, archived ones included.
-    public var backgroundTasks: [BotTask] {
-        (tasks ?? []).filter(\.isListedBackground).sorted { $0.listStamp > $1.listStamp }
+    /// newest first, archived ones included, except threads the listing
+    /// choice already shows as regular rows.
+    public func backgroundTasks(personWorkThreads: Bool = false, botThreads: Bool = false) -> [BotTask] {
+        (tasks ?? [])
+            .filter { $0.isListedBackground(personWorkThreads: personWorkThreads, botThreads: botThreads) }
+            .sorted { $0.listStamp > $1.listStamp }
     }
+
+    public var backgroundTasks: [BotTask] { backgroundTasks() }
 
     /// Older computers only send the profile default. Newer ones snapshot
     /// each thread's model independently, including the thread open here.

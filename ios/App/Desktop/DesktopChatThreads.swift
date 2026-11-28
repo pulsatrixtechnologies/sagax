@@ -61,7 +61,14 @@ struct DesktopThreadPickerCard: View {
 
     var body: some View {
         let live = session.state.bot(bot.id) ?? bot
-        let tasks = live.threadGroups(matching: query, queuedThreadIds: session.state.queuedThreadIds).flatMap(\.tasks)
+        let workThreads = SidebarPrefsModel.shared.prefs.personWorkThreads
+        let botThreads = SidebarPrefsModel.shared.prefs.showBotThreads
+        let tasks = live.threadGroups(
+            matching: query,
+            queuedThreadIds: session.state.queuedThreadIds,
+            personWorkThreads: workThreads,
+            botThreads: botThreads
+        ).flatMap(\.tasks)
         VStack(alignment: .leading, spacing: 0) {
             search.padding(.horizontal, 8).padding(.top, 6).padding(.bottom, 4)
             ScrollView {
@@ -141,7 +148,14 @@ struct DesktopThreadPickerCard: View {
                 .focused($searching)
                 .onSubmit {
                     let live = session.state.bot(bot.id) ?? bot
-                    if let first = live.threadGroups(matching: query, queuedThreadIds: session.state.queuedThreadIds).flatMap(\.tasks).first,
+                    let workThreads = SidebarPrefsModel.shared.prefs.personWorkThreads
+                    let botThreads = SidebarPrefsModel.shared.prefs.showBotThreads
+                    if let first = live.threadGroups(
+                        matching: query,
+                        queuedThreadIds: session.state.queuedThreadIds,
+                        personWorkThreads: workThreads,
+                        botThreads: botThreads
+                    ).flatMap(\.tasks).first,
                        let projected = live.projected(forThread: first.threadId) {
                         model.open(.bot(projected))
                     }

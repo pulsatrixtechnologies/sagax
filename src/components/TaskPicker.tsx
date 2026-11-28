@@ -9,6 +9,7 @@ import { openTeamBotFromThread, teamBotSourceAllowed } from "@/lib/teambot-from-
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronLeft, Layers, MessagesSquare, MoreHorizontal, Plus, Search } from "lucide-react";
 import { backgroundThreads, listedRows, personThreads, type ThreadListChoice } from "../../shared/background-threads";
+import { usePersonWorkThreads } from "@/lib/person-work-threads";
 import { useSidebarBotThreads } from "@/lib/sidebar-bot-threads";
 import { api, type Bot, type BotProject, type Group, type GroupTaskUpdatePatch, type Task } from "@/state/store";
 import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
@@ -624,8 +625,8 @@ export function ThreadsOffReturnLink({ bot }: { bot: Bot }) {
  * an organization server with private threads, narrows to the viewer's own),
  * the person's own conversations only (shared/background-threads.ts: never a
  * routine run, a hand-off, a thread a bot opened or an AI client's, unless it
- * is the one on screen), newest first. With the person's Show Bot threads
- * choice on, the threads bots opened are listed too (#5289). */
+ * is the one on screen), newest first. With Person-work threads or Show Bot
+ * threads on, the threads bots opened are listed too (#5289, D-20261127-040). */
 export function botPickerThreads(bot: Pick<Bot, "tasks" | "threadId">, choice?: ThreadListChoice): Task[] {
   return orderedThreadList(listedRows(personThreads(bot.tasks ?? [], bot.threadId, choice), choice));
 }
@@ -642,9 +643,9 @@ export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen
   // In the chat header mode only (useThreadsMode): the sidebar mode lists a
   // bot's threads under its row instead, and one conversation has none.
   const threadsMode = useThreadsMode();
-  // Settings > Appearance > Sidebar, "Show Bot threads" (off by default):
-  // on, the threads bots opened are rows of this list (#5289)
-  const listChoice: ThreadListChoice = { botThreads: useSidebarBotThreads() };
+  // Settings > Appearance > Sidebar: Person-work threads or Show Bot threads
+  // (both off by default) list the threads bots opened (#5289, D-20261127-040)
+  const listChoice: ThreadListChoice = { botThreads: useSidebarBotThreads(), personWorkThreads: usePersonWorkThreads() };
   const [folderSaving, setFolderSaving] = useState(false);
   const [folderError, setFolderError] = useState<string | null>(null);
   if (threadsMode !== "header") return null;

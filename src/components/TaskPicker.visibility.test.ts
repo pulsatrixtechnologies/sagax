@@ -6,6 +6,7 @@ import type { Bot, Group } from "@/state/store";
 const fixture = vi.hoisted(() => ({
   showThreads: true,
   botThreads: false,
+  personWorkThreads: false,
   location: "header" as "header" | "sidebar",
   queued: {} as Record<string, unknown[]>,
   bots: [] as Bot[],
@@ -14,6 +15,7 @@ const fixture = vi.hoisted(() => ({
   dispatch: vi.fn(),
 }));
 vi.mock("@/lib/sidebar-bot-threads", () => ({ useSidebarBotThreads: () => fixture.botThreads }));
+vi.mock("@/lib/person-work-threads", () => ({ usePersonWorkThreads: () => fixture.personWorkThreads }));
 vi.mock("@/lib/thread-preferences", () => ({ useShowThreads: () => fixture.showThreads, useThreadsLocationChoice: () => fixture.location, useThreadsMode: () => ((fixture.showThreads) ? fixture.location : "one") as "one" | "header" | "sidebar" }));
 vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
@@ -39,6 +41,7 @@ const bot: Bot = {
 beforeEach(() => {
   fixture.showThreads = true;
   fixture.botThreads = false;
+  fixture.personWorkThreads = false;
   fixture.location = "header";
   fixture.queued = {};
   fixture.bots = [];
@@ -125,6 +128,18 @@ describe("the header picker lists only the open bot's threads", () => {
     for (const title of ["Nightly", "From Claude"]) expect(markup).not.toContain(title);
     expect(botPickerThreads(pepper, { botThreads: true }).map((task) => task.threadId)).toContain("peer-opened");
     expect(botPickerBackground(pepper, { botThreads: true }).map((task) => task.threadId)).toEqual(["agent"]);
+  });
+
+  // #5289 D-20261127-040: Person-work threads, independent of Show Bot threads
+  it("lists person-work threads in the normal list once Person-work threads is on, with Show Bot threads off", () => {
+    fixture.bots = [pepper, talon];
+    fixture.groups = [room];
+    fixture.personWorkThreads = true;
+    const markup = renderToStaticMarkup(createElement(TaskPicker, { bot: pepper, initialOpen: true }));
+    expect(markup).toContain("@Talon · work");
+    for (const title of ["Nightly", "From Claude"]) expect(markup).not.toContain(title);
+    expect(botPickerThreads(pepper, { personWorkThreads: true, botThreads: false }).map((task) => task.threadId)).toContain("peer-opened");
+    expect(botPickerBackground(pepper, { personWorkThreads: true, botThreads: false }).map((task) => task.threadId)).toEqual(["agent"]);
   });
 
   it("lists background work behind Show background, newest first, never a routine run", () => {

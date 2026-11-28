@@ -10218,6 +10218,7 @@
   "pages.caps.reads": "Lit : {what}",
   "pages.caps.does": "Peut faire : {what}",
   "pages.caps.adds": "Nouveau dans cette version : {what}",
+  "pages.caps.source.bot": "le bot de cette page",
   "pages.caps.source.team-board": "le travail de tes équipes de codage",
   "pages.caps.viewer": "ton nom et ton rôle",
   "pages.caps.open": "ouvre des liens et des chats",

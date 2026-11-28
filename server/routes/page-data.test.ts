@@ -23,7 +23,7 @@ function page(over: Partial<PageRecord> = {}): PageRecord {
 
 function world(options: { caps?: PageCapabilities | null; capsOf?: (n?: number) => PageCapabilities | null; record?: PageRecord; orgRule?: PageDataRouteDeps["orgRule"] } = {}) {
   const record = options.record ?? page();
-  const read = vi.fn(async (auth: RequestAuth) => {
+  const read = vi.fn(async (auth: RequestAuth, _input: { fresh?: boolean; page?: { id: string; botId: string } }) => {
     const who = (auth as { session: { principalId: string } }).session.principalId;
     return {
       value: { owner: `board of ${who}`, pr: `https://github.com/acme/${who}/pull/1`, open: `thread:bot-${who}:th-${who}`, title: "https://x.example/a" },
@@ -85,6 +85,7 @@ describe("page data: the reader's own data, never another's", () => {
     expect(JSON.stringify(answer)).not.toContain("person-a");
     // the source got the reader's session, never the page owner's
     expect((read.mock.calls[0]![0] as { session: { principalId: string } }).session.principalId).toBe("person-b");
+    expect(read.mock.calls[0]![1]).toMatchObject({ fresh: false, page: { id: "page-1", botId: "lead-bot" } });
   });
 
   it("refuses a reader who is not signed in, without reading anything", async () => {
@@ -135,7 +136,7 @@ describe("page data: the reader's own data, never another's", () => {
   it("hands the source the page's parameters and the reader's language, never the reserved ones (#3449)", async () => {
     const { routes, read } = world();
     expect((await call(routes, as("person-b"), "/api/pages/page-1/data/team-board?team=t-1&column=todo&fresh=1&lang=fr&version=1")).status).toBe(200);
-    expect((read.mock.calls[0] as unknown[])[1]).toEqual({ params: { team: "t-1", column: "todo" }, fresh: true, lang: "fr" });
+    expect((read.mock.calls[0] as unknown[])[1]).toEqual({ params: { team: "t-1", column: "todo" }, fresh: true, lang: "fr", page: { id: "page-1", botId: "lead-bot" } });
   });
 
   it("refuses parameters of an unknown shape before reading (#3449)", async () => {

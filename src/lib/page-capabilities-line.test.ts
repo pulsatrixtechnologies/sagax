@@ -11,6 +11,13 @@ describe("capabilityLine", () => {
   it("says what the page reads, in words", () => {
     expect(capabilityLine({ data: ["team-board"], viewer: true, open: true, files: [] })).toBe("Reads: the work of your coding teams, your name and role, opens links and chats");
     expect(capabilityParts(BOARD)).toEqual(["the work of your coding teams"]);
+    expect(capabilityParts({ data: ["bot"], viewer: false, open: false, files: [] })).toEqual(["this page's bot"]);
+    setLocale("fr");
+    try {
+      expect(capabilityParts({ data: ["bot"], viewer: false, open: false, files: [] })).toEqual(["le bot de cette page"]);
+    } finally {
+      setLocale("en");
+    }
   });
 
   it("says nothing for a page with no declaration", () => {

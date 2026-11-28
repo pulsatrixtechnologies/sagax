@@ -99,7 +99,7 @@ try {
       await shot("ticket-plan");
       await page.locator("[data-record-plan] [data-record-add]").click();
       await shot("ticket-plan-addmenu");
-      await page.keyboard.press("Escape");
+      await page.locator("[data-record-plan] [data-record-add]").click();
       await page.locator("[data-record-show-done]").click();
       await shot("ticket-plan-done");
       await tab("time");
@@ -107,7 +107,7 @@ try {
       await shot("ticket-time");
       await page.locator("[data-record-entry] [data-billing]").first().click();
       await shot("ticket-time-billing");
-      await page.keyboard.press("Escape");
+      await page.locator("[data-record-entry] [data-billing]").first().click();
       await tab("configurations");
       await shot("ticket-configurations");
       await tab("attachments");

@@ -210,6 +210,45 @@ it.each<[string, { withholdHostTools?: boolean; toolScope?: { allow: string[] } 
   expect(prompt).toContain("second question");
 });
 
+// #5554 [M-20261128-006]: personal (non-pin) turns used to load the prior
+// session then session/set_model on that history, which Grok refuses
+// ("conversation history is incompatible"). A mismatch must open a fresh
+// session and replay recoveryText; set_model on the empty new session is fine.
+it("switches the Grok model mid-conversation on a personal turn and rebuilds history (#5554)", async () => {
+  const store = join(mkdtempSync(join(tmpdir(), "omb-grok-personal-switch-")), "models.json");
+  directories.push(dirname(store));
+  const rpc = join(dirname(store), "requests.json");
+  const f = await fixture(GrokAgentDriver, {
+    FAKE_ACP_GROK_VERSION: "1.0.41", FAKE_ACP_SESSION_MODELS: "grok-4.7,grok-4.6",
+    FAKE_ACP_SESSION_MODEL_STORE: store, FAKE_ACP_DUMP_PROMPT: "1", FAKE_ACP_RPC_DUMP: rpc,
+  });
+  const first = await f.instance.adapter.sendTurn({ threadId: "personal-switch", text: "first question", model: "grok-4.7" });
+  await f.recorder.until(event => event.type === "turn.completed" && event.turnId === first.turnId);
+  expect(JSON.parse(readFileSync(store, "utf8"))).toEqual({ "fake-acp-session": "grok-4.7" });
+
+  const second = await f.instance.adapter.sendTurn({
+    threadId: "personal-switch", text: "publish on X", model: "grok-4.6", resumeCursor: "fake-acp-session",
+    recoveryText: "User: first question\nAssistant: fixture answer\nUser: publish on X",
+  });
+  await f.recorder.until(event => event.type === "turn.completed" && event.turnId === second.turnId);
+  const events = f.recorder.events.filter(event => event.turnId === second.turnId);
+  expect(events.filter(event => event.type === "runtime.error")).toEqual([]);
+  expect(events.find(event => event.type === "turn.completed")).toMatchObject({ ok: true });
+  expect(events.find(event => event.type === "session.started")).toMatchObject({ model: "grok-4.6", rebuilt: true });
+  const methods = JSON.parse(readFileSync(rpc, "utf8")) as string[];
+  expect(methods).toEqual(expect.arrayContaining(["session/load", "session/new", "session/prompt"]));
+  expect(methods.indexOf("session/new")).toBeGreaterThan(methods.indexOf("session/load"));
+  // set_model after session/new is the personal pin; never set_model on the loaded session
+  const loadAt = methods.indexOf("session/load");
+  const newAt = methods.indexOf("session/new");
+  const setAt = methods.indexOf("session/set_model");
+  if (setAt >= 0) expect(setAt).toBeGreaterThan(newAt);
+  expect(setAt === -1 || setAt > loadAt).toBe(true);
+  const prompt = JSON.stringify(JSON.parse(readFileSync(`${f.dump}.prompt.json`, "utf8")));
+  expect(prompt).toContain("first question");
+  expect(prompt).toContain("publish on X");
+});
+
 it("passes an unknown Grok model to the engine and runs on the engine's answer with one plain notice", async () => {
   const store = join(mkdtempSync(join(tmpdir(), "omb-grok-unknown-")), "models.json"); directories.push(dirname(store));
   const f = await fixture(GrokAgentDriver, {

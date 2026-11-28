@@ -837,6 +837,20 @@ function grokPinsModelInProfile(turn: { withholdHostTools?: boolean; toolScope?:
   return turn.withholdHostTools === true || narrowsNativeTools(turn.toolScope);
 }
 
+/** Adopt a loaded or live Grok session only when it already runs this turn's model.
+ * Grok keeps the prior model's thought/tool history; session/set_model then fails
+ * with "conversation history is incompatible" (#5554 [M-20261128-006]). A mismatch
+ * opens a fresh session that carries recoveryText instead. */
+export function grokAcceptsLoadedSession(ctx: {
+  turn: { model?: string; withholdHostTools?: boolean; toolScope?: unknown };
+  currentModelId?: string;
+}): boolean {
+  const wanted = ctx.turn.model;
+  const current = ctx.currentModelId;
+  if (!wanted || !current) return true;
+  return current === wanted;
+}
+
 /** Grok Build reports an account refusal from xAI as a JSON-RPC internal
  * error whose data carries the HTTP status and xAI's words. Recorded on the
  * production organization server, grok 1.0.50, 2026-10-08:
@@ -1069,11 +1083,11 @@ const support: AcpSupport = {
   // Grok 1.0.46 session/load restores the stored session's model, whatever
   // -m and the profile's model say (verified: a session made on grok-4.7,
   // loaded by `agent -m grok-4.6` with a grok-4.6 profile, reports grok-4.7;
-  // session/new on that process reports grok-4.6). Where the profile pins
-  // the model, switching in place is not safe (see configureSession), so a
-  // model change opens a fresh session that carries the thread's history.
-  acceptsLoadedSession: ({ turn, currentModelId }) =>
-    !(turn.model && currentModelId && currentModelId !== turn.model && grokPinsModelInProfile(turn)),
+  // session/new on that process reports grok-4.6). session/set_model on a
+  // session whose history was built on another model fails ("conversation
+  // history is incompatible", also seen on routines). Any model mismatch
+  // opens a fresh session that carries the thread's recoveryText (#5554).
+  acceptsLoadedSession: grokAcceptsLoadedSession,
 
   // -m on argv is necessary but not sufficient: session/new still starts on
   // [models].default. Pin the slug over the wire, same as Hermes/Droid.

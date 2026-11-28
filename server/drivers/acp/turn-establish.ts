@@ -87,7 +87,15 @@ promptTurn = turn;
 rebuiltFromReplay = renewedFromChat;
 for (;;) {
   const liveSessionId = session.sessionId;
-  if (liveSessionId !== null && session.sessionKey === sessionKey && (cursor === null || cursor === liveSessionId)) {
+  const liveModelId = typeof session.sessionConfigResult?.models?.currentModelId === "string"
+    ? session.sessionConfigResult.models.currentModelId
+    : undefined;
+  // #5554: a live pool whose model no longer matches must not skip establish;
+  // Grok rejects set_model on history from another model. Fall through to
+  // load/new so recoveryText rebuilds the thread on the turn's model.
+  const liveModelOk = !support.acceptsLoadedSession
+    || support.acceptsLoadedSession({ turn: cliTurn, currentModelId: liveModelId });
+  if (liveSessionId !== null && session.sessionKey === sessionKey && (cursor === null || cursor === liveSessionId) && liveModelOk) {
     // the pooled session still answers the cursor (or the cursor's
     // absence) and was established with these exact session inputs:
     // prompt it directly — no session/load replay, no session/new,

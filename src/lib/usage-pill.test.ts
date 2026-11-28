@@ -165,7 +165,7 @@ describe("the only free engine has no window (#5421 review M2)", () => {
     const accounts = servingAccounts({ rows, serves: ["a", "b", "c", "local"], engine: "a", engineName: (engine) => (engine === "local" ? "Ollama" : engine), limits: ["a", "b", "c"].map((id) => blockedAt(id, SAT)), now: NOW });
     const values = pill(accounts);
     expect(values).toMatchObject({ week: 100, blocked: false, free: 1, total: 4, freeEngine: "Ollama", tone: "warning", back: "" });
-    expect(values.text).toBe("wk 100% · Ollama free");
+    expect(values.text).toBe("wk 100% · Ollama available");
   });
 
   it("with no account with a window at all there is nothing to name", () => {

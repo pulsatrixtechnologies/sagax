@@ -202,7 +202,7 @@ describe("the usage pill of the message bar", () => {
       expect(half("usage")?.dataset.tone).not.toBe("danger");
       // Codex free in sight, Claude held folded below: both still there
       expect(accountIds()).toEqual(["codex"]);
-      expect(detailOf().querySelector("[data-usage-free]")?.textContent).toBe("Free accounts: 1 of 2");
+      expect(detailOf().querySelector("[data-usage-free]")?.textContent).toBe("Available accounts: 1 of 2");
       expect(detailOf().querySelector('[data-usage-fold="limited"]')?.textContent).toBe("At the limit (1)");
       for (const action of ["engine-limit-continue", "engine-limit-switch", "engine-limit-usage"]) {
         expect(detailOf().querySelector(`[data-testid="${action}"]`)).toBeNull();
@@ -216,7 +216,7 @@ describe("the usage pill of the message bar", () => {
       await mount();
       await click(half("usage"));
       expect(pillText()).toBe("wk 55%");
-      expect(detailOf().querySelector("[data-usage-free]")?.textContent).toBe("Free accounts: 1 of 2");
+      expect(detailOf().querySelector("[data-usage-free]")?.textContent).toBe("Available accounts: 1 of 2");
     });
 
     it("before the first answer, what the app knows shows, never called blocked", async () => {
@@ -303,7 +303,7 @@ describe("the usage pill of the message bar", () => {
     expect(rows.map((node) => node.querySelector("[data-usage-account-name]")?.textContent)).toEqual(["Claude · ada@acme.test · Max", "Claude · work@acme.test · Max"]);
     expect(rows.map((node) => node.hasAttribute("data-serving"))).toEqual([true, false]);
     expect([...rows[0]!.querySelectorAll('td[data-usage-col]')].map((cell) => cell.textContent)).toEqual(["31%", "89%", ""]);
-    expect(detailOf().querySelector("[data-usage-free]")?.textContent).toBe("Free accounts: 2 of 2");
+    expect(detailOf().querySelector("[data-usage-free]")?.textContent).toBe("Available accounts: 2 of 2");
     expect(detailOf().querySelectorAll("[data-usage-favorite]")).toHaveLength(2);
     expect(detailOf().querySelector("[data-composer-meter-limit]")).toBeNull();
     expect(detailOf().querySelector("p[data-composer-meter-window]")).toBeNull();
@@ -318,9 +318,11 @@ describe("the usage pill of the message bar", () => {
     await mount();
     await click(half("usage"));
     expect(accountIds()).toEqual(["claude", "b", "c"]);
-    expect(detailOf().querySelector("[data-usage-free]")?.textContent).toBe("Free accounts: 5 of 6");
+    expect(detailOf().querySelector("[data-usage-free]")?.textContent).toBe("Available accounts: 5 of 6");
     const more = detailOf().querySelector<HTMLButtonElement>('[data-usage-fold="more-free"]')!;
-    expect(more.textContent).toBe("Other free accounts (2)");
+    expect(detailOf().querySelector("[data-usage-free]")?.getAttribute("title"))
+      .toBe("Available: no 5 h or weekly limit reached.");
+    expect(more.textContent).toBe("Other available accounts (2)");
     await click(more);
     expect(accountIds()).toEqual(["claude", "b", "c", "d", "e"]);
     const limited = detailOf().querySelector<HTMLButtonElement>('[data-usage-fold="limited"]')!;

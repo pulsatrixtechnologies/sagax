@@ -497,6 +497,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/artifacts(?:\\/([\\w-]+)(\\/refresh)?)?$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/auto-model$","tier":"read","readOnly":true,"scope":"bots:read","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/avatar\\/generate$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
+  {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/banner\\/generate$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/browser\\/(live|action)$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/browser\\/network$","tier":"admin","readOnly":false,"scope":"bots:admin","defaultEnabled":false},
   {"method":"PATCH","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/cards\\/([\\w-]+)$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},

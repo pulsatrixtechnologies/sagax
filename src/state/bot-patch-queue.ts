@@ -29,6 +29,12 @@ type BotPatchBody = {
   avatarZoom: number;
   avatarFocusX: number;
   avatarFocusY: number;
+  bannerUrl: string | null;
+  bannerPreset: import("../../shared/bot-banner").BotBannerPreset | null;
+  bannerZoom: number;
+  bannerFocusX: number;
+  bannerFocusY: number;
+  bannerEffects: import("../../shared/bot-banner").BotBannerEffects | null;
   autoApprove: boolean;
   approvalMode: ApprovalMode;
   proactiveMode: ProactiveMode;

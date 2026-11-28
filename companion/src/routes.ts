@@ -240,6 +240,9 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   // the live catalog and refuses changes while the bot is working.
   { method: "PATCH", path: /^\/api\/bots\/[\w-]+\/model$/ },
   { method: "POST", path: /^\/api\/bots\/[\w-]+\/avatar\/generate$/ },
+  // Bot page banner from a short description (M-20261127-183). Same image
+  // generator as the avatar; the harness checks ownership.
+  { method: "POST", path: /^\/api\/bots\/[\w-]+\/banner\/generate$/ },
   // A shape mascot from a short description (the editor's Generate). The
   // harness checks the bot and runs the bot's own text model.
   { method: "POST", path: /^\/api\/bots\/[\w-]+\/shape-avatar\/generate$/ },

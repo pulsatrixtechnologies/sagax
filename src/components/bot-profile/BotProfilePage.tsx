@@ -53,7 +53,7 @@
 // for opens its tab and its sub-page's modal, scrolled into view. A section this
 // viewer may not change says why (botSectionLock); nothing is hidden for
 // lack of a permission.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Repeat } from "lucide-react";
 
@@ -95,6 +95,8 @@ import { botAvatarProfile } from "../../../shared/bot-avatar";
 import { mascotDominantColor } from "@/lib/mascot-dominant";
 import { profileBannerColors } from "@/lib/profile-banner";
 import { DescribedRow, SettingsSurfaceProvider, Switch } from "../SettingsPrimitives";
+import { useReducedMotion } from "../skin-fx/skin-fx";
+import { BotProfileBanner } from "./BotProfileBanner";
 import { MascotHeroSlotContext } from "../floating-bots/mascot-hero-slot";
 import { RulesSection } from "../bot-settings/RulesSection";
 import { SkillsSection } from "../bot-settings/SkillsSection";
@@ -205,6 +207,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   // The Share popover of the top bar (Grok Bot): the one place the people
   // and groups the bot is shared with are managed.
   const [shareOpen, setShareOpen] = useState(false);
+  const [bannerEditOpen, setBannerEditOpen] = useState(false);
   // The Appearance modal (the mascot editor), opened by the header's mascot
   // (the owner 2026-11-19: no longer a tab).
   const [appearanceOpen, setAppearanceOpen] = useState(false);
@@ -731,8 +734,10 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   const avatar = botAvatarProfile(bot);
   const wearsPicture = Boolean(avatar.avatarUrl) && avatar.avatarCrop !== "mascot";
   const banner = profileBannerColors(bannerAccent, wearsPicture ? null : mascotDominantColor(bot));
-  const bannerStyle = { "--bot-profile-banner-from": banner.from, "--bot-profile-banner-to": banner.to } as CSSProperties;
   const { dragProps } = useCaptionChrome();
+  const reduceMotion = useReducedMotion();
+  const bannerEditShown = canEditBotField(state.config, bot, "bannerUrl");
+  const imageGenConfigured = state.config?.imageGen?.configured === true;
 
   const { heroSlot, hero } = useBotProfileHero({ bot, derived, // a click on the mascot opens the picker under it; a second click closes it
     onOpenAppearance: shown("appearance") ? () => (appearanceOpen ? setAppearanceOpen(false) : openCategory("appearance")) : undefined,
@@ -773,22 +778,27 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     >
       <BotProfileInsetStrip />
       <div ref={scrollRef} data-bot-profile-scroll="" className="content-card-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        {/* Banner hover group: the edit control appears only while the
+            pointer is over the banner (or the sticky actions over it). */}
+        <div data-bot-banner-hover="" className="group/banner">
         {/* Banner in the mascot's colour from the very top, the mascot over
             its lower edge. It is the window's drag handle (the top of the
             page moves the window, as every view's top does) and it scrolls
-            away with the page, so the handle never sits over a row. */}
-        <div
-          aria-hidden="true"
-          data-bot-profile-banner=""
-          data-bot-profile-banner-palette={bannerPalette}
-          {...dragProps}
-          style={{ ...bannerStyle, ...dragProps.style }}
-          className="bot-profile-banner h-[124px] w-full shrink-0"
+            away with the page, so the handle never sits over a row.
+            Customizable (M-20261127-183): image, presets, effects. */}
+        <BotProfileBanner
+          bot={bot}
+          wash={banner}
+          accent={bannerAccent}
+          palette={bannerPalette}
+          scrollRef={scrollRef}
+          dragProps={dragProps}
+          reduceMotion={reduceMotion}
         />
         {/* No bar (#5371): Share and the X float at the top right (sticky,
             no height of their own in the flow) and the banner scrolls away
             under them with the page. After the banner, so the two buttons
-            are cut out of its drag region. */}
+            are cut out of its drag region. Edit banner joins on hover. */}
         <BotProfileTopBar
           bot={bot}
           onClose={onClose}
@@ -797,7 +807,13 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
           shareVisibility={shareVisibility}
           shareOpen={shareOpen}
           onShareOpenChange={setShareOpen}
+          bannerEditShown={bannerEditShown}
+          bannerEditOpen={bannerEditOpen}
+          onBannerEditOpenChange={setBannerEditOpen}
+          onBannerPatch={derived.patch}
+          imageGenConfigured={imageGenConfigured}
         />
+        </div>
         {/* One centred column, the reference's reading width (920px, 32px
             gutters, #4420), a 16px gutter on a phone. */}
         <div data-bot-profile-column="" className="mx-auto flex w-full max-w-[920px] flex-col px-4 pb-12 sm:px-8">

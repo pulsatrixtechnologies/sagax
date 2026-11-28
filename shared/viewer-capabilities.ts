@@ -18,6 +18,8 @@ export const CLIENT_BOT_PATCH_FIELDS = [
 export const MEMBER_BOT_FIELDS = [
   ...CLIENT_BOT_PATCH_FIELDS,
   "name", "title", "description", "soul", "notifications", "avatarUrl", "modelSelection", "harness", "contextWindow", "requireAvailableModel",
+  // Bot page banner (M-20261127-183): owner-set, shared with everyone who sees the bot
+  "bannerUrl", "bannerPreset", "bannerZoom", "bannerFocusX", "bannerFocusY", "bannerEffects",
   // #5019: the app's soul editor marks its typing as a draft, sorted when
   // the editor is left (server/bots/soul-sort.ts); never stored on the bot
   "soulDraft",

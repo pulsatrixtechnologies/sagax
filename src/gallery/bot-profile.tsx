@@ -87,6 +87,19 @@ const bot = {
   ...(params.has("title") ? { title: params.get("title") } : {}),
   ...(params.get("picture") ? { avatarCrop: "circle", avatarUrl: "/api/attachments/avatar.png" } : {}),
   ...(params.get("reader") ? { ownerUserId: "pr_sam" } : {}),
+  // Banner captures (M-20261127-183): ?banner=image|mascot|mascot-deep|dots|grid|waves
+  // and ?bannerEffect=blur,darken,grain,animatedGradient,parallax (comma list).
+  ...(params.get("banner") === "image" ? { bannerUrl: "/api/attachments/banner.webp" } : {}),
+  ...(params.get("banner") && params.get("banner") !== "image" && params.get("banner") !== "default"
+    ? { bannerPreset: params.get("banner") }
+    : {}),
+  ...(params.get("bannerEffect")
+    ? {
+        bannerEffects: Object.fromEntries(
+          params.get("bannerEffect")!.split(",").filter(Boolean).map((effect) => [effect, true]),
+        ),
+      }
+    : {}),
 } as unknown as Bot;
 const neighbours = [
   { ...bot, id: "atlas", threadId: "t-atlas", name: "Atlas", title: "Planning", color: "blue", soul: "" },
@@ -452,7 +465,12 @@ function proactiveMetrics(days: number) {
 
 function answer(method: string, path: string, search: URLSearchParams, body: unknown): Response | null {
   const bots = `/api/bots/${BOT_ID}`;
-  if (path === "/api/config") return json({ viewer: { operator: false, principalId: "pr_alex", name: "Alex Example", role: params.get("reader") ? "member" : "admin", permissions: [] }, profile: { name: "Alex Example" }, features: {}, onboarding: { completedAt: 1, launchMode: "solo" } });
+  if (path === "/api/config") return json({ viewer: { operator: false, principalId: "pr_alex", name: "Alex Example", role: params.get("reader") ? "member" : "admin", permissions: [] }, profile: { name: "Alex Example" }, features: {}, onboarding: { completedAt: 1, launchMode: "solo" }, imageGen: { configured: true, provider: "xai" } });
+  // Tiny 1x1 PNG stand-in for banner/avatar attachment captures (M-20261127-183).
+  if (method === "GET" && /^\/api\/attachments\/(banner\.webp|avatar\.png)$/.test(path)) {
+    const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
+    return new Response(png, { status: 200, headers: { "content-type": "image/png" } });
+  }
   if (path === "/api/auth/session") return json({ authenticated: true, user: { name: "Alex Example", principalId: "pr_alex" } });
   if (path === "/api/org") return json({ org: { name: "Northwind Studio", identity: { kind: "perspicax", issuer: "https://perspicax.example.test" } }, link: { state: "ok" }, viewerRole: "admin", settings: {} });
   if (path === "/api/org/directory") return json({ people: PEOPLE, teams: [{ id: "tm_studio", name: "Studio team", managers: ["pr_alex"], members: ["pr_alex", "pr_sam", "pr_jordan"] }], viewer: { principalId: "pr_alex" } });

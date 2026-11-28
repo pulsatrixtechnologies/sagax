@@ -24,6 +24,8 @@ public enum BotFieldRules {
     /// permission (`MEMBER_BOT_FIELDS`).
     public static let memberFields: Set<String> = clientFields.union([
         "name", "title", "description", "soul", "notifications", "avatarUrl", "modelSelection", "harness", "contextWindow", "requireAvailableModel",
+        // Bot page banner (M-20261127-183): owner-set, shared with everyone who sees the bot
+        "bannerUrl", "bannerPreset", "bannerZoom", "bannerFocusX", "bannerFocusY", "bannerEffects",
         // #5019: the soul editor's draft, sorted when the editor is left; never stored on the bot
         "soulDraft",
     ])

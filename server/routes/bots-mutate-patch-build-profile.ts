@@ -115,6 +115,10 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
     env.json(env.res, 400, { error: "avatarUrl must reference an existing stored image" });
     return true;
   }
+  if (profile.patch.bannerUrl && !env.storedAvatarExists(profile.patch.bannerUrl)) {
+    env.json(env.res, 400, { error: "bannerUrl must reference an existing stored image" });
+    return true;
+  }
   const lookLocked = env.lockedLookRefusal(env.auth, existingBot, profile.patch.mascotLook);
   if (lookLocked) {
     env.json(env.res, 403, lookLocked);

@@ -39,6 +39,9 @@ export function createBotsCoreProfileRoutes(deps: BotsCoreRouteDeps): RouteHandl
       if (parsed.patch.avatarUrl && !storedAvatarExists(parsed.patch.avatarUrl)) {
         return json(res, 400, { error: "avatarUrl must reference an existing stored image" });
       }
+      if (parsed.patch.bannerUrl && !storedAvatarExists(parsed.patch.bannerUrl)) {
+        return json(res, 400, { error: "bannerUrl must reference an existing stored image" });
+      }
       const existingBot = store.bot(m[1]);
       const lookLocked = lockedLookRefusal(auth, existingBot, parsed.patch.mascotLook);
       if (lookLocked) return json(res, 403, lookLocked);

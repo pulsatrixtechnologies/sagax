@@ -115,9 +115,13 @@ describe("the local semantic index", () => {
     db.close();
   });
 
-  it("catches up in the background and keeps its place across a restart", () => {
+  it("lists the conversation backlog off the main thread, then catches up (#5343)", async () => {
     insertMessage("t1", msg("m1", "Grandma's birthday dinner is at the Lebanese restaurant."));
     const first = makeIndex();
+    first.tick(1_000);
+    // Listing runs on the search worker; one sync tick alone must not block
+    // on messageThreadIds(), and must still fill passages once the list lands.
+    await first.flushBacklogList();
     first.tick(1_000);
     first.stop();
     const db = new DatabaseSync(semanticIndexFile(DATA_DIR), { readOnly: true });

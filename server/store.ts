@@ -1324,11 +1324,11 @@ export class Store {
       const legacyFile = messagesFile(threadId);
       if (existsSync(legacyFile)) mdb.readThread(threadId, legacyFile);
     }
-    // #5343: warm messages.db into the page cache in the search worker, then
-    // repair stamps once the OS cache is hot. Deferred so /api/health can
-    // answer first. askedAt fill stays on this turn (marker + one pass); it
-    // is cheap on an empty first boot and must not race deferred bots.json
-    // saves in tests.
+    // #5343: warm messages.db into the OS page cache via fs.promises (libuv
+    // pool + yield between chunks), then repair stamps once the cache is
+    // hot. Deferred so /api/health can answer first. askedAt fill stays on
+    // this turn (marker + one pass); it is cheap on an empty first boot and
+    // must not race deferred bots.json saves in tests.
     if (fillAskedAts) this.fillTaskAskedAts();
     setImmediate(() => {
       void (async () => {

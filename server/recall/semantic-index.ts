@@ -31,7 +31,7 @@ import type { LiveKey } from "../encryption/content-keys.ts";
 import { withoutExpired } from "../memory/memory-entries.ts";
 import { withoutWiderAudience } from "../memory/memory-audience.ts";
 import { topicBody } from "../memory/memory-topics.ts";
-import { contentEncryptionOn, contentKeyById, contentKeyForBot, contentKeyForThread, messageThreadIds, onMessageChange, readMessageText, textMessagesAfter, type IndexableMessage } from "../messages/message-db.ts";
+import { contentEncryptionOn, contentKeyById, contentKeyForBot, contentKeyForThread, messageThreadIdsAsync, onMessageChange, readMessageText, textMessagesAfter, type IndexableMessage } from "../messages/message-db.ts";
 import {
   contentWords, EMBEDDING_MIN_SCORE, embedTexts, fingerprint, HASHED_MIN_SCORE, hashedVector, quantize, quantizedCosine,
   type EmbeddingEndpoint, type QuantizedVector,
@@ -188,6 +188,8 @@ export class LocalSemanticIndex implements SemanticIndex {
   /** threads not yet caught up, in the order the background pass takes them */
   private backlog: string[] = [];
   private backlogListedAt = 0;
+  /** In-flight #5343 worker listing; null when idle. */
+  private backlogListing: Promise<void> | null = null;
   private embedQueue = new Map<string, Set<string>>();
   private queryVectors = new Map<string, { model: string; vector: Float32Array }>();
   private endpointFailedAt = 0;
@@ -195,6 +197,7 @@ export class LocalSemanticIndex implements SemanticIndex {
   private embedding = false;
   private timer: NodeJS.Timeout | null = null;
   private unsubscribe: (() => void) | null = null;
+  private stopped = false;
 
   constructor(options: LocalSemanticIndexOptions) {
     this.options = options;
@@ -229,6 +232,7 @@ export class LocalSemanticIndex implements SemanticIndex {
   }
 
   stop(): void {
+    this.stopped = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     this.unsubscribe?.();
@@ -347,17 +351,7 @@ export class LocalSemanticIndex implements SemanticIndex {
         if (performance.now() > deadline) return;
         if (state.dirty.size) this.catchUp(threadId, deadline);
       }
-      if (!this.backlog.length && Date.now() - this.backlogListedAt > 10 * 60_000) {
-        // #5343: after the boot page-cache warm this SELECT is short; the
-        // cold-disk 9 s+ block was the warm's job to remove.
-        this.backlogListedAt = Date.now();
-        const known = new Set<string>();
-        for (const threadId of messageThreadIds()) {
-          known.add(threadId);
-          this.backlog.push(threadId);
-        }
-        this.sweep(known);
-      }
+      this.ensureBacklogListed();
       while (this.backlog.length && performance.now() < deadline) {
         const threadId = this.backlog[0]!;
         if (this.catchUp(threadId, deadline)) this.backlog.shift();
@@ -366,6 +360,39 @@ export class LocalSemanticIndex implements SemanticIndex {
       console.warn(`semantic index: ${(error as Error).message}`);
     }
     if (!this.embedding && this.embedQueue.size) void this.embedSome().catch(reportBackgroundError);
+  }
+
+  /** #5343: list thread ids on the search worker so a cold messages.db never
+   * stops the event loop. Starts at most one listing; stamp advances when it
+   * finishes so a failure retries on the next window. */
+  private ensureBacklogListed(): void {
+    if (this.backlog.length || this.backlogListing) return;
+    if (Date.now() - this.backlogListedAt <= 10 * 60_000) return;
+    this.backlogListedAt = Date.now();
+    this.backlogListing = messageThreadIdsAsync()
+      .then((ids) => {
+        if (this.stopped) return;
+        const known = new Set<string>();
+        for (const threadId of ids) {
+          known.add(threadId);
+          this.backlog.push(threadId);
+        }
+        this.sweep(known);
+      })
+      .catch((error) => {
+        if (this.stopped) return;
+        this.backlogListedAt = 0;
+        console.warn(`semantic index: backlog list failed: ${(error as Error).message}`);
+      })
+      .finally(() => {
+        this.backlogListing = null;
+      });
+  }
+
+  /** Wait for the in-flight worker listing (tests / boot flush). */
+  async flushBacklogList(): Promise<void> {
+    this.ensureBacklogListed();
+    if (this.backlogListing) await this.backlogListing;
   }
 
   /** Catch one thread up to its newest message. True when it is current. */

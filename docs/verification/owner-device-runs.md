@@ -71,8 +71,12 @@ raw page of the same thread, so the capture and the server agree.
 What green means on the phone only: the same turns are already driven headlessly
 through the real renderer ([chat-ui.md](chat-ui.md)), and the notification
 routing is proven without a device by `server/notification-routing.e2e.test.ts`
-and `src/lib/notify.test.ts`. Slot A is the install, the banner, the touch and
-the screen size.
+and `src/lib/notify.test.ts`. The simulated phone session of
+[fixture-phone-session.md](fixture-phone-session.md) already proves M-1 to M-4
+over pairing, companion headers, the fake engine and SSE (one complete reply,
+a choice answer from the phone token, a routine `done` notification that opens
+the main chat, and a long reply with its link in the payload). Slot A is the
+install, the banner, the touch and the screen size.
 
 ## Slot B. Inbound voice call (V-1 to V-4)
 

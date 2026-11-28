@@ -127,8 +127,10 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
     docked,
   } = p;
   const compact = Boolean(docked);
+  // Compact: no opaque ground on the shell so Pulsatrix Light's navy panel
+  // shows around `.content-card-body` under the `.content-topbar` tab row (#5486).
   const shell = compact
-    ? "relative flex min-h-0 flex-1 flex-col overflow-hidden bg-app text-ink"
+    ? "relative flex min-h-0 flex-1 flex-col overflow-hidden text-ink"
     : "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-hairline/40 bg-card text-ink";
 
   // The docked panel draws the app's sizes; the large window keeps its own bar.
@@ -260,47 +262,53 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
 
   const empty = compact && connected && !frame && !placeholder && !heldElsewhere && !error && !busy && !reconnecting;
 
+  const belowTabs = (
+    <>
+      {addressRow}
+      {addressBar.error && <div role="alert" data-browser-address-error="" className="border-b border-hairline/30 px-3 py-2 text-[12px] text-danger">{addressBar.error}</div>}
+      {recording && <TeachRecordingBar startedAt={recordingStartedAt ?? Date.now()} onStop={() => void stopRecording()} onDiscard={() => void discardRecording()} />}
+      {teachNote && !recording && <div role="status" className="border-b border-hairline/30 px-3 py-2 text-[12px] text-ink-secondary">{teachNote}</div>}
+      {legacyHolder}
+      {error && <div role={reconnecting ? "status" : "alert"} className={`flex items-center justify-between gap-2 border-b border-hairline/30 px-3 py-2 text-[12px] ${reconnecting ? "text-ink-secondary" : "text-danger"}`}><span>{error}</span>{!connected && <button className="shrink-0 underline" onClick={reconnect}>{t("browser.live.reconnect")}</button>}</div>}
+      <div ref={panelStageRef} data-browser-stage="" className={cn("relative min-h-0 flex-1 overflow-hidden", compact ? "bg-app" : "bg-inset/40")}>
+        {recording && <div aria-hidden="true" data-recording-frame="" className={TEACH_RECORDING_FRAME} />}
+        {frame ? <BrowserViewport frame={frame} {...viewport} driving={interactive} input={input} fillWidth={compact}
+          onReturnToToolbar={() => addressInput.current?.focus()}
+          acknowledge={(seq) => { if (generation.current === frame.generation && viewer.current === frame.viewerId) void action({ type: "ack", seq }, frame.viewerId).catch(() => {}); }}
+          onDecodeError={() => { if (generation.current === frame.generation && viewer.current === frame.viewerId) setError(t("browser.frame.decodeError")); }} />
+          : placeholder && !heldElsewhere && !(error && !reconnecting)
+            ? <div data-browser-placeholder="" className="absolute inset-0">
+              <img src={placeholder} alt="" draggable={false} className="h-full w-full select-none object-contain opacity-60" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className={`${pill} border-hairline text-ink`}><Loader2 size={13} className="shrink-0 animate-spin" aria-hidden="true" />{busy ? t("browser.live.botBusy", { name: bot.name }) : t("browser.live.connecting")}</span>
+              </div>
+            </div>
+          : empty
+            ? <div data-browser-empty="" className="flex h-full min-h-48 flex-col items-center justify-center gap-2 p-6 text-center">
+                <Globe size={28} className="text-ink-tertiary" aria-hidden="true" />
+                <span className="text-[13px] font-medium text-ink">{t("browser.panel.browseWith", { name: bot.name })}</span>
+                <p className="max-w-xs text-[12px] leading-relaxed text-ink-secondary">{t("browser.panel.browseWithHint")}</p>
+              </div>
+          : <div className="flex min-h-48 flex-col items-center justify-center gap-3 p-6 text-center text-[13px] text-ink-secondary">
+              {heldElsewhere ? <Hand size={24} /> : error && !reconnecting ? <Globe size={24} /> : <Loader2 size={24} className="animate-spin" />}
+              <span>{heldElsewhere ? t("browser.live.heldElsewhere") : reconnecting ? t("browser.live.reconnectingShort") : error ? t("browser.live.disconnected") : busy ? t("browser.live.botBusy", { name: bot.name }) : t("browser.live.opening")}</span>
+            </div>}
+        <div role="status" className="pointer-events-none absolute inset-x-0 top-2 flex justify-center px-3">
+          {takeStatus === "slow" ? <span className={`${pill} border-hairline text-ink-secondary`}>
+            <Loader2 size={13} className="shrink-0 animate-spin" aria-hidden="true" /><span className="truncate">{t("browser.control.waiting", { name: bot.name })}</span>
+          </span> : takeStatus === "stale" ? <span className={`${pill} border-accent-border text-accent-text`}>
+            <Hand size={13} className="shrink-0" aria-hidden="true" /><span className="truncate">{t("browser.control.stale", { name: bot.name })}</span>
+          </span> : null}
+        </div>
+        {docked?.stageOverlay}
+      </div>
+    </>
+  );
+
   return (
 <div className={shell} data-browser-compact={compact ? "" : undefined}>
     {tabsRow}
-    {addressRow}
-    {addressBar.error && <div role="alert" data-browser-address-error="" className="border-b border-hairline/30 px-3 py-2 text-[12px] text-danger">{addressBar.error}</div>}
-    {recording && <TeachRecordingBar startedAt={recordingStartedAt ?? Date.now()} onStop={() => void stopRecording()} onDiscard={() => void discardRecording()} />}
-    {teachNote && !recording && <div role="status" className="border-b border-hairline/30 px-3 py-2 text-[12px] text-ink-secondary">{teachNote}</div>}
-    {legacyHolder}
-    {error && <div role={reconnecting ? "status" : "alert"} className={`flex items-center justify-between gap-2 border-b border-hairline/30 px-3 py-2 text-[12px] ${reconnecting ? "text-ink-secondary" : "text-danger"}`}><span>{error}</span>{!connected && <button className="shrink-0 underline" onClick={reconnect}>{t("browser.live.reconnect")}</button>}</div>}
-    <div ref={panelStageRef} data-browser-stage="" className={cn("relative min-h-0 flex-1 overflow-hidden", compact ? "bg-app" : "bg-inset/40")}>
-      {recording && <div aria-hidden="true" data-recording-frame="" className={TEACH_RECORDING_FRAME} />}
-      {frame ? <BrowserViewport frame={frame} {...viewport} driving={interactive} input={input} fillWidth={compact}
-        onReturnToToolbar={() => addressInput.current?.focus()}
-        acknowledge={(seq) => { if (generation.current === frame.generation && viewer.current === frame.viewerId) void action({ type: "ack", seq }, frame.viewerId).catch(() => {}); }}
-        onDecodeError={() => { if (generation.current === frame.generation && viewer.current === frame.viewerId) setError(t("browser.frame.decodeError")); }} />
-        : placeholder && !heldElsewhere && !(error && !reconnecting)
-          ? <div data-browser-placeholder="" className="absolute inset-0">
-            <img src={placeholder} alt="" draggable={false} className="h-full w-full select-none object-contain opacity-60" />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className={`${pill} border-hairline text-ink`}><Loader2 size={13} className="shrink-0 animate-spin" aria-hidden="true" />{busy ? t("browser.live.botBusy", { name: bot.name }) : t("browser.live.connecting")}</span>
-            </div>
-          </div>
-        : empty
-          ? <div data-browser-empty="" className="flex h-full min-h-48 flex-col items-center justify-center gap-2 p-6 text-center">
-              <Globe size={28} className="text-ink-tertiary" aria-hidden="true" />
-              <span className="text-[13px] font-medium text-ink">{t("browser.panel.browseWith", { name: bot.name })}</span>
-              <p className="max-w-xs text-[12px] leading-relaxed text-ink-secondary">{t("browser.panel.browseWithHint")}</p>
-            </div>
-        : <div className="flex min-h-48 flex-col items-center justify-center gap-3 p-6 text-center text-[13px] text-ink-secondary">
-            {heldElsewhere ? <Hand size={24} /> : error && !reconnecting ? <Globe size={24} /> : <Loader2 size={24} className="animate-spin" />}
-            <span>{heldElsewhere ? t("browser.live.heldElsewhere") : reconnecting ? t("browser.live.reconnectingShort") : error ? t("browser.live.disconnected") : busy ? t("browser.live.botBusy", { name: bot.name }) : t("browser.live.opening")}</span>
-          </div>}
-      <div role="status" className="pointer-events-none absolute inset-x-0 top-2 flex justify-center px-3">
-        {takeStatus === "slow" ? <span className={`${pill} border-hairline text-ink-secondary`}>
-          <Loader2 size={13} className="shrink-0 animate-spin" aria-hidden="true" /><span className="truncate">{t("browser.control.waiting", { name: bot.name })}</span>
-        </span> : takeStatus === "stale" ? <span className={`${pill} border-accent-border text-accent-text`}>
-          <Hand size={13} className="shrink-0" aria-hidden="true" /><span className="truncate">{t("browser.control.stale", { name: bot.name })}</span>
-        </span> : null}
-      </div>
-      {docked?.stageOverlay}
-    </div>
+    {compact ? <div className="content-card-body relative flex min-h-0 flex-1 flex-col overflow-hidden">{belowTabs}</div> : belowTabs}
     {showProfiles && (
       <AnchoredPopover
         anchorRef={profilesButton}

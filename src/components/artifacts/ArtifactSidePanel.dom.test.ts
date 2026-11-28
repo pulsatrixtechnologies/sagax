@@ -91,6 +91,13 @@ describe("ArtifactSidePanel", () => {
     expect(header.querySelector("span")!.className).toBe(SCREEN_PANEL_TITLE);
   });
 
+  it("carries .content-topbar / .content-card-body like every docked panel (#5486)", async () => {
+    await mount();
+    const header = document.querySelector("[data-artifact-side-panel-header]")!;
+    expect(header.className.split(/\s+/)).toContain("content-topbar");
+    expect(document.querySelector("[data-artifact-side-panel] .content-card-body")).not.toBeNull();
+  });
+
   it("Close clears the store panel", async () => {
     await mount();
     await act(async () => {

@@ -324,6 +324,8 @@ export interface PageAsk {
   /** Send the words as the person's message in the bot's conversation, about
    * this page and its selected passage. */
   onSend(text: string, page: PageContextRef): void;
+  /** Conversation that receives the cite chip on the main composer (#5464). */
+  threadId?: string;
 }
 
 export const PAGE_FOLLOW_MS = 5_000;
@@ -715,6 +717,10 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
               avatar={ask.avatar}
               botName={ask.botName}
               working={ask.working}
+              threadId={ask.threadId}
+              pageId={pageId}
+              pageTitle={title}
+              pageVersion={version}
               onSend={(text, selection) => {
                 askedFromRef.current = version;
                 setEdited(null);

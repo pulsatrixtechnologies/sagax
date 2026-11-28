@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { t } from "@/lib/i18n";
 import { useChatComposerShellClass } from "@/lib/chat-bubble-width";
 import { useComposerBottomSpaceStyle } from "@/lib/composer-bottom-space";
+import { clearPageCiteDraft, usePageCiteDraft } from "@/lib/page-cite-draft";
 import { fixSendBlock } from "@/lib/send-state";
 import { effectivePlace } from "@/lib/place";
 import { changeDraftAttachmentPending } from "@/lib/drafts";
@@ -121,6 +122,8 @@ export function ComposerShell({
   const composerAria = pageTitle?.trim()
     ? t("composer.placeholder.page", { title: pageTitle.trim() })
     : t("composer.placeholder.bot", { name: group ? group.name : (bot?.name ?? "") });
+  const pageCiteDraft = usePageCiteDraft(threadId);
+  const pageCite = group ? null : pageCiteDraft;
 
   const sendMeme = (pick: MemeAttachmentPick) => {
     const attachment = {
@@ -324,6 +327,8 @@ export function ComposerShell({
             locked={locked}
             replyTo={replyTo}
             onClearReply={onClearReply}
+            pageCite={pageCite}
+            onClearPageCite={pageCite ? () => clearPageCiteDraft(threadId) : undefined}
             composerRowRef={composerRowRef}
             fileInput={fileInput}
             onPickFiles={(files) => { void pickFiles(files); }}

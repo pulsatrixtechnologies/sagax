@@ -8,11 +8,13 @@ import { isDictationHold } from "@/lib/composer-dictation";
 import type { Bot, Group } from "@/state/store";
 import type { RoomMentionPerson } from "@/lib/person-mentions";
 import { MentionTextarea } from "../MentionTextarea";
+import { ComposerPageCiteStrip } from "../PageComposerParts";
 import { ComposerReplyStrip } from "../ReplyQuote";
 import type { PlusMenuItem } from "../ComposerControls";
 import type { MemeAttachmentPick } from "../MemePicker";
 import type { MyChromeRecordingResult } from "@/lib/my-chrome";
 import { groupComposerHint, jevRoomRoutingOn } from "@/lib/group-routing";
+import type { PageCiteDraft } from "@/lib/page-cite-draft";
 import type { Message } from "@/state/store";
 
 /** The composer's field: the menu family's edge (`menu-edge`, the account
@@ -28,6 +30,8 @@ export function ComposerEditor({
   locked,
   replyTo,
   onClearReply,
+  pageCite,
+  onClearPageCite,
   composerRowRef,
   fileInput,
   onPickFiles,
@@ -79,6 +83,9 @@ export function ComposerEditor({
   locked: boolean;
   replyTo?: Message | null;
   onClearReply?: () => void;
+  /** Passage selected on an open page, waiting with the next send (#5464). */
+  pageCite?: PageCiteDraft | null;
+  onClearPageCite?: () => void;
   composerRowRef: RefObject<HTMLDivElement | null>;
   fileInput: RefObject<HTMLInputElement | null>;
   onPickFiles: (files: FileList | null) => void;
@@ -164,6 +171,7 @@ export function ComposerEditor({
       )}
     >
     {replyTo && <ComposerReplyStrip message={replyTo} fallbackName={bot?.name} onClear={onClearReply} />}
+    {pageCite && <ComposerPageCiteStrip cite={pageCite} onClear={onClearPageCite} />}
     <div ref={composerRowRef} data-composer-row className="flex items-end gap-1 @max-[30rem]/composer:flex-wrap">
       <input
         ref={fileInput}

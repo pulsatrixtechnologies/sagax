@@ -26,6 +26,7 @@ vi.mock("@/state/store", () => ({
 vi.mock("./WidgetFrame", () => ({ useWidgetTheme: () => ({ scheme: "light", css: "" }) }));
 
 import { resetOpenPage } from "@/lib/open-page";
+import { forgetPageCiteDrafts, pageCiteDraft } from "@/lib/page-cite-draft";
 import { setLocale, t } from "@/lib/i18n";
 import { PAGE_SELECTION_MESSAGE, pageSelectionRequest } from "../../shared/page-selection";
 import { PageSurface } from "./PageViewer";
@@ -43,6 +44,7 @@ let pageWindow: { postMessage: ReturnType<typeof vi.fn> };
 beforeEach(() => {
   setLocale("en");
   resetOpenPage();
+  forgetPageCiteDrafts();
   summary = { id: "abcdefgh12345678", title: "Bilan", status: "draft", access: "private", expiresAt: null, currentVersion: null, botId: "b1", threadId: "t1", createdAt: 1, updatedAt: 1, expired: false, versions: [version(1)] };
   pageWindow = { postMessage: vi.fn() };
   host = document.createElement("div");
@@ -181,6 +183,22 @@ describe("ask the bot about a selected passage, in place (#4099)", () => {
     expect(host.querySelector("[data-page-selection-ask]")).toBeNull();
     expect(pageWindow.postMessage).toHaveBeenCalledWith(pageSelectionRequest(null), "*");
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("parks the passage on the main composer cite chip and offers Cite in message (#5464)", async () => {
+    render({ ask: ask({ threadId: "t1" }) });
+    await flush();
+    wireFrame();
+    await post(selected());
+    expect(pageCiteDraft("t1")).toEqual({ pageId: "abcdefgh12345678", title: "Bilan", version: 1, selection: anchor });
+    const cite = host.querySelector<HTMLButtonElement>("[data-page-selection-cite]")!;
+    expect(cite.getAttribute("aria-label")).toBe(t("pages.selection.cite"));
+    await act(async () => { cite.click(); });
+    expect(pageCiteDraft("t1")?.selection.quote).toBe(anchor.quote);
+    // Escape puts the in-place ask away; the composer cite chip stays
+    await key(host.querySelector<HTMLTextAreaElement>("[data-page-selection-composer] textarea")!, "Escape");
+    expect(host.querySelector("[data-page-selection-ask]")).toBeNull();
+    expect(pageCiteDraft("t1")?.selection.quote).toBe(anchor.quote);
   });
 
   it("is offered only where it is given (the person's own page over its bot's conversation)", async () => {

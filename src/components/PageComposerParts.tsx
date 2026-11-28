@@ -3,13 +3,17 @@
 //     a chip over its words (icon and title); a click opens that page;
 //   - PageSelectionQuote: under the chip, the passage the person selected and
 //     asked about (#4099), in the reply's quote strip;
+//   - ComposerPageCiteStrip: the same passage parked on the main composer
+//     (#5464 R4), so the person can write there and send with
+//     dataContext.page.selection; PageSelectionAsk still offers ask-in-place;
 //   - PageBotStatus: above the composer in the desktop side pane, the bot's
 //     state or its latest answer in one line, with its avatar ("On it", then
 //     its reply), so the person can follow the bot while reading the page.
-import { MessageSquareQuote } from "lucide-react";
+import { MessageSquareQuote, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import type { PageCiteDraft } from "@/lib/page-cite-draft";
 import { openPage } from "@/lib/open-page";
 import type { Message } from "@/state/store";
 import { PageGlyph } from "./PageViewer";
@@ -36,6 +40,43 @@ export function PageSelectionQuote({ selection }: { selection: PageQuote }) {
       <MessageSquareQuote size={14} strokeWidth={1.5} aria-hidden="true" className="shrink-0 rtl:-scale-x-100" />
       <span className="sr-only">{t("pages.selection.tag")}: </span>
       <span dir="auto" className="min-w-0 flex-1 truncate">{words}</span>
+    </div>
+  );
+}
+
+/** One soft strip at the top of the composer box for a page passage waiting
+ * to go with the next message (#5464): same family as the reply strip. */
+export function ComposerPageCiteStrip({
+  cite,
+  onClear,
+}: {
+  cite: PageCiteDraft;
+  onClear?: () => void;
+}) {
+  const words = cite.selection.quote.replace(/\s+/g, " ").trim() || `<${cite.selection.tag}>`;
+  const label = t("pages.selection.citeStrip", { title: cite.title || t("pages.untitled") });
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      title={label}
+      data-composer-page-cite=""
+      className="mb-1 flex min-w-0 items-center gap-2 rounded-2xl bg-ink/[0.06] py-1.5 ps-3 pe-1.5 text-[13px] leading-5 text-ink-secondary"
+    >
+      <MessageSquareQuote size={15} strokeWidth={1.5} aria-hidden="true" className="shrink-0 rtl:-scale-x-100" />
+      <span className="sr-only">{label}: </span>
+      <span dir="auto" className="min-w-0 flex-1 truncate">{words}</span>
+      {onClear && (
+        <button
+          type="button"
+          onClick={onClear}
+          aria-label={t("pages.selection.clearCite")}
+          title={t("pages.selection.clearCite")}
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/10 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <X size={14} strokeWidth={1.5} aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }

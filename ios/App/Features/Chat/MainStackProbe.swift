@@ -74,6 +74,20 @@ enum MainStackProbe {
         return Int(b.top - UInt(bitPattern: p))
     }
 
+    /// Whether the build compiles out the `#if DEBUG` layout probes of the
+    /// transcript (`STACK_MEASURE`, set by `scripts/check-ios-chat-stack.sh`).
+    /// A phone runs Release, where those probes are not in the tree at all, so
+    /// a measure that carried them would report a stack a phone never builds.
+    /// The measure says which tree it read, and `ChatOpenStackUITests` refuses
+    /// a number that came from the other one (#5169).
+    static let compiledOutDebugProbes = {
+        #if STACK_MEASURE
+        return true
+        #else
+        return false
+        #endif
+    }()
+
     /// A transcript row's body: how deep its ancestors already are.
     static func noteRow(kind: String) {
         guard timer != nil else { return }
@@ -96,11 +110,20 @@ enum MainStackProbe {
     private static func write() {
         guard let path = outputPath else { return }
         let b = bounds()
+        // What the deepest row body is made of: how many frames, and how many
+        // of them are ours. The 2026-11-27 run counted 704 frames and 3 of
+        // ours (this function, `MessageRow.body`, `main`): the depth is
+        // AttributeGraph and SwiftUICore walking the layout down from the
+        // window, 86 nested attribute updates of about 7 700 bytes each. That
+        // is why half of a phone's 1 MB is below what one row body costs.
         let payload: [String: Any] = [
             "stackSize": b.size,
             "peakBytes": peak,
             "rowBodyDepthBytes": rowPeak,
             "rowBodySymbols": rowSymbols,
+            "rowBodyFrames": rowSymbols.count,
+            "rowBodyOwnFrames": rowSymbols.filter { $0.contains("5Sagax") }.count,
+            "debugProbesCompiledOut": Self.compiledOutDebugProbes,
             "ticks": ticks,
             "rowKinds": rowKinds.sorted(),
         ]

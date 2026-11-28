@@ -10,6 +10,15 @@
 # deepest point the main stack reached passes the budget of
 # ios/UITests/ChatOpenStackUITests.swift. The simulator is deleted after.
 #
+# STACK_MEASURE is on the build settings below: it compiles out the
+# `#if DEBUG && !STACK_MEASURE` layout probes of the transcript (a metrics
+# probe above the list, one parity probe on every row, the call-debug panel),
+# which a phone running Release never lays out. The measure therefore reads
+# the tree a phone builds, and ChatOpenStackUITests fails a run where the
+# flag was not set (#5169). DEBUG stays spelled out below: the pbxproj sets
+# this build setting itself, and a command-line setting replaces it instead of
+# adding to it, so `$(inherited)` would not hand DEBUG back.
+#
 # MemoryManagerUITests rides along on the same build: opening a memory source
 # is a navigation push, and it crashed in `EnvironmentObject.error()` in
 # TestFlight 0.8.42 (#5159).
@@ -37,6 +46,7 @@ nice -n 10 xcodebuild test -project Sagax.xcodeproj -scheme Sagax -configuration
   -only-testing:SagaxUITests/ChatOpenStackUITests \
   -only-testing:SagaxUITests/MemoryManagerUITests \
   CODE_SIGNING_ALLOWED=NO SWIFT_OPTIMIZATION_LEVEL=-O SWIFT_COMPILATION_MODE=wholemodule \
+  "SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG STACK_MEASURE" \
   > "$log" 2>&1 || status=$?
 grep -E "STACK-PROBE|error: -\[|Test Case .*(passed|failed)" "$log" || true
 if [[ $status -ne 0 ]]; then

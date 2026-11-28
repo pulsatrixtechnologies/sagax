@@ -84,7 +84,11 @@ beside them, sit on a clear sibling of the screen (`observeBeside` in
 `ChatView.swift`), so they are not layout levels above a row. A bot's widget
 tree is drawn within `ChatWidgetNode.maxDepth` so a card's shape stops adding
 levels too. The nine tenths budget below is unchanged until a new measure
-of `rowBodyDepthBytes` says the margin grew. Three checks hold it:
+of `rowBodyDepthBytes` says the margin grew. #5169 asked for that measure on
+2026-11-27: it came, the margin is about 165 KB of a phone's 1 MB, half of the
+stack sits below what one row's body already costs, and what came down is the
+row body's own budget, held in `ChatOpenStackUITests.rowBodyBudget`. Three
+checks hold it:
 
 - every PR: `scripts/testing/ios-modifier-chain.guard.test.ts` (a guard test,
   no Xcode): `onValueChange` stays one modifier type on every OS, a new
@@ -104,13 +108,48 @@ of `rowBodyDepthBytes` says the margin grew. Three checks hold it:
   preview card, nested callouts, a bot card nested 40 deep) and 2000 plain rows,
   and fails when the deepest point the main stack reached
   (`MainStackProbe`, `-stack-probe`) passes nine tenths of a phone's 1 MB
-  (943 713 bytes): 870 920 for the 2000 plain rows and 843 528 for the 600 rich
-  ones on 2026-11-21, once `onValueChange` went unary, against the 1008 KB a
-  phone crashed at; the first transcript row drew at 651 417 bytes deep, which
-  is what SwiftUI's own chain from the window down to it costs. The
-  simulator's own main thread has 8 MB, so read the number against 1 MB, not
-  against what the simulator survives. Half of 1 MB is the goal, and the budget
-  only comes down; a raise needs the new measure and its reason here.
+  (943 713 bytes). Measured on 2026-11-27 on the current `main`: **886 408
+  bytes for the 2000 plain rows** and **852 152 for the 600 rich ones**, against
+  the 1008 KB a phone crashed at, so a phone has about **162 168 bytes of its
+  1 MB left** and 57 305 bytes under the budget. Two runs of one tree differ by
+  a few thousand bytes, so read the number as plus or minus 5 KB. A single
+  transcript row's body draws **664 089 bytes** deep (a rich one 629 833), and
+  that number now carries a budget of its own, two thirds of the stack:
+  everything a message shows stacks on top of it.
+  The measure builds with `STACK_MEASURE` (see the script above), which
+  compiles out the `#if DEBUG` layout probes of the transcript: a metrics probe
+  above the list, one parity probe on every row, the call-debug panel. A phone
+  runs Release, where those levels were never in the tree, and the test refuses
+  a number from a build that carried them. That is honesty rather than margin:
+  the same build with the probes in read 883 320 and 853 288, so the 2000
+  parity probes of the measured conversation cost nothing that shows. They are
+  compiled out so the number cannot drift when a probe grows, not because today
+  they weigh anything.
+  **Half of the 1 MB is not a reachable target, and the same run says why.** At
+  the deepest point a row's body sat under 697 frames, and 2 of them are ours:
+  `MainStackProbe.noteRow` and `MessageRow.body`. The other 695 are AttributeGraph
+  and SwiftUICore, walking the layout down from the window through 85 nested
+  attribute updates of about 7 813 bytes each; 63 of those frames are the
+  preference machinery that every background, overlay and presentation above a
+  row feeds. So each level the screen nests above the transcript costs about
+  7 800 bytes, and it is Apple's frames, not ours, that hold the stack: 664 KB
+  is what one row costs before its content is drawn, more than the 524 288 bytes
+  half of the stack would leave. The goal here and in `docs/releasing.md` stays a
+  goal, the applied budget stays nine tenths, and the row body's own budget took
+  the only number that could come down (#5169).
+  What is left to take, in the order it is worth: the nine presentation
+  modifiers every message row carries (`MessageRow.swift`: a context menu, six
+  sheets, an alert and a confirmation dialog), then the four `AnyView` the chat
+  screen erases its body with. Each presentation is one more attribute update in
+  the chain, so about 7 800 bytes: the nine of a row are worth in the order of
+  20 to 30 KB of stack per row laid out, read off the frames above rather than
+  measured. The applied budget, nine tenths, has 57 305 bytes of room over the
+  measure of 2026-11-27, and that is the margin those two jobs can grow. Both
+  change how the screen presents, so they wait for a human decision
+  [D-20261119-030], not for an agent.
+  The simulator's own main thread has 8 MB, so read the number against 1 MB, not
+  against what the simulator survives. The budget only comes down; a raise needs
+  the new measure and its reason here.
   `MemoryManagerUITests` runs on the same build: Tools > Memory > a source is a
   navigation push, and it died in `EnvironmentObject.error()` in TestFlight
   0.8.42;

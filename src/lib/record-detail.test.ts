@@ -24,7 +24,7 @@ describe("a board's tickets", () => {
     expect(page.lines).toHaveLength(2);
     expect(row).toMatchObject({ id: "300124", ref, number: "#300124", statusTone: "waiting", level: "normal", mine: true, opened: "2026-10-23T13:50:00-04:00" });
     expect(row!.next).toEqual({ state: "planned", at: "2026-12-14T14:30:00-05:00", people: [{ name: "Noor Haddad", seen: true }, { name: "Bruno Tremblay", seen: false }] });
-    expect(odd).toMatchObject({ statusTone: "open" });
+    expect(odd).not.toHaveProperty("statusTone");
     expect(odd).not.toHaveProperty("level");
     expect(odd).not.toHaveProperty("next");
   });

@@ -56,6 +56,8 @@ export interface RecordDetail {
   /** the counts answer came: the tabs it names can be drawn (a company's tabs wait for it) */
   known: boolean;
   countError: string;
+  /** the counts answered: the tabs and the actions the console takes are known */
+  ready: boolean;
   /** the console takes this action for the record (a console that lists none: any is tried) */
   can: (action: RecordActionName) => boolean;
   section: <K extends DetailSection>(tab: K) => DetailSectionState<K>;
@@ -80,6 +82,7 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
   const [counts, setCounts] = useState<Partial<Record<DetailSection, number>>>({});
   const [countsKnown, setCountsKnown] = useState(false);
   const [countError, setCountError] = useState("");
+  const [ready, setReady] = useState(false);
   const [missing, setMissing] = useState(false);
   // the sections read, for one record: a page of another record (the one before) is never shown
   const [pages, setPages] = useState<{ token?: object; map: Partial<Record<DetailSection, DetailSectionState<DetailSection>>> }>({ map: {} });
@@ -118,6 +121,7 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
     setCounts({});
     setCountsKnown(false);
     setCountError("");
+    setReady(false);
     setMissing(false);
     setSaved({});
     setStamps({});
@@ -174,6 +178,7 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
       setFields(read.fields);
       setTitleEditable(read.title);
       setActions(read.actions);
+      setReady(true);
     }, (failure: unknown) => {
       if (!current) return;
       if (failure instanceof RecordDetailMissing) setMissing(true);
@@ -255,6 +260,7 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
       counts,
       known: countsKnown,
       countError,
+      ready,
       can: (action) => actions === null || actions.has(action),
       section: <K extends DetailSection>(tab: K) => ((pages.token === source.token ? pages.map[tab] : undefined) ?? { loading: true, error: "" }) as unknown as DetailSectionState<K>,
       want,
@@ -280,7 +286,7 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
       readImage: (src) => readNoteImage(source.record, src),
       notice: downloadError ? t("recordCard.related.downloadFailed") : undefined,
     };
-  }, [source, missing, counts, countsKnown, countError, actions, pages, want, load, downloadError]);
+  }, [source, missing, counts, countsKnown, countError, ready, actions, pages, want, load, downloadError]);
 
   return { detail, edits, title, refresh, missing };
 }

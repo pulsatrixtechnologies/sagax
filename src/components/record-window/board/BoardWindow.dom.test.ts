@@ -23,6 +23,8 @@ const NOW = Date.parse("2026-11-27T13:50:00-05:00");
 let host: HTMLDivElement;
 let root: Root;
 let noBoardDetail = false;
+/** the console sends no priority level, next scheduling, status tone nor owner flag */
+let bare = false;
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const settle = async () => { for (let i = 0; i < 8; i++) await act(async () => { await vi.advanceTimersByTimeAsync(20); }); };
 const q = <T extends Element = HTMLElement>(selector: string) => document.querySelector<T & HTMLElement>(selector);
@@ -44,11 +46,16 @@ beforeEach(() => {
   resetPersonProducts();
   seedPersonProducts([nimbusProduct()]);
   noBoardDetail = false;
+  bare = false;
   const console = boardInvoiceConsole("en", NOW, "board");
   vi.stubGlobal("fetch", vi.fn(async (input: string, init?: RequestInit) => {
     const url = String(input);
     if (noBoardDetail && url.includes("/board/41/detail")) return json({ state: "unavailable", code: "kind_unknown" }, 404);
     const detail = console.detail(url, init);
+    if (detail && bare && url.includes("section=tickets")) {
+      const body = await detail.json() as { lines: Array<Record<string, unknown>> };
+      return json({ ...body, lines: body.lines.map(({ priority_level: _level, next: _next, status_tone: _tone, mine: _mine, ...row }) => row) });
+    }
     if (detail) return detail;
     if (url.includes("/detail")) return url.includes("section=counts") ? json({ counts: {}, fields: [] }) : json({ lines: [], next: null });
     const match = /\/api\/me\/records\/nimbus_desk\/(\w+)\/([^?/]+)/.exec(url);
@@ -150,6 +157,16 @@ describe("the board window", () => {
     expect(q("[data-record-window]")!.dataset.recordWindow).toBe("nimbus_desk/board");
     expect(q('[data-record-tile="waiting"]')!.getAttribute("aria-pressed")).toBe("true");
     expect(rows()).toEqual(["300124", "299702"]);
+  });
+
+  it("shows a tile and its quick filter only when the console sends what they count, never a 0 made of a missing field", async () => {
+    bare = true;
+    await open();
+    expect(all("[data-record-tile]").map((tile) => tile.dataset.recordTile)).toEqual(["all"]);
+    expect(all("[data-board-quick]").map((pill) => pill.dataset.boardQuick)).toEqual(["all"]);
+    expect(rows()).toHaveLength(8);
+    // the status still reads, in the quiet tone
+    expect(q('[data-ticket-row="300124"]')!.textContent).toContain("Waiting");
   });
 
   it("stays the original card when the console serves no detail for boards", async () => {

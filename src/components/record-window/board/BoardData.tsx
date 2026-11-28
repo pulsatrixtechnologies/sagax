@@ -9,6 +9,7 @@
 import { useRef } from "react";
 import { ChartPlot, CHART_PALETTE } from "@/components/ChartBlock";
 import { RecordAvatar, RecordPod } from "@/components/record-window/RecordBlocks";
+import { RecordName } from "@/components/record-window/ticket/parts";
 import { useSkinScheme } from "@/components/rich-ui";
 import { cn } from "@/lib/cn";
 import { activeLocale, formatNumber, t } from "@/lib/i18n";
@@ -86,7 +87,7 @@ export function BoardData({ rows, weeks, stats, owners, now }: {
             {owners.map((owner) => (
               <li key={owner.key} className="flex min-w-0 items-center gap-2.5" data-board-owner-row={owner.key}>
                 {owner.row.owner ? <RecordAvatar name={owner.name} /> : <span aria-hidden="true" className="inline-block size-7 shrink-0 rounded-full border border-dashed border-popover-ink-secondary" />}
-                <span className="w-40 min-w-0 shrink-0 truncate text-[13px] text-popover-ink-secondary" title={owner.name}>{owner.name}</span>
+                <span className="w-40 min-w-0 shrink-0 truncate text-[13px] text-popover-ink-secondary" title={owner.name}><RecordName name={owner.name} recordRef={owner.row.owner ? owner.row.ownerRef : undefined} /></span>
                 <span role="img" aria-label={`${owner.name}: ${formatNumber(owner.count)}`} className="h-2 min-w-8 flex-1 overflow-hidden rounded-full bg-popover-hover">
                   <span className="block h-full rounded-full bg-accent" style={{ width: `${(owner.count / most) * 100}%` }} />
                 </span>

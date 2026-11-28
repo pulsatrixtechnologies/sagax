@@ -29,6 +29,8 @@ let host: HTMLDivElement;
 let root: Root;
 let calls: Array<{ url: string; method: string; body?: string }>;
 let scene = "invoice";
+/** the counts answer waits for this */
+let countsGate: Promise<void> | null = null;
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const settle = async () => { for (let i = 0; i < 8; i++) await act(async () => { await vi.advanceTimersByTimeAsync(20); }); };
 const q = (selector: string) => document.querySelector<HTMLElement>(selector);
@@ -54,11 +56,13 @@ beforeEach(() => {
   seedPersonProducts([nimbusProduct()]);
   calls = [];
   scene = "invoice";
+  countsGate = null;
   vi.mocked(downloadBlob).mockClear();
   vi.stubGlobal("fetch", vi.fn(async (input: string, init?: RequestInit) => {
     const url = String(input);
     calls.push({ url, method: init?.method ?? "GET", body: typeof init?.body === "string" ? init.body : undefined });
     const console = stand;
+    if (countsGate && url.includes("section=counts")) await countsGate;
     const detail = console.detail(url, init);
     if (detail) return detail;
     if (url.includes("/detail")) return json({ state: "unavailable" }, 404);
@@ -98,7 +102,7 @@ describe("the invoice window", () => {
     expect(balance.textContent).toContain("Balance due$1,421.67");
     expect(balance.textContent).toContain("27 days late");
     expect(q("[data-invoice-pdf]")).not.toBeNull();
-    expect(all("[data-invoice-step]").map((step) => [step.dataset.invoiceStep, step.dataset.tone])).toEqual([["issued", "done"], ["sent", "done"], ["due", "late"], ["reminder", "done"], ["next_reminder", "next"]]);
+    expect(all("[data-invoice-step]").map((step) => [step.dataset.invoiceStep, step.dataset.tone])).toEqual([["issued", "done"], ["sent", "done"], ["due", "alert"], ["reminder", "done"], ["next_reminder", "next"]]);
     expect(q('[data-invoice-step="sent"]')!.textContent).toContain("Sent to Ada Lindqvist");
     expect(q('[data-invoice-step="due"]')!.textContent).toContain("Past due");
     expect(q("[data-invoice-client]")!.textContent).toContain("Total balance$4,820.15");
@@ -124,6 +128,20 @@ describe("the invoice window", () => {
     expect(payments).toHaveLength(1);
     expect(payments[0]!.textContent).toMatch(/^Transfer.*today · Noor Haddad\$200\.00$/);
     expect(q('[data-record-tab="payments"]')!.textContent).toBe("Payments1");
+  });
+
+  it("offers Payments, History and Record a payment only once the counts answered", async () => {
+    let release!: () => void;
+    countsGate = new Promise((done) => { release = done; });
+    await open();
+    expect(q("[data-invoice-document]")).not.toBeNull();
+    expect(all("[data-record-tab]").map((tab) => tab.dataset.recordTab)).toEqual(["invoice"]);
+    expect(q("[data-invoice-pay]")).toBeNull();
+    expect(calls.some((call) => call.url.includes("section=payments") || call.url.includes("section=history"))).toBe(false);
+    await act(async () => { release(); });
+    await settle();
+    expect(all("[data-record-tab]").map((tab) => tab.dataset.recordTab)).toEqual(["invoice", "payments", "history"]);
+    expect(q("[data-invoice-side] [data-invoice-pay]")).not.toBeNull();
   });
 
   it("downloads the PDF through the detail route", async () => {

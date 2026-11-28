@@ -219,6 +219,7 @@ export const TONE_CLASS: Record<RecordTone, string> = {
   done: "bg-success/15",
   alert: "bg-danger/15",
 };
+/** A tone as a dot: one look for every state a record window draws (a chip, a tile, a step). */
 export const TONE_DOT: Record<RecordTone, string> = {
   open: "bg-popover-ink-secondary",
   waiting: "bg-warning",

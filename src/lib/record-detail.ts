@@ -187,13 +187,25 @@ export interface NextPlan {
 }
 /** A ticket as the board shows it (M-20261127-145, M-20261127-129): its next scheduling with who. */
 export interface TicketRow {
-  id?: string; number: string; summary: string; ref?: RecordRef;
-  status: string; tone?: RecordTone; statusTone?: RecordTone; priority: string; level?: RecordLevel; type: string;
+  id?: string;
+  ref?: RecordRef;
+  number: string;
+  summary: string;
+  company?: string;
+  companyRef?: RecordRef;
+  status: string;
+  tone?: RecordTone;
+  /** absent: the console does not say (never read as open) */
+  statusTone?: RecordTone;
+  priority: string;
+  level?: RecordLevel;
+  type: string;
   next?: NextPlan;
   closed?: boolean;
-  owner: string; ownerRef?: RecordRef;
-  company?: string; companyRef?: RecordRef;
-  updated?: string; updatedText?: string;
+  owner: string;
+  ownerRef?: RecordRef;
+  updated?: string;
+  updatedText?: string;
   /** the person reading is its owner */
   mine?: boolean;
   /** an instant: when it was entered */
@@ -592,7 +604,7 @@ function ticketOf(r: Raw): TicketRow | null {
   const next = nextOf(r.next);
   return {
     ...optional({
-      id: idOf(r.id), ref: refOf(r.ref), tone,
+      id: idOf(r.id), ref: refOf(r.ref), tone, statusTone: toneOf(r.status_tone) ?? toneOf(r.tone),
       level: oneOf(RECORD_LEVELS, r.level) ?? oneOf(RECORD_LEVELS, r.priority_level),
       ownerRef: refOf(r.owner_ref), companyRef: refOf(r.company_ref),
       updated: instantOf(r.updated), opened: instantOf(r.opened), updatedText: short(r.updated_text, 60) || undefined,
@@ -601,7 +613,7 @@ function ticketOf(r: Raw): TicketRow | null {
     ...(r.closed === true ? { closed: true } : {}),
     ...(next ? { next } : {}),
     number, summary, company: text(r.company),
-    status: short(r.status, 60) || text(r.status), statusTone: tone ?? "open",
+    status: short(r.status, 60) || text(r.status),
     priority: short(r.priority, 60) || text(r.priority), type: short(r.type, 80) || text(r.type),
     owner: short(r.owner, 120) || text(r.owner),
   };

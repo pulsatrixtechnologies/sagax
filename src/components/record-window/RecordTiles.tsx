@@ -6,6 +6,7 @@
 // line's tone is a dot beside the words, the words staying in the secondary
 // ink (4.5:1 in every skin).
 import type { ReactNode } from "react";
+import { TONE_DOT } from "@/components/RecordCard";
 import { cn } from "@/lib/cn";
 
 export interface RecordTile<T extends string> {
@@ -15,8 +16,6 @@ export interface RecordTile<T extends string> {
   detail?: string;
   tone?: "alert" | "waiting";
 }
-
-const DOT = { alert: "bg-danger", waiting: "bg-warning" } as const;
 
 export function RecordTiles<T extends string>({ tiles, selected, onSelect, label }: {
   tiles: readonly RecordTile<T>[];
@@ -35,7 +34,7 @@ export function RecordTiles<T extends string>({ tiles, selected, onSelect, label
             <span className="text-[22px] font-semibold leading-7 tabular-nums text-popover-ink" data-record-tile-value="">{tile.value}</span>
             {tile.detail && (
               <span className="flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px] text-popover-ink-secondary">
-                {tile.tone && <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", DOT[tile.tone])} />}
+                {tile.tone && <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[tile.tone])} />}
                 <span className="min-w-0 truncate">{tile.detail}</span>
               </span>
             )}

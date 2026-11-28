@@ -20,18 +20,18 @@
 // download.
 import { useEffect, useState, type ReactNode } from "react";
 import { Download, FileText, Plus, Send } from "lucide-react";
-import { FieldValue, recordLateness, type RecordWindowLayout } from "@/components/RecordCard";
+import { FieldValue, recordLateness, TONE_DOT, type RecordWindowLayout } from "@/components/RecordCard";
 import { RecordMarkdown } from "@/components/RecordMarkdown";
 import { RECORD_ACTION, RECORD_PRIMARY, RecordAddButton, RecordEntryForm, RecordPod, RecordWindowTabs, type RecordTab } from "@/components/record-window/RecordBlocks";
 import { RecordSplit } from "@/components/record-window/RecordSplit";
-import { RecordName } from "@/components/record-window/ticket/parts";
+import { RecordName, dayOf } from "@/components/record-window/ticket/parts";
 import type { RecordDetail } from "@/components/useRecordDetail";
 import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
 import { formatAbsolute, formatFull } from "@/lib/record-card-format";
 import { downloadAttachment, type HistoryRow, type InvoiceDocument, type InvoiceLine, type InvoiceStep, type PaymentRow } from "@/lib/record-detail";
 import { RECORD_LINE_NOTE_MAX, RECORD_SUBJECT_MAX } from "../../../../shared/record-actions";
-import type { RecordCard as Card, RecordField, RecordRef } from "../../../../shared/record-cards";
+import type { RecordCard as Card, RecordField, RecordRef, RecordTone } from "../../../../shared/record-cards";
 
 export const INVOICE_TABS = ["invoice", "payments", "history"] as const;
 export type InvoiceTab = (typeof INVOICE_TABS)[number];
@@ -67,8 +67,8 @@ export function invoiceWindow(props: InvoiceWindowProps): RecordWindowLayout {
   const history = detail?.section("history").page;
   const tabs: RecordTab<InvoiceTab>[] = [
     { id: "invoice", label: t("recordWindow.invoice.tabs.invoice"), canAdd: true },
-    // a console that serves no detail for invoices has no payments nor history to show
-    ...(detail ? [
+    // a console that serves no detail for invoices has no payments nor history to show (known once the counts answered)
+    ...(detail?.ready ? [
       { id: "payments" as const, label: t("recordWindow.invoice.tabs.payments"), count: payments?.lines.length ?? detail.counts.payments, canAdd: detail.can("payment.add") },
       { id: "history" as const, label: t("recordWindow.invoice.tabs.history"), count: history?.lines.length ?? detail.counts.history },
     ] : []),
@@ -198,7 +198,23 @@ function InvoiceDocumentPod({ card, doc, lines, now }: { card: Card; doc?: Invoi
   );
 }
 
-const STEP_DOT = { done: "bg-success", late: "bg-danger", next: "border-2 border-popover-ink-secondary" } as const;
+/** A timeline (the invoice's steps, its history): a dot of its tone on a rail, the words, the date under them. A step still to come is a ring. */
+function Timeline({ items, ...data }: { items: Array<{ key: string; tone: RecordTone | "next"; title: ReactNode; date?: ReactNode; attributes?: Record<`data-${string}`, string> }> } & Record<`data-${string}`, string>) {
+  return (
+    <ol className="flex flex-col" {...data}>
+      {items.map((item, index) => (
+        <li key={item.key} className="relative flex gap-3 pb-3 last:pb-0" data-tone={item.tone} {...item.attributes}>
+          {index < items.length - 1 && <span aria-hidden="true" className="absolute start-[5px] top-4 h-[calc(100%-12px)] w-px bg-popover-hairline" />}
+          <span aria-hidden="true" className={cn("mt-1 size-3 shrink-0 rounded-full", item.tone === "next" ? "border-2 border-popover-ink-secondary" : TONE_DOT[item.tone])} />
+          <span className="flex min-w-0 flex-col">
+            <span className="break-words">{item.title}</span>
+            {item.date && <Label>{item.date}</Label>}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 /** The timeline: issued, sent, due, reminder, next reminder; the due step late once it is passed and still owed. */
 function StepsPod({ doc, late, now, tz }: { doc: InvoiceDocument; late: boolean; now: number; tz?: string }) {
@@ -208,28 +224,21 @@ function StepsPod({ doc, late, now, tz }: { doc: InvoiceDocument; late: boolean;
     : t(`recordWindow.invoice.step.${step === "next_reminder" ? "nextReminder" : step}` as "recordWindow.invoice.step.issued");
   return (
     <RecordPod title={t("recordWindow.invoice.steps")} data-invoice-steps="">
-      <ol className="flex flex-col">
-        {doc.steps.map((step, index) => {
-          const tone = step.step === "due" ? (late ? "late" : step.done ? "done" : "next") : step.done === false || step.step === "next_reminder" ? "next" : "done";
-          return (
-            <li key={`${step.step}-${index}`} className="relative flex gap-3 pb-3 last:pb-0" data-invoice-step={step.step} data-tone={tone}>
-              {index < doc.steps.length - 1 && <span aria-hidden="true" className="absolute start-[5px] top-4 h-[calc(100%-12px)] w-px bg-popover-hairline" />}
-              <span aria-hidden="true" className={cn("mt-1 size-3 shrink-0 rounded-full", STEP_DOT[tone])} />
-              <span className="flex min-w-0 flex-col">
-                <span className="break-words">{words(step.step, step.who)}</span>
-                {step.at && <Label>{dateText(step.at, now, tz)}</Label>}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
+      <Timeline items={doc.steps.map((step, index) => ({
+        key: `${step.step}-${index}`,
+        tone: step.step === "due" ? (late ? "alert" : step.done ? "done" : "next") : step.done === false || step.step === "next_reminder" ? "next" : "done",
+        title: words(step.step, step.who),
+        ...(step.at ? { date: dateText(step.at, now, tz) } : {}),
+        attributes: { "data-invoice-step": step.step },
+      }))} />
     </RecordPod>
   );
 }
 
 /** Record a payment: the amount, the day, a reference and a note, written as one checked action. */
-function PaymentForm({ detail, onDone }: { detail: RecordDetail; onDone: () => void }) {
-  const today = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+function PaymentForm({ detail, now, tz, onDone }: { detail: RecordDetail; now: number; tz?: string; onDone: () => void }) {
+  // today in the record's zone, as the console reads a day
+  const today = dayOf(new Date(now).toISOString(), "", tz).key;
   return (
     <RecordEntryForm data-invoice-payment-form=""
       fields={[
@@ -250,7 +259,10 @@ function PaymentForm({ detail, onDone }: { detail: RecordDetail; onDone: () => v
 
 function InvoiceBody({ card, record, detail, type, now, tab, idPrefix, onRemind }: InvoiceWindowProps & { tab: InvoiceTab; idPrefix: string }) {
   const want = detail?.want;
-  useEffect(() => { want?.(["document", "payments", "history"]); }, [want]);
+  const ready = Boolean(detail?.ready);
+  // the document at once; the payments and the history once the console said it serves invoices
+  useEffect(() => { want?.(["document"]); }, [want]);
+  useEffect(() => { if (ready) want?.(["payments", "history"]); }, [want, ready]);
   const [paying, setPaying] = useState(false);
   const [asked, setAsked] = useState(false);
   const [pdfFailed, setPdfFailed] = useState(false);
@@ -260,8 +272,9 @@ function InvoiceBody({ card, record, detail, type, now, tab, idPrefix, onRemind 
   const due = doc?.due ?? card.dates?.due;
   // late as the card says it, never once the product says nothing is owed
   const lateBy = doc?.owed === false ? null : recordLateness(card, now, activeLocale(), tz, due);
-  const canPay = Boolean(detail?.can("payment.add"));
-  const form = paying && detail ? <PaymentForm detail={detail} onDone={() => setPaying(false)} /> : null;
+  // offered once the counts answered: a console that serves no detail for invoices never shows it, not even for a moment
+  const canPay = ready && Boolean(detail?.can("payment.add"));
+  const form = paying && detail ? <PaymentForm detail={detail} now={now} tz={tz} onDone={() => setPaying(false)} /> : null;
   const payButton = (primary = false) => canPay && (
     <button type="button" className={primary ? RECORD_PRIMARY : RECORD_ACTION} onClick={() => setPaying(true)} data-invoice-pay=""><Plus size={14} aria-hidden="true" />{t("recordWindow.invoice.recordPayment")}</button>
   );
@@ -313,18 +326,11 @@ function InvoiceBody({ card, record, detail, type, now, tab, idPrefix, onRemind 
         : (
           <RecordPod data-invoice-history="">
             {!rows.length && <p className="text-popover-ink-secondary">{t("recordWindow.invoice.noHistory")}</p>}
-            <ol className="flex flex-col">
-              {rows.map((row, index) => (
-                <li key={row.id ?? index} className="relative flex gap-3 pb-3 last:pb-0" data-invoice-event="">
-                  {index < rows.length - 1 && <span aria-hidden="true" className="absolute start-[5px] top-4 h-[calc(100%-12px)] w-px bg-popover-hairline" />}
-                  <span aria-hidden="true" className={cn("mt-1 size-3 shrink-0 rounded-full", row.tone === "alert" ? "bg-danger" : row.tone === "waiting" ? "bg-warning" : row.tone === "open" ? "border-2 border-popover-ink-secondary" : "bg-success")} />
-                  <span className="flex min-w-0 flex-col">
-                    <span className="break-words">{row.text}</span>
-                    <Label>{row.at ? <time dateTime={row.at} title={formatFull(row.at, activeLocale(), tz)}>{formatAbsolute(row.at, now, activeLocale(), tz, { year: true })}</time> : row.date}</Label>
-                  </span>
-                </li>
-              ))}
-            </ol>
+            <Timeline items={rows.map((row, index) => ({
+              key: row.id ?? String(index), tone: row.tone ?? "done", title: row.text,
+              date: row.at ? <time dateTime={row.at} title={formatFull(row.at, activeLocale(), tz)}>{formatAbsolute(row.at, now, activeLocale(), tz, { year: true })}</time> : row.date,
+              attributes: { "data-invoice-event": "" },
+            }))} />
           </RecordPod>
         ),
     );
@@ -358,7 +364,7 @@ function InvoiceBody({ card, record, detail, type, now, tab, idPrefix, onRemind 
         <RecordPod title={t("recordWindow.invoice.client")} data-invoice-client="">
           <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2">
             {doc.client.balance && <><dt><Label>{t("recordWindow.invoice.clientBalance")}</Label></dt><dd className="tabular-nums">{doc.client.balance}</dd></>}
-            {doc.client.late && <><dt><Label>{t("recordWindow.invoice.clientLate")}</Label></dt><dd className="tabular-nums">{doc.client.late}</dd></>}
+            {doc.client.late && <><dt><Label>{t("recordWindow.invoice.clientLate")}</Label></dt><dd className="tabular-nums text-danger">{doc.client.late}</dd></>}
             {doc.client.paysIn && <><dt><Label>{t("recordWindow.invoice.clientPaysIn")}</Label></dt><dd>{doc.client.paysIn}</dd></>}
           </dl>
         </RecordPod>

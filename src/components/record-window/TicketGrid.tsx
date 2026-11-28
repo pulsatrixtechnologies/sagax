@@ -16,6 +16,7 @@ import { MENU_BOX } from "@/components/menu-look";
 import { RecordAvatar } from "@/components/record-window/RecordBlocks";
 import { RecordGrid, type RecordColumn } from "@/components/record-window/RecordGrid";
 import { rangeOf } from "@/components/record-window/ticket/TicketPlanTab";
+import { RecordName } from "@/components/record-window/ticket/parts";
 import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
 import { formatAbsolute, formatFull, formatRelative } from "@/lib/record-card-format";
@@ -67,7 +68,7 @@ function NextTip({ next }: { next: NextPlan }) {
             <li key={`${person.name}-${index}`} className="flex min-w-0 items-start gap-2" data-ticket-next-person="">
               <RecordAvatar name={person.name} />
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="break-words font-medium">{person.name}</span>
+                <span className="break-words font-medium"><RecordName name={person.name} recordRef={person.ref} /></span>
                 {(person.at ?? next.at) && <span className="text-popover-ink-secondary">{rangeOf(person.at ?? next.at, person.endAt ?? next.endAt, "", "")}</span>}
               </span>
               {person.seen !== undefined && (
@@ -91,10 +92,12 @@ export function NextPlanCell({ next, now, tz }: { next?: NextPlan; now: number; 
   if (!next) return null;
   const Icon = next.state === "ongoing" ? ChevronRight : next.state === "none" ? Ban : CalendarDays;
   const words = nextPlanWords(next, now, tz);
+  // the same words as the hover, for a screen reader: who is planned and whether they saw it
+  const said = [words, ...next.people.map((person) => person.seen === undefined ? person.name : `${person.name}, ${t(person.seen ? "recordWindow.tickets.seen" : "recordWindow.tickets.notSeen")}`)].join(" · ");
   return (
     <HoverCard kind="ticket-next" card={() => <NextTip next={next} />}>
       {(anchor) => (
-        <span {...anchor} tabIndex={0} className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" data-ticket-next={next.state}>
+        <span {...anchor} tabIndex={0} aria-label={said} className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" data-ticket-next={next.state}>
           <Icon size={15} aria-hidden="true" className={cn("shrink-0", next.state === "ongoing" ? "text-success" : next.state === "none" ? "text-popover-ink-secondary" : "text-popover-ink")} />
           <span className={cn("min-w-0 truncate", next.state === "none" && "text-popover-ink-secondary")}>{words}</span>
           {next.people.length > 1 && <span className="shrink-0 text-[13px] text-popover-ink-secondary">+{next.people.length - 1}</span>}

@@ -2,11 +2,16 @@
  * screen side panel (#4452) beside a plain conversation area and the real bot
  * panel, the conforming docked neighbour (same header height, hairline edge,
  * round buttons). The browser's stream is a stand-in EventSource and the server
- * a fetch stub. ?skin=<id>&lang=<code>&width=<px> */
+ * a fetch stub. ?skin=<id>&lang=<code>&width=<px>&panel=<px>
+ * ?chathead=1 puts the real chat header beside the panel (M-20261127-179),
+ * ?control=you hands the browser to the person ("You have control"),
+ * ?places=2 leaves out the remote computer (browser and VM only). */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ScreenPanel } from "../components/ScreenPanel";
 import { BotSettingsDialog } from "../components/BotSettingsDialog";
+import { ChatHeadSample } from "./chat-head-sample";
+import { SCREEN_PANEL_WIDTH_KEY } from "../lib/screen-panel";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { loadLocale } from "../lib/i18n";
 import { BotEditorStore, initialState, type Bot } from "../state/store";
@@ -19,6 +24,11 @@ applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? ski
 const lang = params.get("lang") ?? "fr";
 await loadLocale(lang);
 const width = Number(params.get("width") ?? 1440);
+const panelWidth = params.get("panel");
+if (panelWidth) localStorage.setItem(SCREEN_PANEL_WIDTH_KEY, panelWidth);
+const chatHead = params.get("chathead") === "1";
+const youControl = params.get("control") === "you";
+const twoPlaces = params.get("places") === "2";
 
 /** A page the stand-in browser shows. */
 function pagePicture(): string {
@@ -64,6 +74,8 @@ class StandInSource {
     setTimeout(() => {
       if (url.includes("/bots/closed/")) { this.emit("offline", {}); return; }
       this.emit("ready", { viewerId: "gallery" });
+      this.emit("tabs", { tabs: [{ tabId: "t1", title: "Google", url: "https://www.google.com/", active: true }] });
+      if (youControl) this.emit("control", { held: true, owned: true, controlling: true });
       this.emit("frame", { seq: 1, data: pagePicture(), format: "png", metadata: { deviceWidth: 1280, deviceHeight: 800 } });
     }, 50);
   }
@@ -87,7 +99,7 @@ window.fetch = ((input: RequestInfo | URL) => {
   if (/\/api\/me\/server-environment/.test(url)) return json({ configured: false });
   if (/\/api\/me\/desktop-bridge/.test(url)) return withTabs ? json({ connected: true, tunnel: false, desktops: [], workplace: "auto", activity: [] }) : Promise.resolve(new Response("{}", { status: 404 }));
   if (/\/remote-sessions\/[^/]+\/screen/.test(url)) return realFetch(desktopPicture("Poste distant"));
-  if (/\/remote-sessions/.test(url)) return json({ sessions: withTabs ? [{ id: "0123456789ab", code: "ABCDEF", state: "connected", os: "windows", elevated: false, endAt: "2099-01-01T00:00:00Z", hostname: "PC-COMPTA-02", inventory: "ready", osKnown: true, suggestions: [] }] : [] });
+  if (/\/remote-sessions/.test(url)) return json({ sessions: withTabs && !twoPlaces ? [{ id: "0123456789ab", code: "ABCDEF", state: "connected", os: "windows", elevated: false, endAt: "2099-01-01T00:00:00Z", hostname: "PC-COMPTA-02", inventory: "ready", osKnown: true, suggestions: [] }] : [] });
   if (/\/team-work/.test(url)) return Promise.resolve(new Response("{}", { status: 404, headers: { "content-type": "application/json" } }));
   if (/\/task-list/.test(url)) return json({ tasks: [] });
   if (/\/activity/.test(url)) return json({ items: [], subagents: [], launchedAgents: [] });
@@ -106,7 +118,9 @@ function Gallery() {
   return (
     <BotEditorStore value={store}>
       <div data-gallery-sample="" className="relative flex h-[860px] bg-app text-ink" style={{ width }}>
-        <div className="min-w-0 flex-1 bg-panel p-6 text-[13px] text-ink-secondary">{lang === "fr" ? "Conversation (galerie)" : "Conversation (gallery)"}</div>
+        {chatHead
+          ? <ChatHeadSample bot={bot} lines={lang === "fr" ? ["Ouvre Google dans ton navigateur.", "C'est ouvert, à droite."] : ["Open Google in your browser.", "It is open, on the right."]} />
+          : <div className="min-w-0 flex-1 bg-panel p-6 text-[13px] text-ink-secondary">{lang === "fr" ? "Conversation (galerie)" : "Conversation (gallery)"}</div>}
         <ScreenPanel bot={bot} />
         {params.get("neighbour") !== "0" && <BotSettingsDialog bot={bot} />}
       </div>

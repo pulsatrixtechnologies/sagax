@@ -41,6 +41,8 @@ vi.mock("./ArtifactFrame", () => ({
 }));
 
 import { ArtifactSidePanel } from "./ArtifactSidePanel";
+import { CIRCLE_BUTTON, CIRCLE_ICON } from "@/lib/circle-button";
+import { SCREEN_PANEL_TITLE } from "../ScreenPanelChrome";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -74,6 +76,19 @@ describe("ArtifactSidePanel", () => {
     expect(document.querySelector("[data-artifact-detach]")).not.toBeNull();
     expect(document.querySelector("[data-artifact-enlarge]")).not.toBeNull();
     expect(document.querySelector("[data-artifact-side-panel-close]")).not.toBeNull();
+  });
+
+  it("draws the chat header's round controls and glyphs, and a docked panel's title (M-20261127-179)", async () => {
+    await mount();
+    const header = document.querySelector("[data-artifact-side-panel-header]")!;
+    const buttons = [...header.querySelectorAll("button")];
+    expect(buttons.length).toBeGreaterThanOrEqual(3);
+    for (const button of buttons) {
+      expect(button.className.split(/\s+/)).toEqual(expect.arrayContaining(CIRCLE_BUTTON.split(/\s+/)));
+      const svg = button.querySelector("svg")!;
+      expect({ size: Number(svg.getAttribute("width")), strokeWidth: Number(svg.getAttribute("stroke-width")) }).toEqual(CIRCLE_ICON);
+    }
+    expect(header.querySelector("span")!.className).toBe(SCREEN_PANEL_TITLE);
   });
 
   it("Close clears the store panel", async () => {

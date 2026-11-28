@@ -10,6 +10,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot } from "@/state/store";
 import { isScreenPanelOpen, setScreenPanelOpen } from "@/lib/screen-panel";
 import { openScreenPanelWindow } from "@/lib/screen-panel-window";
+import { CIRCLE_BUTTON, CIRCLE_ICON, CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
+import { renderToStaticMarkup } from "react-dom/server";
+import { chooseFold, SCREEN_PANEL_TOP_ROW, ScreenBar, type ScreenBarFold } from "./ScreenPanelChrome";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const seen = vi.hoisted(() => ({ live: undefined as boolean | undefined, botId: "", docked: false }));
@@ -129,6 +132,67 @@ describe("ScreenPanel", () => {
     expect(host.querySelector("[data-pane=remote]")).not.toBeNull();
     expect(host.textContent).toContain("Ada’s remote computer");
     expect(host.querySelector("[data-screen-marks-bar]")).toBeNull();
+  });
+
+  it("draws the chat header's round controls, the app's tabs and the frame's header height (M-20261127-179)", () => {
+    const classes = (element: Element) => (element.getAttribute("class") ?? "").split(/\s+/);
+    for (const selector of ["[data-screen-panel-marks]", "[data-screen-panel-detach]", "[data-screen-panel-expand]", "[data-screen-panel-close]"]) {
+      const button = host.querySelector(selector)!;
+      expect(classes(button), selector).toEqual(expect.arrayContaining(CIRCLE_BUTTON.split(/\s+/)));
+      const svg = button.querySelector("svg")!;
+      expect({ size: Number(svg.getAttribute("width")), strokeWidth: Number(svg.getAttribute("stroke-width")) }, selector).toEqual(CIRCLE_ICON);
+    }
+    found.places = ["browser", "vm"]; found.vm = "server";
+    act(() => root.render(createElement(ScreenPanel, { bot })));
+    const tabs = [...host.querySelectorAll("[data-screen-place-select] [role=tab]")];
+    expect(tabs).toHaveLength(2);
+    for (const tab of tabs) {
+      expect(classes(tab)).toEqual(expect.arrayContaining(["rounded-full", "text-[13px]", "leading-[18px]"]));
+      expect(tab.querySelector("svg")!.getAttribute("width")).toBe("16");
+    }
+    act(() => { (host.querySelector("[data-screen-tab=vm]") as HTMLElement).click(); });
+    expect(classes(host.querySelector("[data-screen-panel-tabs]")!)).toEqual(expect.arrayContaining([...SCREEN_PANEL_TOP_ROW.split(/\s+/), "group/screenbar"]));
+  });
+
+  it("folds a row's labels only while its controls do not fit, place tabs first (ScreenBar)", () => {
+    expect(chooseFold(() => true)).toBe("none");
+    expect(chooseFold((fold) => fold !== "none")).toBe("places");
+    expect(chooseFold(() => false)).toBe("all");
+    // a stand-in layout: the row is 456px wide; the field keeps 0, 100 or 220px by fold
+    const field: Record<ScreenBarFold, number> = { none: 0, places: 100, all: 220 };
+    const fold = (rowWidth: number, min: number) => {
+      const proto = HTMLElement.prototype;
+      const client = vi.spyOn(proto, "clientWidth", "get").mockImplementation(function (this: HTMLElement) { return this.hasAttribute("data-fold") ? rowWidth : 0; });
+      const scroll = vi.spyOn(proto, "scrollWidth", "get").mockImplementation(function (this: HTMLElement) { return this.hasAttribute("data-fold") ? Math.min(rowWidth, 456) : 0; });
+      const rect = vi.spyOn(proto, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+        const row = this.closest<HTMLElement>("[data-fold]");
+        const width = rowWidth >= 900 ? 400 : field[(row?.dataset.fold ?? "none") as ScreenBarFold];
+        return { width, height: 30, x: 0, y: 0, top: 0, left: 0, right: width, bottom: 30, toJSON: () => ({}) } as DOMRect;
+      });
+      const bar = document.createElement("div");
+      document.body.append(bar);
+      const barRoot = createRoot(bar);
+      act(() => barRoot.render(createElement(ScreenBar, { min, "data-test-bar": "" } as never,
+        createElement("input", { "data-screen-bar-flex": "" }))));
+      const value = bar.querySelector("[data-test-bar]")!.getAttribute("data-fold");
+      act(() => barRoot.unmount()); bar.remove();
+      client.mockRestore(); scroll.mockRestore(); rect.mockRestore();
+      return value;
+    };
+    expect(fold(900, 160)).toBe("none");
+    expect(fold(456, 90)).toBe("places");
+    expect(fold(456, 160)).toBe("all");
+  });
+
+  it("gives the VM's Take control the top bar's 36px labelled button", async () => {
+    const { ControlSwitch } = await vi.importActual<typeof import("./ScreenPlaces")>("./ScreenPlaces");
+    for (const control of [false, true]) {
+      const html = renderToStaticMarkup(createElement(ControlSwitch, { control, onChange: () => {} }));
+      const list = /class="([^"]+)"/.exec(html)![1]!.split(/\s+/);
+      expect(list).toEqual(expect.arrayContaining(["h-9", "rounded-full", "text-[13px]", "leading-[18px]"]));
+      expect(CIRCLE_LABEL_BUTTON.split(/\s+/).every((name) => list.includes(name) || /^(bg|text|border|hover:bg)-/.test(name))).toBe(true);
+      expect(html).toMatch(/aria-label="[^"]+"/);
+    }
   });
 
   it("falls back to the first place when the picked one goes away", () => {

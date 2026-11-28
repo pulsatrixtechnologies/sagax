@@ -2,7 +2,12 @@
 // Compact docked layout (M-20261127-064): one tab row with panel actions, one
 // address row with a full-width editable URL, status pill and Take control
 // icon; the page fills the rest with no framed card and no letterbox bands.
-import type { RefObject, Dispatch, SetStateAction, ReactNode } from "react";
+// Its controls are the app's own sizes (M-20261127-179): the chat header's
+// round buttons and glyphs (CIRCLE_BUTTON, CIRCLE_ICON), the 36px labelled
+// chip (CIRCLE_LABEL) for the tabs, the holder and Take control, the app's
+// field (PLAIN_FIELD) for the address; while the address row cannot hold its
+// labels it folds them (ScreenBar), never a size and never a control.
+import type { RefObject, Dispatch, FormEvent, SetStateAction, ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Bot as BotIcon, EllipsisVertical, Globe, Hand, Loader2, LockKeyhole, Plus, RotateCw, UserRound, X } from "lucide-react";
 import { t } from "@/lib/i18n";
 import type { Bot } from "@/state/store";
@@ -17,13 +22,22 @@ import { TEACH_RECORDING_FRAME, TeachRecordingBar } from "../TeachRecordingBar";
 import type { TeachStep } from "../../../shared/teach-recording";
 import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "../menu-look";
 import { AnchoredPopover } from "../AnchoredPopover";
-import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
+import { PILL, PLAIN_FIELD, PRIMARY_PILL } from "../SettingsPrimitives";
 import { panelStageRef } from "@/lib/browser-panel-viewport";
+import { CIRCLE_ICON, CIRCLE_LABEL, CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
+import { FOLD_CHIP, FOLD_CHIP_LABEL, SCREEN_PANEL_TOOL, SCREEN_PANEL_TOP_ROW, ScreenBar } from "../ScreenPanelChrome";
 
 interface BrowserTab { tabId: string; title: string; url: string; active: boolean }
 type ViewerFrame = BrowserFrame & { viewerId: string; generation: number };
 const button = "rounded-md p-1 text-ink-secondary hover:bg-inset hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed";
 const iconBtn = `${button} flex size-7 items-center justify-center`;
+/** A page tab of the docked panel: the labelled 36px chip, the page's title in regular weight. */
+const DOCKED_TAB = cn(CIRCLE_LABEL, "max-w-48 gap-0 pl-0 pr-1 font-normal");
+/** Its select button fills the chip up to the close, globe included: the whole tab is the target. */
+const DOCKED_TAB_SELECT = "flex min-w-0 items-center gap-1 self-stretch pl-3 pr-0.5 text-left disabled:cursor-default";
+const DOCKED_TAB_IDLE = "border-transparent bg-transparent text-ink-secondary hover:bg-circle-hover hover:text-ink";
+/** Take control: the top bar's labelled button in the accent, the one action of the row. */
+const DOCKED_TAKE = cn(CIRCLE_LABEL_BUTTON, "border-transparent bg-accent text-accent-ink hover:bg-accent hover:brightness-110 disabled:opacity-50", FOLD_CHIP);
 
 /** Chrome the docked screen panel injects into the tab and address rows. */
 export type LiveBrowserDocked = {
@@ -114,19 +128,31 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
     ? "relative flex min-h-0 flex-1 flex-col overflow-hidden bg-app text-ink"
     : "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-hairline/40 bg-card text-ink";
 
+  // The docked panel draws the app's sizes; the large window keeps its own bar.
+  const tool = compact ? SCREEN_PANEL_TOOL : iconBtn;
+  const glyph = compact ? CIRCLE_ICON : { size: 15 };
   const tabsRow = (
-    <div data-browser-tabs="" className={cn("flex items-center gap-0.5 px-1.5", compact ? "min-h-9 border-b border-hairline/40" : "min-h-12 pt-1.5 px-2")}>
-      <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
+    <div data-browser-tabs="" className={compact ? SCREEN_PANEL_TOP_ROW : "flex min-h-12 items-center gap-0.5 px-2 pt-1.5"}>
+      <div className={cn("flex min-w-0 flex-1 items-center overflow-x-auto", compact ? "gap-1" : "gap-0.5")}>
         {tabs.length ? tabs.map((tab) => (
-          <div key={tab.tabId} className={cn("flex max-w-44 shrink-0 items-center gap-0.5 rounded-lg px-0.5 text-[12px]", tab.active ? "bg-inset text-ink" : "text-ink-secondary")}>
-            <Globe size={12} className="ml-1 shrink-0 opacity-60" />
-            <button className="truncate px-1 py-1.5 text-left disabled:cursor-default" disabled={!commandsReady} onClick={() => command({ type: "tab-select", tabId: tab.tabId })} title={tab.title || tab.url}>{tab.title || t("browser.tab.new")}</button>
-            <button className={button} aria-label={tab.title ? t("browser.tab.close", { title: tab.title }) : t("browser.tab.closeUntitled")} disabled={!commandsReady} onClick={() => command({ type: "tab-close", tabId: tab.tabId })}><X size={12} /></button>
+          <div key={tab.tabId} data-browser-tab="" className={compact ? cn(DOCKED_TAB, !tab.active && DOCKED_TAB_IDLE) : cn("flex max-w-44 shrink-0 items-center gap-0.5 rounded-lg px-0.5 text-[12px]", tab.active ? "bg-inset text-ink" : "text-ink-secondary")}>
+            {compact ? (
+              <button data-browser-tab-title="" className={DOCKED_TAB_SELECT} disabled={!commandsReady} onClick={() => command({ type: "tab-select", tabId: tab.tabId })} title={tab.title || tab.url}>
+                <Globe size={16} strokeWidth={1.75} className="shrink-0 opacity-60" aria-hidden="true" />
+                <span className="truncate">{tab.title || t("browser.tab.new")}</span>
+              </button>
+            ) : (
+              <>
+                <Globe size={12} className="ml-1 shrink-0 opacity-60" aria-hidden="true" />
+                <button data-browser-tab-title="" className="truncate px-1 py-1.5 text-left disabled:cursor-default" disabled={!commandsReady} onClick={() => command({ type: "tab-select", tabId: tab.tabId })} title={tab.title || tab.url}>{tab.title || t("browser.tab.new")}</button>
+              </>
+            )}
+            <button className={compact ? "ui-icon-button shrink-0 rounded-full" : button} aria-label={tab.title ? t("browser.tab.close", { title: tab.title }) : t("browser.tab.closeUntitled")} disabled={!commandsReady} onClick={() => command({ type: "tab-close", tabId: tab.tabId })}><X size={compact ? 14 : 12} strokeWidth={compact ? 1.75 : 2} /></button>
           </div>
         )) : (
-          <div className="flex items-center gap-1.5 rounded-lg bg-inset px-2 py-1 text-[12px] text-ink-secondary"><Globe size={12} />{t("browser.tab.new")}</div>
+          <div data-browser-tab="" className={compact ? cn(DOCKED_TAB, "gap-1 px-3 text-ink-secondary") : "flex items-center gap-1.5 rounded-lg bg-inset px-2 py-1 text-[12px] text-ink-secondary"}><Globe size={compact ? 16 : 12} strokeWidth={compact ? 1.75 : 2} aria-hidden="true" /><span data-browser-tab-title="">{t("browser.tab.new")}</span></div>
         )}
-        <button className={`${iconBtn} shrink-0`} disabled={!commandsReady} aria-label={t("browser.tab.new")} title={t("browser.tab.new")} onClick={() => command({ type: "tab-new" })}><Plus size={15} /></button>
+        <button className={`${tool} shrink-0`} disabled={!commandsReady} aria-label={t("browser.tab.new")} title={t("browser.tab.new")} onClick={() => command({ type: "tab-new" })}><Plus {...glyph} /></button>
       </div>
       {!compact && (
         <button ref={profilesButton} type="button" className={`${button} rounded-xl bg-inset p-2`} title={t("browser.profile.current", { name: profileName })} aria-label={t("browser.profiles.open")} aria-expanded={showProfiles} aria-haspopup="dialog" onClick={() => { handBack(); setShowProfiles((open) => !open); }}><UserRound size={16} /></button>
@@ -135,24 +161,22 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
     </div>
   );
 
-  const addressRow = (
-    <form
-      data-browser-address-row=""
-      className={cn("flex items-center gap-0.5 border-b border-hairline/40", compact ? "min-h-9 px-1.5" : "h-12 px-2")}
-      onSubmit={(e) => {
-        e.preventDefault();
-        const url = resolveAddressBarInput(address);
-        if (commandsReady && url) command({ type: "navigate", url });
-        else if (address.trim()) setError(t("browser.address.invalid"));
-      }}
-    >
-      <div className="flex shrink-0 items-center">
-        <button type="button" className={iconBtn} disabled={!commandsReady} aria-label={t("browser.nav.back")} onClick={() => command({ type: "back" })}><ArrowLeft size={15} /></button>
-        <button type="button" className={iconBtn} disabled={!commandsReady} aria-label={t("browser.nav.forward")} onClick={() => command({ type: "forward" })}><ArrowRight size={15} /></button>
-        <button type="button" className={iconBtn} disabled={!commandsReady} aria-label={t("browser.nav.reload")} onClick={() => command({ type: "reload" })}><RotateCw size={15} /></button>
+  const submitAddress = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const url = resolveAddressBarInput(address);
+    if (commandsReady && url) command({ type: "navigate", url });
+    else if (address.trim()) setError(t("browser.address.invalid"));
+  };
+  const addressContent = (
+    <>
+      <div className={cn("flex shrink-0 items-center", compact && "gap-1")}>
+        <button type="button" className={tool} disabled={!commandsReady} aria-label={t("browser.nav.back")} onClick={() => command({ type: "back" })}><ArrowLeft {...glyph} /></button>
+        <button type="button" className={tool} disabled={!commandsReady} aria-label={t("browser.nav.forward")} onClick={() => command({ type: "forward" })}><ArrowRight {...glyph} /></button>
+        <button type="button" className={tool} disabled={!commandsReady} aria-label={t("browser.nav.reload")} onClick={() => command({ type: "reload" })}><RotateCw {...glyph} /></button>
       </div>
       <input
         ref={addressInput}
+        data-screen-bar-flex=""
         aria-label={t("browser.address.label")}
         readOnly={!commandsReady}
         value={address}
@@ -161,44 +185,44 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
         onBlur={() => { urlEditing.current = false; }}
         placeholder={connected ? "about:blank" : t("browser.live.connecting")}
         spellCheck={false}
-        className={cn(
-          "min-w-0 flex-1 rounded-md bg-inset/60 px-2 py-1 text-[12px] outline-none placeholder:text-ink-secondary focus:bg-inset focus:ring-1 focus:ring-accent/50",
-          compact ? "text-left" : "mx-1 text-center focus:text-left",
-        )}
+        className={compact
+          ? cn(PLAIN_FIELD, "flex-1 text-left")
+          : "mx-1 min-w-0 flex-1 rounded-md bg-inset/60 px-2 py-1 text-center text-[12px] outline-none placeholder:text-ink-secondary focus:bg-inset focus:text-left focus:ring-1 focus:ring-accent/50"}
       />
       {compact && docked?.placeSelector}
       {compact && allowed && connected && !heldElsewhere && (
-        <span data-browser-holder={mine ? "you" : "bot"} className="flex shrink-0 items-center gap-0.5">
+        <span data-browser-holder={mine ? "you" : "bot"} className="flex shrink-0 items-center gap-1">
           <span
-            className={cn("flex max-w-[9rem] items-center gap-1 truncate rounded-full px-1.5 py-0.5 text-[10.5px]", mine ? "bg-accent/15 font-medium text-accent-text" : "bg-inset text-ink-secondary")}
+            data-browser-holder-pill=""
+            className={cn(CIRCLE_LABEL, "max-w-[11rem]", FOLD_CHIP, mine && "border-accent-border bg-accent/15 text-accent-text")}
             title={pageTitle ? `${holder} · ${pageTitle}` : holder}
           >
-            {mine ? <Hand size={11} className="shrink-0" aria-hidden="true" /> : <BotIcon size={11} className="shrink-0" aria-hidden="true" />}
-            <span className="truncate">{mine ? holder : bot.name}</span>
+            {mine ? <Hand {...CIRCLE_ICON} className="shrink-0" aria-hidden="true" /> : <BotIcon {...CIRCLE_ICON} className="shrink-0" aria-hidden="true" />}
+            <span className={cn("truncate", FOLD_CHIP_LABEL)}>{mine ? holder : bot.name}</span>
           </span>
           {mine ? (
             <button type="button" data-browser-give-back="" onClick={handBack}
-              className={iconBtn}
+              className={tool}
               aria-label={t("browser.control.giveBack")}
               title={t("browser.control.giveBack")}>
-              <BotIcon size={14} aria-hidden="true" />
+              <BotIcon {...glyph} aria-hidden="true" />
             </button>
           ) : (
             <button type="button" data-browser-take="" disabled={taking || pending} onClick={takeControl}
-              className="flex h-7 shrink-0 items-center gap-1 rounded-full bg-accent px-2 text-[11px] font-medium text-accent-ink hover:brightness-110 disabled:opacity-50"
+              className={DOCKED_TAKE}
               aria-label={t("sandboxDesktop.takeControl")}
               title={t("sandboxDesktop.takeControl")}>
-              <Hand size={12} aria-hidden="true" />
-              <span className="max-w-[7rem] truncate">{t("sandboxDesktop.takeControl")}</span>
+              <Hand {...CIRCLE_ICON} className="shrink-0" aria-hidden="true" />
+              <span className={cn("max-w-[9rem] truncate", FOLD_CHIP_LABEL)}>{t("sandboxDesktop.takeControl")}</span>
             </button>
           )}
         </span>
       )}
       {compact && (
-        <button ref={profilesButton} type="button" className={iconBtn} title={docked?.title ? `${t("browser.profile.current", { name: profileName })} · ${docked.title}` : t("browser.profile.current", { name: profileName })} aria-label={t("browser.profiles.open")} aria-expanded={showProfiles} aria-haspopup="dialog" onClick={() => { handBack(); setShowProfiles((open) => !open); }}><UserRound size={14} /></button>
+        <button ref={profilesButton} type="button" className={tool} title={docked?.title ? `${t("browser.profile.current", { name: profileName })} · ${docked.title}` : t("browser.profile.current", { name: profileName })} aria-label={t("browser.profiles.open")} aria-expanded={showProfiles} aria-haspopup="dialog" onClick={() => { handBack(); setShowProfiles((open) => !open); }}><UserRound {...glyph} /></button>
       )}
       <details className="relative shrink-0">
-        <summary ref={menuSummary} className={`${iconBtn} list-none cursor-pointer [&::-webkit-details-marker]:hidden`} aria-label={t("browser.menu.label")} title={t("browser.menu.label")}><EllipsisVertical size={15} /></summary>
+        <summary ref={menuSummary} className={`${tool} list-none cursor-pointer [&::-webkit-details-marker]:hidden`} aria-label={t("browser.menu.label")} title={t("browser.menu.label")}><EllipsisVertical {...glyph} /></summary>
         <div role="menu" aria-label={t("browser.menu.label")} className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 top-full z-20 mt-1")}>
           {compact && (
             <div role="none" className="border-b border-hairline/40 px-2.5 py-1.5 text-[11px] text-ink-secondary" title={docked?.title}>{docked?.title}</div>
@@ -222,8 +246,11 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
           }}>{t("browser.menu.restart")}</button>
         </div>
       </details>
-    </form>
+    </>
   );
+  const addressRow = compact
+    ? <ScreenBar as="form" data-browser-address-row="" onSubmit={submitAddress} className="flex min-h-12 items-center gap-1 border-b border-hairline/40 px-3 py-1.5">{addressContent}</ScreenBar>
+    : <form data-browser-address-row="" onSubmit={submitAddress} className="flex h-12 items-center gap-0.5 border-b border-hairline/40 px-2">{addressContent}</form>;
 
   const legacyHolder = !compact && (
     <div data-browser-holder={mine ? "you" : heldElsewhere ? "elsewhere" : "bot"} className="flex min-h-10 items-center gap-2 border-b border-hairline/40 px-3 py-1.5 text-[12px]">

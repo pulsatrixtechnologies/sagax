@@ -1,10 +1,14 @@
 // @vitest-environment happy-dom
 // Compact docked browser chrome (M-20261127-064): two rows, editable URL,
-// status pill, Take control, empty state, no framed card.
+// status pill, Take control, empty state, no framed card. Its sizes are the
+// app's own (M-20261127-179): pinned here by the shared classes they use.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { LiveBrowserView, type LiveBrowserViewProps } from "./BrowserPanel.tsx-parts/LiveBrowserView";
+import { CIRCLE_BUTTON, CIRCLE_ICON, CIRCLE_LABEL, CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
+import { PLAIN_FIELD } from "./SettingsPrimitives";
+import { SCREEN_PANEL_TOP_ROW } from "./ScreenPanelChrome";
 import type { Bot } from "@/state/store";
 
 vi.mock("@/lib/i18n", async (importOriginal) => {
@@ -150,5 +154,93 @@ describe("compact LiveBrowserView", () => {
     expect(html).toMatch(/value="https:\/\/example.com"/);
     expect(html).toContain("text-left");
     expect(html).not.toContain("text-center text-[12px]");
+  });
+});
+
+describe("compact LiveBrowserView sizes, the app's own (M-20261127-179)", () => {
+  const classes = (value: string | null | undefined) => (value ?? "").split(/\s+/).filter(Boolean);
+  const parse = (over: Partial<LiveBrowserViewProps> = {}) => {
+    const host = document.createElement("div");
+    host.innerHTML = renderToStaticMarkup(createElement(LiveBrowserView, base({
+      frame: { seq: 1, data: "x", viewerId: "v1", generation: 1 },
+      tabs: [{ tabId: "t1", title: "Google", url: "https://www.google.com/", active: true }, { tabId: "t2", title: "Docs", url: "https://example.com/", active: false }],
+      address: "https://www.google.com/",
+      ...over,
+    })));
+    return host;
+  };
+  const glyph = (element: Element) => {
+    const svg = element.querySelector("svg")!;
+    return { size: Number(svg.getAttribute("width")), strokeWidth: Number(svg.getAttribute("stroke-width")) };
+  };
+
+  it("draws every round control as the chat header's: CIRCLE_BUTTON with the CIRCLE_ICON glyph", () => {
+    for (const over of [{}, { control: { held: true, controlling: true, owned: true } }]) {
+      const host = parse(over);
+      const round = [...host.querySelectorAll("[data-browser-tabs] > div > button, [data-browser-address-row] button:not([data-browser-take]):not([role=menuitem]), [data-browser-address-row] summary")];
+      // + (new tab); back, forward, reload; give back while held; profiles; the menu
+      expect(round.length).toBeGreaterThanOrEqual(6);
+      for (const element of round) {
+        expect(classes(element.getAttribute("class")), element.outerHTML.slice(0, 120)).toEqual(expect.arrayContaining(classes(CIRCLE_BUTTON)));
+        expect(glyph(element)).toEqual(CIRCLE_ICON);
+      }
+    }
+  });
+
+  it("keeps the holder chip on screen in every state: its label folds, the chip never goes", () => {
+    for (const control of [{ held: false, controlling: false, owned: false }, { held: true, controlling: true, owned: true }]) {
+      const chip = parse({ control }).querySelector("[data-browser-holder-pill]")!;
+      const list = classes(chip.getAttribute("class"));
+      expect(list.some((name) => /(^|:)hidden$/.test(name))).toBe(false);
+      expect(list).toContain("group-data-[fold=all]/screenbar:w-9");
+      expect(classes(chip.querySelector("span")!.getAttribute("class"))).toContain("group-data-[fold=all]/screenbar:sr-only");
+    }
+  });
+
+  it("draws the page tabs, the holder and Take control as the 36px labelled chip, in the app's 13px type", () => {
+    const host = parse();
+    const tabs = [...host.querySelectorAll("[data-browser-tab]")];
+    expect(tabs).toHaveLength(2);
+    for (const tab of tabs) {
+      const list = classes(tab.getAttribute("class"));
+      expect(list).toEqual(expect.arrayContaining(["h-9", "rounded-full", "text-[13px]", "leading-[18px]"]));
+      expect(classes(tab.querySelector("button[aria-label]")!.getAttribute("class"))).toContain("ui-icon-button");
+      // the select button is the whole chip up to the close, globe included
+      const select = tab.querySelector("button[data-browser-tab-title]")!;
+      expect(classes(select.getAttribute("class"))).toContain("self-stretch");
+      expect(select.querySelector("svg")).not.toBeNull();
+    }
+    expect(classes(CIRCLE_LABEL)).toEqual(expect.arrayContaining(["h-9", "rounded-full", "border-circle-ring", "bg-circle", "text-[13px]", "leading-[18px]"]));
+    expect(classes(host.querySelector("[data-browser-holder-pill]")!.getAttribute("class"))).toEqual(expect.arrayContaining(classes(CIRCLE_LABEL).filter((name) => name !== "border-circle-ring" && name !== "bg-circle" && name !== "text-ink")));
+    const take = host.querySelector("[data-browser-take]")!;
+    expect(classes(take.getAttribute("class"))).toEqual(expect.arrayContaining(["h-9", "rounded-full", "text-[13px]", "bg-accent", "text-accent-ink"]));
+    expect(CIRCLE_LABEL_BUTTON.startsWith(CIRCLE_LABEL)).toBe(true);
+  });
+
+  it("uses the app's field for the address and the frame's header height for the tab row", () => {
+    const host = parse();
+    expect(classes(host.querySelector("[data-browser-address-row] input")!.getAttribute("class"))).toEqual(expect.arrayContaining(classes(PLAIN_FIELD)));
+    expect(classes(host.querySelector("[data-browser-tabs]")!.getAttribute("class"))).toEqual(expect.arrayContaining(classes(SCREEN_PANEL_TOP_ROW)));
+    expect(SCREEN_PANEL_TOP_ROW).toContain("min-h-(--app-topbar-height)");
+    const row = host.querySelector("[data-browser-address-row]")!;
+    expect(classes(row.getAttribute("class"))).toContain("group/screenbar");
+    // no fold before the row is measured: every label shows
+    expect(row.getAttribute("data-fold")).toBe("none");
+    expect(host.querySelector("[data-browser-address-row] input")!.hasAttribute("data-screen-bar-flex")).toBe(true);
+  });
+
+  it("keeps no undersized control or type in the two rows", () => {
+    for (const over of [{}, { control: { held: true, controlling: true, owned: true } }, { tabs: [] }]) {
+      const host = parse(over);
+      const rows = [...host.querySelectorAll("[data-browser-tabs], [data-browser-address-row]")].map((row) => {
+        const copy = row.cloneNode(true) as HTMLElement;
+        copy.querySelectorAll("[role=menu]").forEach((menu) => menu.remove());
+        // a tab's own close is the app's 28px icon button (ui-icon-button), its glyph 14px
+        copy.querySelectorAll("[data-browser-tab] button.ui-icon-button svg").forEach((svg) => svg.remove());
+        return copy.outerHTML;
+      }).join("");
+      expect(rows).not.toMatch(/\bsize-7\b|text-\[1[01](\.5)?px\]|text-\[12px\]|\bh-7\b/);
+      expect(rows).not.toMatch(/width="1[1-5]"/);
+    }
   });
 });

@@ -14,15 +14,15 @@ export const CIRCLE_BUTTON =
 export const CIRCLE_CLOSE_BUTTON = `${CIRCLE_BUTTON} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60`;
 export const CIRCLE_ICON = { size: 18, strokeWidth: 1.75 } as const;
 
-// A labelled indicator on the same 36px surface (the bot page's Private / Shared):
-// CIRCLE_BUTTON's height, ring and fill, widened for a label, no hover
-// since it does nothing on click.
+// A labelled indicator on the same 36px surface (the docked browser's holder
+// chip and its page tabs): CIRCLE_BUTTON's height, ring and fill, widened for
+// a label in the app's 13px control type (ui-button, PillTabs, the fields,
+// M-20261127-179), no hover since it does nothing on click.
 export const CIRCLE_LABEL =
-  "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-circle-ring bg-circle px-3 text-[12px] font-medium leading-none text-ink";
+  "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-circle-ring bg-circle px-3 text-[13px] font-medium leading-[18px] text-ink";
 
-// CIRCLE_LABEL as a button of a top bar (the bot page's Share, and the link
-// back of its sub-pages, #4078): the same pill, with a hover and the accent
-// focus ring.
+// CIRCLE_LABEL as a button of a top bar (the docked browser's Take control):
+// the same pill, with a hover and the accent focus ring.
 export const CIRCLE_LABEL_BUTTON = `${CIRCLE_LABEL} transition-colors hover:bg-circle-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 motion-reduce:transition-none`;
 
 // The same 36px circle for a control that sits on the sidebar rail (the

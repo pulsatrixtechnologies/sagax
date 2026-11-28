@@ -1251,6 +1251,15 @@ describe("a browser on this machine is not the owner", () => {
     expect(check({ host: "127.0.0.1:8799" }, "/api/health", "GET", { trust: "service" }).auth?.kind).toBe("loopback");
   });
 
+  it("names sign_in_required when the desktop mutation (stream-ticket) arrives without the owner capability (#5320)", () => {
+    const desktop = { desktopToken: "owner-token-123" };
+    const refused = check(ownUi, "/api/auth/stream-ticket", "POST", desktop);
+    expect(refused.auth).toBeNull();
+    expect(refused.status).toBe(401);
+    expect(refused.code).toBe("sign_in_required");
+    expect(check({ ...ownUi, "x-openmausbot-desktop-owner": "owner-token-123" }, "/api/auth/stream-ticket", "POST", desktop).auth?.kind).toBe("loopback");
+  });
+
   it("lets the desktop app's own window in with its owner header, on http and WebSocket alike", () => {
     const desktop = { desktopToken: "owner-token-123" };
     const owner = { "x-openmausbot-desktop-owner": "owner-token-123" };

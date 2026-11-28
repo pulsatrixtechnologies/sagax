@@ -3,7 +3,9 @@
 import { materializeEngineAccess, turnPayer } from "../engines/engine-credentials.ts";
 import { soloPiTurnAccess } from "../pi-own-model-servers-access.ts";
 import { claudeAccessUsable } from "../engines/claude-subscription-refresh.ts";
-import { renewWithCli } from "../cloud-agents/subscription-access.ts";
+import { codexOAuthFrom, renewWithCli } from "../cloud-agents/subscription-access.ts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 export type Host = Record<string, any>;
 
 /** The account a bot signs in with on an organization server, for a turn
@@ -65,7 +67,7 @@ export function engineAccessDeps(host: Host, slot: LoginSlot = "primary") {
     // #4410 / #5525: pi on the payer's Grok sign-in: access token renewed
     // through the Grok CLI's own path, read in memory only
     grokSignIn: (principalId) => grokSignInToken(host, principalId),
-    // #5524: pi / OpenCode on the payer's Codex sign-in: short access only
+    // #5524: pi / OpenCode on the payer's Codex sign-in (pi needs refresh + expires)
     codexSignIn: (principalId) => codexSignInToken(host, principalId),
   };
 }
@@ -94,8 +96,9 @@ export async function grokSignInToken(host: Host, principalId: string): Promise<
   return { accessToken: access.accessToken };
 }
 
-/** #5524: the payer's Codex sign-in as pi / OpenCode take it, or null. */
-export async function codexSignInToken(host: Host, principalId: string): Promise<{ accessToken: string; accountId?: string } | null> {
+/** #5524: the payer's Codex sign-in as pi / OpenCode take it, or null.
+ * Includes refresh + expires for pi's auth.json oauth (ephemeral home only). */
+export async function codexSignInToken(host: Host, principalId: string): Promise<{ accessToken: string; refreshToken?: string; expiresAt?: number; accountId?: string } | null> {
   const logins = host.engineLogins;
   if (!logins) return null;
   const loginDir = logins.loginDir(principalId, "codex", "primary");
@@ -105,6 +108,18 @@ export async function codexSignInToken(host: Host, principalId: string): Promise
   }
   const access = await host.readSubscriptionAccess("codex", loginDir);
   if (!claudeAccessUsable(access, Date.now())) return null;
+  // Full oauth for pi auth.json (refresh stays in the ephemeral home only)
+  let authText: string | null = null;
+  try { authText = readFileSync(join(loginDir, "auth.json"), "utf8"); } catch { /* missing */ }
+  const oauth = codexOAuthFrom(authText);
+  if (oauth) {
+    return {
+      accessToken: oauth.accessToken,
+      refreshToken: oauth.refreshToken,
+      expiresAt: oauth.expiresAt,
+      ...(oauth.accountId ? { accountId: oauth.accountId } : {}),
+    };
+  }
   return { accessToken: access.accessToken, ...(access.accountId ? { accountId: access.accountId } : {}) };
 }
 

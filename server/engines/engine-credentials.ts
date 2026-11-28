@@ -398,13 +398,22 @@ export function openCodeCodexAuthContent(accessToken: string): string {
   return JSON.stringify({ openai: { type: "oauth", access: accessToken } });
 }
 
-/** #5524: pi's auth.json entry for openai-codex oauth (OpenClaw/pi shape).
- * Access only; accountId when Codex's auth.json carried one. */
-export function piCodexAuthContent(accessToken: string, accountId?: string): string {
+/** #5524: pi's auth.json entry for openai-codex oauth. pi's FileAuthStorage
+ * requires access + refresh + expires (ms); access alone is rejected. The
+ * refresh stays in the turn's ephemeral PI_CODING_AGENT_DIR only (never logged,
+ * never returned from SubscriptionAccess). accountId when Codex carried one. */
+export function piCodexAuthContent(
+  accessToken: string,
+  refreshToken: string,
+  expiresAtMs: number,
+  accountId?: string,
+): string {
   return JSON.stringify({
     "openai-codex": {
       type: "oauth",
       access: accessToken,
+      refresh: refreshToken,
+      expires: expiresAtMs,
       ...(accountId ? { accountId } : {}),
     },
   });
@@ -687,10 +696,14 @@ export interface ClaudeSignInToken {
   accessToken: string;
 }
 
-/** #5524: a person's Codex sign-in as pi / OpenCode take it: the short
- * access token only, never the refresh token. */
+/** #5524: a person's Codex sign-in as pi / OpenCode take it. OpenCode uses
+ * access only; pi's auth.json oauth also needs refresh + expires (written
+ * only into the turn's ephemeral engine home, never logged). */
 export interface CodexSignInToken {
   accessToken: string;
+  refreshToken?: string;
+  /** Epoch ms; required with refreshToken for pi. */
+  expiresAt?: number;
   accountId?: string;
 }
 
@@ -772,8 +785,9 @@ async function accountSignInEnvironment(
     }
     if (plan.codexAccount) {
       const codex = await deps.codexSignIn?.(principalId).catch(() => null) ?? null;
-      if (codex?.accessToken) {
-        environment[PI_AUTH_CONTENT_ENV] = piCodexAuthContent(codex.accessToken, codex.accountId);
+      // pi rejects oauth without refresh + expires; skip rather than write a broken file
+      if (codex?.accessToken && codex.refreshToken && typeof codex.expiresAt === "number" && Number.isFinite(codex.expiresAt)) {
+        environment[PI_AUTH_CONTENT_ENV] = piCodexAuthContent(codex.accessToken, codex.refreshToken, codex.expiresAt, codex.accountId);
       }
     }
   }

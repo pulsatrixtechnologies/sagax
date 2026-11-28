@@ -673,7 +673,10 @@ describe("#4410 / #5525: pi runs xAI models on the payer's own Grok sign-in", ()
 describe("#5524: pi runs OpenAI models on the payer's own Codex sign-in", () => {
   const BOB_PID = BOB.toLowerCase();
   const TOKEN = "sk-test-codex-access-token-000000000000000001";
-  const deps = (signIn: (principalId: string) => Promise<{ accessToken: string; accountId?: string } | null>, key: (sub: string, provider: ModelProvider) => ProviderKeyResult = () => ({ ok: false, error: "no_key" })) => ({
+  const REFRESH = "sk-test-codex-refresh-token-0000000000000001";
+  const EXPIRES = 1_900_000_000_000;
+  const oauth = (accountId?: string) => ({ accessToken: TOKEN, refreshToken: REFRESH, expiresAt: EXPIRES, ...(accountId ? { accountId } : {}) });
+  const deps = (signIn: (principalId: string) => Promise<ReturnType<typeof oauth> | { accessToken: string } | null>, key: (sub: string, provider: ModelProvider) => ProviderKeyResult = () => ({ ok: false, error: "no_key" })) => ({
     dataDir: "/data",
     resolveKey: async (sub: string, provider: ModelProvider) => key(sub, provider),
     invalidate: () => {},
@@ -692,32 +695,40 @@ describe("#5524: pi runs OpenAI models on the payer's own Codex sign-in", () => 
       .toEqual({ ok: false, reason: "no_access", cause: "no_credentials", payer: "speaker", payerPrincipalId: BOB });
   });
 
-  it("hands the short token as PI_AUTH_CONTENT openai-codex oauth in the payer's own pi home", async () => {
+  it("hands openai-codex oauth (access+refresh+expires) as PI_AUTH_CONTENT in the payer's own pi home", async () => {
     const inp = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/codex`] });
-    const out = await materializeEngineAccess(inp, resolveEngineAccess(inp), deps(async () => ({ accessToken: TOKEN, accountId: "acct_test" })));
+    const out = await materializeEngineAccess(inp, resolveEngineAccess(inp), deps(async () => oauth("acct_test")));
     expect(out).toEqual({
       ok: true,
       plan: expect.objectContaining({ via: "subscription", codexAccount: true }),
       access: {
         via: "subscription",
         identity: `subscription:${BOB_PID}:codex`,
-        environment: { PI_AUTH_CONTENT: piCodexAuthContent(TOKEN, "acct_test") },
+        environment: { PI_AUTH_CONTENT: piCodexAuthContent(TOKEN, REFRESH, EXPIRES, "acct_test") },
         engineHome: join("/data", "principals", BOB_PID, "piAgent-key"),
       },
     });
     if (out.ok) {
       expect(out.access.identity).not.toContain(TOKEN);
+      expect(out.access.identity).not.toContain(REFRESH);
       expect(out.access.environment?.PI_AUTH_CONTENT).toContain('"openai-codex"');
+      expect(out.access.environment?.PI_AUTH_CONTENT).toContain('"refresh"');
       expect(out.access.environment?.PI_AUTH_CONTENT).toContain(TOKEN);
     }
   });
 
+  it("skips PI_AUTH_CONTENT when the Codex sign-in has no refresh (pi would reject it)", async () => {
+    const inp = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/codex`] });
+    const out = await materializeEngineAccess(inp, resolveEngineAccess(inp), deps(async () => ({ accessToken: TOKEN })));
+    expect(out).toMatchObject({ ok: false, reason: "no_access" });
+  });
+
   it("adds the sign-in beside the payer's keys only when no OpenAI key of theirs pays Codex", async () => {
     const keyed = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/codex`], keys: ["SUB-BOB/xai"] });
-    const out = await materializeEngineAccess(keyed, resolveEngineAccess(keyed), deps(async () => ({ accessToken: TOKEN }), () => ({ ok: true, key: "xai-test-bob-000000000001", fingerprint: "fx" })));
-    expect(out).toMatchObject({ ok: true, access: { via: "speaker-key", identity: `speaker-key:${BOB_PID}:fx+codex`, environment: { XAI_API_KEY: "xai-test-bob-000000000001", PI_AUTH_CONTENT: piCodexAuthContent(TOKEN) } } });
+    const out = await materializeEngineAccess(keyed, resolveEngineAccess(keyed), deps(async () => oauth(), () => ({ ok: true, key: "xai-test-bob-000000000001", fingerprint: "fx" })));
+    expect(out).toMatchObject({ ok: true, access: { via: "speaker-key", identity: `speaker-key:${BOB_PID}:fx+codex`, environment: { XAI_API_KEY: "xai-test-bob-000000000001", PI_AUTH_CONTENT: piCodexAuthContent(TOKEN, REFRESH, EXPIRES) } } });
     const both = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/codex`], keys: ["SUB-BOB/openai"] });
-    const keyOnly = await materializeEngineAccess(both, resolveEngineAccess(both), deps(async () => ({ accessToken: TOKEN }), () => ({ ok: true, key: "sk-test-openai-bob-000001", fingerprint: "fo" })));
+    const keyOnly = await materializeEngineAccess(both, resolveEngineAccess(both), deps(async () => oauth(), () => ({ ok: true, key: "sk-test-openai-bob-000001", fingerprint: "fo" })));
     expect(keyOnly).toMatchObject({ ok: true, access: { environment: { OPENAI_API_KEY: "sk-test-openai-bob-000001" } } });
     if (keyOnly.ok) expect(keyOnly.access.environment?.PI_AUTH_CONTENT).toBeUndefined();
   });

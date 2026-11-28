@@ -211,7 +211,10 @@ describe("egress gate", () => {
   // upstream #4608: a public name usually resolves to IPv6 and IPv4; a host
   // with no IPv6 route must still reach the IPv4 answer.
   it("reaches the next address when the first family cannot route", async () => {
-    const reachable = NodeNet.createServer((socket) => socket.end("reached"));
+    const reachable = NodeNet.createServer((socket) => {
+      socket.on("error", () => {});
+      socket.end("reached");
+    });
     await new Promise<void>((resolve) => reachable.listen(0, "127.0.0.1", resolve));
     const reachablePort = (reachable.address() as NodeNet.AddressInfo).port;
     // The name is this machine's own, as in the test above, so the loopback answer is a place to connect to.
@@ -233,7 +236,11 @@ describe("egress gate", () => {
   });
 
   it("tries each checked address in turn: one that never answers does not hold up the next", async () => {
-    const reachable = NodeNet.createServer((socket) => socket.end("reached"));
+    // Own accepted-socket errors: a client that destroys mid-close can RST (#5473).
+    const reachable = NodeNet.createServer((socket) => {
+      socket.on("error", () => {});
+      socket.end("reached");
+    });
     await new Promise<void>((resolve) => reachable.listen(0, "127.0.0.1", resolve));
     const reachablePort = (reachable.address() as NodeNet.AddressInfo).port;
     const started = Date.now();
@@ -241,6 +248,7 @@ describe("egress gate", () => {
     const socket = await connectChecked(reachablePort, [{ address: "192.0.2.1", family: 4 }, { address: "127.0.0.1", family: 4 }], 50);
     expect(socket.remoteAddress).toBe("127.0.0.1");
     expect(Date.now() - started).toBeLessThan(2_000);
+    socket.on("error", () => {});
     socket.destroy();
     await new Promise<void>((resolve) => reachable.close(() => resolve()));
   });

@@ -217,7 +217,7 @@ export function RecordEntryForm({ fields, submitLabel, onSubmit, onCancel, extra
                   onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit(); } }} />;
               case "choice":
                 return <select id={fieldId} autoFocus={index === 0} required={field.required} value={typeof value === "string" ? value : ""} className={INPUT} onChange={(event) => set(field.key, event.target.value)}>
-                  {!field.required && <option value="">{t("recordCard.edit.notSet")}</option>}
+                  {field.required ? <option value="" disabled>{t("recordWindow.choose")}</option> : <option value="">{t("recordCard.edit.notSet")}</option>}
                   {field.choices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
                 </select>;
               case "file":

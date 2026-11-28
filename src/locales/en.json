@@ -15800,6 +15800,7 @@
   "recordWindow.removeAsk": "Remove it?",
   "recordWindow.removeConfirm": "Yes, remove {name}",
   "recordWindow.cancel": "Cancel",
+  "recordWindow.choose": "Choose…",
   "recordWindow.save": "Save",
   "recordWindow.saveFailed": "The change could not be saved.",
   "recordWindow.notTaken": "Your console does not take this change yet.",

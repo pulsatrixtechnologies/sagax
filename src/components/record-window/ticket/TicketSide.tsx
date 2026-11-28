@@ -15,6 +15,7 @@ import { Building2, ChevronRight } from "lucide-react";
 import { FieldValue, PersonLine, RecordRefChip, ROOMY_FIELD_SELECT, ROOMY_FIELD_UNSET, useOpenRef, useRecordEdits } from "@/components/RecordCard";
 import { RecordFieldSelect } from "@/components/RecordFieldSelect";
 import { RecordAvatar } from "@/components/record-window/RecordBlocks";
+import { RecordName } from "./parts";
 import { activeLocale, t } from "@/lib/i18n";
 import { formatAbsolute, formatFull, formatLateness, formatRelative } from "@/lib/record-card-format";
 import type { RecordCard as Card, RecordField, RecordRef } from "../../../../shared/record-cards";
@@ -53,10 +54,9 @@ function Value({ field, slot, label, now, tz }: { field?: RecordField; slot: str
 }
 
 function Person({ name, personRef, detail }: { name: string; personRef?: RecordRef; detail?: string }) {
-  const open = useOpenRef(personRef);
   return (
     <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[13px] leading-[18px] text-popover-ink-secondary">
-      {personRef && open ? <RecordRefChip name={name} refTo={personRef} onOpen={open} /> : <span dir="auto" className="break-words">{name}</span>}
+      <RecordName name={name} recordRef={personRef} />
       {detail && <span dir="ltr" className="whitespace-nowrap [unicode-bidi:isolate]">· {detail}</span>}
     </span>
   );

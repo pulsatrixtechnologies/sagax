@@ -59,6 +59,11 @@ export function RecordLink({ record, draftId, children }: { record: RecordRef; d
   const text = label && !isGuid(label) ? label : kindName;
   const productInfo = product ? { name: product.name, ...(product.icon?.url ? { iconUrl: product.icon.url } : {}) } : undefined;
   const chipName = t(product ? "recordCard.chipName" : "recordCard.chipNameBare", { kind: kindName, number: text, product: product?.name ?? "" });
+  // Schedule me and Dispatch the ticket go to the conversation the record was named in; in a room, to the
+  // person's Primary Bot; with neither, they are not offered (nothing would take them)
+  const [surface, surfaceBot, surfaceThread] = (draftId ?? "").split(":");
+  const askTo = surface === "bot" && surfaceBot ? surfaceBot : store?.state.bots.find((one) => one.chiefOfStaff && !one.hidden)?.id;
+  const askBot = store && askTo ? (text: string) => store.dispatch({ type: "send", botId: askTo, text, ...(surface === "bot" && surfaceThread ? { threadId: surfaceThread } : {}) }) : undefined;
   // a console that cannot serve cards: the chip reads as plain words. The same
   // button stays mounted, so an open card and the focus are not lost under it.
   const plain = known.miss?.state === "unavailable";
@@ -84,12 +89,7 @@ export function RecordLink({ record, draftId, children }: { record: RecordRef; d
           onAsk={draftId ? (ref, words) => { close(); appendComposerDraft(draftId, `${recordMarkdown(words, ref)} `); setTimeout(() => focusComposer(), 0); } : undefined}
           onConnect={store ? () => { close(); store.dispatch({ type: "togglePlugins", open: true, surface: "apps" }); } : undefined}
           onSignIn={() => { void signInAgainPath().then((path) => { if (path) window.location.assign(path); }); }}
-          onBotAsk={store ? (text) => {
-            // the conversation the record was named in; in a room, the person's Primary Bot
-            const [surface, botId, threadId] = (draftId ?? "").split(":");
-            const bot = surface === "bot" && botId ? botId : store.state.bots.find((one) => one.chiefOfStaff && !one.hidden)?.id;
-            if (bot) store.dispatch({ type: "send", botId: bot, text, ...(surface === "bot" && threadId ? { threadId } : {}) });
-          } : undefined}
+          onBotAsk={askBot}
         />
       )}
     >

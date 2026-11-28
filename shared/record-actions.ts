@@ -139,7 +139,12 @@ export function parseRecordAction(body: unknown): RecordAction | null {
   for (const [key, value] of Object.entries(given as Record<string, unknown>)) {
     const rule = shape.fields[key];
     if (!rule) return null;
-    if (value === undefined || value === "") continue;
+    if (value === undefined) continue;
+    if (value === "") {
+      // a change may empty a text that may be empty (a time entry's note); anything else empty is left out
+      if (shape.id && rule.type === "text" && !rule.min) set[key] = "";
+      continue;
+    }
     const clean = valid(rule, value);
     if (clean === undefined) return null;
     set[key] = clean;

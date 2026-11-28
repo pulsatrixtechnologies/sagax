@@ -70,6 +70,17 @@ function consoleCode(body: unknown): string | undefined {
 export const RECORD_CARD_ROUTE = /^\/api\/me\/records\/([^/]{1,128})\/([^/]{1,128})\/([^/]{1,300})(\/detail)?$/;
 const RECORD_DETAIL_WRITE_ROUTE = /^\/api\/me\/records\/([^/]{1,128})\/([^/]{1,128})\/([^/]{1,300})(\/detail)$/;
 
+/** What a rule reads of a read or a write: the record, and for a write what it is, the entry it names and what it sets (a file by its name and size, never its bytes). */
+export function recordRuleInput(ref: RecordRef, change?: RecordWrite): Record<string, unknown> {
+  if (!change) return { kind: ref.kind, id: ref.id };
+  if ("action" in change) {
+    const { base64, ...set } = change.set ?? {};
+    return { kind: ref.kind, id: ref.id, action: actionVerb(change), entry: change.action, ...(change.id ? { entryId: change.id } : {}), set: { ...set, ...(typeof base64 === "string" ? { bytes: Math.floor(base64.length * 3 / 4) } : {}) } };
+  }
+  // the title is written as text, every other field as the id of a choice
+  return { kind: ref.kind, id: ref.id, action: "update", set: { [change.field]: change.field === RECORD_TITLE_FIELD ? change.value : { id: change.value } } };
+}
+
 /** The organization's decision on a person's read of one record. */
 export type RecordReadRule = { kind: "none" } | { kind: "deny"; rule: { id: string; text: string } };
 
@@ -83,17 +94,7 @@ export function recordReadOrgRule(rules: readonly CustomRule[], ref: RecordRef, 
   const org = rules.filter((rule) => rule.org === true && rule.enabled && rule.behavior === "deny");
   if (!org.length) return { kind: "none" };
   const tool = `${ref.product}_${change ? "tickets_write" : "query"}`;
-  const input = (() => {
-    if (!change) return { kind: ref.kind, id: ref.id };
-    if ("action" in change) {
-      // an action reads as a write of that product: what it is, the entry it names and what it sets (a file by its name and size, never its bytes)
-      const { base64, ...set } = change.set ?? {};
-      return { kind: ref.kind, id: ref.id, action: actionVerb(change), entry: change.action, ...(change.id ? { entryId: change.id } : {}), set: { ...set, ...(typeof base64 === "string" ? { bytes: Math.floor(base64.length * 3 / 4) } : {}) } };
-    }
-    // the title is written as text, every other field as the id of a choice
-    return { kind: ref.kind, id: ref.id, action: "update", set: { [change.field]: change.field === RECORD_TITLE_FIELD ? change.value : { id: change.value } } };
-  })();
-  const facts = factsForCall({ tool, mcpTool: `mcp__perspicax__${tool}`, input: JSON.stringify(input), hints: { readOnly: !change } }, home);
+  const facts = factsForCall({ tool, mcpTool: `mcp__perspicax__${tool}`, input: JSON.stringify(recordRuleInput(ref, change)), hints: { readOnly: !change } }, home);
   if (!facts.products.includes(ref.product)) facts.products.push(ref.product);
   const decision = evaluateCustomRules(org, facts, {
     products: [{ id: ref.product, ...(productName ? { name: productName } : {}) }],

@@ -19683,7 +19683,8 @@
       "recordWindow.attachments.open": "f687d18152a5b541e172a5468106160deb5dd30fdee78ecb4596cdc835a4c013",
       "recordWindow.attachments.openShort": "ed077f3d8125d60dca1979c7133601bd187d47c73ed9975028f677e49e709942",
       "recordWindow.schedule.range": "c72e51fdcb01a6213c788a9ca09ff2747acff350f40634bd0e56feb477e1b1e8",
-      "recordWindow.notes.writtenRest": "5e39bf0533e621f17665d13f64f13b454d8b94bc45ad231eb93e226425b5f3a9"
+      "recordWindow.notes.writtenRest": "5e39bf0533e621f17665d13f64f13b454d8b94bc45ad231eb93e226425b5f3a9",
+      "recordWindow.choose": "7ca41615c19be38d63b5defd85e2db57712e18014c8d9e985f449245c0fdabc4"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

@@ -15785,6 +15785,7 @@
   "recordWindow.removeAsk": "Le retirer ?",
   "recordWindow.removeConfirm": "Oui, retirer {name}",
   "recordWindow.cancel": "Annuler",
+  "recordWindow.choose": "Choisir…",
   "recordWindow.save": "Enregistrer",
   "recordWindow.saveFailed": "Impossible d’enregistrer la modification.",
   "recordWindow.notTaken": "Ta console ne fait pas encore cette modification.",

@@ -276,6 +276,17 @@ describe("the shared blocks (D-20261127-009)", () => {
     expect(cancel).toHaveBeenCalled();
   });
 
+  it("starts a required choice on a disabled \"Choose\" so even the only choice can be picked", async () => {
+    const submit = vi.fn(async () => {});
+    act(() => root.render(createElement(RecordEntryForm, { fields: [{ key: "configuration", label: "Configuration", kind: "choice", required: true, choices: [{ value: "31", label: "Poste du comptoir" }] }], submitLabel: "Ajouter", onSubmit: submit, onCancel: () => {} })));
+    const select = host.querySelector<HTMLSelectElement>("select")!;
+    expect([...select.options].map((option) => [option.textContent, option.disabled])).toEqual([["Choisir…", true], ["Poste du comptoir", false]]);
+    expect(host.querySelector<HTMLButtonElement>("[data-record-form-submit]")!.disabled).toBe(true);
+    act(() => { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, "31"); select.dispatchEvent(new Event("change", { bubbles: true })); });
+    await act(async () => host.querySelector<HTMLButtonElement>("[data-record-form-submit]")!.click());
+    expect(submit).toHaveBeenCalledWith({ configuration: "31" });
+  });
+
   type Row = { id: string; who: string; when: string };
   const columns: RecordColumn<Row>[] = [
     { id: "who", label: "Qui", width: 160, text: (row) => row.who },

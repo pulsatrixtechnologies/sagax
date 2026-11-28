@@ -60,6 +60,7 @@ function Note({ note, detail }: { note: TicketNote; detail: RecordDetail }) {
   const id = note.id;
   if (editing && id) {
     return (
+      <li className="min-w-0">
       <RecordEntryForm
         data-record-note-edit=""
         fields={[
@@ -73,6 +74,7 @@ function Note({ note, detail }: { note: TicketNote; detail: RecordDetail }) {
           setEditing(false);
         }}
       />
+      </li>
     );
   }
   return (

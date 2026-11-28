@@ -123,6 +123,8 @@ function PlanForm({ kind, row, detail, onDone }: { kind: RecordPlanKind; row?: P
     const set: Record<string, string> = { kind };
     // a change sends only what the person changed; an addition what she filled
     for (const [key, value] of Object.entries(values)) if (typeof value === "string" && value && (!row || value !== initial[key])) set[key] = value;
+    // a change of nothing writes nothing
+    if (row && Object.keys(set).length === 1) { onDone(); return; }
     await detail.write(row?.id ? { action: "schedule.update", id: row.id, set } : { action: "schedule.add", set });
     onDone();
   };

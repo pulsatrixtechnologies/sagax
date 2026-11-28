@@ -10,7 +10,7 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import type { CustomRule } from "../../shared/custom-rules.ts";
 import type { PersonProductsCall } from "../perspicax/person-products.ts";
 import { createRecordCardsClient, recordCardPath } from "../perspicax/record-cards.ts";
-import { createRecordCardsRoutes, fieldChange, recordReadOrgRule, recordWrite, type RecordCardsRouteDeps, type RecordReadRule } from "./record-cards.ts";
+import { createRecordCardsRoutes, fieldChange, recordReadOrgRule, recordRuleInput, recordWrite, type RecordCardsRouteDeps, type RecordReadRule } from "./record-cards.ts";
 import { PASS } from "./table.ts";
 
 const REF = { product: "nimbus_desk", kind: "ticket", id: "481516" };
@@ -222,6 +222,8 @@ describe("the record window's actions", () => {
       { action: "configuration.add", set: { configuration: "900" } },
       { action: "attachment.add", set: { name: "test.txt", content_type: "text/plain", base64: "UHJpbnQ=" } },
       { action: "note.remove", id: "77" },
+      // a change may empty a note that may be empty
+      { action: "time.update", id: "88", set: { note: "" } },
     ];
     for (const ask of asks) expect((await h.request(PATH + "/detail", ADA, "POST", ask)).status, ask.action).toBe(200);
     expect(h.calls.map((call) => call.body)).toEqual([
@@ -234,6 +236,7 @@ describe("the record window's actions", () => {
       { action: "configuration.add", set: { configuration: "900" } },
       { action: "attachment.add", set: { name: "test.txt", content_type: "text/plain", base64: "UHJpbnQ=" } },
       { action: "note.remove", id: "77", set: {} },
+      { action: "time.update", id: "88", set: { note: "" } },
     ]);
     expect(new Set(h.calls.map((call) => `${call.method} ${call.token}`))).toEqual(new Set(["POST token-of-p-ada"]));
   });
@@ -273,6 +276,10 @@ describe("the record window's actions", () => {
     expect(recordReadOrgRule([rule], REF, "Nimbus Desk", undefined, note).kind).toBe("deny");
     const reading = { ...rule, when: "lire Nimbus Desk" };
     expect(recordReadOrgRule([reading], REF, "Nimbus Desk", undefined, note).kind).toBe("none");
+    // a file is read by its name and size, never its bytes
+    const file = recordWrite({ action: "attachment.add", set: { name: "test.txt", base64: "UHJpbnQ=" } })!;
+    expect(recordRuleInput(REF, file)).toEqual({ kind: "ticket", id: "481516", action: "create", entry: "attachment.add", set: { name: "test.txt", bytes: 6 } });
+    expect(JSON.stringify(recordRuleInput(REF, file))).not.toContain("UHJpbnQ=");
     const denied = harness({ rule: { kind: "deny", rule: { id: "o1", text: "rule" } } });
     const answer = await denied.request(PATH + "/detail", ADA, "POST", { action: "time.remove", id: "88" });
     expect(answer.status).toBe(403);

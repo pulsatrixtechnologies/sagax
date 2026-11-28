@@ -90,10 +90,11 @@ describe("every route of the server is classed (#4471)", () => {
     expect(unclassedForms(any, judgeRoute(any, routeSamples(any.kind, any.route)!).scopes)).toEqual(["ANY /api/me/nothing-here"]);
   });
 
-  // the three routes the branch probe found falling to admin in silence
+  // desktop-bridge routes are the person's own computer, never admin by default
   it.each([
     ["POST", "/api/desktop-bridge/00000000-0000-0000-0000-000000000000/progress"],
     ["POST", "/api/desktop-bridge/00000000-0000-0000-0000-000000000000/mac-apps"],
+    ["POST", "/api/desktop-bridge/00000000-0000-0000-0000-000000000000/local-models"],
     ["POST", "/api/me/desktop-bridge/computers/access"],
   ])("opens the person's own desktop route %s %s", (method, path) => {
     expect(requiredScope(method, path, ORG)).toBe("client");

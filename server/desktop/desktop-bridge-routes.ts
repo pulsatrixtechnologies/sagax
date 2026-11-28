@@ -117,14 +117,17 @@ export function createDesktopBridgeRoutes(deps: {
   phones?: (person: string) => Array<{ name: string; platform: string; lastSeenAt: number; online: boolean }>;
 }): RouteHandler {
   return async ({ req, res, path, method, auth, json, readBody }) => {
+    // Organization and solo hosted workspaces both offer the bridge (#4856).
+    // The org probe still gets a quiet 200 so the web app can tell solo from org.
+    // Keep this GET check away from LOCAL_MODELS_PUBLISH.exec: the route
+    // inventory binds nearby method === guards to that constant (#5585).
+    if (!deps.organization() && method === "GET" && path === "/api/me/desktop-bridge" && req.headers["x-sagax-org-probe"] === "1") {
+      res.setHeader("cache-control", "no-store");
+      return json(res, 200, { offered: true });
+    }
     const publishMatch = LOCAL_MODELS_PUBLISH.exec(path);
     if (path !== "/api/me/desktop-bridge" && path !== "/api/desktop-bridge/connect" && path !== LOCAL_VM_ROUTE && !COMPUTER_ROUTE.test(path) && path !== LOCAL_MODELS_ROUTE && !publishMatch && !ID_ROUTE.test(path)) return PASS;
     res.setHeader("cache-control", "no-store");
-    // Organization and solo hosted workspaces both offer the bridge (#4856).
-    // The org probe still gets a quiet 200 so the web app can tell solo from org.
-    if (!deps.organization() && method === "GET" && path === "/api/me/desktop-bridge" && req.headers["x-sagax-org-probe"] === "1") {
-      return json(res, 200, { offered: true });
-    }
     // Organization: Pulsatrix principal required, same key as before (#4856 review).
     // Solo paired workspace: personKey (principal or legacy hashed session/email).
     const person = auth.kind === "session"

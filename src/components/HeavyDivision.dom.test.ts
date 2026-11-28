@@ -218,8 +218,10 @@ describe("the division in the chat's row", () => {
     });
     await settle();
     expect(pile()).toHaveLength(8);
-    // nothing fades under reduced motion: the division is gone at once
+    // nothing fades under reduced motion: the division is gone at once, and its clock with it
     expect($("[data-heavy-division]")).toBeNull();
+    pump(1);
+    expect(frames).toHaveLength(0);
   });
 
   it("the bot's own colour, a free one too, is the cell that divides and every expert's", async () => {

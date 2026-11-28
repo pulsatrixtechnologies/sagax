@@ -199,8 +199,8 @@ export function RoomMessageItem({
     ) : m.kind === "activity" && m.tool ? (
       roomActivityVisible(m, showToolCalls) ? (
         m.dataResult ? <DataResultChip message={m} /> : isStatusActivity(m) ? (
-          // a Heavy run's experts are the bot that ran it (M-20261127-178)
-          <HeavyLeaderContext value={state.bots.find((candidate) => candidate.id === m.from?.botId) ?? null}><StatusActivityRow message={m} /></HeavyLeaderContext>
+          // a Heavy run's experts are the room's bot that ran it, whoever owns it (M-20261127-178)
+          <HeavyLeaderContext value={memberOf(m.from?.botId) ?? null}><StatusActivityRow message={m} /></HeavyLeaderContext>
         ) : <RoomToolChip message={m} roomId={group.id} live={liveTools.has(m.id)} />
       ) : null
     ) : m.kind === "screen" ? (

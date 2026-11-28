@@ -448,8 +448,11 @@ called from `startTurn` before the leader's prompt is built.
     run goes) every step lands at once.
   - The clock stops when the row leaves the screen, when the window is
     hidden and once nothing moves (a finished row asks for no frame and has
-    no filter). While the run goes the cells breathe at 30 frames a second.
-    Measured by `scripts/capture/heavy-division.mjs --measure`.
+    no filter). While the cells divide they breathe at 30 frames a second;
+    once the pile has closed up the division leaves the row (after its 600 ms
+    fade) and the pile is the bot's own small avatars, which live as that
+    avatar does. Measured by `scripts/capture/heavy-division.mjs --measure`
+    (the division, then the pile).
   - It replaces the orbit of #5090 on the desktop (D-20261126-022): the
     phone keeps its own until its lot. Who speaks still reads in the live
     line per expert, and the round's kind in the header.

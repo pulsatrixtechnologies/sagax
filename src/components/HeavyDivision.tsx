@@ -188,7 +188,7 @@ export interface HeavyDivisionProps {
   art: DivisionArt;
   /** How many experts the run has now; none while the leader still picks its team. */
   count: number;
-  /** The run is live: the cells divide, then breathe. Off draws the finished pile. */
+  /** The run is live: the cells divide, then breathe until the row puts the bot's avatars in their place. Off draws the finished pile. */
   running: boolean;
   /** The run's own id (its message): a division plays once per run. */
   runId: string;

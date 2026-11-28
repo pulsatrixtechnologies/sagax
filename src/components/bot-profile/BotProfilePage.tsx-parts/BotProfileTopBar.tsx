@@ -97,7 +97,7 @@ export function BotProfileTopBar({
                 CIRCLE_CLOSE_BUTTON,
                 // Visible on banner hover (group-hover on the scroll area) or
                 // while the panel is open; always reachable by keyboard focus.
-                !bannerEditOpen && "opacity-0 group-hover/banner:opacity-100 focus-visible:opacity-100",
+                !bannerEditOpen && "opacity-0 group-hover/banner:opacity-100 focus-visible:opacity-100 touch:opacity-100",
               )}
             >
               <Images {...CIRCLE_ICON} aria-hidden="true" />

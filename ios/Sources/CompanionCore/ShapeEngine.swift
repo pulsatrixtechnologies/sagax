@@ -137,33 +137,88 @@ public enum ShapeMath {
         path.closeSubpath()
     }
 
-    /// A closed curve from the desktop's path string (two-decimal cubic segments).
+    /// A closed cubic path from the desktop's `eyeMarkup` string (`M` / `C` / `Z`).
+    /// Reads each segment as written: `move` at `M`, one `addCurve` per `C`,
+    /// `closeSubpath` at `Z`. No re-smoothing. A malformed string draws nothing.
     public static func smoothClosedPath(_ d: String, into path: CGMutablePath) {
         guard !d.isEmpty else { return }
-        // Parse: M x y C c1x c1y c2x c2y toX toY Z
-        // Handle letter-number concatenation (M0, C10, Z)
-        let regex = try! NSRegularExpression(pattern: "([A-Z])|(-?[0-9]*\\.?[0-9]+)", options: [])
-        let rawTokens: [Double] = regex.matches(in: d, range: NSRange(d.startIndex..., in: d))
-            .compactMap { match in
-                let s = String(d[Range(match.range, in: d)!])
-                if s == "M" || s == "C" || s == "Z" { return nil }
-                return Double(s)
+        let scratch = CGMutablePath()
+        var numbers: [CGFloat] = []
+        var command: Character?
+        var started = false
+        var closed = false
+        var abandoned = false
+
+        func flush() {
+            guard let command else { return }
+            switch command {
+            case "M":
+                guard numbers.count >= 2 else { abandoned = true; return }
+                scratch.move(to: CGPoint(x: numbers[0], y: numbers[1]))
+                started = true
+            case "C":
+                guard started, numbers.count >= 6, numbers.count % 6 == 0 else { abandoned = true; return }
+                var i = 0
+                while i + 5 < numbers.count {
+                    scratch.addCurve(
+                        to: CGPoint(x: numbers[i + 4], y: numbers[i + 5]),
+                        control1: CGPoint(x: numbers[i], y: numbers[i + 1]),
+                        control2: CGPoint(x: numbers[i + 2], y: numbers[i + 3])
+                    )
+                    i += 6
+                }
+            default:
+                abandoned = true
             }
-        guard rawTokens.count >= 2 else { return }
-        // First pair is start (M x y), rest are C segments: c1x c1y c2x c2y toX toY
-        var points: [CGPoint] = [CGPoint(x: rawTokens[0], y: rawTokens[1])]
-        var i = 2
-        while i + 5 < rawTokens.count {
-            points.append(CGPoint(x: rawTokens[i], y: rawTokens[i + 1]))   // control1
-            points.append(CGPoint(x: rawTokens[i + 2], y: rawTokens[i + 3])) // control2
-            points.append(CGPoint(x: rawTokens[i + 4], y: rawTokens[i + 5])) // to
-            i += 6
+            numbers.removeAll(keepingCapacity: true)
         }
-        // If we have leftover toX toY
-        if i + 1 < rawTokens.count {
-            points.append(CGPoint(x: rawTokens[i], y: rawTokens[i + 1]))
+
+        var token = ""
+        func takeNumber() {
+            if token.isEmpty { return }
+            guard let value = Double(token) else { abandoned = true; token = ""; return }
+            numbers.append(CGFloat(value))
+            token = ""
         }
-        smoothClosedPath(points, into: path)
+
+        for character in d {
+            if abandoned { break }
+            if character.isNumber || character == "." || character == "e" || character == "E" {
+                token.append(character)
+            } else if character == "-" {
+                if token.hasSuffix("e") || token.hasSuffix("E") {
+                    token.append(character)
+                } else {
+                    takeNumber()
+                    token = "-"
+                }
+            } else if character == " " || character == "," || character == "\n" || character == "\t" {
+                takeNumber()
+            } else if character == "Z" || character == "z" {
+                takeNumber()
+                flush()
+                if abandoned { break }
+                guard started else { abandoned = true; break }
+                scratch.closeSubpath()
+                closed = true
+                command = nil
+                started = false
+            } else if character == "M" || character == "C" {
+                takeNumber()
+                flush()
+                if abandoned { break }
+                command = character
+            } else {
+                abandoned = true
+                break
+            }
+        }
+        if !abandoned {
+            takeNumber()
+            if command != nil { flush() }
+        }
+        guard !abandoned, closed, !scratch.isEmpty else { return }
+        path.addPath(scratch)
     }
 
     // MARK: Colours

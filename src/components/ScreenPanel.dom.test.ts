@@ -12,7 +12,7 @@ import { isScreenPanelOpen, setScreenPanelOpen } from "@/lib/screen-panel";
 import { openScreenPanelWindow } from "@/lib/screen-panel-window";
 import { CIRCLE_BUTTON, CIRCLE_ICON, CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SCREEN_PANEL_TOP_ROW } from "./ScreenPanelChrome";
+import { chooseFold, SCREEN_PANEL_TOP_ROW, ScreenBar, type ScreenBarFold } from "./ScreenPanelChrome";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const seen = vi.hoisted(() => ({ live: undefined as boolean | undefined, botId: "", docked: false }));
@@ -151,7 +151,37 @@ describe("ScreenPanel", () => {
       expect(tab.querySelector("svg")!.getAttribute("width")).toBe("16");
     }
     act(() => { (host.querySelector("[data-screen-tab=vm]") as HTMLElement).click(); });
-    expect(classes(host.querySelector("[data-screen-panel-tabs]")!)).toEqual(expect.arrayContaining([...SCREEN_PANEL_TOP_ROW.split(/\s+/), "@container/screenbar"]));
+    expect(classes(host.querySelector("[data-screen-panel-tabs]")!)).toEqual(expect.arrayContaining([...SCREEN_PANEL_TOP_ROW.split(/\s+/), "group/screenbar"]));
+  });
+
+  it("folds a row's labels only while its controls do not fit, place tabs first (ScreenBar)", () => {
+    expect(chooseFold(() => true)).toBe("none");
+    expect(chooseFold((fold) => fold !== "none")).toBe("places");
+    expect(chooseFold(() => false)).toBe("all");
+    // a stand-in layout: the row is 456px wide; the field keeps 0, 100 or 220px by fold
+    const field: Record<ScreenBarFold, number> = { none: 0, places: 100, all: 220 };
+    const fold = (rowWidth: number, min: number) => {
+      const proto = HTMLElement.prototype;
+      const client = vi.spyOn(proto, "clientWidth", "get").mockImplementation(function (this: HTMLElement) { return this.hasAttribute("data-fold") ? rowWidth : 0; });
+      const scroll = vi.spyOn(proto, "scrollWidth", "get").mockImplementation(function (this: HTMLElement) { return this.hasAttribute("data-fold") ? Math.min(rowWidth, 456) : 0; });
+      const rect = vi.spyOn(proto, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+        const row = this.closest<HTMLElement>("[data-fold]");
+        const width = rowWidth >= 900 ? 400 : field[(row?.dataset.fold ?? "none") as ScreenBarFold];
+        return { width, height: 30, x: 0, y: 0, top: 0, left: 0, right: width, bottom: 30, toJSON: () => ({}) } as DOMRect;
+      });
+      const bar = document.createElement("div");
+      document.body.append(bar);
+      const barRoot = createRoot(bar);
+      act(() => barRoot.render(createElement(ScreenBar, { min, "data-test-bar": "" } as never,
+        createElement("input", { "data-screen-bar-flex": "" }))));
+      const value = bar.querySelector("[data-test-bar]")!.getAttribute("data-fold");
+      act(() => barRoot.unmount()); bar.remove();
+      client.mockRestore(); scroll.mockRestore(); rect.mockRestore();
+      return value;
+    };
+    expect(fold(900, 160)).toBe("none");
+    expect(fold(456, 90)).toBe("places");
+    expect(fold(456, 160)).toBe("all");
   });
 
   it("gives the VM's Take control the top bar's 36px labelled button", async () => {

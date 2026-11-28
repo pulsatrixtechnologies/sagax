@@ -5,8 +5,9 @@
 // Its controls are the app's own sizes (M-20261127-179): the chat header's
 // round buttons and glyphs (CIRCLE_BUTTON, CIRCLE_ICON), the 36px labelled
 // chip (CIRCLE_LABEL) for the tabs, the holder and Take control, the app's
-// field (PLAIN_FIELD) for the address; a narrow panel folds labels, never sizes.
-import type { RefObject, Dispatch, SetStateAction, ReactNode } from "react";
+// field (PLAIN_FIELD) for the address; while the address row cannot hold its
+// labels it folds them (ScreenBar), never a size and never a control.
+import type { RefObject, Dispatch, FormEvent, SetStateAction, ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Bot as BotIcon, EllipsisVertical, Globe, Hand, Loader2, LockKeyhole, Plus, RotateCw, UserRound, X } from "lucide-react";
 import { t } from "@/lib/i18n";
 import type { Bot } from "@/state/store";
@@ -24,7 +25,7 @@ import { AnchoredPopover } from "../AnchoredPopover";
 import { PILL, PLAIN_FIELD, PRIMARY_PILL } from "../SettingsPrimitives";
 import { panelStageRef } from "@/lib/browser-panel-viewport";
 import { CIRCLE_ICON, CIRCLE_LABEL, CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
-import { FOLD_AWAY, FOLD_CHIP, FOLD_CHIP_LABEL, SCREEN_PANEL_BAR, SCREEN_PANEL_TOOL, SCREEN_PANEL_TOP_ROW } from "../ScreenPanelChrome";
+import { FOLD_CHIP, FOLD_CHIP_LABEL, SCREEN_PANEL_TOOL, SCREEN_PANEL_TOP_ROW, ScreenBar } from "../ScreenPanelChrome";
 
 interface BrowserTab { tabId: string; title: string; url: string; active: boolean }
 type ViewerFrame = BrowserFrame & { viewerId: string; generation: number };
@@ -149,17 +150,14 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
     </div>
   );
 
-  const addressRow = (
-    <form
-      data-browser-address-row=""
-      className={cn("flex items-center border-b border-hairline/40", compact ? cn("min-h-12 gap-1 px-3 py-1.5", SCREEN_PANEL_BAR) : "h-12 gap-0.5 px-2")}
-      onSubmit={(e) => {
-        e.preventDefault();
-        const url = resolveAddressBarInput(address);
-        if (commandsReady && url) command({ type: "navigate", url });
-        else if (address.trim()) setError(t("browser.address.invalid"));
-      }}
-    >
+  const submitAddress = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const url = resolveAddressBarInput(address);
+    if (commandsReady && url) command({ type: "navigate", url });
+    else if (address.trim()) setError(t("browser.address.invalid"));
+  };
+  const addressContent = (
+    <>
       <div className={cn("flex shrink-0 items-center", compact && "gap-1")}>
         <button type="button" className={tool} disabled={!commandsReady} aria-label={t("browser.nav.back")} onClick={() => command({ type: "back" })}><ArrowLeft {...glyph} /></button>
         <button type="button" className={tool} disabled={!commandsReady} aria-label={t("browser.nav.forward")} onClick={() => command({ type: "forward" })}><ArrowRight {...glyph} /></button>
@@ -167,6 +165,7 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
       </div>
       <input
         ref={addressInput}
+        data-screen-bar-flex=""
         aria-label={t("browser.address.label")}
         readOnly={!commandsReady}
         value={address}
@@ -184,11 +183,11 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
         <span data-browser-holder={mine ? "you" : "bot"} className="flex shrink-0 items-center gap-1">
           <span
             data-browser-holder-pill=""
-            className={cn(CIRCLE_LABEL, "max-w-[11rem]", FOLD_AWAY, mine && "border-accent-border bg-accent/15 text-accent-text")}
+            className={cn(CIRCLE_LABEL, "max-w-[11rem]", FOLD_CHIP, mine && "border-accent-border bg-accent/15 text-accent-text")}
             title={pageTitle ? `${holder} · ${pageTitle}` : holder}
           >
             {mine ? <Hand size={16} strokeWidth={1.75} className="shrink-0" aria-hidden="true" /> : <BotIcon size={16} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />}
-            <span className="truncate">{mine ? holder : bot.name}</span>
+            <span className={cn("truncate", FOLD_CHIP_LABEL)}>{mine ? holder : bot.name}</span>
           </span>
           {mine ? (
             <button type="button" data-browser-give-back="" onClick={handBack}
@@ -236,8 +235,11 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
           }}>{t("browser.menu.restart")}</button>
         </div>
       </details>
-    </form>
+    </>
   );
+  const addressRow = compact
+    ? <ScreenBar as="form" data-browser-address-row="" onSubmit={submitAddress} className="flex min-h-12 items-center gap-1 border-b border-hairline/40 px-3 py-1.5">{addressContent}</ScreenBar>
+    : <form data-browser-address-row="" onSubmit={submitAddress} className="flex h-12 items-center gap-0.5 border-b border-hairline/40 px-2">{addressContent}</form>;
 
   const legacyHolder = !compact && (
     <div data-browser-holder={mine ? "you" : heldElsewhere ? "elsewhere" : "bot"} className="flex min-h-10 items-center gap-2 border-b border-hairline/40 px-3 py-1.5 text-[12px]">

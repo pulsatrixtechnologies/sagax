@@ -17,7 +17,7 @@ import { BrowserPanel, type BrowserDescriber } from "./BrowserPanel";
 import { ScreenMarksBar, ScreenMarksOverlay, useScreenMarks } from "./ScreenMarks";
 import { ControlSwitch, placeControllable, RemotePane, useScreenPlaces, VmPane } from "./ScreenPlaces";
 import { DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
-import { foldTabLabel, SCREEN_PANEL_BAR, SCREEN_PANEL_TITLE, SCREEN_PANEL_TOOL, SCREEN_PANEL_TOP_ROW, ScreenPanelChrome } from "./ScreenPanelChrome";
+import { FOLD_TAB_ICON, FOLD_TAB_LABEL, SCREEN_PANEL_TITLE, SCREEN_PANEL_TOOL, SCREEN_PANEL_TOP_ROW, ScreenBar, ScreenPanelChrome } from "./ScreenPanelChrome";
 import { PillTabs } from "./PillTabs";
 import { openScreenPanelWindow } from "@/lib/screen-panel-window";
 
@@ -89,13 +89,13 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
   );
 
   // One tab list for the places, in the browser's address row and in the VM
-  // and remote top row alike: the app's tabs, each with its place's icon; a
-  // narrow panel keeps the icons and folds the labels (foldTabLabel).
+  // and remote top row alike: the app's tabs; while their row cannot hold
+  // the labels (ScreenBar), each shows its place's icon instead.
   const placeTabs = !artifact && found.places.length > 1 ? (
     <PillTabs tabs={found.places} tab={place} onTab={pick} ariaLabel={t("screenPanel.tabs")} idPrefix="screen-panel"
       label={(id) => {
         const Icon = PLACE_ICON[id];
-        return <span className="flex items-center gap-1.5" title={t(PLACE_TAB[id])}><Icon size={16} strokeWidth={1.75} aria-hidden="true" /><span className={foldTabLabel(found.places.length)}>{t(PLACE_TAB[id])}</span></span>;
+        return <span className="inline-flex h-[18px] items-center" title={t(PLACE_TAB[id])}><Icon size={16} strokeWidth={1.75} aria-hidden="true" className={FOLD_TAB_ICON} /><span className={FOLD_TAB_LABEL}>{t(PLACE_TAB[id])}</span></span>;
       }}
       tabAttributes={(id) => ({ "data-screen-tab": id })}
       data-screen-place-select="" className="shrink-0 flex-nowrap" />
@@ -140,12 +140,12 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
           />
         ) : (
           <>
-            <div data-screen-panel-tabs="" className={cn(SCREEN_PANEL_TOP_ROW, SCREEN_PANEL_BAR)}>
+            <ScreenBar data-screen-panel-tabs="" min={120} className={SCREEN_PANEL_TOP_ROW}>
               <PlaceIcon size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-ink-secondary" />
-              <span dir="auto" className={SCREEN_PANEL_TITLE} title={title}>{title}</span>
+              <span dir="auto" data-screen-bar-flex="" className={SCREEN_PANEL_TITLE} title={title}>{title}</span>
               {placeTabs}
               {chrome}
-            </div>
+            </ScreenBar>
             {place === "vm" && found.vm && <VmPane source={found.vm} control={control} host={body} />}
             {place === "remote" && found.remote && <RemotePane botId={bot.id} view={found.remote} control={control} host={body} />}
           </>

@@ -187,6 +187,16 @@ describe("compact LiveBrowserView sizes, the app's own (M-20261127-179)", () => 
     }
   });
 
+  it("keeps the holder chip on screen in every state: its label folds, the chip never goes", () => {
+    for (const control of [{ held: false, controlling: false, owned: false }, { held: true, controlling: true, owned: true }]) {
+      const chip = parse({ control }).querySelector("[data-browser-holder-pill]")!;
+      const list = classes(chip.getAttribute("class"));
+      expect(list.some((name) => /(^|:)hidden$/.test(name))).toBe(false);
+      expect(list).toContain("group-data-[fold=all]/screenbar:w-9");
+      expect(classes(chip.querySelector("span")!.getAttribute("class"))).toContain("group-data-[fold=all]/screenbar:sr-only");
+    }
+  });
+
   it("draws the page tabs, the holder and Take control as the 36px labelled chip, in the app's 13px type", () => {
     const host = parse();
     const tabs = [...host.querySelectorAll("[data-browser-tab]")];
@@ -208,7 +218,11 @@ describe("compact LiveBrowserView sizes, the app's own (M-20261127-179)", () => 
     expect(classes(host.querySelector("[data-browser-address-row] input")!.getAttribute("class"))).toEqual(expect.arrayContaining(classes(PLAIN_FIELD)));
     expect(classes(host.querySelector("[data-browser-tabs]")!.getAttribute("class"))).toEqual(expect.arrayContaining(classes(SCREEN_PANEL_TOP_ROW)));
     expect(SCREEN_PANEL_TOP_ROW).toContain("min-h-(--app-topbar-height)");
-    expect(classes(host.querySelector("[data-browser-address-row]")!.getAttribute("class"))).toContain("@container/screenbar");
+    const row = host.querySelector("[data-browser-address-row]")!;
+    expect(classes(row.getAttribute("class"))).toContain("group/screenbar");
+    // no fold before the row is measured: every label shows
+    expect(row.getAttribute("data-fold")).toBe("none");
+    expect(host.querySelector("[data-browser-address-row] input")!.hasAttribute("data-screen-bar-flex")).toBe(true);
   });
 
   it("keeps no undersized control or type in the two rows", () => {

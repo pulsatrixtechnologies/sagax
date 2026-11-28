@@ -231,9 +231,12 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   #5180 runs that list through `shared/credential-resolver.ts` when a policy
   is set: a connected Grok account and an API key can each serve, Act as
   needs the person's consent for a personal credential, and a fallback onto
-  a paid key asks first. An empty `tts.voice` uses xAI's built-in voice
-  (`ara`). A key that is out of credits is `out_of_credits`, not a network
-  error.
+  a paid key asks first. A phone line (`resolveVoiceKeys` with `phoneLine`)
+  keeps that person's accounts for call fallback. A paid key enters the
+  line's order only when the person permitted the paid fallback
+  (`paidKeyConfirmed`), the same setting as the in-app voice. An empty
+  `tts.voice` uses xAI's built-in voice (`ara`). A key that is out of
+  credits is `out_of_credits`, not a network error.
 - The organization's Grok account (#5200, `server/voice/org-grok-account.ts`):
   the fourth form of that one order, source `org-account`, after everything
   of the person's and before `org-key`, under the same grant

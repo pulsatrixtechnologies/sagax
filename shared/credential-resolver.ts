@@ -1,8 +1,7 @@
 // One decision for the four credential forms (#5180). Callers pass
 // candidates in the order they already resolve (engine-credentials.ts,
-// voice-mode.ts, the account strategy in account-switch-host.ts). This
-// function does not reorder them. The proposed merged order is written in
-// docs/credential-order.md and is not applied here.
+// voice-mode.ts, chat-image.ts). This function does not reorder them.
+// Which form serves which aspect is shared/credential-matrix.ts.
 //
 // A personal form is a personal account (a subscription sign-in) or a
 // personal API key. An organization form is an organization account or an

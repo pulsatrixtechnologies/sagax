@@ -381,6 +381,8 @@ describe("POST /api/org/link/grok-sign-in with voice_keys: the app's own order f
     orgKey: string | undefined;
     /** the organization's Grok account, when it has one */
     orgAccount?: string;
+    /** same paid-fallback permission as the in-app voice */
+    paidKeyConfirmed?: boolean;
     perspicaxDown?: boolean;
     disabled?: Set<string>;
   }
@@ -410,7 +412,9 @@ describe("POST /api/org/link/grok-sign-in with voice_keys: the app's own order f
       scheduler: { request: () => "started" },
       person: (sub) => w.people[sub] ?? null,
       grokSignIn: async () => ({ ok: false, error: "no_sign_in" }),
-      // the wiring of server/index.ts: the app's own function, for that person
+      // the wiring of server/index.ts: the app's own function, for that person,
+      // with the same policy the server passes, and phoneLine so accounts stay
+      // for call fallback; paid keys only when paidKeyConfirmed is set
       voiceKeys: (principalId) => {
         resolved.push(principalId);
         return resolveVoiceKeys({
@@ -422,7 +426,8 @@ describe("POST /api/org/link/grok-sign-in with voice_keys: the app's own order f
           personalKey: (speaker) => w.voiceKeys[speaker.principalId],
           grokAccount: (speaker) => w.grok[speaker.principalId],
           orgAccount: () => w.orgAccount,
-        }, speakerOf(principalId));
+          credentialPolicy: () => ({ aspect: "voice", personalKeysEnabled: true, allowPersonalWhenActingAs: false, paidKeyConfirmed: w.paidKeyConfirmed === true }),
+        }, speakerOf(principalId), undefined, { phoneLine: true });
       },
       log: (line) => lines.push(line),
     });
@@ -460,9 +465,14 @@ describe("POST /api/org/link/grok-sign-in with voice_keys: the app's own order f
     });
   });
 
-  it("lists every source in the app's order: Grok account, voice key, Perspicax key, organization", async () => {
-    const h = await start(world({ grok: { pr_ada: ADA_GROK }, voiceKeys: { pr_ada: ADA_VOICE } }));
-    const answer = await h.call({ sub: "sub-ada", voice_keys: true });
+  it("lists accounts without a paid-fallback permission, and the full order once permitted", async () => {
+    const held = await start(world({ grok: { pr_ada: ADA_GROK }, voiceKeys: { pr_ada: ADA_VOICE } }));
+    const without = await held.call({ sub: "sub-ada", voice_keys: true });
+    expect(without.body!.voice_keys).toEqual([
+      { source: "grok-account", auth: "grok-account", key: ADA_GROK },
+    ]);
+    const permitted = await start(world({ grok: { pr_ada: ADA_GROK }, voiceKeys: { pr_ada: ADA_VOICE }, paidKeyConfirmed: true }));
+    const answer = await permitted.call({ sub: "sub-ada", voice_keys: true });
     expect(answer.body!.voice_keys).toEqual([
       { source: "grok-account", auth: "grok-account", key: ADA_GROK },
       { source: "voice-key", auth: "api-key", key: ADA_VOICE },
@@ -471,9 +481,16 @@ describe("POST /api/org/link/grok-sign-in with voice_keys: the app's own order f
     ]);
   });
 
-  it("hands a phone line the organization's Grok account as an account, before the organization's key (#5200)", async () => {
+  it("hands a phone line the organization's Grok account as an account, before the organization's key when permitted (#5200)", async () => {
     const ORG_GROK = "fake-org-grok-access-55556666";
-    const h = await start(world({ orgAccount: ORG_GROK, perspicaxKeys: {} }));
+    const held = await start(world({ orgAccount: ORG_GROK, perspicaxKeys: {} }));
+    expect((await held.call({ sub: "sub-ada", voice_keys: true })).body).toEqual({
+      provider: "xai",
+      voice_keys: [
+        { source: "org-account", auth: "grok-account", key: ORG_GROK },
+      ],
+    });
+    const h = await start(world({ orgAccount: ORG_GROK, perspicaxKeys: {}, paidKeyConfirmed: true }));
     const answer = await h.call({ sub: "sub-ada", voice_keys: true });
     expect(answer.body).toEqual({
       provider: "xai",
@@ -485,7 +502,7 @@ describe("POST /api/org/link/grok-sign-in with voice_keys: the app's own order f
     expect(h.lines.join("\n")).toContain("org-account, org-key");
     expect(h.lines.join("\n")).not.toContain(ORG_GROK);
     // the same grant as the organization's key
-    const refused = await start(world({ orgAccount: ORG_GROK, perspicaxKeys: {}, orgVoice: new Set() }));
+    const refused = await start(world({ orgAccount: ORG_GROK, perspicaxKeys: {}, orgVoice: new Set(), paidKeyConfirmed: true }));
     expect((await refused.call({ sub: "sub-ada", voice_keys: true })).body).toEqual({ provider: "xai", voice_keys: [], cause: "server_engine_not_allowed" });
   });
 
@@ -566,10 +583,13 @@ describe("POST /api/org/link/grok-sign-in with voice_keys: the app's own order f
     for (const method of ["log", "info", "warn", "error", "debug"] as const) {
       vi.spyOn(console, method).mockImplementation((...args: unknown[]) => { consoleLines.push(args.map(String).join(" ")); });
     }
-    const h = await start(world({ grok: { pr_ada: ADA_GROK }, voiceKeys: { pr_ada: ADA_VOICE } }));
+    const held = await start(world({ grok: { pr_ada: ADA_GROK }, voiceKeys: { pr_ada: ADA_VOICE } }));
+    expect((await held.call({ sub: "sub-ada", voice_keys: true })).status).toBe(200);
+    expect(held.lines).toEqual(["org link: voice keys for a phone line (grok-account)"]);
+    const h = await start(world({ grok: { pr_ada: ADA_GROK }, voiceKeys: { pr_ada: ADA_VOICE }, paidKeyConfirmed: true }));
     expect((await h.call({ sub: "sub-ada", voice_keys: true })).status).toBe(200);
     expect(h.lines).toEqual(["org link: voice keys for a phone line (grok-account, voice-key, perspicax-key, org-key)"]);
-    for (const line of [...h.lines, ...consoleLines]) {
+    for (const line of [...held.lines, ...h.lines, ...consoleLines]) {
       for (const key of [ORG_KEY, ADA_PERSPICAX, ADA_VOICE, ADA_GROK]) {
         expect(line).not.toContain(key);
         expect(line).not.toContain(key.slice(-4));

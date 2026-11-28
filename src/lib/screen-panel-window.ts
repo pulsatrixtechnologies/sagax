@@ -1,13 +1,19 @@
 // Browser (and later artifact) takeover window opened from the screen side
 // panel's Detach / Expand actions. Lives outside ScreenPanel so Detach can
-// close the docked column without unmounting the window.
+// close the docked column without unmounting the window. The window is the
+// one of the place on screen: the browser's, the VM's or the remote
+// computer's (M-20261127-180).
 import { useSyncExternalStore } from "react";
+import type { RemoteSessionView } from "../../shared/remote-session";
 
 export type ScreenPanelWindow = {
   botId: string;
   /** "expand" keeps the side panel; "detach" closes it. */
   mode: "expand" | "detach";
-  kind: "browser" | "artifact";
+  /** "vm" is the server environment's desktop (the Local VM has no window here). */
+  kind: "browser" | "vm" | "remote" | "artifact";
+  /** The remote session a "remote" window shows. */
+  remote?: RemoteSessionView;
   artifactId?: string;
 };
 

@@ -8,6 +8,8 @@ describe("resolveAddressBarInput", () => {
     expect(resolveAddressBarInput("127.0.0.1:3000/path")).toBe("http://127.0.0.1:3000/path");
     expect(resolveAddressBarInput("[::1]:3000")).toBe("http://[::1]:3000/");
     expect(resolveAddressBarInput("cnn.com")).toBe("https://cnn.com/");
+    expect(resolveAddressBarInput("google.ca")).toBe("https://google.ca/");
+    expect(resolveAddressBarInput(" Google.CA ")).toBe("https://google.ca/");
     expect(resolveAddressBarInput("google.com/maps")).toBe("https://google.com/maps");
     expect(resolveAddressBarInput("my-box.tailnet.ts.net")).toBe("https://my-box.tailnet.ts.net/");
     expect(resolveAddressBarInput("devbox:8080")).toBe("https://devbox:8080/");

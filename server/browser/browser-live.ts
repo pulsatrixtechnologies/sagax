@@ -248,6 +248,10 @@ interface Viewer extends OpenOptions {
   frameSeq?: number;
   frameAt?: number;
   hiddenFrame?: ObjectValue;
+  /** The newest tabs and url messages withheld while another view held the
+   * browser, in arrival order: sent with the frame on release, so the bar
+   * names the page shown again instead of staying empty (M-20261127-180). */
+  hiddenPage?: ObjectValue[];
   pendingFrame?: ObjectValue;
   pendingActions: number;
   pressedKeys: Set<string>;
@@ -312,6 +316,10 @@ export class BrowserLive {
       if (!held && viewer.hiddenFrame) {
         const frame = viewer.hiddenFrame; viewer.hiddenFrame = undefined;
         this.frame(viewer, frame);
+      }
+      if (!held && viewer.hiddenPage) {
+        const page = viewer.hiddenPage; viewer.hiddenPage = undefined;
+        for (const message of page) this.send(viewer, message);
       }
     }
   }
@@ -576,7 +584,11 @@ export class BrowserLive {
         try { raw = object(JSON.parse(event.data)); message = normalizeBrowserLiveMessage(raw); } catch { this.close(viewer); return; }
         if (!message) { if (raw?.type === "frame") this.close(viewer); return; }
         const heldBy = this.runtime.heldBy(viewer.session);
-        if (heldBy && heldBy !== viewer.id && ["tabs", "url"].includes(String(message.type))) return;
+        if (heldBy && heldBy !== viewer.id && ["tabs", "url"].includes(String(message.type))) {
+          const hidden = message;
+          viewer.hiddenPage = [...(viewer.hiddenPage ?? []).filter((kept) => kept.type !== hidden.type), hidden];
+          return;
+        }
         if (message.type === "frame") this.frame(viewer, message);
         else {
           if (message.type === "url" && typeof message.url === "string") this.teach.get(viewer.owner, viewer.session)?.observeUrl(message.url);

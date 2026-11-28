@@ -501,10 +501,11 @@ describe("live browser control affordance", () => {
     expect(watching.address.props.readOnly).toBe(false);
     expect(watching.viewport.props.driving).toBe(true);
     // A pending take holds toolbar actions back, while page input still reaches the take.
+    // The address stays editable: Enter waits for the take (M-20261127-180).
     fixture.states = { 4: true, 11: "pending" };
     const taking = controls();
     expect([taking.back, taking.reload, taking.newTab].map((node) => node.props.disabled)).toEqual([true, true, true]);
-    expect(taking.address.props.readOnly).toBe(true);
+    expect(taking.address.props.readOnly).toBe(false);
     expect(taking.viewport.props.driving).toBe(true);
     fixture.states = { 4: true };
     fixture.control = { held: true, controlling: false, owned: false };

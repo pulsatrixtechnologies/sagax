@@ -1,5 +1,5 @@
-// The detail of a record window (a ticket, a company, a contact): the client
-// of GET and POST /api/me/records/:product/:kind/:id/detail
+// The detail of a record window (a ticket, a company, a contact, a board, an
+// invoice): the client of GET and POST /api/me/records/:product/:kind/:id/detail
 // (server/routes/record-cards.ts).
 // It reads the sections of the record window (counts, pages, attachments),
 // the images a note names, the choices of an editable field or of a form,
@@ -22,6 +22,13 @@
 // configuration's record (a click opens it in the window), a time entry's
 // billing (B, NC, DNB) and work type, an instant for the day it is grouped
 // under. A console that sends none of them shows its rows as before.
+//
+// A board and an invoice read their own sections through the same route
+// (M-20261127-101, M-20261127-140): a board's active tickets (`tickets`,
+// each with its next scheduling, M-20261127-129) and its figures (`stats`),
+// an invoice's document (`document`), its payments and its history. A
+// console that serves no detail for a kind answers `kind_unknown`: that kind
+// then shows what its card holds, as before.
 import { api, ApiError } from "@/state/store";
 import { activeLocale, t } from "@/lib/i18n";
 import { downloadBlob } from "@/lib/diagram-view";
@@ -35,10 +42,11 @@ export interface RecordChoice {
   label: string;
 }
 
-/** The sections the record window reads: each is one console section. A ticket's first, then a company's and a contact's (M-20261127-101). */
+/** The sections the record window reads: each is one console section. A ticket's first, then a company's and a contact's, then a board's and an invoice's (M-20261127-101). */
 export const DETAIL_SECTIONS = [
   "notes", "schedule", "activities", "time", "expenses", "configurations", "attachments",
   "sheet", "contacts", "tickets", "projects", "opportunities", "agreements", "sites", "finance", "stats", "history",
+  "document", "payments",
 ] as const;
 export type DetailSection = (typeof DETAIL_SECTIONS)[number];
 
@@ -162,15 +170,46 @@ export interface RecordSheet {
   prefs: Array<{ label: string; value: string }>;
 }
 export interface ContactRow { id?: string; name: string; ref?: RecordRef; title: string; roles: string[]; phone: string; email: string; portal: string; inactive?: boolean }
-/** A ticket as the board shows it (M-20261127-145, M-20261127-129): its next planned entry with who. */
+/** Who is planned on a ticket, when, and whether they saw it (M-20261127-129). */
+export interface PlannedPerson {
+  name: string;
+  ref?: RecordRef;
+  at?: string;
+  endAt?: string;
+  seen?: boolean;
+}
+/** A ticket's next scheduling in a list: planned, going on now, or none. */
+export interface NextPlan {
+  state: "planned" | "ongoing" | "none";
+  at?: string;
+  endAt?: string;
+  people: PlannedPerson[];
+}
+/** A ticket as the board shows it (M-20261127-145, M-20261127-129): its next scheduling with who. */
 export interface TicketRow {
-  id?: string; number: string; summary: string; ref?: RecordRef;
-  status: string; tone?: RecordTone; priority: string; level?: RecordLevel; type: string;
-  next?: { at?: string; date: string; who: string[] };
+  id?: string;
+  ref?: RecordRef;
+  number: string;
+  summary: string;
+  company?: string;
+  companyRef?: RecordRef;
+  status: string;
+  tone?: RecordTone;
+  /** absent: the console does not say (never read as open) */
+  statusTone?: RecordTone;
+  priority: string;
+  level?: RecordLevel;
+  type: string;
+  next?: NextPlan;
   closed?: boolean;
-  owner: string; ownerRef?: RecordRef;
-  company?: string; companyRef?: RecordRef;
-  updated?: string; updatedText: string;
+  owner: string;
+  ownerRef?: RecordRef;
+  updated?: string;
+  updatedText?: string;
+  /** the person reading is its owner */
+  mine?: boolean;
+  /** an instant: when it was entered */
+  opened?: string;
 }
 export interface ProjectRow { id?: string; name: string; ref?: RecordRef; status: string; tone?: RecordTone; share?: number; manager: string; managerRef?: RecordRef; period: string; hours: string }
 export interface OpportunityRow { id?: string; name: string; ref?: RecordRef; amount: string; stage: string; step?: number; steps?: number; probability?: number; close: string; owner: string; ownerRef?: RecordRef; tone?: RecordTone }
@@ -190,7 +229,51 @@ export interface RecordStats {
   resolution?: { text: string; detail?: string };
   billable: Array<{ billing: RecordBilling; share: number; text?: string }>;
 }
-export interface HistoryRow { at?: string; date: string; text: string; who?: string }
+/** One week of a board: the tickets entered and closed in it. */
+export interface WeekRow {
+  /** the week's first day (a calendar day) */
+  week: string;
+  opened?: number;
+  closed?: number;
+}
+/** A board's figures the window cannot count from its active tickets. */
+export interface BoardStats {
+  closedThisWeek?: number;
+  firstResponse?: { text: string; detail?: string };
+}
+/** A line of an invoice, its amount as the product wrote it. */
+export interface InvoiceLine {
+  id?: string;
+  label: string;
+  detail?: string;
+  amount: string;
+  ref?: RecordRef;
+}
+export const INVOICE_STEPS = ["issued", "sent", "due", "reminder", "next_reminder"] as const;
+export type InvoiceStep = (typeof INVOICE_STEPS)[number];
+/** An invoice as a document: every amount is the product's own text, never computed here. */
+export interface InvoiceDocument {
+  issued?: string;
+  due?: string;
+  terms?: string;
+  billedTo?: { name: string; ref?: RecordRef; attention?: string; address: string[] };
+  /** the tickets, the agreement, the project it was made from */
+  links: Array<{ label: string; ref?: RecordRef; detail?: string }>;
+  subtotal?: string;
+  taxes: Array<{ label: string; amount: string }>;
+  total?: string;
+  paid?: string;
+  balance?: string;
+  /** the product says something is still owed */
+  owed?: boolean;
+  steps: Array<{ step: InvoiceStep; at?: string; who?: string; done?: boolean }>;
+  client?: { balance?: string; late?: string; paysIn?: string };
+  /** the detail route downloads its PDF (`section=download&field=pdf`) */
+  pdf?: boolean;
+}
+/** A payment: its calendar day (`day`, never shifted) or the words of a console that sends none. */
+export interface PaymentRow { id?: string; day?: string; date: string; type: string; amount: string; by?: string; reference?: string }
+export interface HistoryRow { id?: string; at?: string; date: string; text: string; who?: string; tone?: RecordTone }
 
 type Lines = {
   notes: TicketNote[];
@@ -208,11 +291,13 @@ type Lines = {
   agreements: AgreementRow[];
   sites: SiteRow[];
   finance: InvoiceRow[];
-  stats: never[];
+  stats: WeekRow[];
   history: HistoryRow[];
+  document: InvoiceLine[];
+  payments: PaymentRow[];
 };
 export type DetailPage = {
-  [K in DetailSection]: { tab: K; lines: Lines[K]; totalHours?: string; totals?: TimeTotals; sheet?: RecordSheet; finance?: FinanceFacts; stats?: RecordStats }
+  [K in DetailSection]: { tab: K; lines: Lines[K]; totalHours?: string; totals?: TimeTotals; sheet?: RecordSheet; finance?: FinanceFacts; stats?: RecordStats | BoardStats; document?: InvoiceDocument }
 }[DetailSection];
 export type DetailPageOf<K extends DetailSection> = Extract<DetailPage, { tab: K }>;
 
@@ -259,11 +344,13 @@ export function recordDetailPath(ref: RecordRef, query: Record<string, string | 
   return `/api/me/records/${encodeURIComponent(ref.product)}/${encodeURIComponent(ref.kind)}/${encodeURIComponent(ref.id)}/detail?${parts.join("&")}`;
 }
 
-/** Only a route that is not there: a 404 or 405 with no code of the console. */
+/** Only a route that is not there: a 404 or 405 with no code of the console,
+ * or the console's `kind_unknown` (it serves no detail for this kind: its card is shown). */
 export function detailRouteMissing(error: unknown): boolean {
   if (!(error instanceof ApiError) || (error.status !== 404 && error.status !== 405)) return false;
   const body = error.body as { code?: unknown } | undefined;
-  return !(body && typeof body === "object" && typeof body.code === "string" && body.code);
+  const code = body && typeof body === "object" && typeof body.code === "string" ? body.code : "";
+  return !code || code === "kind_unknown";
 }
 
 /** A console with no detail for this kind of record (a company or a contact before it serves their sections). */
@@ -381,7 +468,7 @@ export function parseDetailPage(tab: DetailSection, raw: unknown, download: (id:
       ...optional({ id: idOf(r.id), ref: refOf(r.ref) }), ...(r.inactive === true ? { inactive: true } : {}),
       name: short(r.name, 120), title: short(r.title, 120), roles: words(r.roles, 6, 40), phone: short(r.phone, 40), email: short(r.email, 250), portal: short(r.portal, 80),
     })).filter((row) => row.name) } };
-    case "tickets": return { next, page: { tab, lines: rows.map(ticketOf).filter((row) => row.summary || row.number) } };
+    case "tickets": return { next, page: { tab, lines: rows.map(ticketOf).filter((row): row is TicketRow => row !== null) } };
     case "projects": return { next, page: { tab, lines: rows.map((r) => ({
       ...optional({ id: idOf(r.id), ref: refOf(r.ref), tone: toneOf(r.tone), share: shareOf(r.share), managerRef: refOf(r.manager_ref) }),
       name: short(r.name, 160), status: short(r.status, 60), manager: short(r.manager, 120), period: short(r.period, 80), hours: short(r.hours, 60),
@@ -410,6 +497,12 @@ export function parseDetailPage(tab: DetailSection, raw: unknown, download: (id:
       })).filter((row) => row.number) } };
     }
     case "stats": {
+      // a board: weeks as lines plus closed_this_week / first_response; a company's Data: hours/types under stats
+      const weeks = rows.map((r) => ({ week: dayText(r.week) ?? "", ...optional({ opened: countOf(r.opened), closed: countOf(r.closed) }) })).filter((row) => row.week);
+      const board = isObject(raw) ? boardStatsOf(raw) : undefined;
+      if (weeks.length || board) {
+        return { next, page: { tab, ...(board ? { stats: board } : {}), lines: weeks } };
+      }
       const stats = isObject(raw) && isObject(raw.stats) ? raw.stats : undefined;
       const resolution = stats && isObject(stats.resolution) && short(stats.resolution.text, 40) ? { text: short(stats.resolution.text, 40), ...optional({ detail: short(stats.resolution.detail, 160) || undefined }) } : undefined;
       return { next: null, page: { tab, lines: [], ...(stats ? { stats: {
@@ -418,7 +511,18 @@ export function parseDetailPage(tab: DetailSection, raw: unknown, download: (id:
           .filter((part): part is { billing: RecordBilling; share: number; text: string | undefined } => Boolean(part.billing) && part.share !== undefined).map((part) => optional(part)),
       } } : {}) } };
     }
-    case "history": return { next, page: { tab, lines: rows.map((r) => ({ ...optional({ at: instantOf(r.at), who: short(r.who, 120) || undefined }), date: short(r.date, 60), text: short(r.text, 400) })).filter((row) => row.text) } };
+    case "document": {
+      const document = isObject(raw) && isObject(raw.document) ? documentOf(raw.document) : undefined;
+      return { next, page: { tab, ...(document ? { document } : {}), lines: rows.map((r) => ({ ...optional({ id: idOf(r.id), detail: text(r.detail) || undefined, ref: refOf(r.ref) }), label: text(r.label), amount: text(r.amount) })).filter((row) => row.label) } };
+    }
+    case "payments": return { next, page: { tab, lines: rows.map((r) => ({
+      ...optional({ id: idOf(r.id), day: dayText(r.date), by: text(r.by) || undefined, reference: text(r.reference) || undefined }),
+      date: dayText(r.date) ? "" : text(r.date), type: text(r.type), amount: text(r.amount),
+    })).filter((row) => row.amount) } };
+    case "history": return { next, page: { tab, lines: rows.map((r) => ({
+      ...optional({ id: idOf(r.id), at: instantOf(r.at), who: short(r.who, 120) || undefined, tone: toneOf(r.tone) }),
+      date: instantOf(r.at) ? "" : (short(r.date, 60) || text(r.date)), text: short(r.text, 400) || text(r.text),
+    })).filter((row) => row.text) } };
   }
 }
 
@@ -468,14 +572,79 @@ export function sheetOf(raw: Raw): RecordSheet {
   };
 }
 
-function ticketOf(r: Raw): TicketRow {
-  const next = isObject(r.next) ? r.next : undefined;
-  const nextDate = next ? short(next.date, 60) : "";
+/** A calendar day as sent (`2026-10-31`), never shifted by a zone. */
+const dayText = (value: unknown): string | undefined => /^\d{4}-\d{2}-\d{2}$/.test(text(value)) && Number.isFinite(Date.parse(text(value))) ? text(value) : undefined;
+const texts = (value: unknown, most: number): string[] => Array.isArray(value) ? value.map(text).filter(Boolean).slice(0, most) : [];
+
+function nextOf(raw: unknown): NextPlan | undefined {
+  if (!isObject(raw)) return undefined;
+  const state = text(raw.state);
+  if (state === "planned" || state === "ongoing" || state === "none") {
+    const people = (Array.isArray(raw.people) ? raw.people : []).filter(isObject).slice(0, 12).map((p) => ({
+      ...optional({ ref: refOf(p.ref), at: instantOf(p.start), endAt: instantOf(p.end) }),
+      ...(typeof p.seen === "boolean" ? { seen: p.seen } : {}),
+      name: text(p.name),
+    })).filter((p) => p.name);
+    return { state, ...optional({ at: instantOf(raw.start), endAt: instantOf(raw.end) }), people: state === "none" ? [] : people };
+  }
+  // a company's list: next { start, date, who[] } → NextPlan
+  const who = words(raw.who, 8, 120);
+  const at = instantOf(raw.start);
+  const date = short(raw.date, 60);
+  if (!who.length && !at && !date) return undefined;
+  return { state: "planned", ...optional({ at }), people: who.map((name) => ({ name })) };
+}
+
+/** A ticket of a list; null without its number and its words. */
+function ticketOf(r: Raw): TicketRow | null {
+  const number = short(r.number, 40) || text(r.number);
+  const summary = short(r.summary, 200) || text(r.summary);
+  if (!number || !summary) return null;
+  const tone = toneOf(r.status_tone) ?? toneOf(r.tone);
+  const next = nextOf(r.next);
   return {
-    ...optional({ id: idOf(r.id), ref: refOf(r.ref), tone: toneOf(r.tone), level: oneOf(RECORD_LEVELS, r.level), ownerRef: refOf(r.owner_ref), company: short(r.company, 120) || undefined, companyRef: refOf(r.company_ref), updated: instantOf(r.updated) }),
-    ...(next && (nextDate || instantOf(next.start)) ? { next: { ...optional({ at: instantOf(next.start) }), date: nextDate, who: words(next.who, 8, 120) } } : {}),
+    ...optional({
+      id: idOf(r.id), ref: refOf(r.ref), tone, statusTone: toneOf(r.status_tone) ?? toneOf(r.tone),
+      level: oneOf(RECORD_LEVELS, r.level) ?? oneOf(RECORD_LEVELS, r.priority_level),
+      ownerRef: refOf(r.owner_ref), companyRef: refOf(r.company_ref),
+      updated: instantOf(r.updated), opened: instantOf(r.opened), updatedText: short(r.updated_text, 60) || undefined,
+    }),
+    ...(typeof r.mine === "boolean" ? { mine: r.mine } : {}),
     ...(r.closed === true ? { closed: true } : {}),
-    number: short(r.number, 40), summary: short(r.summary, 200), status: short(r.status, 60), priority: short(r.priority, 60), type: short(r.type, 80), owner: short(r.owner, 120), updatedText: short(r.updated_text, 60),
+    ...(next ? { next } : {}),
+    number, summary, company: text(r.company),
+    status: short(r.status, 60) || text(r.status),
+    priority: short(r.priority, 60) || text(r.priority), type: short(r.type, 80) || text(r.type),
+    owner: short(r.owner, 120) || text(r.owner),
+  };
+}
+
+function boardStatsOf(raw: Raw): BoardStats | undefined {
+  const first = isObject(raw.first_response) && text(raw.first_response.text) ? optional({ text: text(raw.first_response.text), detail: text(raw.first_response.detail) || undefined }) : undefined;
+  const stats = optional({ closedThisWeek: countOf(raw.closed_this_week), firstResponse: first });
+  return Object.keys(stats).length ? stats : undefined;
+}
+
+function documentOf(raw: Raw): InvoiceDocument {
+  const billed = isObject(raw.billed_to) && text(raw.billed_to.name) ? raw.billed_to : undefined;
+  const client = isObject(raw.client) ? optional({ balance: text(raw.client.balance) || undefined, late: text(raw.client.late) || undefined, paysIn: text(raw.client.pays_in) || undefined }) : {};
+  return {
+    ...optional({
+      issued: dayText(raw.issued), due: dayText(raw.due), terms: text(raw.terms) || undefined,
+      subtotal: text(raw.subtotal) || undefined, total: text(raw.total) || undefined, paid: text(raw.paid) || undefined, balance: text(raw.balance) || undefined,
+    }),
+    ...(typeof raw.owed === "boolean" ? { owed: raw.owed } : {}),
+    ...(raw.pdf === true ? { pdf: true } : {}),
+    ...(billed ? { billedTo: { name: text(billed.name), ...optional({ ref: refOf(billed.ref), attention: text(billed.attention) || undefined }), address: texts(billed.address, 6) } } : {}),
+    links: (Array.isArray(raw.links) ? raw.links : []).filter(isObject).slice(0, 12).map((l) => ({ label: text(l.label), ...optional({ ref: refOf(l.ref), detail: text(l.detail) || undefined }) })).filter((l) => l.label),
+    taxes: (Array.isArray(raw.taxes) ? raw.taxes : []).filter(isObject).slice(0, 6).map((tax) => ({ label: text(tax.label), amount: text(tax.amount) })).filter((tax) => tax.label && tax.amount),
+    steps: (Array.isArray(raw.steps) ? raw.steps : []).filter(isObject).slice(0, 12).flatMap((s) => {
+      const step = text(s.step);
+      if (!(INVOICE_STEPS as readonly string[]).includes(step)) return [];
+      const at = dayText(s.at) ?? instantOf(s.at);
+      return [{ step: step as InvoiceStep, ...optional({ at, who: text(s.who) || undefined }), ...(typeof s.done === "boolean" ? { done: s.done } : {}) }];
+    }),
+    ...(Object.keys(client).length ? { client } : {}),
   };
 }
 

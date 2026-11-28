@@ -382,7 +382,8 @@ describe("the card", () => {
   it("draws the chip of any kind the product declares with the product's mark, and reads its card at once, no button", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string) => {
       const url = String(input);
-      if (url.includes("/api/me/records/")) reads.push(url);
+      // the card's reads (the invoice window reads its own detail beside it, M-20261127-140)
+      if (url.includes("/api/me/records/") && !url.includes("/detail")) reads.push(url);
       return json(answer(invoiceCard(Date.now(), "fr")));
     }));
     await render("[INV-1042](sagax://record/nimbus_desk/invoice/5150)");
@@ -492,7 +493,8 @@ describe("the card", () => {
   it("never replaces the card when the pointer rests on a nested ref: only a click does (once)", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string) => {
       const url = String(input);
-      if (url.includes("/api/me/records/")) reads.push(url);
+      // the card's reads (the invoice window reads its own detail beside it, M-20261127-140)
+      if (url.includes("/api/me/records/") && !url.includes("/detail")) reads.push(url);
       return json(answer(url.includes("/agreement/") ? agreementCard(Date.now(), "fr") : invoiceCard(Date.now(), "fr")));
     }));
     await render("[INV-1042](sagax://record/nimbus_desk/invoice/5150)");

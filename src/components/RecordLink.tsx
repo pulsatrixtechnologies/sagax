@@ -28,6 +28,8 @@ import { placeRecordWindow, recordWindowType } from "@/lib/record-window-layout"
 import { TicketWindow } from "@/components/record-window/ticket/TicketWindow";
 import { accountWindow } from "@/components/record-window/account/AccountWindow";
 import type { AccountTab } from "@/components/record-window/account/account-model";
+import { boardWindow, type BoardView } from "@/components/record-window/board/BoardWindow";
+import { invoiceWindow, type InvoiceView } from "@/components/record-window/invoice/InvoiceWindow";
 import { useStoreOptional } from "@/state/store";
 import { recordKey, recordMarkdown, type RecordRef } from "../../shared/record-cards";
 
@@ -127,7 +129,8 @@ export function RecordLink({ record, draftId, children }: { record: RecordRef; d
 /** The most cards one chip's card keeps to go back through. */
 export const RECORD_TRAIL_MAX = 8;
 
-/** The card, reading while it is on screen. A record the card names (a
+/** The card, reading while it is on screen; a ticket, a board and an invoice
+ * become their own window (record-window/). A record the card names (a
  * company, an invoice's agreement, a ticket, a parent agreement: any kind) opens
  * in this card's place (a card from a card: never two stacked), with a back
  * arrow in the head that returns to the one it replaced. A record of a product
@@ -141,7 +144,7 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
   onAsk?: (ref: RecordRef, label: string) => void;
   onConnect?: () => void;
   onSignIn?: () => void;
-  /** a request handed to a bot in the chat (Schedule me, Dispatch the ticket, D-20261127-007) */
+  /** a request handed to a bot in the chat (Schedule me, Dispatch the ticket, D-20261127-007; an invoice's Send a reminder) */
   onBotAsk?: (text: string) => void;
 }) {
   const [trail, setTrail] = useState<Array<{ ref: RecordRef; label: string }>>([]);
@@ -152,20 +155,43 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
   const products = useSharedPersonProducts();
   const { product, kind } = findRecordKind(products, current.ref);
   const read = useRecordCard(current.ref, { enabled: true });
-  // a ticket card becomes the ticket window once the card is read (its tabs, its
-  // fields column, its writes); a server without the detail route leaves the original card.
-  // A company and a contact become their window at once (M-20261127-140): the card's facts,
-  // then the sections the console serves for them
+  // a ticket, board or invoice card becomes its window once the card is read; a company
+  // and a contact become theirs at once (M-20261127-140). A server without the detail
+  // route leaves the original card; an invoice keeps the card's facts in its own layout.
   const { refresh: refreshCard } = read;
   const refKind = current.ref.kind;
   const account = refKind === "company" || refKind === "contact" ? refKind : null;
-  const detail = useRecordDetail(current.ref, (refKind === "ticket" || account !== null) && Boolean(read.card), refreshCard);
+  const kindWindow = refKind === "ticket" || refKind === "board" || refKind === "invoice" || account !== null;
+  const detail = useRecordDetail(current.ref, kindWindow && Boolean(read.card), refreshCard);
   const { refresh: refreshDetail } = detail;
   const refresh = useCallback(() => { refreshCard(); refreshDetail(); }, [refreshCard, refreshDetail]);
   // each record of the way keeps the tab the person chose, back and forth
   const [tabs, setTabs] = useState<Record<string, AccountTab>>({});
   const key = recordKey(current.ref);
   const link = recordMarkdown(current.label, current.ref);
+  // what the person set in a window (its tab, a board's filters), kept while this card is open:
+  // coming back to a record on the way finds it as it was left
+  const [views, setViews] = useState<Record<string, unknown>>({});
+  const viewKey = recordKey(current.ref);
+  const setView = useCallback((view: unknown) => setViews((all) => ({ ...all, [viewKey]: view })), [viewKey]);
+  const type = recordWindowType(current.ref);
+  const now = Date.now();
+  const layout = (() => {
+    if (!read.card) return undefined;
+    if (current.ref.kind === "ticket") {
+      return detail.detail ? {
+        body: <TicketWindow card={read.card} detail={detail.detail} type={type} now={now}
+          onScheduleMe={onBotAsk ? () => onBotAsk(t("recordWindow.schedule.mePrompt", { record: link })) : undefined}
+          onDispatch={onBotAsk ? () => onBotAsk(t("recordWindow.schedule.dispatchPrompt", { record: link })) : undefined} />,
+      } : undefined;
+    }
+    if (current.ref.kind === "board") return detail.detail ? boardWindow({ card: read.card, detail: detail.detail, type, now, view: views[viewKey] as BoardView | undefined, onView: setView }) : undefined;
+    if (current.ref.kind === "invoice") {
+      return invoiceWindow({ card: read.card, record: current.ref, detail: detail.detail, type, now, view: views[viewKey] as InvoiceView | undefined, onView: setView,
+        onRemind: onBotAsk ? () => onBotAsk(t("recordWindow.invoice.remindPrompt", { record: link })) : undefined });
+    }
+    return undefined;
+  })();
   // the way here, from the chip's record to this one (M-20261119-084): a number reads with its kind
   const way = [{ ref: record, label }, ...trail];
   const crumbs = trail.length ? way.map((step, index) => {
@@ -181,13 +207,9 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
       product={product ? { name: product.name, ...(product.icon?.url ? { iconUrl: product.icon.url } : {}) } : undefined}
       read={detail.detail ? { ...read, refresh } : read}
       window={!read.card ? undefined : account ? accountWindow({
-        kind: account, card: read.card, detail: detail.detail, type: recordWindowType(current.ref), now: Date.now(),
+        kind: account, card: read.card, detail: detail.detail, type, now,
         tab: tabs[key], onTab: (tab) => setTabs((now) => ({ ...now, [key]: tab })), idPrefix: `record-${account}-${current.ref.id.replace(/[^A-Za-z0-9_-]/g, "_")}`,
-      }) : detail.detail ? {
-        body: <TicketWindow card={read.card} detail={detail.detail} type={recordWindowType(current.ref)} now={Date.now()}
-          onScheduleMe={onBotAsk ? () => onBotAsk(t("recordWindow.schedule.mePrompt", { record: link })) : undefined}
-          onDispatch={onBotAsk ? () => onBotAsk(t("recordWindow.schedule.dispatchPrompt", { record: link })) : undefined} />,
-      } : undefined}
+      }) : layout}
       edits={detail.edits}
       titleEdit={detail.title}
       trail={crumbs}

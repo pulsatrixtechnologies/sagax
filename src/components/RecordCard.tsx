@@ -96,6 +96,8 @@ export interface RecordTitleEdit {
 export interface RecordWindowLayout {
   tabs?: ReactNode;
   body: ReactNode;
+  /** pills a kind adds to the head after the card's own (an invoice's lateness) */
+  chips?: NonNullable<Card["chips"]>;
 }
 
 export interface RecordCardProps {
@@ -219,6 +221,7 @@ export const TONE_CLASS: Record<RecordTone, string> = {
   done: "bg-success/15",
   alert: "bg-danger/15",
 };
+/** A tone as a dot: one look for every state a record window draws (a chip, a tile, a step). */
 export const TONE_DOT: Record<RecordTone, string> = {
   open: "bg-popover-ink-secondary",
   waiting: "bg-warning",
@@ -479,6 +482,14 @@ export function FieldValue({ field, label, now, lang, tz }: { field: RecordField
   }
 }
 
+/** How late a record is past its due date: never once it is done or closed,
+ * else formatLateness. One rule for the card's due row and a kind's own window
+ * (an invoice's balance, M-20261127-140). */
+export function recordLateness(card: { state?: { tone: string }; dates?: { due?: string; closed?: string } }, now: number, lang: string, tz?: string, due = card.dates?.due): string | null {
+  if (!due || card.state?.tone === "done" || card.dates?.closed) return null;
+  return formatLateness(due, now, lang, tz);
+}
+
 type FactRow = { label: string; value: ReactNode; gap?: boolean; key: string };
 
 /** The dates and key fields as one description list. In the opened card the
@@ -498,7 +509,7 @@ function Facts({ card, now, lang, part = "all", chipRows = [], lead = [], pairs 
   if (dates.opened) rows.push({ key: "opened", label: t("recordCard.date.opened"), value: time(dates.opened, "relative") });
   if (dates.updated) rows.push({ key: "updated", label: t("recordCard.date.updated"), value: time(dates.updated, "relative") });
   if (dates.due) {
-    const late = card.state?.tone === "done" || dates.closed ? null : formatLateness(dates.due, now, lang, tz);
+    const late = recordLateness(card, now, lang, tz);
     rows.push({
       key: "due",
       label: t("recordCard.date.due"),
@@ -989,7 +1000,7 @@ export function RecordCard({ record, label, kindName, product, read, window: lay
 
   if (roomy) {
     const type = recordWindowType(record);
-    const chips = card?.chips ?? [];
+    const chips = [...(card?.chips ?? []), ...(card ? layout?.chips ?? [] : [])];
     const title = card && (titleEdit
       ? <RecordTitle key={`${record.product}/${record.kind}/${record.id}`} title={card.title} edit={titleEdit} />
       : <p dir="auto" className="shrink-0 break-words px-6 pb-4 pt-2 text-[20px] font-semibold leading-7" title={card.title}>{card.title}</p>);

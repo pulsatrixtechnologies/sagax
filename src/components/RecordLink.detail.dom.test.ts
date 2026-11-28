@@ -8,7 +8,7 @@ import { createElement, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
-import { answer, companyCard, nimbusProduct, ticketCard } from "@/lib/record-card-fixtures";
+import { agreementCard, answer, companyCard, nimbusProduct, ticketCard } from "@/lib/record-card-fixtures";
 import { resetPersonProducts, seedPersonProducts } from "@/lib/person-products";
 import { resetRecordCards } from "@/lib/record-cards";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -75,7 +75,12 @@ beforeEach(() => {
     const method = init?.method ?? "GET";
     calls.push({ url: String(input), method, body: typeof init?.body === "string" ? init.body : undefined });
     if (url.pathname.endsWith("/detail")) return detail(url, method, typeof init?.body === "string" ? init.body : undefined);
-    return json(answer(url.pathname.includes("/company/") ? companyCard(Date.now(), "en") : ticketCard(Date.now(), "en")));
+    const body = url.pathname.includes("/company/")
+      ? companyCard(Date.now(), "en")
+      : url.pathname.includes("/agreement/")
+        ? agreementCard(Date.now(), "en")
+        : ticketCard(Date.now(), "en");
+    return json(answer(body));
   }));
   host = document.createElement("div");
   document.body.append(host);
@@ -497,8 +502,8 @@ describe("the ticket window through its chip", () => {
     expect(action.querySelector("svg")).toBeNull();
   });
 
-  it("asks nothing of the detail route for a record with no window of its own (a ticket, a company and a contact have one)", async () => {
-    await open("sagax://record/nimbus_desk/invoice/5150", "INV-1042");
+  it("asks nothing of the detail route for a record with no window of its own (ticket, company, contact, board and invoice have one)", async () => {
+    await open("sagax://record/nimbus_desk/agreement/412", "Managed services");
     expect(card()).not.toBeNull();
     expect(calls.some((call) => call.url.includes("/detail"))).toBe(false);
   });

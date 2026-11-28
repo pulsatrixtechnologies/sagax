@@ -36,6 +36,7 @@ export function nimbusProductRaw(): Record<string, unknown> {
       { kind: "contact", name: { en: "Contact", fr: "Contact" }, plural: { en: "Contacts", fr: "Contacts" } },
       { kind: "department", name: { en: "Department", fr: "Département" }, plural: { en: "Departments", fr: "Départements" } },
       { kind: "email", name: { en: "Email", fr: "Courriel" }, plural: { en: "Emails", fr: "Courriels" } },
+      { kind: "board", name: { en: "Board", fr: "Board" }, plural: { en: "Boards", fr: "Boards" } },
     ],
   };
 }

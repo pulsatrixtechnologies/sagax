@@ -3645,12 +3645,42 @@ type; Agreements draw the block of hours as a ring; Finance and Data are
 figures and one-series bars in the accent. A contact opens in the same window
 with the trail back to its company (M-20261127-101).
 
+The board window (M-20261127-101, M-20261127-140): a board a bot names
+opens in the same window as a ticket does and shows its active tickets.
+On top, four tiles that are quick filters, Active, Urgent, Not scheduled,
+Waiting (each a pod, the chosen one ringed in the accent; a tone is a dot
+beside the quiet words, agent's choice); then All, My tickets, Urgent, Not
+scheduled, Waiting, the owner and the one dynamic filter
+(M-20261127-139). Tabs across the window: List, one plain grid never
+grouped by status (M-20261127-145): the priority as a bar of its colour, the
+number, the subject with the company under it, the status, the type, the
+next scheduling (a calendar, going on now in the success tone, or not
+scheduled, and its date; resting on it says who is planned, when and
+whether they saw it, M-20261127-129), the owner, the age; Columns, one pod
+per status; Data, the active tickets by owner, opened and closed by week
+(the app's one chart), the age of the active tickets and the first
+response time (D-20261127-010). A ticket opens in the same window with a
+way back to the board, which keeps its tab and its filters (agent's
+choice). The ticket grid is shared (`TicketGrid.tsx`) for every record
+that lists tickets.
+
+The invoice window (M-20261127-101, M-20261127-140): the invoice as a
+document at the left (number, dates, billed to, the tickets and the
+agreement it comes from, its lines with their detail, subtotal, each tax,
+total, paid); at the right the balance due and how late it is, Send a
+reminder, Record a payment and PDF, the timeline (issued, sent, due,
+reminder, next reminder) and the company's summary; tabs Invoice, Payments,
+History. Every amount is the product's text, never computed; a console that
+serves no detail for invoices leaves the card's facts in the same layout,
+and what it does not send is not shown (agent's choice).
+
 Captures: `scripts/capture/record-window.mjs` (headless Chrome, DPR 2) of
 `src/gallery/record-window.html`: every tab of the ticket window, the note
 being written, the + menu, the completed entries, a billing menu, the
 company opened from the ticket, the window narrow and the shared blocks,
 dark and light, French and English, each beside the mockup's capture with
-`--mockup`.
+`--mockup`. The board and the invoice: `scripts/capture/record-window-board-invoice.mjs`
+(the same gallery, its board and invoice scenes).
 
 ## The bot row menu and a bot's own window (owner, 2026-11-17, #4639)
 

@@ -47,11 +47,14 @@ const { RuleTestResults } = await import("@/components/approvals/RuleTest");
 const { OutcomesCard } = await import("@/components/bot-profile/BotProfilePage.tsx-parts/Outcomes");
 const { outcomesOf } = await import("../../shared/outcomes");
 const { productRows } = await import("@/components/plugins/ProductRows");
+const { boardWindow } = await import("@/components/record-window/board/BoardWindow");
+const { invoiceWindow } = await import("@/components/record-window/invoice/InvoiceWindow");
+const { parseDetailPage } = await import("@/lib/record-detail");
+const { parseRecordCard } = await import("../../shared/record-cards");
 const { ProductDetailView } = await import("@/components/plugins/ProductDetailView");
 const { AccountProfile } = await import("@/components/record-window/account/AccountProfile");
 const { cardTicketRows, profileView } = await import("@/components/record-window/account/account-model");
 const { TicketGrid } = await import("@/components/record-window/TicketGrid");
-const { parseRecordCard } = await import("../../shared/record-cards");
 
 const BOT_ID = "5752d21c-e77c-4a83-84f0-66048216a5df";
 const THREAD_ID = "d4eb1f10-ceef-428a-afdd-d53d1194c2e7";
@@ -289,6 +292,37 @@ describe("no UUID on screen", () => {
     expectNoUuid(text);
     expect(text).toContain("Morning digest");
     expect(text).toContain("Vendor follow-up");
+  });
+  it("a board's and an invoice's windows name their tickets, companies, people and lines, never their ids (M-20261127-140)", () => {
+    const ref = (kind: string, id: string) => ({ product: "nimbus_desk", kind, id });
+    const pages: Record<string, unknown> = {
+      tickets: parseDetailPage("tickets", { lines: [{
+        id: THREAD_ID, ref: ref("ticket", THREAD_ID), number: "#300124", summary: "Partnership", company: "Acme", company_ref: ref("company", BOT_ID), status: "Waiting", status_tone: "waiting",
+        priority: "3: Medium", priority_level: "normal", type: "Admin", owner: "Noor Haddad", owner_ref: ref("member", BOT_ID), mine: true, opened: "2026-11-20T10:00:00-05:00",
+        next: { state: "planned", start: "2026-12-14T14:30:00-05:00", people: [{ name: "Noor Haddad", ref: ref("member", BOT_ID), seen: true }] },
+      }] }, () => () => {}).page,
+      stats: parseDetailPage("stats", { lines: [{ week: "2026-11-23", opened: 3, closed: 2 }], first_response: { text: "38 min" } }, () => () => {}).page,
+      document: parseDetailPage("document", {
+        document: { issued: "2026-10-01", due: "2026-10-31", billed_to: { name: "Acme", ref: ref("company", BOT_ID), attention: "Ada" }, links: [{ label: "#300124", ref: ref("ticket", THREAD_ID) }], total: "$10.00", balance: "$10.00", owed: true, steps: [{ step: "issued", at: "2026-10-01", done: true }] },
+        lines: [{ id: THREAD_ID, label: "Support", detail: "1 h", amount: "$10.00", ref: ref("ticket", THREAD_ID) }],
+      }, () => () => {}).page,
+      payments: parseDetailPage("payments", { lines: [{ id: THREAD_ID, date: "2026-11-20", type: "Transfer", amount: "$5.00", by: "Noor Haddad" }] }, () => () => {}).page,
+      history: parseDetailPage("history", { lines: [{ id: THREAD_ID, at: "2026-11-15T08:00:00-05:00", text: "Reminder sent", tone: "done" }] }, () => () => {}).page,
+    };
+    const detail = {
+      counts: { tickets: 1, payments: 1, history: 1 }, countError: "", ready: true, can: () => true,
+      section: (tab: string) => ({ page: pages[tab], loading: false, error: "" }), want: () => {}, write: async () => {}, choices: async () => [],
+    } as never;
+    const card = (kind: string, title: string) => parseRecordCard({ product: { id: "nimbus_desk", name: "Nimbus Desk" }, kind: { id: kind, name: kind }, id: THREAD_ID, number: kind === "board" ? "Support" : "F-10391", title, notes: { state: "none", items: [] }, cached: false })!;
+    const now = Date.parse("2026-11-27T13:50:00-05:00");
+    const views = ["list", "columns", "data"].map((tab) => boardWindow({ card: card("board", "Support board"), detail, type: "nimbus_desk/board", now, view: { tab: tab as "list", quick: "all", owner: "", filter: { text: "" } }, onView: () => {} }));
+    const invoices = ["invoice", "payments", "history"].map((tab) => invoiceWindow({ card: card("invoice", "Acme"), record: ref("invoice", THREAD_ID), detail, type: "nimbus_desk/invoice", now, view: { tab: tab as "invoice" }, onView: () => {}, onRemind: () => {} }));
+    const text = visibleText(createElement("div", null, ...[...views, ...invoices].flatMap((layout, index) => [createElement("div", { key: `t${index}` }, layout.tabs), createElement("div", { key: `b${index}` }, layout.body)])));
+    expectNoUuid(text);
+    expect(text).toContain("Partnership");
+    expect(text).toContain("Noor Haddad");
+    expect(text).toContain("Support");
+    expect(text).toContain("Reminder sent");
   });
   it("a Perspicax product's row and page name the product and its roles, never its id (#4185)", () => {
     const product = {

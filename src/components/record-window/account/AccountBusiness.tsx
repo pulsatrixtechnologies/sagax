@@ -271,7 +271,7 @@ export function AccountFinanceTab({ detail }: { detail: RecordDetail }) {
 
 export function AccountDataTab({ detail }: { detail: RecordDetail }) {
   const state = detail.section("stats");
-  const stats = state.page?.stats;
+  const stats = state.page?.stats && "hours" in state.page.stats ? state.page.stats : undefined;
   if (!state.page) return <Panel name="data"><SectionStatus state={state} /></Panel>;
   if (!stats || (!stats.hours.length && !stats.types.length && !stats.resolution && !stats.billable.length)) {
     return <Panel name="data"><p role="status" className="py-2 text-popover-ink-secondary">{t("recordWindow.account.noData")}</p></Panel>;

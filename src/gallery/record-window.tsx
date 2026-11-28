@@ -9,6 +9,7 @@
  *             (src/lib/record-account-fixtures.ts; a contact named in the company opens in the same window)
  *   frame     the shared pieces of the frame on their own (pods, the filtered grid, the list,
  *             the schedule cells, the add menu, a form), for the lots that build other kinds
+ *   board, invoice, invoice-card   a chat naming a board and an invoice (src/lib/record-board-invoice-fixtures.ts)
  *   &console=old  the console answers as before the window: no entry ids, no billing, no actions list,
  *             and no section for a company or a contact (their window is drawn from the card)
  * The time is held still. */
@@ -26,6 +27,7 @@ import { accountCompanyCard, accountConsole, accountContactCard } from "../lib/r
 import { seedPersonProducts } from "../lib/person-products";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider } from "../state/store";
+import { boardInvoiceConsole } from "../lib/record-board-invoice-fixtures";
 import { RECORD_ACTIONS } from "../../shared/record-actions";
 import "../styles.css";
 
@@ -188,6 +190,7 @@ function take(body: { field?: string; value?: string; action?: string; id?: stri
   }
 }
 
+const lot3 = boardInvoiceConsole(lang, NOW, scene);
 seedPersonProducts([nimbusProduct()]);
 const accounts = accountConsole(lang, NOW);
 const realFetch = window.fetch.bind(window);
@@ -207,6 +210,8 @@ window.fetch = async (input, init) => {
     if (section === "download") return json({ name: "contrat-adhesion.pdf", contentType: "application/pdf", base64: btoa("PDF") });
     return json({ ...accounts.section(account, section), next: null });
   }
+  const boardOrInvoice = lot3.detail(url, init);
+  if (boardOrInvoice) return boardOrInvoice;
   if (url.includes("/detail?")) {
     const query = new URL(url, window.location.href).searchParams;
     if (!url.includes(`/ticket/${TICKET_ID}/`)) return new Response(null, { status: 404 });
@@ -227,6 +232,8 @@ window.fetch = async (input, init) => {
     if (match[1] === "ticket") return json(answer(ticketCard()));
     if (match[1] === "company") return json(answer(accountCompanyCard(NOW, lang)));
     if (match[1] === "contact") return json(answer(accountContactCard(NOW, lang)));
+    const other = lot3.card(match[1]!, match[2]!);
+    if (other) return json(answer(other));
     return json({ state: "unknown" });
   }
   // the app's other routes are not this gallery's: answered as a server without them
@@ -286,7 +293,7 @@ function Page() {
   return (
     <div className="min-h-screen bg-app p-6 text-ink">
       <div className="max-w-[44rem] text-[15px] leading-6" data-gallery-chat>
-        <ChatMarkdown text={CHAT} botId="bot-gallery" draftId="bot:bot-gallery:thread-gallery" message={{ threadId: "thread-gallery", messageId: "m-1" }} />
+        <ChatMarkdown text={scene === "board" || scene.startsWith("invoice") ? lot3.chat : CHAT} botId="bot-gallery" draftId="bot:bot-gallery:thread-gallery" message={{ threadId: "thread-gallery", messageId: "m-1" }} />
       </div>
     </div>
   );

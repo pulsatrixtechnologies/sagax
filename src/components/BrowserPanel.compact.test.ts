@@ -163,7 +163,7 @@ describe("compact LiveBrowserView sizes, the app's own (M-20261127-179)", () => 
     host.innerHTML = renderToStaticMarkup(createElement(LiveBrowserView, base({
       frame: { seq: 1, data: "x", viewerId: "v1", generation: 1 },
       tabs: [{ tabId: "t1", title: "Google", url: "https://www.google.com/", active: true }, { tabId: "t2", title: "Docs", url: "https://example.com/", active: false }],
-      address: "https://www.google.com/",
+      addressBar: { ...base().addressBar, value: "https://www.google.com/" },
       ...over,
     })));
     return host;

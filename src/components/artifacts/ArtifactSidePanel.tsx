@@ -53,7 +53,7 @@ export function ArtifactSidePanel({ botId, artifactId, title }: { botId: string;
       }}
     >
       <DockedPanelResizeHandle label={t("computer.resizeAria")} panel={dockedPanel} />
-      <div data-artifact-side-panel-header="" className="flex min-h-[52px] shrink-0 items-center gap-2 px-3 py-2.5">
+      <div data-artifact-side-panel-header="" className="content-topbar flex min-h-[52px] shrink-0 items-center gap-2 px-3 py-2.5">
         <span dir="auto" className={SCREEN_PANEL_TITLE}>{shownTitle}</span>
         {artifact?.source && (
           <button
@@ -104,21 +104,23 @@ export function ArtifactSidePanel({ botId, artifactId, title }: { botId: string;
           <X {...CIRCLE_ICON} aria-hidden="true" />
         </button>
       </div>
-      {artifact && (
-        <div className="shrink-0 px-3 pb-2">
-          <ArtifactStatusLine artifact={{ ...artifact, ...(artifact.data ? { dataAt: artifact.data.at } : {}) }} />
-        </div>
-      )}
-      <div data-artifact-side-panel-body="" className="relative flex min-h-0 flex-1 flex-col px-3 pb-3">
-        {artifact ? (
-          <ArtifactFrame artifact={artifact} fill bare className="min-h-0 flex-1 overflow-hidden rounded-lg border border-hairline/40" />
-        ) : error ? (
-          <p role="alert" className="p-2 text-[12.5px] text-danger">{t("artifacts.error")}</p>
-        ) : (
-          <span role="status" className="flex items-center gap-2 p-2 text-[12.5px] text-ink-secondary">
-            <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> {t("artifacts.loading")}
-          </span>
+      <div className="content-card-body flex min-h-0 flex-1 flex-col overflow-hidden">
+        {artifact && (
+          <div className="shrink-0 px-3 pb-2 pt-2">
+            <ArtifactStatusLine artifact={{ ...artifact, ...(artifact.data ? { dataAt: artifact.data.at } : {}) }} />
+          </div>
         )}
+        <div data-artifact-side-panel-body="" className="relative flex min-h-0 flex-1 flex-col px-3 pb-3">
+          {artifact ? (
+            <ArtifactFrame artifact={artifact} fill bare className="min-h-0 flex-1 overflow-hidden rounded-lg border border-hairline/40" />
+          ) : error ? (
+            <p role="alert" className="p-2 text-[12.5px] text-danger">{t("artifacts.error")}</p>
+          ) : (
+            <span role="status" className="flex items-center gap-2 p-2 text-[12.5px] text-ink-secondary">
+              <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> {t("artifacts.loading")}
+            </span>
+          )}
+        </div>
       </div>
     </aside>
   );

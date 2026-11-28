@@ -1,15 +1,17 @@
 // The screen side panel (#4452): one column beside the chat for what the
-// selected bot is working in. Compact chrome (M-20261127-064): no title
-// header band; the live view fills the rest edge to edge. One top row for
-// every place (M-20261127-181, ScreenPanelBar): the place's own part on the
-// left, then Take control, place selector, Mark up, Detach, Expand and Close,
-// in that order, whether the browser, the VM or the remote computer shows.
-// Every control is the app's own size (M-20261127-179): the chat header's
-// round buttons and glyphs, the app's tabs (PillTabs) for the places; a
-// narrow bar folds labels (ScreenBar), never the order. Mark up draws over
-// the picture only, so its pen, Detach, Expand, Close and the bars stay
-// usable while it is on; the pen, Done and Escape end it (M-20261127-180).
-// Browser, VM and remote supply the body; artifacts reuse the same row.
+// selected bot is working in. Compact chrome (M-20261127-064): the live view
+// fills the rest edge to edge. One top row for every place (M-20261127-181,
+// ScreenPanelBar): the place's own part on the left, then Take control, place
+// selector, Mark up, Detach, Expand and Close, in that order, whether the
+// browser, the VM or the remote computer shows. The row is `.content-topbar`
+// and the body under it `.content-card-body` so Pulsatrix Light paints the
+// circles on the navy band (#5486). Every control is the app's own size
+// (M-20261127-179): the chat header's round buttons and glyphs, the app's
+// tabs (PillTabs) for the places; a narrow bar folds labels (ScreenBar),
+// never the order. Mark up draws over the picture only, so its pen, Detach,
+// Expand, Close and the bars stay usable while it is on; the pen, Done and
+// Escape end it (M-20261127-180). Browser, VM and remote supply the body;
+// artifacts reuse the same row.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Globe, Laptop, Monitor, PenLine, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -160,7 +162,7 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
         {artifact ? (
           <>
             {bar({ leading: <span dir="auto" className={SCREEN_PANEL_TITLE} title={artifact.title}>{artifact.title}</span> })}
-            <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">{artifact.body}</div>
+            <div className="content-card-body relative flex min-h-0 flex-1 flex-col overflow-hidden">{artifact.body}</div>
           </>
         ) : place === "browser" && !inWindow ? (
           <BrowserPanel
@@ -182,7 +184,7 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
             {inWindow ? (
               <div role="status" data-screen-in-window="" className="flex min-h-0 flex-1 items-center justify-center p-4 text-center text-[12px] text-ink-secondary">{t("sandboxDesktop.inWindow")}</div>
             ) : (
-              <div data-screen-stage="" className="relative flex min-h-0 flex-1 flex-col">
+              <div data-screen-stage="" className="content-card-body relative flex min-h-0 flex-1 flex-col">
                 {place === "vm" && found.vm && <VmPane source={found.vm} control={control} host={body} />}
                 {place === "remote" && found.remote && <RemotePane botId={bot.id} view={found.remote} control={control} host={body} />}
                 {overlay}

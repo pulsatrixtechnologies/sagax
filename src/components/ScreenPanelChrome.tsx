@@ -19,8 +19,9 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { CIRCLE_BUTTON, CIRCLE_ICON, CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
 
-/** The panel's top row: the chat header's height, 12px gutters, a hairline under it. */
-export const SCREEN_PANEL_TOP_ROW = "flex min-h-(--app-topbar-height) shrink-0 items-center gap-2 border-b border-hairline/40 px-3";
+/** The panel's top row: the frame's `.content-topbar` (navy band on Pulsatrix Light),
+ * the chat header's height, 12px gutters, a hairline under it (#5486). */
+export const SCREEN_PANEL_TOP_ROW = "content-topbar flex min-h-(--app-topbar-height) shrink-0 items-center gap-2 border-b border-hairline/40 px-3";
 /** A docked panel's title (the artifact panel, the VM and remote row). */
 export const SCREEN_PANEL_TITLE = "min-w-0 flex-1 truncate text-[13.5px] font-medium leading-5 text-ink";
 /** A round control of the panel: the chat header's, dimmed while it cannot act. */

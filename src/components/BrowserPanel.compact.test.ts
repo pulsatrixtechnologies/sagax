@@ -185,7 +185,9 @@ describe("compact LiveBrowserView sizes, the app's own (M-20261127-179)", () => 
     const host = parse();
     expect(classes(host.querySelector("[data-browser-address-row] input")!.getAttribute("class"))).toEqual(expect.arrayContaining(classes(PLAIN_FIELD)));
     expect(classes(host.querySelector("[data-screen-panel-bar]")!.getAttribute("class"))).toEqual(expect.arrayContaining(classes(SCREEN_PANEL_TOP_ROW)));
+    expect(SCREEN_PANEL_TOP_ROW).toContain("content-topbar");
     expect(SCREEN_PANEL_TOP_ROW).toContain("min-h-(--app-topbar-height)");
+    expect(host.querySelector(".content-card-body")).not.toBeNull();
     const row = host.querySelector("[data-browser-address-row]")!;
     expect(classes(row.getAttribute("class"))).toContain("group/screenbar");
     // no fold before the row is measured: every label shows

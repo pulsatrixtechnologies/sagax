@@ -3820,7 +3820,9 @@ control is the size of the app's own, never a smaller copy:
   with its `CIRCLE_ICON` glyph (18px, 1.75), 8px apart in the top row.
 - The top row is the frame's header height (`--app-topbar-height`), so its
   circles sit on the chat header's centre line; the address row holds the
-  same circles.
+  same circles. The top row carries `.content-topbar` and the body under it
+  `.content-card-body`, like every other docked panel, so on Pulsatrix Light
+  the circles sit on the navy band (#5486).
 - Type: 13px, the app's control type. Page tabs, the holder chip and Take
   control are the 36px labelled chip (`CIRCLE_LABEL`, `CIRCLE_LABEL_BUTTON`);
   a tab's own close is the app's icon button (`ui-icon-button`). The places

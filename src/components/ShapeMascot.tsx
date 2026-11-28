@@ -32,16 +32,17 @@ import "./shape-mascot.css";
 import { cloneElement, Fragment, isValidElement, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { avatarFrame, createAnimator, pointerGaze, type AvatarDefinition, type AvatarState, type EyeMark, type FrameShape, type Matrix } from "open-bot-avatar";
 import { requestFrame, subscribeFrames, trackPointer } from "open-bot-avatar/dom";
-import { MAUS_COLORS } from "@/lib/mascot";
+import { isHexColor } from "@/lib/mascot";
 import { cn } from "@/lib/cn";
-import { DEFAULT_ENGINE_LOOK, isBodyShape, MASCOT_SHAPES, SHAPE_DEPTH, SHAPE_SKIN_TIER, SHAPE_SKINS, type BodyShape, type EngineLook, type MascotShape, type ShapeSkin, type SkinTier } from "../../shared/mascot-look";
+import { DEFAULT_ENGINE_LOOK, isBodyShape, type BodyShape, type EngineLook, type MascotShape, type ShapeSkin } from "../../shared/mascot-look";
 import type { MascotAvatarDef } from "../../shared/mascot-look";
-import { bakedShapeFor, engineFrame, enginePose, eyeMarkup, isMarkSlice, lookDefinition, moodFrame, pathsMarkup, runtimeStill, shapesMarkup, stateStill, stillUrl, type BakedStill, type EnginePose, type ShapeMood, type StillFrame, type StillPath } from "./shape-avatar";
+import { engineFrame, eyeMarkup, isMarkSlice, lookDefinition, moodFrame, pathsMarkup, runtimeStill, shapesMarkup, stateStill, stillUrl, type BakedStill, type EnginePose, type ShapeMood, type StillFrame, type StillPath } from "./shape-avatar";
+import { shapeLook } from "./shape-look";
 import { ShapeCanvas, ShapeMaterialStill, useShapeMaterial } from "./shape-material";
 import { ShapeStageContext } from "./shape-stage";
 import { mixHex, MOVE_TIMING, ShapeEngine, stillFrame as restFrame, isShapeMove, rainbowStops, type ShapeFrame, type ShapeMove } from "./shape-engine";
 import { loadBakedStill, useBakedStill } from "./shape-stills";
-import { shapeSkinBase, shapeSkinLayers, type ShapeSkinBase, type ShapeSkinLayers } from "./skin-fx/shape-skins";
+import { shapeSkinLayers, type ShapeSkinBase, type ShapeSkinLayers } from "./skin-fx/shape-skins";
 import { useAliveSeat } from "./shape-alive";
 import { EquipFx, MoveFx } from "./skin-fx/SkinFx";
 import { fxDetail, fxPalette, useEquipBurst, useFxVisibility, useMoveBurst, useReducedMotion, useReplayMove, type FxDetail, type FxMoveRequest } from "./skin-fx/skin-fx";
@@ -98,15 +99,6 @@ export const LIVE_MIN = 88;
 const SMALL_LIVE = 128;
 const SMALL_FRAME_S = 1 / 30 - 0.004;
 
-const hexOf = (color: string) => (MAUS_COLORS as Record<string, string>)[color] ?? (/^#[0-9a-fA-F]{6}$/.test(color) ? color : MAUS_COLORS.green);
-const HEX = /^#[0-9a-fA-F]{6}$/;
-
-/** How a skin paints a shape: its body and eye colours, tier and effect family. Plain is the bot's colour. */
-export function shapeSkinPaint(skin: ShapeSkin, hex: string): ShapeSkinBase & { tier: SkinTier } {
-  const known = SHAPE_SKINS.includes(skin) ? skin : "plain";
-  return { ...shapeSkinBase(known, hex), tier: SHAPE_SKIN_TIER[known] };
-}
-
 /**
  * Whether a shape is live: animated and large (LIVE_MIN), or asked for in
  * full (the Appearance page's skin cards, the desktop mascot); never forced
@@ -119,7 +111,7 @@ export function shapeIsLive(size: number, animated: boolean, detail: FxDetail | 
 
 /** Whether a skin draws anything over the flat body (a fill of its own, texture, edge, glow, shine): such a skin is drawn as SVG, a flat one as the shared image. */
 export function skinIsFlat(layers: ShapeSkinLayers, paint: ShapeSkinBase): boolean {
-  return !layers.defs && !layers.under && !layers.inner && !layers.edge && !layers.around && HEX.test(layers.fill) && !paint.stroke && !paint.shine;
+  return !layers.defs && !layers.under && !layers.inner && !layers.edge && !layers.around && isHexColor(layers.fill) && !paint.stroke && !paint.shine;
 }
 
 /* ------------------------------------------------------------ drawing */
@@ -344,7 +336,7 @@ function withEyes(frame: StillFrame, open: [number, number]): StillFrame {
  * engine shades its own default orange (#5384).
  */
 export function liveStateFrame(definition: AvatarDefinition, options: Parameters<typeof avatarFrame>[1] & { color: string }) {
-  return avatarFrame(definition, { ...options, ...(HEX.test(options.color) ? { color: options.color } : { color: undefined }) });
+  return avatarFrame(definition, { ...options, ...(isHexColor(options.color) ? { color: options.color } : { color: undefined }) });
 }
 
 const seconds = () => (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
@@ -531,23 +523,10 @@ export function ShapeMascot({
   label = null,
   className,
 }: ShapeMascotProps) {
-  const known: MascotShape = MASCOT_SHAPES.includes(shape) ? shape : "circle";
-  const knownSkin: ShapeSkin = SHAPE_SKINS.includes(skin) ? skin : "plain";
-  const definition = lookDefinition(known, avatarDef);
-  const hex = hexOf(color);
-  const paint = shapeSkinPaint(knownSkin, hex);
-  const settings: EngineLook = { ...DEFAULT_ENGINE_LOOK, ...engineLook };
   // a material is the engine's own finish (shape-material.tsx): it takes the bot's colour, in place of the skin
-  const material = useShapeMaterial(settings.material);
-  const body = (material ? hex : HEX.test(paint.fill) ? paint.fill : hex).toLowerCase();
-  // the eyes in the colour the person chose, else the skin's own ink
-  const ink = (settings.eyeColor && HEX.test(settings.eyeColor) ? settings.eyeColor : !material && HEX.test(paint.eyes) ? paint.eyes : "#151515").toLowerCase();
-  // the Outline skin is drawn flat on purpose; else the depth the person chose (the engine's natural depth is the baked still)
-  const chosenDepth = settings.depth === null || settings.depth === SHAPE_DEPTH.natural ? undefined : Math.min(SHAPE_DEPTH.max, Math.max(SHAPE_DEPTH.min, settings.depth));
-  const depth = knownSkin === "outline" && !material ? 0 : chosenDepth;
+  const material = useShapeMaterial(engineLook?.material ?? DEFAULT_ENGINE_LOOK.material);
   // the person's motion preference for this mascot (the picker's gear, #5369), else the device's
   const systemReduced = useReducedMotion();
-  const reduced = settings.motion === "reduced" || (settings.motion === "system" && systemReduced);
   // on a stage the large mascot is turned by hand (#5384); a thumbnail inside one is not
   const stage = useContext(ShapeStageContext);
   const stageBusy = stage !== null && (stage.holdGaze || stage.previewState !== null || Math.abs(stage.view.yaw) > 0.01 || Math.abs(stage.view.pitch) > 0.01);
@@ -556,12 +535,17 @@ export function ShapeMascot({
   const shownState = onStage && stage.previewState ? stage.previewState : agentState;
   const uid = `shape-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
+  // the look: the shape and skin it draws, the body's colour and the eyes' ink, the depth it is drawn at, the still
+  // it starts from and the pose it holds at rest. shape-look.ts writes these rules once, for this component and for
+  // every drawing that paints a bot's shape itself (the Heavy row's cell division); shape-look.test.ts holds the two
+  // together, so they never drift apart (#5426).
+  const { shape: known, skin: knownSkin, settings, hex, paint, body, ink, chosenDepth, depth, bakedId, pose } = shapeLook({ shape, skin, color, engineLook, avatarDef, material: material !== null, mood, agentState: shownState });
+  const definition = lookDefinition(known, avatarDef);
+  const reduced = settings.motion === "reduced" || (settings.motion === "system" && systemReduced);
   // the still: the shape's baked frames, or (a person's own drawing, the flat Outline skin) inferred once here
-  const bakedId: MascotShape | null = depth === undefined ? bakedShapeFor(known, avatarDef) : null;
   const baked = useBakedStill(bakedId);
   const still = bakedId ? baked : runtimeStill(definition, depth);
   // what the bot is doing and how it feels, in the engine's terms; at rest the app's own pose (one of the baked moods)
-  const pose = enginePose(mood, shownState, settings.mood);
   const motion = pose.motion;
   const atRest = motion ? (still ? moodFrame(still, motion) : null) : stateStill(definition, pose.state, pose.mood, depth);
   // turned by hand: the engine's frame under that view, until the loop draws over it

@@ -10,8 +10,9 @@ import { MASCOT_SHAPES } from "../../shared/mascot-look";
 import { AGENT_STATES, MAUS_COLORS } from "@/lib/mascot";
 import { BotAvatar, type BotAvatarProps } from "./Avatar";
 import { enginePose, moodFrame, mountPose, runtimeStill, shapeDefinition, shapesMarkup, stateStill, stillUrl } from "./shape-avatar";
+import { shapeSkinPaint } from "./shape-look";
 import { bakedStill, loadAllBakedStills } from "./shape-stills";
-import { ShapeMascot, shapeSkinPaint, skinFace } from "./ShapeMascot";
+import { ShapeMascot, skinFace } from "./ShapeMascot";
 
 const svgOf = (url: string) => decodeURIComponent(url.replace(/^data:image\/svg\+xml;charset=utf-8,/, ""));
 const stillOf = (html: string) => /<img src="(data:image\/svg\+xml[^"]+)"/.exec(html)?.[1] ?? null;

@@ -8,10 +8,11 @@ import { avatarFrame } from "open-bot-avatar";
 import { beforeAll, describe, expect, it } from "vitest";
 import { MAUS_COLORS } from "@/lib/mascot";
 import { shapeDefinition, shapesMarkup } from "./shape-avatar";
+import { shapeSkinPaint } from "./shape-look";
 import { canvasOptions } from "./shape-material";
 import { ShapeStageContext, type ShapeStage } from "./shape-stage";
 import { loadAllBakedStills } from "./shape-stills";
-import { ShapeMascot, shapeSkinPaint, type ShapeMascotProps } from "./ShapeMascot";
+import { ShapeMascot, type ShapeMascotProps } from "./ShapeMascot";
 
 const uidless = (html: string) => html.replace(/shape-[A-Za-z0-9_-]+/g, "uid");
 const FRONT = { yaw: 0, pitch: 0 };

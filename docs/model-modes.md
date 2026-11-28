@@ -421,8 +421,8 @@ called from `startTurn` before the leader's prompt is built.
     open-bot-avatar body (the baked still every other avatar of the bot
     draws, or its own drawing read once per content), its colour, its eyes
     where the bot has them; every cell keeps that shape and that colour.
-    The look's rules are ShapeMascot's own (`shape-look.ts`, held to
-    ShapeMascot by `shape-look.test.ts`).
+    The look's rules are written once (`shape-look.ts`), and ShapeMascot
+    reads them there too (#5426, held together by `shape-look.test.ts`).
   - A Fluffy or Glass bot wears its material in its cells: the bot's one
     still, painted once per look by the engine on the WebGL2 context the
     material already shares across the page (`shape-material-still.ts`), so

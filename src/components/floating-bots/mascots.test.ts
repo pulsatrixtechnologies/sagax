@@ -12,9 +12,9 @@ import { forgetLegacyBotLooks, readLegacyBotLooks, type FloatingStorage } from "
 import { setGrokAccountLinked } from "@/lib/grok-account";
 import { NOTHING_LOCKED, type AchievementSnapshot } from "../../../shared/achievements";
 import { BotAvatar } from "@/components/Avatar";
-import { shapeSkinPaint } from "@/components/ShapeMascot";
 import { SHAPE_ART } from "@/components/shape-art";
 import { SHAPE_MOVES } from "@/components/shape-engine";
+import { shapeSkinPaint } from "@/components/shape-look";
 import { botMascotLook, CHARACTER_PAINT, completeMascotLook, MASCOT_SHAPES, SHAPE_SKINS, TROMBI_SKINS } from "../../../shared/mascot-look";
 import { MASCOTS, mascotFor, motion25dTransform, SHAPE_CHOICES, trombiPoseFor } from "./mascots";
 import MascotPicker from "./MascotPicker";

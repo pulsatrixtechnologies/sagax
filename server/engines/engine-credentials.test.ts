@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import type { TurnSpeaker } from "./engine-access.ts";
-import { materializeEngineAccess, paidByPerson, piPayerProviders, providerOfDriver, providersOfDriver, resolveEngineAccess, resolveGovernedEngineAccess, subscriptionDriver, turnPayer, type EngineCredentialInput, type PersonFacts } from "./engine-credentials.ts";
+import { materializeEngineAccess, openCodeClaudeAuthContent, paidByPerson, piPayerProviders, providerOfDriver, providersOfDriver, resolveEngineAccess, resolveGovernedEngineAccess, subscriptionDriver, turnPayer, type EngineCredentialInput, type PersonFacts } from "./engine-credentials.ts";
 import type { ModelProvider, ProviderKeyResult } from "../perspicax/perspicax-link.ts";
 
 const OWNER = "pr_00000000-0000-4000-8000-000000000001";
@@ -36,6 +36,7 @@ const GROK = { instanceId: "grok", driver: "grokAgent", installed: true };
 const KIMI = { instanceId: "kimi", driver: "kimiAgent", installed: true };
 const GEMINI = { instanceId: "gemini", driver: "geminiAgent", installed: true };
 const PI = { instanceId: "pi", driver: "piAgent", installed: true };
+const OPENCODE = { instanceId: "opencode", driver: "opencodeGo", installed: true };
 const CURSOR = { instanceId: "cursor", driver: "cursorAgent", installed: true };
 const bob: TurnSpeaker = { origin: "person", principalId: BOB };
 const routine: TurnSpeaker = { origin: "owner-routine" };
@@ -558,6 +559,48 @@ describe("#4410 lot 1: pi runs Claude models on the payer's own Claude sign-in",
     // a sign-in-only plan that cannot be read at dispatch is refused, never loops
     const alone = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/claudeAgent`] });
     expect(await materializeEngineAccess(alone, resolveEngineAccess(alone), deps(async () => { throw new Error("unreadable"); }))).toMatchObject({ ok: false, reason: "no_access" });
+  });
+});
+
+describe("#4410 / #5523: OpenCode runs Claude models on the payer's own Claude sign-in", () => {
+  const BOB_PID = BOB.toLowerCase();
+  const TOKEN = "sk-ant-oat01-test-opencode-sign-in-000000000001";
+  const deps = (signIn: (principalId: string) => Promise<{ accessToken: string } | null>) => ({
+    dataDir: "/data",
+    resolveKey: async () => ({ ok: false as const, error: "no_key" as const }),
+    invalidate: () => {},
+    loginDir: (principalId: string) => `/data/principals/${principalId}/claude`,
+    claudeSignIn: async (principalId: string) => signIn(principalId),
+  });
+
+  it("a person with a Claude sign-in and no key pays an OpenCode turn with it", () => {
+    expect(resolveEngineAccess(input({ instance: OPENCODE, speaker: bob, signedIn: [`${BOB}/claudeAgent`] })))
+      .toEqual({ ok: true, via: "subscription", payer: "speaker", payerPrincipalId: BOB, provider: "anthropic", claudeAccount: true });
+  });
+
+  it("hands the short token as OPENCODE_AUTH_CONTENT oauth in the payer's own OpenCode home", async () => {
+    const inp = input({ instance: OPENCODE, speaker: bob, signedIn: [`${BOB}/claudeAgent`] });
+    const out = await materializeEngineAccess(inp, resolveEngineAccess(inp), deps(async () => ({ accessToken: TOKEN })));
+    expect(out).toEqual({
+      ok: true,
+      plan: expect.objectContaining({ via: "subscription", claudeAccount: true }),
+      access: {
+        via: "subscription",
+        identity: `subscription:${BOB_PID}:claude`,
+        environment: { OPENCODE_AUTH_CONTENT: openCodeClaudeAuthContent(TOKEN) },
+        engineHome: join("/data", "principals", BOB_PID, "opencodeGo-key"),
+      },
+    });
+    if (out.ok) {
+      expect(out.access.identity).not.toContain(TOKEN);
+      expect(out.access.environment?.OPENCODE_AUTH_CONTENT).toContain('"type":"oauth"');
+      expect(out.access.environment?.OPENCODE_AUTH_CONTENT).toContain(TOKEN);
+    }
+  });
+
+  it("only the payer's own sign-in: the owner's never pays for the person who speaks", () => {
+    expect(resolveEngineAccess(input({ instance: OPENCODE, speaker: bob, signedIn: [`${OWNER}/claudeAgent`] })))
+      .toEqual({ ok: false, reason: "no_access", cause: "no_credentials", payer: "speaker", payerPrincipalId: BOB });
   });
 });
 

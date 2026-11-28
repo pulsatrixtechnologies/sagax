@@ -42,9 +42,10 @@ describe("#4329 lot 5: the engine a bot runs with, resolved when it is written",
   const subscriptionOnly = catalogOf(instances.map((entry) => entry.instanceId === "pi" ? instance({ instanceId: "pi", driverKind: "piAgent", access: "custom" }, ["openai/gpt-6"]) : entry));
 
   it("refuses by name a pair the matrix does not offer, with its reason", () => {
-    const result = resolveHarness({ catalog: subscriptionOnly, place: "solo", selection: { instanceId: "claude", model: "claude-opus-5" }, bot: "opencodeGo", strict: true });
+    // built-in openai-compat stays "no" on a Claude subscription (SUBSCRIPTION_KEPT)
+    const result = resolveHarness({ catalog: subscriptionOnly, place: "solo", selection: { instanceId: "claude", model: "claude-opus-5" }, bot: "openai-compat", strict: true });
     expect(result.ok).toBe(false);
-    expect(!result.ok && result.error).toMatch(/^OpenCode cannot run Claude here\. The vendor keeps subscription use to its own tools/);
+    expect(!result.ok && result.error).toMatch(/^OpenAI-compatible cannot run Claude here\. The vendor keeps subscription use to its own tools/);
   });
 
   it("#4410 lot 1: a Claude account runs under pi when pi lists the model for its payer, and is refused only for the model", () => {
@@ -57,6 +58,21 @@ describe("#4329 lot 5: the engine a bot runs with, resolved when it is written",
     // pi lists no Claude model for this payer (no sign-in, no key): the model, not the pair
     const result = resolveHarness({ catalog: subscriptionOnly, place: "solo", selection: { instanceId: "claude", model: "claude-opus-5" }, bot: "piAgent", strict: true });
     expect(!result.ok && result.error).toBe("pi does not offer claude-opus-5. Pick a model it offers first, then choose pi.");
+  });
+
+  it("#5523: a Claude account runs under OpenCode when OpenCode lists the model for its payer, and is refused only for the model", () => {
+    for (const place of ["solo", "organization"] as const) {
+      const here = catalogOf([
+        ...instances,
+        instance({ instanceId: "oc", driverKind: "opencodeGo", access: "custom" }, ["anthropic/claude-opus-5"]),
+      ], place);
+      expect(resolveHarness({ catalog: here, place, selection: { instanceId: "claude", model: "claude-opus-5" }, bot: "opencodeGo", strict: true }))
+        .toEqual({ ok: true, selection: { instanceId: "oc", model: "anthropic/claude-opus-5" }, harness: "opencodeGo", provider: "anthropic" });
+      expect(harnessDefaultRefusal(here, place, "anthropic", "opencodeGo")).toBeNull();
+    }
+    // OpenCode lists no Claude model for this payer: the model, not the pair
+    const result = resolveHarness({ catalog: subscriptionOnly, place: "solo", selection: { instanceId: "claude", model: "claude-opus-5" }, bot: "opencodeGo", strict: true });
+    expect(!result.ok && result.error).toBe("OpenCode does not offer claude-opus-5. Pick a model it offers first, then choose OpenCode.");
   });
 
   it("refuses an engine that does not list the model, never another model", () => {
@@ -72,7 +88,7 @@ describe("#4329 lot 5: the engine a bot runs with, resolved when it is written",
     const result = resolveHarness({ catalog, place: "solo", selection: { instanceId: "claude", model: "claude-opus-5" }, bot: "piAgent", strict: true });
     expect(result).toEqual({ ok: true, selection: { instanceId: "pi", model: "anthropic/claude-opus-5" }, harness: "piAgent", provider: "anthropic" });
     expect(harnessDefaultRefusal(catalog, "solo", "anthropic", "piAgent")).toBeNull();
-    // OpenCode lists none of them here: still not offered
+    // OpenCode lists none of them here: refused for the model, not the pair (#5523)
     expect(resolveHarness({ catalog, place: "solo", selection: { instanceId: "claude", model: "claude-opus-5" }, bot: "opencodeGo", strict: true }).ok).toBe(false);
   });
 

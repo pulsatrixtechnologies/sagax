@@ -30,7 +30,6 @@ import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
 import { formatAbsolute, formatFull } from "@/lib/record-card-format";
 import { downloadAttachment, type HistoryRow, type InvoiceDocument, type InvoiceLine, type InvoiceStep, type PaymentRow } from "@/lib/record-detail";
-import { RECORD_LINE_NOTE_MAX, RECORD_SUBJECT_MAX } from "../../../../shared/record-actions";
 import type { RecordCard as Card, RecordField, RecordRef, RecordTone } from "../../../../shared/record-cards";
 
 export const INVOICE_TABS = ["invoice", "payments", "history"] as const;
@@ -248,7 +247,7 @@ function StepsPod({ doc, late, now, tz }: { doc: InvoiceDocument; late: boolean;
   );
 }
 
-/** Record a payment: the amount, the day, a reference and a note, written as one checked action. */
+/** Record a payment: amount and day only. ConnectWise has no reference or note on a payment; the console drops them, so the form does not offer them (M-20261127-101). */
 function PaymentForm({ detail, now, tz, onDone }: { detail: RecordDetail; now: number; tz?: string; onDone: () => void }) {
   // today in the record's zone, as the console reads a day
   const today = dayOf(new Date(now).toISOString(), "", tz).key;
@@ -257,14 +256,12 @@ function PaymentForm({ detail, now, tz, onDone }: { detail: RecordDetail; now: n
       fields={[
         { key: "amount", label: t("recordWindow.invoice.payment.amount"), kind: "number", required: true, min: 0.01, step: 0.01 },
         { key: "date", label: t("recordWindow.invoice.payment.date"), kind: "date", required: true, value: today },
-        { key: "reference", label: t("recordWindow.invoice.payment.reference"), kind: "text", max: RECORD_SUBJECT_MAX },
-        { key: "note", label: t("recordWindow.invoice.payment.note"), kind: "textarea", max: RECORD_LINE_NOTE_MAX },
       ]}
       submitLabel={t("recordWindow.invoice.payment.save")}
       onCancel={onDone}
       onSubmit={async (values) => {
         const text = (key: string) => (typeof values[key] === "string" ? (values[key] as string).trim() : "");
-        await detail.write({ action: "payment.add", set: { amount: text("amount"), date: text("date"), ...(text("reference") ? { reference: text("reference") } : {}), ...(text("note") ? { note: text("note") } : {}) } });
+        await detail.write({ action: "payment.add", set: { amount: text("amount"), date: text("date") } });
         onDone();
       }} />
   );

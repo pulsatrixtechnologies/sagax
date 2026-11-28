@@ -73,11 +73,14 @@ describe("an invoice's sections", () => {
   });
 
   it("checks a payment before it is sent: an amount and a day, its own fields only", () => {
-    expect(parseRecordAction({ action: "payment.add", set: { amount: "200", date: "2026-11-27", reference: "TX-1" } })).toEqual({ action: "payment.add", set: { amount: 200, date: "2026-11-27", reference: "TX-1" } });
+    expect(parseRecordAction({ action: "payment.add", set: { amount: "200", date: "2026-11-27" } })).toEqual({ action: "payment.add", set: { amount: 200, date: "2026-11-27" } });
     expect(parseRecordAction({ action: "payment.add", set: { amount: "200" } })).toBeNull();
     expect(parseRecordAction({ action: "payment.add", set: { amount: "0", date: "2026-11-27" } })).toBeNull();
     expect(parseRecordAction({ action: "payment.add", id: "4", set: { amount: "1", date: "2026-11-27" } })).toBeNull();
     expect(parseRecordAction({ action: "payment.add", set: { amount: "1", date: "2026-11-27", billing: "B" } })).toBeNull();
+    // ConnectWise has no reference or note; unknown fields refuse the action (M-20261127-101).
+    expect(parseRecordAction({ action: "payment.add", set: { amount: "200", date: "2026-11-27", reference: "TX-1" } })).toBeNull();
+    expect(parseRecordAction({ action: "payment.add", set: { amount: "200", date: "2026-11-27", note: "wire" } })).toBeNull();
   });
 });
 

@@ -116,6 +116,9 @@ describe("the invoice window", () => {
     await open();
     await click(q("[data-invoice-side] [data-invoice-pay]"));
     const form = q("[data-invoice-payment-form]")!;
+    // ConnectWise has no reference or note on a payment: amount and date only (M-20261127-101).
+    expect(form.querySelectorAll("input").length).toBe(2);
+    expect(form.querySelector("textarea")).toBeNull();
     const [amount, date] = [...form.querySelectorAll<HTMLInputElement>("input")];
     expect(date!.value).toBe("2026-11-27");
     await act(async () => setValue(amount!, "200"));

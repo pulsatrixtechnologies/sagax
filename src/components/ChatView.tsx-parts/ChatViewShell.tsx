@@ -163,6 +163,10 @@ export function ChatViewShell(m: Record<string, any>) {
       {/* Messages + composer share one pane so bubbles scroll into the pill
           instead of dying on a rectangular clip above a black dock. */}
       <div className="relative min-h-0 flex-1">
+      {/* M-20261127-178: the conversation's bot, the leader every Heavy expert
+          is drawn as, for every row (the earlier topics' too) and the
+          Thoughts panel. */}
+      <HeavyLeaderContext value={bot}>
       {/* Behind the transcript, which is positioned only while the field is
           on so it paints over the canvas (BackgroundEffectLayer.tsx). */}
       <BackgroundEffectLayer paneRef={scrollRef} effect={backgroundEffect} />
@@ -214,7 +218,7 @@ export function ChatViewShell(m: Record<string, any>) {
             <div ref={topSentinelRef} className="h-2 w-full pointer-events-none" aria-hidden="true" />
           ) : null}
           {windowedMessages.length === 0 && !bot.busy && (!streamHasEarlier || !streamDrawn) && <EmptyChat bot={bot} />}
-          <ChatRowsContext.Provider value={rows}><LiveToolsContext value={liveTools}><LiveTurnsContext value={liveTurns}><ChatBusyContext value={busy}><HeavyLeaderContext value={bot}>
+          <ChatRowsContext.Provider value={rows}><LiveToolsContext value={liveTools}><LiveTurnsContext value={liveTurns}><ChatBusyContext value={busy}>
             <ConversationGalleryProvider>
             <MessagesList
               confidential={confidential}
@@ -238,7 +242,7 @@ export function ChatViewShell(m: Record<string, any>) {
               seen={seenRow}
             />
             </ConversationGalleryProvider>
-          </HeavyLeaderContext></ChatBusyContext></LiveTurnsContext></LiveToolsContext></ChatRowsContext.Provider>
+          </ChatBusyContext></LiveTurnsContext></LiveToolsContext></ChatRowsContext.Provider>
           {laterCount > 0 && (
             <div className="flex justify-center">
               <button
@@ -266,6 +270,7 @@ export function ChatViewShell(m: Record<string, any>) {
       <TranscriptAnnouncer threadKey={transcriptKey} snapshot={announcement} />
       {/* #4901: the Thoughts panel of a Heavy run, docked in the right-hand slot */}
       <ThoughtsPanelHost messages={messages} busy={Boolean(busy)} />
+      </HeavyLeaderContext>
 
       {/* #2149: the dev context pods (</>) live only in a coding window
           (CodingChat), never in the plain chat. */}

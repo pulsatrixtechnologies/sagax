@@ -2,22 +2,24 @@
 // detail panel (DetailPanel, the one every page's detail uses) with what the
 // team wrote. The leader's steps first, how it ended (agreed, or decided with
 // the points still in dispute), then each expert with its persona and seat,
-// collapsible: a one-line preview closed, every round's message open. The
-// final answer stays in the chat.
-import { useEffect, useState } from "react";
+// collapsible: a one-line preview closed, every round's message open. Each
+// expert's avatar is the conversation's bot, as the row draws it
+// (ExpertAvatar, M-20261127-178). The final answer stays in the chat.
+import { use, useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { AGENT_COLORS, agentPreview, agentStatusText, expertName, heavyLineOf, heavyOutcomeText, leaderStepText, refusalSaysText, refusalText } from "@/lib/heavy-team";
+import { agentPreview, agentStatusText, expertName, heavyLineOf, heavyOutcomeText, leaderStepText, refusalSaysText, refusalText } from "@/lib/heavy-team";
 import { closeThoughts, useOpenThoughts } from "@/lib/thoughts-panel";
 import { formatElapsed } from "@/lib/working-time";
 import type { Message } from "@/state/store";
 import type { HeavyAgentLine, HeavyTeamLine } from "../../shared/heavy-team";
-import { MausAvatar } from "./Avatar";
+import type { BotAvatarProps } from "./Avatar";
 import { DetailPanel } from "./DetailPanel";
+import { ExpertAvatar, HeavyLeaderContext } from "./HeavyTeamRow";
 
-function AgentSection({ agent, index, running }: { agent: HeavyAgentLine; index: number; running: boolean }) {
+function AgentSection({ agent, bot, running }: { agent: HeavyAgentLine; bot: BotAvatarProps["bot"] | null; running: boolean }) {
   // an agent still writing is open; a finished one folds to its preview, the person opens it
   const [open, setOpen] = useState(agent.status === "working");
   const live = agent.status === "working" && running;
@@ -27,9 +29,11 @@ function AgentSection({ agent, index, running }: { agent: HeavyAgentLine; index:
       <button type="button" aria-expanded={open} aria-controls={bodyId} aria-label={t("heavy.agent.toggle", { agent: expertName(agent) })}
         onClick={() => setOpen((on) => !on)}
         className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left outline-none hover:bg-menu-hover focus-visible:bg-menu-hover focus-visible:ring-2 focus-visible:ring-focus">
-        <span className="flex shrink-0 items-center justify-center rounded-full bg-app ring-2 ring-app">
-          <MausAvatar color={AGENT_COLORS[index % AGENT_COLORS.length]!} size={24} state={live ? "thinking" : "idle"} animated={live} trackPointer={false} />
-        </span>
+        {bot && (
+          <span data-thoughts-avatar="" className="flex shrink-0 items-center justify-center rounded-full bg-app ring-2 ring-app">
+            <ExpertAvatar bot={bot} size={24} working={live} animated={live} />
+          </span>
+        )}
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="flex items-baseline gap-1.5 text-[14px] leading-5 text-ink">
             <span className="shrink-0">{expertName(agent)}</span>
@@ -58,6 +62,8 @@ function AgentSection({ agent, index, running }: { agent: HeavyAgentLine; index:
 }
 
 export function ThoughtsPanel({ line, running, onClose }: { line: HeavyTeamLine; running: boolean; onClose: () => void }) {
+  // the conversation's bot: every expert is it
+  const bot = use(HeavyLeaderContext);
   return (
     <DetailPanel label={t("heavy.panel.title")} title={t("heavy.panel.title")} onClose={onClose} data-thoughts-panel="" bodyClassName="py-1">
       <section data-thoughts-leader="" className="border-b border-hairline/40 px-4 py-3">
@@ -96,7 +102,7 @@ export function ThoughtsPanel({ line, running, onClose }: { line: HeavyTeamLine;
           </div>
         )}
       </section>
-      {line.agents.map((agent, index) => <AgentSection key={agent.n} agent={agent} index={index} running={running} />)}
+      {line.agents.map((agent) => <AgentSection key={agent.n} agent={agent} bot={bot} running={running} />)}
     </DetailPanel>
   );
 }

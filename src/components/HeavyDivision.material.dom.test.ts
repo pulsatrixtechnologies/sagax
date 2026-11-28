@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 // A bot in a material (Fluffy, Glass) wears it in its cells: the bot's still
-// over its body while nothing divides, each expert's in its cell once it has
-// its colour, and the flat volume is off where a still is worn. The engine's
+// over its body while nothing divides, the same still of the bot in every
+// expert's cell (no colour of its own, M-20261127-178), and the flat volume
+// is off where a still is worn. The engine's
 // painting itself needs WebGL2 (real Chrome: scripts/capture/heavy-division.mjs
 // --material); here the material and its stills are stand-ins.
 import { act, createElement } from "react";
@@ -15,7 +16,8 @@ import type { MaterialStillRequest } from "./shape-material-still";
 import { loadAllBakedStills } from "./shape-stills";
 
 const asked: MaterialStillRequest[] = [];
-vi.mock("./shape-material", () => ({ useShapeMaterial: (name: string) => (name === "flat" ? null : { id: name, render: () => null }) }));
+// the rest of the module as it is: the row's leader and pile are the bot's real avatar (M-20261127-178)
+vi.mock("./shape-material", async (importOriginal) => ({ ...(await importOriginal<object>()), useShapeMaterial: (name: string) => (name === "flat" ? null : { id: name, render: () => null }) }));
 vi.mock("./shape-material-still", () => ({
   materialStill: (request: MaterialStillRequest) => {
     asked.push(request);
@@ -24,7 +26,6 @@ vi.mock("./shape-material-still", () => ({
 }));
 
 const { HeavyLeaderContext, HeavyTeamRow } = await import("./HeavyTeamRow");
-const { expertPaint } = await import("./HeavyDivision");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -45,6 +46,8 @@ const bot = { name: "Nimbus", color: "amber", mascotLook: { character: "shape", 
 let host: HTMLDivElement;
 let root: Root;
 let frames: FrameRequestCallback[] = [];
+let frameIds: number[] = [];
+let lastFrameId = 0;
 let clock = 0;
 const row = async (line: HeavyTeamLine, busy: boolean, id: string) => {
   await act(async () => {
@@ -60,6 +63,7 @@ function pump(seconds: number): void {
     clock += 1000 / 60;
     const due = frames;
     frames = [];
+    frameIds = [];
     for (const callback of due) callback(clock);
   }
 }
@@ -72,8 +76,19 @@ beforeEach(() => {
   asked.length = 0;
   frames = [];
   clock = 10_000;
-  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
-  vi.stubGlobal("cancelAnimationFrame", () => { frames = []; });
+  // each frame cancelled by its own id, as a browser does: the bot's own avatar beside the division asks for frames too
+  frameIds = [];
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    frames.push(callback);
+    frameIds.push(++lastFrameId);
+    return lastFrameId;
+  });
+  vi.stubGlobal("cancelAnimationFrame", (id: number) => {
+    const at = frameIds.indexOf(id);
+    if (at < 0) return;
+    frames.splice(at, 1);
+    frameIds.splice(at, 1);
+  });
   vi.spyOn(performance, "now").mockImplementation(() => clock);
   host = document.createElement("div");
   document.body.append(host);
@@ -87,8 +102,9 @@ afterEach(() => {
 });
 
 describe("a bot in a material divides into cells that wear it", () => {
-  it("shows the bot in its material while the leader picks the team, its flat body under it hidden", async () => {
+  it("shows the bot in its material as the division starts, its flat body under it hidden", async () => {
     await row(team(0), true, "glass-planning");
+    await row(team(2), true, "glass-planning");
     expect($("[data-heavy-division]")!.dataset.heavyMaterial).toBe("glass");
     const own = $("[data-heavy-own]")!;
     expect(own.getAttribute("href")).toBe("data:image/png;base64,f2a51a");
@@ -99,18 +115,19 @@ describe("a bot in a material divides into cells that wear it", () => {
     expect(asked[0]).toMatchObject({ color: "#f2a51a", state: "idle" });
   });
 
-  it("each expert wears its own still, in its colour, once the pile has closed up; the flat volume is off", async () => {
+  it("every expert wears the bot's own still once the pile has closed up, never one of its own colour; the flat volume is off", async () => {
     await row(team(0), true, "glass-run");
     await row(team(4), true, "glass-run");
     pump(30);
     expect(cells()).toHaveLength(4);
-    cells().forEach((cell, index) => {
+    for (const cell of cells()) {
       const image = cell.querySelector("image")!;
-      expect(image.getAttribute("href")).toBe(`data:image/png;base64,${expertPaint(index).color.slice(1)}`);
+      expect(image.getAttribute("href")).toBe("data:image/png;base64,f2a51a");
       expect(image.getAttribute("width")).toBe("108");
       expect(cell.querySelector("use:not([stroke])")!.getAttribute("display")).toBe("none");
       expect(cell.querySelector("[data-heavy-shade]")!.getAttribute("opacity")).toBe("0");
-    });
-    expect(new Set(asked.map((request) => request.color)).size).toBe(5);
+    }
+    // one still, the bot's: no colour per expert is ever painted
+    expect(new Set(asked.map((request) => request.color))).toEqual(new Set(["#f2a51a"]));
   });
 });

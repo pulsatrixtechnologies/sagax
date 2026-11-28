@@ -399,40 +399,47 @@ called from `startTurn` before the leader's prompt is built.
   mascot divides in place into one cell per expert. A cell loses its eyes;
   the bot's own silhouette elongates, pinches in the middle and lets go
   (one membrane until it breaks: a blur then a threshold on its alpha, on
-  the silhouette itself, in SVG); each daughter gets its eyes back, takes
-  its expert's colour, and the experts close up into the pile, each cut out
-  of its neighbour by a ring of the page's colour. Any number the run
-  announces is drawn (the colours are eight, `AGENT_COLORS`, the seventh
-  lime as in the mock-up); several cells divide at once when many are
-  needed (1, 2, 4, 8). One speed, the mock-up's (`DIVISION_SPEED`). The
-  drawing is as wide as its cells, so the header stays against the pile.
+  the silhouette itself, in SVG); each daughter gets its eyes back, and the
+  experts close up into the pile, each cut out of its neighbour by a ring of
+  the page's colour. Any number the run announces is drawn; several cells
+  divide at once when many are needed (1, 2, 4, 8). One speed, the
+  mock-up's (`DIVISION_SPEED`). The drawing is as wide as its cells, so the
+  header stays against the pile.
+  - Every expert is the conversation's bot, duplicated (owner 2026-11-27,
+    M-20261127-178, M-20261126-119): the same character, shape, skin,
+    colours or picture as the chat's header, drawn by the same component
+    (`ExpertAvatar` in `HeavyTeamRow.tsx`: `BotAvatar` with the bot
+    unchanged), once per expert, in the row's pile and in the Thoughts
+    panel. Never a colour per expert, an owl or a generic shape. The chat
+    gives the bot to every row of the conversation (the earlier topics' too)
+    and to the panel (`HeavyLeaderContext`); a room gives the bot that ran
+    the run.
   - The cell is the bot's own shape for the whole division: its
     open-bot-avatar body (the baked still every other avatar of the bot
     draws, or its own drawing read once per content), its colour, its eyes
-    where the bot has them; every expert keeps the shape and only the colour
-    changes. The look's rules are ShapeMascot's own (`shape-look.ts`, held
-    to ShapeMascot by `shape-look.test.ts`).
-  - A Fluffy or Glass bot wears its material in its cells: the bot's still
-    while nothing divides, each expert's once it has its colour, painted
-    once per look and colour by the engine on the WebGL2 context the
+    where the bot has them; every cell keeps that shape and that colour.
+    The look's rules are ShapeMascot's own (`shape-look.ts`, held to
+    ShapeMascot by `shape-look.test.ts`).
+  - A Fluffy or Glass bot wears its material in its cells: the bot's one
+    still, painted once per look by the engine on the WebGL2 context the
     material already shares across the page (`shape-material-still.ts`), so
     no context is added per row. While the cells divide the membrane is flat
     in the bot's colour with the mock-up's simple volume, and where the page
     cannot paint the material (no WebGL2) the cells stay flat with that
     volume. A Flat bot's cells are flat, as its avatars are. A skin's layers
-    (gold, neon...) are not carried into the cells: the bot's own cell takes
-    the skin's fill and eyes, the experts their colour.
-  - An expert that fails mid-run stays marked: its cell (or its owl) is
-    dimmed, as the orbit dimmed it, and its line in the preview reads "Did
-    not finish · ..." in the tertiary ink.
-  - A bot whose mascot is a character (the owl, Shiba...) or its own picture
-    divides too (D-20261126-037): while its leader picks the team the row
-    shows the bot itself, then a round in the bot's colour divides, and once
-    the pile has closed up each cell becomes the bot's own character again
-    (its look in the expert's colour; a picture as it is), stacked as the
-    pile is, the round fading out over them. The pile is alive while the run
-    goes (the one speaking at work, as the orbit drew them) and still after;
-    a run read back from history is that pile at once.
+    (gold, neon...) are not carried into the dividing cells; the pile after
+    them is the bot's own avatar, skin included.
+  - An expert that fails mid-run stays marked: its cell (or its avatar in
+    the pile) is dimmed, as the orbit dimmed it, and its line in the preview
+    reads "Did not finish · ..." in the tertiary ink.
+  - While its leader picks the team the row shows the bot itself, then its
+    mascot divides (its own shape, or a round in its colour for a character
+    such as the owl or Shiba, or its own picture, D-20261126-037), and once
+    the pile has closed up each cell becomes the bot's own avatar again,
+    stacked as the pile is, the division fading out over them. The pile is
+    alive while the run goes (the one speaking at work, as the orbit drew
+    them) and still after; a run read back from history is that pile at
+    once.
   - A run that is over, or read back from history, is drawn finished and
     never replayed; so is a row that first shows once the experts are past
     their first round or the leader writes; a division shown to its end is
@@ -441,8 +448,11 @@ called from `startTurn` before the leader's prompt is built.
     run goes) every step lands at once.
   - The clock stops when the row leaves the screen, when the window is
     hidden and once nothing moves (a finished row asks for no frame and has
-    no filter). While the run goes the cells breathe at 30 frames a second.
-    Measured by `scripts/capture/heavy-division.mjs --measure`.
+    no filter). While the cells divide they breathe at 30 frames a second;
+    once the pile has closed up the division leaves the row (after its 600 ms
+    fade) and the pile is the bot's own small avatars, which live as that
+    avatar does. Measured by `scripts/capture/heavy-division.mjs --measure`
+    (the division, then the pile).
   - It replaces the orbit of #5090 on the desktop (D-20261126-022): the
     phone keeps its own until its lot. Who speaks still reads in the live
     line per expert, and the round's kind in the header.
@@ -457,10 +467,13 @@ called from `startTurn` before the leader's prompt is built.
   `src/components/HeavyDivision.dom.test.ts`,
   `src/components/HeavyDivision.material.dom.test.ts`,
   `src/components/shape-look.test.ts`,
-  `src/components/HeavyTeamRow.dom.test.ts`; captures:
+  `src/components/HeavyTeamRow.dom.test.ts`,
+  `src/components/HeavyExperts.mascot.dom.test.ts` (every expert is the
+  header's own avatar, row and panel; no expert colour, no owl); captures:
   `scripts/capture/heavy-division.mjs` (frame by frame, beside the mock-up
   with `--mockup`; `--look` for an own drawing, a material, a failure, a
-  character, a picture; `--shape owl`), `scripts/capture/heavy-team.mjs`.
+  character, a picture; `--shape owl`), `scripts/capture/heavy-team.mjs`
+  (`--look` for a character or a picture too).
 
 Tests: `server/heavy-team.test.ts` (an expert's write is refused by the server;
 the leader stops at 5 rounds at most; agreement stops early; the plan, the

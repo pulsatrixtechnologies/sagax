@@ -60,6 +60,7 @@ Rules only. How the code works (files, routes, tests, history) lives in
 - Build is no mode: the server never picks it and no menu offers it; a stored or sent Build is Auto, never an error (2026-11-26, #5398).
 - The chat bar's voice button does the mode the person used last; dictation before any use (2026-11-26, #5399).
 - A bot's title always sits under its name, plain secondary grey, never a tag, pill or outline, on every surface (2026-11-06).
+- On the desktop, a Heavy run's experts are the conversation's bot duplicated, drawn as its header draws it (`ExpertAvatar`, `BotAvatar` with the bot unchanged) in the row and the Thoughts panel: never a colour per expert, an owl or a generic shape; the phone follows in its own lot (2026-11-27, M-20261127-178).
 - A surface that was a window stays a window, and a page stays a page, unless the owner asks (2026-11-02).
 - Never hard-code a colour in a component; fix a failing contrast pair in the skin, never in the `.tsx` (2026-10-08).
 - No per-component scrollbar styles; overlay scrollbars are one rule (2026-10-18).

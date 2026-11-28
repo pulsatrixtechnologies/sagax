@@ -540,6 +540,18 @@ export interface WireBot {
   avatarFocusX?: number;
   /** Vertical point of the image kept in the crop, 0–1. Absent means center. */
   avatarFocusY?: number;
+  /** App-owned image for the bot page's top banner; null/absent means the wash. */
+  bannerUrl?: string | null;
+  /** Ready-made banner background when there is no image. Absent means default. */
+  bannerPreset?: import("./bot-banner.ts").BotBannerPreset | null;
+  /** Zoom of a custom banner image. Absent means 1. */
+  bannerZoom?: number;
+  /** Horizontal focal point of the banner image, 0–1. Absent means center. */
+  bannerFocusX?: number;
+  /** Vertical focal point of the banner image, 0–1. Absent means center. */
+  bannerFocusY?: number;
+  /** Optional banner effects (blur, darken, grain, animated wash, parallax). */
+  bannerEffects?: import("./bot-banner.ts").BotBannerEffects | null;
   /** True when any task has unread output. */
   unread: boolean;
   /** The bot's model: every thread without a model of its own runs on it

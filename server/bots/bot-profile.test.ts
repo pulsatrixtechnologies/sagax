@@ -102,6 +102,32 @@ describe("parseBotProfilePatch (both modes)", () => {
       error: "avatarCrop must be mascot, circle, rounded, or square",
     });
   });
+
+  it("accepts banner fields and clears them to the default wash", () => {
+    expect(parseBotProfilePatch({
+      bannerUrl: "/api/attachments/cover.webp",
+      bannerPreset: "waves",
+      bannerZoom: 1.25,
+      bannerFocusX: 0.3,
+      bannerFocusY: 0.7,
+      bannerEffects: { blur: true, grain: false },
+    }, true)).toEqual({
+      ok: true,
+      patch: {
+        bannerUrl: "/api/attachments/cover.webp",
+        bannerPreset: "waves",
+        bannerZoom: 1.25,
+        bannerFocusX: 0.3,
+        bannerFocusY: 0.7,
+        bannerEffects: { blur: true },
+      },
+    });
+    expect(parseBotProfilePatch({ bannerUrl: null, bannerPreset: "default", bannerEffects: null }, true)).toEqual({
+      ok: true,
+      patch: { bannerUrl: undefined, bannerPreset: undefined, bannerEffects: undefined },
+    });
+    expect(parseBotProfilePatch({ bannerPreset: "neon" } as never, true).ok).toBe(false);
+  });
 });
 
 describe("mascotBody", () => {

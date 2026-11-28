@@ -41,7 +41,8 @@ import { pickBotName } from "./names.ts";
 import { redactSecretsInText } from "./redact.ts";
 import { withoutRunMarkersIn } from "../shared/routine-result.ts";
 import { splitRecordText } from "../shared/record-cards.ts";
-import { AVATAR_FOCUS_CENTER, AVATAR_ZOOM_MIN, botAvatarProfile, clampAvatarFocus, clampAvatarZoom } from "../shared/bot-avatar.ts";
+import { AVATAR_FOCUS_CENTER, AVATAR_ZOOM_MIN, botAvatarProfile, botAvatarUrlSchema, clampAvatarFocus, clampAvatarZoom } from "../shared/bot-avatar.ts";
+import { bannerEffectsActive, botBannerPresetSchema, normalizeBannerEffects } from "../shared/bot-banner.ts";
 import { approvalModeFor, delegatedLevelWidens, isApprovalException, isApprovalMode, modelSwitchNeedsAsk, threadApprovalFields, type ApprovalException, type ApprovalMode } from "../shared/approval-mode.ts";
 import { lastChangeRequestUrl } from "../shared/thread-link.ts";
 import { REMOVED_COMPUTER_DRIVER, type ComputerEngineMove } from "./computer/computer-engine-removal.ts";
@@ -970,6 +971,52 @@ export class Store {
           boot.botsMigrated = true;
         } else if (b[key] !== focus) {
           b[key] = focus;
+          boot.botsMigrated = true;
+        }
+      }
+      // Banner fields (M-20261127-183): same attachment and framing clamps as the avatar.
+      if (b.bannerUrl !== undefined) {
+        const bannerUrl = botAvatarUrlSchema.safeParse(b.bannerUrl);
+        if (!bannerUrl.success) {
+          delete b.bannerUrl;
+          boot.botsMigrated = true;
+        }
+      }
+      if (b.bannerPreset !== undefined) {
+        const preset = botBannerPresetSchema.safeParse(b.bannerPreset);
+        if (!preset.success || preset.data === "default") {
+          delete b.bannerPreset;
+          boot.botsMigrated = true;
+        }
+      }
+      if (b.bannerZoom !== undefined) {
+        const zoom = clampAvatarZoom(b.bannerZoom);
+        if (zoom === AVATAR_ZOOM_MIN) {
+          delete b.bannerZoom;
+          boot.botsMigrated = true;
+        } else if (b.bannerZoom !== zoom) {
+          b.bannerZoom = zoom;
+          boot.botsMigrated = true;
+        }
+      }
+      for (const key of ["bannerFocusX", "bannerFocusY"] as const) {
+        if (b[key] === undefined) continue;
+        const focus = clampAvatarFocus(b[key]);
+        if (focus === AVATAR_FOCUS_CENTER) {
+          delete b[key];
+          boot.botsMigrated = true;
+        } else if (b[key] !== focus) {
+          b[key] = focus;
+          boot.botsMigrated = true;
+        }
+      }
+      if (b.bannerEffects !== undefined) {
+        const effects = normalizeBannerEffects(b.bannerEffects);
+        if (!bannerEffectsActive(effects)) {
+          delete b.bannerEffects;
+          boot.botsMigrated = true;
+        } else if (JSON.stringify(b.bannerEffects) !== JSON.stringify(effects)) {
+          b.bannerEffects = effects;
           boot.botsMigrated = true;
         }
       }

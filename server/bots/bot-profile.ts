@@ -7,6 +7,12 @@ import {
   botAvatarCropSchema,
   botAvatarUrlSchema,
 } from "../../shared/bot-avatar.ts";
+import {
+  BOT_BANNER_PRESETS,
+  bannerEffectsActive,
+  botBannerPatchShape,
+  normalizeBannerEffects,
+} from "../../shared/bot-banner.ts";
 import { BOT_PROFILE_LIMITS, fitsOnOneLine } from "../../shared/bot-profile.ts";
 import { MASCOT_BODY_IDS, mascotBodySchema } from "../../shared/mascot-bodies.ts";
 import { MASCOT_SKIN_IDS, mascotSkinSchema } from "../../shared/mascot-skins.ts";
@@ -32,6 +38,12 @@ export const BOT_PROFILE_PATCH_FIELDS = [
   "avatarZoom",
   "avatarFocusX",
   "avatarFocusY",
+  "bannerUrl",
+  "bannerPreset",
+  "bannerZoom",
+  "bannerFocusX",
+  "bannerFocusY",
+  "bannerEffects",
   "mascotBody",
   "mascotSkin",
   "mascotLook",
@@ -75,6 +87,7 @@ export const profilePatchSchema = z.object({
   avatarZoom: z.number({ error: "avatarZoom must be a number from 1 to 3" }).finite().min(AVATAR_ZOOM_MIN).max(AVATAR_ZOOM_MAX).optional(),
   avatarFocusX: z.number({ error: "avatarFocusX must be a number from 0 to 1" }).finite().min(0).max(1).optional(),
   avatarFocusY: z.number({ error: "avatarFocusY must be a number from 0 to 1" }).finite().min(0).max(1).optional(),
+  ...botBannerPatchShape,
   mascotBody: mascotBodySchema.optional(),
   mascotSkin: mascotSkinSchema.optional(),
   mascotLook: mascotLookSchema.optional(),
@@ -129,6 +142,12 @@ export type BotProfilePatch = Partial<
       | "avatarZoom"
       | "avatarFocusX"
       | "avatarFocusY"
+      | "bannerUrl"
+      | "bannerPreset"
+      | "bannerZoom"
+      | "bannerFocusX"
+      | "bannerFocusY"
+      | "bannerEffects"
       | "mascotBody"
       | "mascotSkin"
       | "mascotLook"
@@ -139,8 +158,8 @@ export type BotProfilePatch = Partial<
       | "finishUntil"
       | "finishUntilMaxRounds"
     >,
-    "avatarUrl"
-  > & { avatarUrl?: string }
+    "avatarUrl" | "bannerUrl"
+  > & { avatarUrl?: string; bannerUrl?: string }
 >;
 
 export type BotProfilePatchResult =
@@ -181,14 +200,24 @@ export function parseBotProfilePatch(input: BotProfilePatchInput, strict = false
       const options = `${MASCOT_SKIN_IDS.slice(0, -1).join(", ")}, or ${MASCOT_SKIN_IDS.at(-1)}`;
       return { ok: false, error: `mascotSkin must be ${options}` };
     }
+    if (issue?.path[0] === "bannerPreset") {
+      const options = `${BOT_BANNER_PRESETS.slice(0, -1).join(", ")}, or ${BOT_BANNER_PRESETS.at(-1)}`;
+      return { ok: false, error: `bannerPreset must be ${options}` };
+    }
     return { ok: false, error: issue?.message ?? "invalid profile patch" };
   }
 
-  const { avatarUrl, finishUntil, finishUntilMaxRounds, ...fields } = parsed.data;
+  const { avatarUrl, bannerUrl, bannerPreset, bannerEffects, finishUntil, finishUntilMaxRounds, ...fields } = parsed.data;
   const patch: BotProfilePatch = fields;
   // null clears the bound back to the default (absent on the record).
   if (finishUntilMaxRounds !== undefined) patch.finishUntilMaxRounds = finishUntilMaxRounds ?? undefined;
   if (avatarUrl !== undefined) patch.avatarUrl = avatarUrl || undefined;
+  if (bannerUrl !== undefined) patch.bannerUrl = bannerUrl || undefined;
+  if (bannerPreset !== undefined) patch.bannerPreset = bannerPreset === null || bannerPreset === "default" ? undefined : bannerPreset;
+  if (bannerEffects !== undefined) {
+    const normalized = bannerEffects ? normalizeBannerEffects(bannerEffects) : {};
+    patch.bannerEffects = bannerEffectsActive(normalized) ? normalized : undefined;
+  }
   if (finishUntil !== undefined) {
     const text = finishUntilText(finishUntil);
     patch.finishUntil = text || undefined;

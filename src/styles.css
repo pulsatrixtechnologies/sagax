@@ -3093,6 +3093,53 @@ body {
 .bot-profile-banner {
   background-image: linear-gradient(180deg, var(--bot-profile-banner-from, #c6c9ce) 0%, var(--bot-profile-banner-to, #dcdee1) 100%);
 }
+/* Custom banner layers (M-20261127-183): readability veil, grain, slow wash. */
+.bot-profile-banner-veil {
+  background:
+    linear-gradient(90deg, transparent 40%, rgb(0 0 0 / 0.28) 100%),
+    linear-gradient(0deg, rgb(0 0 0 / 0.18) 0%, transparent 55%);
+}
+.bot-profile-banner-veil-strong {
+  background:
+    linear-gradient(180deg, rgb(0 0 0 / 0.45) 0%, rgb(0 0 0 / 0.25) 100%),
+    linear-gradient(90deg, transparent 35%, rgb(0 0 0 / 0.35) 100%);
+}
+.bot-profile-banner-grain {
+  opacity: 0.22;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+}
+.bot-profile-banner-animated {
+  background-size: 200% 200%;
+  animation: bot-profile-banner-wash 18s ease-in-out infinite;
+}
+@keyframes bot-profile-banner-wash {
+  0%, 100% { background-position: 0% 0%; }
+  50% { background-position: 100% 100%; }
+}
+.bot-profile-banner-pattern-dots {
+  background-image:
+    radial-gradient(circle at 20% 30%, color-mix(in srgb, var(--bot-profile-banner-from, #c6c9ce) 70%, #000) 1.4px, transparent 1.8px),
+    linear-gradient(180deg, var(--bot-profile-banner-from, #c6c9ce) 0%, var(--bot-profile-banner-to, #dcdee1) 100%);
+  background-size: 14px 14px, auto;
+}
+.bot-profile-banner-pattern-grid {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--bot-profile-banner-from, #c6c9ce) 55%, #000) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--bot-profile-banner-from, #c6c9ce) 55%, #000) 1px, transparent 1px),
+    linear-gradient(180deg, var(--bot-profile-banner-from, #c6c9ce) 0%, var(--bot-profile-banner-to, #dcdee1) 100%);
+  background-size: 16px 16px, 16px 16px, auto;
+}
+.bot-profile-banner-pattern-waves {
+  background-image:
+    repeating-linear-gradient(135deg, color-mix(in srgb, var(--bot-profile-banner-from, #c6c9ce) 80%, #fff) 0 10px, var(--bot-profile-banner-to, #dcdee1) 10px 20px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .bot-profile-banner-animated { animation: none; }
+}
+:root[data-reduced-motion="true"] .bot-profile-banner-animated {
+  animation: none;
+}
 /* The profile mascot's own soft shadow, the one any avatar has: no outline,
    no halo. It replaces the skin's ambient shadow so the two never stack. */
 .profile-mascot-shadow {

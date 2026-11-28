@@ -535,6 +535,18 @@ export interface Bot {
   avatarFocusX?: number;
   /** Vertical point of the image kept in the crop, 0–1. Absent means center. */
   avatarFocusY?: number;
+  /** App-owned image for the bot page banner. */
+  bannerUrl?: string | null;
+  /** Ready-made banner background when there is no image. */
+  bannerPreset?: import("../../../shared/bot-banner").BotBannerPreset | null;
+  /** Zoom of a custom banner image. Absent means 1. */
+  bannerZoom?: number;
+  /** Horizontal focal point of the banner image, 0–1. */
+  bannerFocusX?: number;
+  /** Vertical focal point of the banner image, 0–1. */
+  bannerFocusY?: number;
+  /** Optional banner effects. */
+  bannerEffects?: import("../../../shared/bot-banner").BotBannerEffects | null;
   unread: boolean;
   busy?: boolean;
   /** what the bot is doing, as the harness sees it; busy is derived from it */

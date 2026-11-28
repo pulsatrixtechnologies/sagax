@@ -6472,6 +6472,8 @@ bindLeafHost({
   get botProductInputs() { return botProductInputs; },
   get orgTeams() { return orgTeams; },
   get engineLogins() { return engineLogins; },
+  // #4410 / #5525: pi turns read the payer's Grok access through this
+  get grokLiveAccessOf() { return grokLiveAccessOf; },
   get sectionChannels() { return sectionChannels; },
   get threadsWithActiveCoordination() { return threadsWithActiveCoordination; },
   get cacheKeepWarmStatus() { return cacheKeepWarmStatus; },

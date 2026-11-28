@@ -15,12 +15,22 @@ describe("the harness matrix (#4329, design section 1)", () => {
     expect(recommendedHarness(source, "solo")).toBe("claudeAgent");
   });
 
-  it("marks the OpenAI and xAI subscriptions under pi as larger work, never offered", () => {
+  it("marks the OpenAI subscription under pi as larger work, never offered", () => {
     expect(works({ kind: "subscription", vendor: "openai", driver: "codex" })).toEqual(["codex"]);
     expect(harnessPairs({ kind: "subscription", vendor: "openai", driver: "codex" }, "solo").map((pair) => [pair.harness, pair.mark]))
       .toEqual([["codex", "works"], ["piAgent", "larger"], ["opencodeGo", "larger"], ["openai-compat", "no"]]);
-    expect(harnessPairs({ kind: "subscription", vendor: "xai", driver: "grokAgent" }, "solo").map((pair) => [pair.harness, pair.mark]))
-      .toEqual([["grokAgent", "works"], ["piAgent", "larger"], ["opencodeGo", "no"], ["grok", "no"]]);
+  });
+
+  it("#4410 / #5525: offers a Grok account under its own tool and pi; OpenCode has no sign-in", () => {
+    const source: HarnessSource = { kind: "subscription", vendor: "xai", driver: "grokAgent" };
+    for (const place of ["solo", "organization"] as const) {
+      expect(works(source, place)).toEqual(["grokAgent", "piAgent"]);
+      expect(harnessPairs(source, place).find((pair) => pair.harness === "piAgent")).toEqual({ harness: "piAgent", role: "pi", mark: "works" });
+      expect(harnessPairs(source, place).find((pair) => pair.harness === "opencodeGo")).toEqual({
+        harness: "opencodeGo", role: "opencode", mark: "no", reason: "OpenCode has no sign-in for it.",
+      });
+    }
+    expect(recommendedHarness(source, "solo")).toBe("grokAgent");
   });
 
   it("offers another tool's sign-in on that tool only", () => {

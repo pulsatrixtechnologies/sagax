@@ -163,7 +163,9 @@ function rowsFor(source: HarnessSource): Row[] {
         case "xai":
           return [
             { harness: "grokAgent", mark: "works" },
-            { harness: "piAgent", mark: "larger", reason: "A recent pi signs in to it; the pinned version must be checked." },
+            // #4410 / #5525: pi 1.0.1 takes the payer's Grok access token as
+            // XAI_API_KEY for the turn (pi's own OAuth path ends the same way)
+            { harness: "piAgent", mark: "works" },
             { harness: "opencodeGo", mark: "no", reason: "OpenCode has no sign-in for it." },
             { harness: "grok", mark: "no", reason: PLAN_NOT_KEY },
           ];

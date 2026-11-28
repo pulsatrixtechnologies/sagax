@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { RenewInput, SubscriptionAccess } from "../cloud-agents/subscription-access.ts";
 import { ensureClaudeSubscriptionFresh, resetClaudeSubscriptionRefreshForTests } from "../engines/claude-subscription-refresh.ts";
-import { claudeSignInToken } from "./orgTurnAccess.ts";
+import { claudeSignInToken, grokSignInToken } from "./orgTurnAccess.ts";
 
 const PRIMARY = "/fake/principals/p1/claude";
 
@@ -92,8 +92,28 @@ describe("claudeSignInToken (#4410)", () => {
     // orgTurnAccess.ts is @ts-nocheck: a renamed member would only throw at
     // dispatch, where materializeEngineAccess turns it into a refused turn
     const source = readFileSync(join(import.meta.dirname, "..", "index.ts"), "utf8");
-    for (const member of ["engineLogins", "subscriptionCli", "ensureClaudeSubscriptionFresh", "readSubscriptionAccess"]) {
+    for (const member of ["engineLogins", "subscriptionCli", "ensureClaudeSubscriptionFresh", "readSubscriptionAccess", "grokLiveAccessOf"]) {
       expect(source).toContain(`get ${member}() { return ${member}; }`);
     }
+  });
+});
+
+describe("grokSignInToken (#4410 / #5525)", () => {
+  it("returns only the access token of a live Grok sign-in", async () => {
+    const asked: string[] = [];
+    const host = {
+      grokLiveAccessOf: async (principalId: string) => {
+        asked.push(principalId);
+        return { ok: true as const, accessToken: "fixture-grok-live-access", expiresAt: Date.now() + 3_600_000 };
+      },
+    };
+    expect(await grokSignInToken(host, "p1")).toEqual({ accessToken: "fixture-grok-live-access" });
+    expect(asked).toEqual(["p1"]);
+  });
+
+  it("returns null when the live path has no sign-in or refuses it", async () => {
+    expect(await grokSignInToken({ grokLiveAccessOf: async () => ({ ok: false as const, error: "no_sign_in" as const }) }, "p1")).toBeNull();
+    expect(await grokSignInToken({ grokLiveAccessOf: async () => ({ ok: false as const, error: "sign_in_refused" as const }) }, "p1")).toBeNull();
+    expect(await grokSignInToken({}, "p1")).toBeNull();
   });
 });

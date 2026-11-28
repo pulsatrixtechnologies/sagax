@@ -604,6 +604,72 @@ describe("#4410 / #5523: OpenCode runs Claude models on the payer's own Claude s
   });
 });
 
+describe("#4410 / #5525: pi runs xAI models on the payer's own Grok sign-in", () => {
+  const BOB_PID = BOB.toLowerCase();
+  const TOKEN = "fixture-grok-access-token-0000000000000001";
+  const deps = (signIn: (principalId: string) => Promise<{ accessToken: string } | null>, key: (sub: string, provider: ModelProvider) => ProviderKeyResult = () => ({ ok: false, error: "no_key" })) => {
+    const asked: string[] = [];
+    return {
+      asked,
+      dataDir: "/data",
+      resolveKey: async (sub: string, provider: ModelProvider) => key(sub, provider),
+      invalidate: () => {},
+      loginDir: (principalId: string) => `/data/principals/${principalId}/grok`,
+      grokSignIn: async (principalId: string) => { asked.push(principalId); return signIn(principalId); },
+    };
+  };
+
+  it("a person with a Grok sign-in and no key pays a pi turn with it", () => {
+    expect(resolveEngineAccess(input({ instance: PI, speaker: bob, signedIn: [`${BOB}/grokAgent`] })))
+      .toEqual({ ok: true, via: "subscription", payer: "speaker", payerPrincipalId: BOB, provider: "xai", grokAccount: true });
+    expect(paidByPerson(resolveEngineAccess(input({ instance: PI, speaker: bob, signedIn: [`${BOB}/grokAgent`] })))).toBe(true);
+  });
+
+  it("only the payer's own sign-in: the owner's never pays for the person who speaks", () => {
+    expect(resolveEngineAccess(input({ instance: PI, speaker: bob, signedIn: [`${OWNER}/grokAgent`] })))
+      .toEqual({ ok: false, reason: "no_access", cause: "no_credentials", payer: "speaker", payerPrincipalId: BOB });
+  });
+
+  it("OpenCode never takes a Grok sign-in (matrix: no)", () => {
+    expect(resolveEngineAccess(input({ instance: OPENCODE, speaker: bob, signedIn: [`${BOB}/grokAgent`] })))
+      .toEqual({ ok: false, reason: "no_access", cause: "no_credentials", payer: "speaker", payerPrincipalId: BOB });
+  });
+
+  it("a refused sign-in no longer pays", () => {
+    const expired = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/grokAgent`], subscriptionExpired: (pid, driver) => pid === BOB && driver === "grokAgent" });
+    expect(resolveEngineAccess(expired)).toMatchObject({ ok: false, cause: "no_credentials" });
+  });
+
+  it("hands the access token as XAI_API_KEY in the payer's own pi home", async () => {
+    const inp = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/grokAgent`] });
+    const d = deps(async () => ({ accessToken: TOKEN }));
+    const out = await materializeEngineAccess(inp, resolveEngineAccess(inp), d);
+    expect(out).toEqual({
+      ok: true,
+      plan: expect.objectContaining({ via: "subscription", grokAccount: true }),
+      access: { via: "subscription", identity: `subscription:${BOB_PID}:xai`, environment: { XAI_API_KEY: TOKEN }, engineHome: join("/data", "principals", BOB_PID, "piAgent-key") },
+    });
+    expect(d.asked).toEqual([BOB_PID]);
+    if (out.ok) expect(out.access.identity).not.toContain(TOKEN);
+  });
+
+  it("adds the sign-in beside the payer's other keys only when no xAI key of theirs pays", async () => {
+    const keyed = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/grokAgent`], keys: ["SUB-BOB/anthropic"] });
+    const out = await materializeEngineAccess(keyed, resolveEngineAccess(keyed), deps(async () => ({ accessToken: TOKEN }), () => ({ ok: true, key: "sk-ant-test-bob-key-000001", fingerprint: "fa" })));
+    expect(out).toMatchObject({ ok: true, access: { via: "speaker-key", identity: `speaker-key:${BOB_PID}:fa+xai`, environment: { ANTHROPIC_API_KEY: "sk-ant-test-bob-key-000001", XAI_API_KEY: TOKEN } } });
+    const both = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/grokAgent`], keys: ["SUB-BOB/xai"] });
+    const d = deps(async () => ({ accessToken: TOKEN }), () => ({ ok: true, key: "xai-test-bob-key-000001", fingerprint: "fx" }));
+    const keyOnly = await materializeEngineAccess(both, resolveEngineAccess(both), d);
+    expect(keyOnly).toMatchObject({ ok: true, access: { environment: { XAI_API_KEY: "xai-test-bob-key-000001" } } });
+    if (keyOnly.ok) expect(d.asked).toEqual([]);
+  });
+
+  it("the Grok sign-in counts as holding xAI for the pi catalog", () => {
+    expect([...piPayerProviders(input({ instance: PI, speaker: bob, signedIn: [`${BOB}/grokAgent`] }), [])!].sort()).toEqual(["xai"]);
+    expect([...piPayerProviders(input({ instance: PI, speaker: bob, signedIn: [`${BOB}/claudeAgent`, `${BOB}/grokAgent`] }), [])!].sort()).toEqual(["anthropic", "xai"]);
+  });
+});
+
 describe("resolveGovernedEngineAccess (#5180)", () => {
   const policy = { aspect: "chat" as const };
 

@@ -36,6 +36,12 @@
 //      only when no Anthropic key of that plan pays
 //      them; it never takes the place of a key. When
 //      none of them serves (step 6)                     -> subscription (claudeAccount)
+//   3c. pi (#4410 / #5525): the payer is signed in to
+//      their own Grok account (grokAgent, not expired).
+//      Same shape as 3b (`grokAccount`) for xAI models,
+//      handed as XAI_API_KEY for the turn (pi's own
+//      OAuth path ends that way). OpenCode has no
+//      sign-in for it (matrix: no).
 //   4. the payer keeps a key for the engine's provider
 //      in Perspicax (claudeAgent: anthropic, codex:
 //      openai, grokAgent: xai, geminiAgent: google,
@@ -179,18 +185,22 @@ export function piKeyProvider(piProvider: string | undefined): ModelProvider | n
 
 /** #3085: the providers whose pi models the turn's payer can really run,
  * resolved like a turn (resolveEngineAccess): the payer's own keys and their
- * Claude sign-in (#4410), else the organization's keys (`orgKeyProviders`) when the org-key step serves them.
+ * Claude / Grok sign-ins (#4410, #5525), else the organization's keys
+ * (`orgKeyProviders`) when the org-key step serves them.
  * Null: no filter (solo, where pi itself lists only what its keys serve).
  * Names only, never a key value. */
 export function piPayerProviders(input: EngineCredentialInput, orgKeyProviders: readonly ModelProvider[]): ReadonlySet<ModelProvider> | null {
   if (input.identity !== "perspicax") return null;
   const plan = resolveEngineAccess({ ...input, orgKeyProviders });
   if (!plan.ok) return new Set();
-  // #4410: the payer's Claude sign-in counts as holding the Claude provider,
-  // beside the keys of the plan
-  const signIn: ModelProvider[] = plan.claudeAccount ? ["anthropic"] : [];
+  // #4410 / #5525: the payer's Claude and Grok sign-ins count as holding
+  // those providers, beside the keys of the plan
+  const signIn: ModelProvider[] = [
+    ...(plan.claudeAccount ? ["anthropic" as const] : []),
+    ...(plan.grokAccount ? ["xai" as const] : []),
+  ];
   if (plan.via === "org-key") return new Set([...orgKeyProviders.filter((provider) => DRIVER_PROVIDERS.piAgent.includes(provider)), ...signIn]);
-  if (plan.via === "subscription" && plan.claudeAccount) return new Set(signIn);
+  if (plan.via === "subscription" && (plan.claudeAccount || plan.grokAccount)) return new Set(signIn);
   if (keyVia(plan.via) && plan.provider && plan.payerPrincipalId) {
     const sub = payerFacts(input, plan.payerPrincipalId)?.sub;
     if (!sub) return new Set(signIn);
@@ -317,7 +327,7 @@ export interface EngineCredentialInput {
 }
 
 export type EngineCredentialPlan =
-  | { ok: true; via: AccessVia; payer: AccessPayer; payerPrincipalId?: string; provider?: ModelProvider; localKey?: true; routine?: true; ownerPays?: true; claudeAccount?: true; credential?: Extract<CredentialDecision, { ok: true }> }
+  | { ok: true; via: AccessVia; payer: AccessPayer; payerPrincipalId?: string; provider?: ModelProvider; localKey?: true; routine?: true; ownerPays?: true; claudeAccount?: true; grokAccount?: true; credential?: Extract<CredentialDecision, { ok: true }> }
   | { ok: false; reason: EngineAccessRefusal; cause?: NoAccessCause; payer?: "speaker" | "owner"; payerPrincipalId?: string; routine?: true; ownerPays?: true; error?: string; confirm?: PaidKeyConfirm };
 
 const key = (id: string | undefined) => id?.trim().toLowerCase() ?? "";
@@ -346,9 +356,18 @@ export function turnPayer(input: Pick<EngineCredentialInput, "speaker" | "owner"
  * sign-in; never in arguments, models.json or a file of pi's home. */
 export const PI_CLAUDE_SIGN_IN_ENV = "ANTHROPIC_OAUTH_TOKEN";
 
+/** #4410 / #5525: the variable pi bills xAI with. A Grok subscription's
+ * access token is handed here for one turn (pi's own OAuth `toAuth` returns
+ * the same shape); never in arguments or models.json. */
+export const PI_GROK_SIGN_IN_ENV = "XAI_API_KEY";
+
 /** #4410 / #5523: engines that may run Claude models on the payer's own
  * Claude sign-in (pi via ANTHROPIC_OAUTH_TOKEN; OpenCode via auth.json oauth). */
 const CLAUDE_SIGN_IN_DRIVERS: ReadonlySet<string> = new Set(["piAgent", "opencodeGo"]);
+
+/** #4410 / #5525: engines that may run xAI models on the payer's own Grok
+ * sign-in. OpenCode has no xAI sign-in (matrix: no). */
+const GROK_SIGN_IN_DRIVERS: ReadonlySet<string> = new Set(["piAgent"]);
 
 /** #4410 / #5523: OpenCode's auth.json entry for a Claude subscription, as
  * one JSON object OpenCode's Anthropic provider accepts (type oauth). The
@@ -362,6 +381,13 @@ export function openCodeClaudeAuthContent(accessToken: string): string {
 function claudeSignInServes(input: EngineCredentialInput, principalId: string): boolean {
   if (!principalId || !input.subscriptionSignedIn(principalId, "claudeAgent", "claudeAgent")) return false;
   return input.subscriptionExpired?.(principalId, "claudeAgent", "claudeAgent") !== true;
+}
+
+/** #4410 / #5525: the payer's own Grok sign-in (grokAgent) is there and not
+ * refused since: pi may run xAI models on it. */
+function grokSignInServes(input: EngineCredentialInput, principalId: string): boolean {
+  if (!principalId || !input.subscriptionSignedIn(principalId, "grokAgent", "grokAgent")) return false;
+  return input.subscriptionExpired?.(principalId, "grokAgent", "grokAgent") !== true;
 }
 
 /** The resolution order above, pure. `skip.key` drops step 4 (the key went
@@ -393,21 +419,33 @@ export function resolveEngineAccess(input: EngineCredentialInput, skip: { key?: 
   if (signedIn && !expired && !skip.personalAccount) {
     return { ok: true, via: "subscription", ...who };
   }
-  // #4410 / #5523: pi or OpenCode on the payer's own Claude sign-in (their bill, like a key of theirs)
+  // #4410 / #5523 / #5525: pi (or OpenCode for Claude) on the payer's own
+  // Claude / Grok sign-in (their bill, like a key of theirs)
   const claudeAccount = !skip.signIn && !skip.personalAccount && CLAUDE_SIGN_IN_DRIVERS.has(driver) && !input.instance.keyOnly && !input.instance.personalOwner && claudeSignInServes(input, payer.principalId);
-  const signIn = claudeAccount ? { claudeAccount: true as const } : {};
+  const grokAccount = !skip.signIn && !skip.personalAccount && GROK_SIGN_IN_DRIVERS.has(driver) && !input.instance.keyOnly && !input.instance.personalOwner && grokSignInServes(input, payer.principalId);
+  const signIn = {
+    ...(claudeAccount ? { claudeAccount: true as const } : {}),
+    ...(grokAccount ? { grokAccount: true as const } : {}),
+  };
+  const hasSignIn = claudeAccount || grokAccount;
   const providers = input.instance.keyProvider ? [input.instance.keyProvider] : providersOfInstance(input.instance.instanceId, driver);
   const provider = facts?.sub ? providers.find((candidate) => input.hasKey(facts.sub!, candidate)) : undefined;
   if (!skip.key && !skip.personalKey && provider && facts?.sub) {
     return { ok: true, via: isOwner ? "owner-key" : "speaker-key", ...who, provider, ...signIn };
   }
-  // #4410: the sign-in alone, only when no key of any step serves
-  const signInOnly = { ok: true as const, via: "subscription" as const, ...who, provider: "anthropic" as const, claudeAccount: true as const };
+  // #4410 / #5525: the sign-in alone, only when no key of any step serves
+  const signInOnly = {
+    ok: true as const,
+    via: "subscription" as const,
+    ...who,
+    ...(claudeAccount ? { provider: "anthropic" as const, claudeAccount: true as const } : {}),
+    ...(grokAccount ? { ...(claudeAccount ? {} : { provider: "xai" as const }), grokAccount: true as const } : {}),
+  };
   // An endpoint owned by this payer can also serve without authentication
   // (a local model server). Never substitute an org key or another file.
   if (input.instance.personalOwner) return { ok: true, via: isOwner ? "owner-key" : "speaker-key", ...who };
   if (!skip.personalKey && !input.instance.personalOwner && payer.principalId && input.hasLocalKey?.(payer.principalId, driver)) {
-    // a key pasted on this server never pays pi's Claude models (pi has no file key)
+    // a key pasted on this server never pays pi's Claude / Grok models (pi has no file key)
     return { ok: true, via: isOwner ? "owner-key" : "speaker-key", ...who, localKey: true, ...signIn };
   }
   // #5200: the organization's Grok account, after the person's forms and
@@ -424,14 +462,19 @@ export function resolveEngineAccess(input: EngineCredentialInput, skip: { key?: 
     // nobody is known to speak for is judged as the bot's owner's.
     const judged = payer.principalId || input.owner.principalId;
     if (input.orgEngineAllowed === false || (input.serverEngineAllowed && !input.serverEngineAllowed(judged, input.instance.instanceId))) {
-      if (claudeAccount) return signInOnly;
+      if (hasSignIn) return signInOnly;
       return { ok: false, reason: "no_access", cause: expired ? "sign_in_expired" : "server_engine_not_allowed", ...who };
     }
-    // the organization's Anthropic key keeps paying Claude models
+    // the organization's Anthropic / xAI key keeps paying those models
     const orgPaysClaude = input.orgKeyProviders?.includes("anthropic") === true;
-    return { ok: true, via: "org-key", payer: "organization", ...routine, ...(orgPaysClaude ? {} : signIn) };
+    const orgPaysGrok = input.orgKeyProviders?.includes("xai") === true;
+    const besideOrg = {
+      ...(claudeAccount && !orgPaysClaude ? { claudeAccount: true as const } : {}),
+      ...(grokAccount && !orgPaysGrok ? { grokAccount: true as const } : {}),
+    };
+    return { ok: true, via: "org-key", payer: "organization", ...routine, ...besideOrg };
   }
-  if (claudeAccount) return signInOnly;
+  if (hasSignIn) return signInOnly;
   return { ok: false, reason: "no_access", cause: expired ? "sign_in_expired" : "no_credentials", ...who };
 }
 
@@ -448,21 +491,23 @@ export function engineCredentialCandidates(input: EngineCredentialInput): Creden
   const driver = input.instance.driver;
   const signedIn = Boolean(payer.principalId) && !input.instance.keyOnly && subscriptionDriver(driver) && input.subscriptionSignedIn(payer.principalId, driver, input.instance.instanceId);
   const expired = signedIn && input.subscriptionExpired?.(payer.principalId, driver, input.instance.instanceId) === true;
-  const claudeSignedIn = driver === "piAgent" && !input.instance.keyOnly && !input.instance.personalOwner && input.subscriptionSignedIn(payer.principalId, "claudeAgent", "claudeAgent");
+  const claudeSignedIn = CLAUDE_SIGN_IN_DRIVERS.has(driver) && !input.instance.keyOnly && !input.instance.personalOwner && input.subscriptionSignedIn(payer.principalId, "claudeAgent", "claudeAgent");
   const claudeExpired = claudeSignedIn && input.subscriptionExpired?.(payer.principalId, "claudeAgent", "claudeAgent") === true;
+  const grokSignedIn = GROK_SIGN_IN_DRIVERS.has(driver) && !input.instance.keyOnly && !input.instance.personalOwner && input.subscriptionSignedIn(payer.principalId, "grokAgent", "grokAgent");
+  const grokExpired = grokSignedIn && input.subscriptionExpired?.(payer.principalId, "grokAgent", "grokAgent") === true;
   const isOwner = payer.principalId !== "" && key(payer.principalId) === key(input.owner.principalId);
   const facts = payer.principalId === "" ? undefined : isOwner ? input.owner : input.person?.(payer.principalId);
   const providers = input.instance.keyProvider ? [input.instance.keyProvider] : providersOfInstance(input.instance.instanceId, driver);
   const provider = facts?.sub ? providers.find((candidate) => input.hasKey(facts.sub!, candidate)) : undefined;
   const local = Boolean(!input.instance.personalOwner && payer.principalId && input.hasLocalKey?.(payer.principalId, driver));
   const candidates: CredentialCandidate[] = [];
-  if (signedIn || claudeSignedIn) {
+  if (signedIn || claudeSignedIn || grokSignedIn) {
     candidates.push({
       form: "personal-account",
       via: "subscription",
       present: true,
-      available: (signedIn && !expired) || (claudeSignedIn && !claudeExpired),
-      ...(expired || claudeExpired ? { state: "expired" as const } : {}),
+      available: (signedIn && !expired) || (claudeSignedIn && !claudeExpired) || (grokSignedIn && !grokExpired),
+      ...(expired || claudeExpired || grokExpired ? { state: "expired" as const } : {}),
       paid: false,
     });
   }
@@ -602,6 +647,9 @@ export interface MaterializeDeps {
   /** #4410: the payer's Claude sign-in, renewed when near its end, or null
    * when it cannot be read. Absent: no sign-in serves pi. */
   claudeSignIn?: (principalId: string) => Promise<ClaudeSignInToken | null>;
+  /** #4410 / #5525: the payer's Grok sign-in access token, renewed when near
+   * its end, or null when it cannot be read. Absent: no Grok sign-in serves pi. */
+  grokSignIn?: (principalId: string) => Promise<ClaudeSignInToken | null>;
 }
 
 /** #4410 / #5523: the payer's Claude sign-in as the harness variable, or null
@@ -611,6 +659,42 @@ async function claudeSignInEnvironment(deps: MaterializeDeps, principalId: strin
   if (!signIn?.accessToken) return null;
   if (driver === "opencodeGo") return { OPENCODE_AUTH_CONTENT: openCodeClaudeAuthContent(signIn.accessToken) };
   return { [PI_CLAUDE_SIGN_IN_ENV]: signIn.accessToken };
+}
+
+/** #4410 / #5525: the payer's Grok access token as XAI_API_KEY for pi, or null
+ * when it cannot be read. */
+async function grokSignInEnvironment(deps: MaterializeDeps, principalId: string): Promise<Record<string, string> | null> {
+  const signIn = await deps.grokSignIn?.(principalId).catch(() => null);
+  if (!signIn?.accessToken) return null;
+  return { [PI_GROK_SIGN_IN_ENV]: signIn.accessToken };
+}
+
+/** #4410 / #5525: Claude and Grok sign-in env vars the plan carries, merged. */
+async function accountSignInEnvironment(
+  deps: MaterializeDeps,
+  principalId: string,
+  driver: string,
+  plan: { claudeAccount?: true; grokAccount?: true },
+): Promise<Record<string, string> | null> {
+  const environment: Record<string, string> = {};
+  if (plan.claudeAccount) {
+    const claude = await claudeSignInEnvironment(deps, principalId, driver);
+    if (claude) Object.assign(environment, claude);
+  }
+  if (plan.grokAccount) {
+    const grok = await grokSignInEnvironment(deps, principalId);
+    if (grok) Object.assign(environment, grok);
+  }
+  return Object.keys(environment).length ? environment : null;
+}
+
+/** Labels that name which account sign-ins rode the turn (never the token). */
+function accountSignInLabel(plan: { claudeAccount?: true; grokAccount?: true }): string {
+  const parts = [
+    ...(plan.claudeAccount ? ["claude"] : []),
+    ...(plan.grokAccount ? ["xai"] : []),
+  ];
+  return parts.join("+");
 }
 
 export type MaterializedAccess =
@@ -634,19 +718,16 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
   if (!plan.ok) return { ok: false, reason: plan.reason, plan };
   const driver = input.instance.driver;
   const payer = plan.payerPrincipalId ?? "";
-  if (plan.via === "subscription" && plan.claudeAccount && payer) {
-    const signIn = await deps.claudeSignIn?.(payer).catch(() => null);
+  if (plan.via === "subscription" && (plan.claudeAccount || plan.grokAccount) && payer) {
+    const environment = await accountSignInEnvironment(deps, payer, driver, plan);
     // unreadable since admission: the next steps serve, else the refusal
-    if (!signIn) return materializeEngineAccess(input, planAfter(input, { ...skipped, signIn: true }), deps, { ...skipped, signIn: true });
-    const environment: Record<string, string> = driver === "opencodeGo"
-      ? { OPENCODE_AUTH_CONTENT: openCodeClaudeAuthContent(signIn.accessToken) }
-      : { [PI_CLAUDE_SIGN_IN_ENV]: signIn.accessToken };
+    if (!environment) return materializeEngineAccess(input, planAfter(input, { ...skipped, signIn: true }), deps, { ...skipped, signIn: true });
     return {
       ok: true,
       plan,
       access: {
         via: "subscription",
-        identity: `subscription:${payer}:claude`,
+        identity: `subscription:${payer}:${accountSignInLabel(plan)}`,
         environment,
         engineHome: join(deps.dataDir, "principals", payer, `${driver}-key`),
       },
@@ -658,8 +739,9 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
     return { ok: true, plan, access: { via: "subscription", identity: subscriptionIdentity(payer, input.instance.instanceId), ...where } };
   }
   if (keyVia(plan.via) && plan.localKey && payer) {
-    const signIn = plan.claudeAccount ? await claudeSignInEnvironment(deps, payer, driver) : null;
-    return { ok: true, plan, access: { via: plan.via, identity: `${plan.via}:${payer}:local${signIn ? "+claude" : ""}`, localKeyPrincipal: payer, ...(signIn ? { environment: signIn } : {}) } };
+    const signIn = (plan.claudeAccount || plan.grokAccount) ? await accountSignInEnvironment(deps, payer, driver, plan) : null;
+    const label = signIn ? `+${accountSignInLabel(plan)}` : "";
+    return { ok: true, plan, access: { via: plan.via, identity: `${plan.via}:${payer}:local${label}`, localKeyPrincipal: payer, ...(signIn ? { environment: signIn } : {}) } };
   }
   if (keyVia(plan.via) && plan.provider && payer) {
     const facts = payerFacts(input, payer);
@@ -687,12 +769,21 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
           fingerprints.push(more.fingerprint || "key");
         }
       }
-      // #4410 / #5523: Claude models on the payer's sign-in when no Anthropic key of theirs pays them
-      if ((driver === "piAgent" || driver === "opencodeGo") && plan.claudeAccount && !environment[keyEnvironment("anthropic", driver)]) {
-        const signIn = await claudeSignInEnvironment(deps, payer, driver);
-        if (signIn) {
-          Object.assign(environment, signIn);
-          fingerprints.push("claude");
+      // #4410 / #5523 / #5525: Claude / Grok models on the payer's sign-in when no key of theirs pays them
+      if (driver === "piAgent" || driver === "opencodeGo") {
+        if (plan.claudeAccount && !environment[keyEnvironment("anthropic", driver)]) {
+          const signIn = await claudeSignInEnvironment(deps, payer, driver);
+          if (signIn) {
+            Object.assign(environment, signIn);
+            fingerprints.push("claude");
+          }
+        }
+        if (plan.grokAccount && !environment[keyEnvironment("xai", driver)]) {
+          const signIn = await grokSignInEnvironment(deps, payer);
+          if (signIn) {
+            Object.assign(environment, signIn);
+            fingerprints.push("xai");
+          }
         }
       }
       return {
@@ -760,11 +851,11 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
     // engine with a home of its own still gets an empty one, never the
     // server's login.
     const home = homeDriver(driver) ? { engineHome: join(deps.dataDir, "org", `${driver}-key`) } : {};
-    // #4410: the turn's payer's Claude sign-in beside the organization's keys
-    // (their own warm pi: the identity names them)
-    const signer = plan.claudeAccount ? turnPayer(input).principalId : "";
-    const signIn = signer ? await claudeSignInEnvironment(deps, signer, driver) : null;
-    if (signIn) return { ok: true, plan, access: { via: "org-key", identity: `org-key:${signer}:claude`, environment: signIn, ...home } };
+    // #4410 / #5525: the turn's payer's Claude / Grok sign-in beside the
+    // organization's keys (their own warm pi: the identity names them)
+    const signer = (plan.claudeAccount || plan.grokAccount) ? turnPayer(input).principalId : "";
+    const signIn = signer ? await accountSignInEnvironment(deps, signer, driver, plan) : null;
+    if (signIn) return { ok: true, plan, access: { via: "org-key", identity: `org-key:${signer}:${accountSignInLabel(plan)}`, environment: signIn, ...home } };
     return { ok: true, plan, access: { via: "org-key", identity: "org-key", ...home } };
   }
   if (keyVia(plan.via) && input.instance.personalOwner) return { ok: true, plan, access: { via: plan.via, identity: `${plan.via}:${payer}:endpoint`, environment: {} } };

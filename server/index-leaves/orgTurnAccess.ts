@@ -60,7 +60,10 @@ export function engineAccessDeps(host: Host, slot: LoginSlot = "primary") {
     loginDir: (principalId, driver, instanceId) => host.principalLoginDir(principalId, driver, slot, instanceId),
     // #4410: pi on the payer's Claude sign-in: its short token, renewed by
     // the one flight every Claude turn of theirs shares, read in memory only
-    claudeSignIn: (principalId) => claudeSignInToken(host, principalId)
+    claudeSignIn: (principalId) => claudeSignInToken(host, principalId),
+    // #4410 / #5525: pi on the payer's Grok sign-in: access token renewed
+    // through the Grok CLI's own path, read in memory only
+    grokSignIn: (principalId) => grokSignInToken(host, principalId),
   };
 }
 
@@ -77,6 +80,14 @@ export async function claudeSignInToken(host: Host, principalId: string): Promis
   }
   const access = await host.readSubscriptionAccess("claude-code", loginDir);
   if (!claudeAccessUsable(access, Date.now())) return null;
+  return { accessToken: access.accessToken };
+}
+
+/** #4410 / #5525: the payer's Grok sign-in as a pi turn takes it (XAI_API_KEY),
+ * or null. Uses the same live path voice and the org link already share. */
+export async function grokSignInToken(host: Host, principalId: string): Promise<{ accessToken: string } | null> {
+  const access = await host.grokLiveAccessOf?.(principalId);
+  if (!access || access.ok !== true || !access.accessToken) return null;
   return { accessToken: access.accessToken };
 }
 

@@ -938,7 +938,13 @@ struct ChatView: View {
                     .environment(\.openPagePanel, openPagePanelAction)
                     .environment(\.desktopFindHit, desktopFindHit)
                     .background(BottomFollowProbe(model: follow))
-#if DEBUG
+#if DEBUG && !STACK_MEASURE
+                    // A Debug-only probe is one more layout level between the
+                    // window and every transcript row, and a phone (Release)
+                    // never builds it. `STACK_MEASURE` compiles these probes
+                    // out of the measured build, so the number
+                    // `ChatOpenStackUITests` holds is the stack a phone lays
+                    // out; they stay on everywhere else (#5169).
                     .background(LongTranscriptMetricsProbe(rowCount: transcript.count, lazyStack: useLazyTranscript))
 #endif
                     // an earlier topic asked for (a notification, a link, a
@@ -1203,7 +1209,7 @@ struct ChatView: View {
                 if !shown { callPanel = nil }
             }
         }
-#if DEBUG
+#if DEBUG && !STACK_MEASURE
         .overlay(alignment: .bottomLeading) {
             if CallDebug.injecting && call.active { CallDebugPanel(call: call).padding(.leading, 2).padding(.bottom, 120) }
         }
@@ -1354,7 +1360,10 @@ struct ChatView: View {
                     }
                 }
                 .id(row.id)
-#if DEBUG
+#if DEBUG && !STACK_MEASURE
+                // The same Debug-only probe as above: on 2,000 rows it is
+                // 2,000 background levels the measure would count and a phone
+                // would never lay out (`STACK_MEASURE`, #5169).
                 .background { desktopParityRowProbe(row) }
 #endif
     }

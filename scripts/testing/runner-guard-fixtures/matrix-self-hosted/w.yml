@@ -1,0 +1,8 @@
+on: pull_request
+jobs:
+  a:
+    strategy:
+      matrix:
+        runner: [self-hosted, ubuntu-latest]
+    runs-on: ${{ matrix.runner }}
+    steps: [{run: "true"}]

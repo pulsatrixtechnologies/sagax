@@ -1,0 +1,14 @@
+# Mirrors .github/workflows/desktop-install-smoke.yml matrix.runner include.
+on: workflow_dispatch
+jobs:
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            arch: x64
+          - runner: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps: [{run: "true"}]

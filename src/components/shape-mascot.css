@@ -8,7 +8,7 @@
    live): a press always lands on the mascot itself, never on the drawing
    that may be swapped under the pointer before the release, so the row
    keeps its click (#4433). */
-[data-sidebar-mascot] .shape-mascot > :is(img, svg) {
+[data-sidebar-mascot] .shape-mascot > :is(img, svg, [data-shape-material-still], [data-shape-canvas]) {
   pointer-events: none;
 }
 

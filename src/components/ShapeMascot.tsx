@@ -7,7 +7,9 @@
 // - a still (small avatars, lists, reduced motion) is the shape's baked
 //   frame (shape-stills.ts), one image shared by every avatar of the same
 //   shape, colour and mood: no volume inference and no animation loop on the
-//   page for a sidebar of bots;
+//   page for a sidebar of bots; a Fluffy or Glass body at rest is the same
+//   idea as a painted PNG (shape-material-still.ts, #5414), never a resting
+//   canvas;
 // - the large mascot (LIVE_MIN and up, animated, or asked for in full) is
 //   live: the engine's frames (avatarFrame) on the engine's one shared clock
 //   (subscribeFrames), written straight onto one SVG: it breathes, blinks,
@@ -35,7 +37,7 @@ import { cn } from "@/lib/cn";
 import { DEFAULT_ENGINE_LOOK, isBodyShape, MASCOT_SHAPES, SHAPE_DEPTH, SHAPE_SKIN_TIER, SHAPE_SKINS, type BodyShape, type EngineLook, type MascotShape, type ShapeSkin, type SkinTier } from "../../shared/mascot-look";
 import type { MascotAvatarDef } from "../../shared/mascot-look";
 import { bakedShapeFor, engineFrame, enginePose, eyeMarkup, isMarkSlice, lookDefinition, moodFrame, pathsMarkup, runtimeStill, shapesMarkup, stateStill, stillUrl, type BakedStill, type EnginePose, type ShapeMood, type StillFrame, type StillPath } from "./shape-avatar";
-import { ShapeCanvas, useShapeMaterial } from "./shape-material";
+import { ShapeCanvas, ShapeMaterialStill, useShapeMaterial } from "./shape-material";
 import { ShapeStageContext } from "./shape-stage";
 import { mixHex, MOVE_TIMING, ShapeEngine, stillFrame as restFrame, isShapeMove, rainbowStops, type ShapeFrame, type ShapeMove } from "./shape-engine";
 import { loadBakedStill, useBakedStill } from "./shape-stills";
@@ -634,7 +636,10 @@ export function ShapeMascot({
   const palette = fxPalette(paint.fx, hex);
   let drawing: ReactNode = null;
   if (material) {
-    drawing = <ShapeCanvas definition={definition} material={material} color={body} ink={ink} depth={chosenDepth} state={pose.state} mood={pose.mood} followPointer={followPointer && settings.followPointer} live={looping} reduced={reduced} view={view} holdGaze={onStage && stage.holdGaze} />;
+    // at rest: a painted still image; canvas only while live or moving (#5414)
+    drawing = looping
+      ? <ShapeCanvas definition={definition} material={material} color={body} ink={ink} depth={chosenDepth} state={pose.state} mood={pose.mood} followPointer={followPointer && settings.followPointer} live reduced={reduced} view={view} holdGaze={onStage && stage.holdGaze} />
+      : <ShapeMaterialStill definition={definition} material={material} color={body} ink={ink} depth={chosenDepth} state={pose.state} mood={pose.mood} size={drawSize ?? size} />;
   } else if (frame) {
     drawing = looping || !flatSkin
       ? <ShapeSvg uid={uid} frame={frame} color={body} ink={ink} layers={flatSkin ? null : layers} paint={paint} faceD={faceD} refs={refs} live={looping} />

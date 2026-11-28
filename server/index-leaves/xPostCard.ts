@@ -216,6 +216,8 @@ export function createXPostCard(getHost: () => Host): any {
    * (nothing but tool rows between them) join the same message: the chat draws them as a stack. */
   function showPosted(host: Host, threadId: string, from: any, text: string, url: string | undefined, input?: string) {
     const botId = from?.botId;
+    // #5553: the status URL names the posting account when whoami never ran
+    if (botId && url) learnHandleFromUrl(host, botId, url);
     const who = accountOf(host, botId);
     const id = url ? /status\/(\d{5,25})/.exec(url)?.[1] : undefined;
     const reply = xReplyFromInput(input);

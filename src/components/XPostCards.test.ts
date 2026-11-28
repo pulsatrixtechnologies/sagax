@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { postedPost, postedReply, quotePost, sampleDraft, samplePost, timelinePosts } from "@/lib/x-post-fixtures";
-import { XDraftCard, XPostList, XPostStack, xDateText, xFanStyle, xTimeText } from "./XPostCards";
+import { XDraftCard, XPostList, XPostStack, withAccount, xDateText, xFanStyle, xTimeText } from "./XPostCards";
 
 describe("X draft card (#4638)", () => {
   it("shows the avatar, Post and the handle, Copy, the text, and two equal buttons", () => {
@@ -107,6 +107,18 @@ describe("the posted card and the stack (#4640)", () => {
     expect(html).not.toContain(">YA<");
     expect(html).not.toContain("@x");
     expect(html).not.toContain('title="Verified account"');
+  });
+  // #5553 [M-20261128-006]: connected account fills empty posted fields and upgrades a URL placeholder.
+  it("fills a posted card from the connected X account, including a URL-learned placeholder (#5553)", () => {
+    const account = { handle: "demo_handle", name: "Demo Name", verified: true, avatarUrl: "https://pbs.twimg.com/profile_images/1/demo_normal.jpg" };
+    const empty = withAccount(postedPost("en", 0, { name: "", handle: "", verified: false, avatarUrl: undefined }), account);
+    expect(empty).toMatchObject({ name: "Demo Name", handle: "demo_handle", verified: true, avatarUrl: account.avatarUrl });
+    const placeholder = withAccount(postedPost("en", 0, { name: "demo_handle", handle: "demo_handle", verified: false, avatarUrl: undefined }), account);
+    expect(placeholder).toMatchObject({ name: "Demo Name", handle: "demo_handle", verified: true, avatarUrl: account.avatarUrl });
+    const html = renderToStaticMarkup(createElement(XPostList, { posts: [empty] }));
+    expect(html).toContain("Demo Name");
+    expect(html).toContain("@demo_handle");
+    expect(html).not.toContain("Your account");
   });
   it("draws a reply with Replying to @handle and the parent quoted compactly", () => {
     const html = renderToStaticMarkup(createElement(XPostList, { posts: [postedReply("en")] }));

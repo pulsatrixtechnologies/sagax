@@ -197,4 +197,28 @@ describe("the posted card carries the account that posted (#4640)", () => {
     expect(rows[0].xPosts.k9).toMatchObject({ status: "posted", url: "https://x.com/sample/status/1234567890557" });
     expect(rows).toHaveLength(1);
   });
+
+  // #5553 [M-20261128-006]: a tool finish that only returns the status URL must still
+  // name the posting account on the card (handle from the URL), even when whoami never ran.
+  it("learns the posting handle from the published URL when whoami never ran (#5553)", () => {
+    const alone = mkdtempSync(join(tmpdir(), "x-account-url-"));
+    const rows: any[] = [];
+    const store = {
+      messagesFor: () => rows,
+      appendMessage: (_t: string, row: any) => { rows.push({ id: `u${rows.length}`, at: Date.now(), ...row }); },
+      patchMessage: (_t: string, id: string, patch: any) => Object.assign(rows.find((row) => row.id === id)!, patch),
+      groupByThread: () => undefined,
+      botByThread: () => ({ id: "b1", name: "Bot", color: "#fff" }),
+      bot: (id: string) => ({ id, name: "Bot", color: "#fff" }),
+    };
+    const host: any = { store, DATA_DIR: alone, appendDecision: vi.fn(), languageOfRequest: () => "en", emailDraftBot: () => ({ bot: { id: "b1" } }) };
+    const card = createXPostCard(() => host);
+    expect(card.account({}, "t1", "b1").body.account).toBeNull();
+    expect(card.finish("t1", TOOL, true, '{"url":"https://x.com/demo_handle/status/1234567890999"}', JSON.stringify({ text: "Published reply" }))).toBe(true);
+    const [post] = fenceOf(rows[0]);
+    expect(post).toMatchObject({ handle: "demo_handle", name: "demo_handle", posted: true, url: "https://x.com/demo_handle/status/1234567890999", text: "Published reply" });
+    expect(post.name).toBeTruthy();
+    expect(post.handle).toBeTruthy();
+    expect(card.account({}, "t1", "b1").body.account).toMatchObject({ handle: "demo_handle" });
+  });
 });

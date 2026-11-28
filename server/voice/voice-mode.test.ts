@@ -708,10 +708,10 @@ describe("voice mode uses the key that has funds (2026-10-28)", () => {
     expect(acting.ok && acting.keys.map((key) => key.source)).toEqual(["org-account"]);
   });
 
-  // D-20261127-029: a phone line has no confirm step. The list keeps this
-  // person's full order so a dead account falls back onto their own keys,
-  // then the organization. Never another person's token.
-  it("a phone line keeps this person's full order under a policy (#5180)", async () => {
+  // A phone line keeps this person's accounts. A paid key enters the list
+  // only when paidKeyConfirmed is set (same setting as the in-app voice).
+  // Never another person's token.
+  it("a phone line keeps this person's accounts and paid keys only when permitted (#5180)", async () => {
     const policy = { aspect: "voice" as const, personalKeysEnabled: true, allowPersonalWhenActingAs: false, paidKeyConfirmed: false };
     const BEN = "grk-BEN-other-person-99998888";
     const deps = {
@@ -723,15 +723,21 @@ describe("voice mode uses the key that has funds (2026-10-28)", () => {
       credentialPolicy: () => policy,
     };
     const line = await resolveVoiceKeys(deps, { principalId: "p-ada", sub: "sub-ada" }, undefined, { phoneLine: true });
-    expect(line.ok && line.keys.map((key) => key.source)).toEqual(["grok-account", "voice-key", "perspicax-key", "org-account", "org-key"]);
-    expect(line.ok && line.keys.map((key) => key.key)).toEqual([ACCOUNT, MINE_KEY, OWN_KEY, ORG_ACCOUNT, ORG_KEY]);
+    expect(line.ok && line.keys.map((key) => key.source)).toEqual(["grok-account", "org-account"]);
+    expect(line).toMatchObject({ confirm: { from: "personal-account", to: "personal-key", form: "personal-key", via: "voice-key", aspect: "voice" } });
     expect(JSON.stringify(line)).not.toContain(BEN);
+    expect(JSON.stringify(line)).not.toContain(MINE_KEY);
+    const permitted = await resolveVoiceKeys({ ...deps, credentialPolicy: () => ({ ...policy, paidKeyConfirmed: true }) }, { principalId: "p-ada", sub: "sub-ada" }, undefined, { phoneLine: true });
+    expect(permitted.ok && permitted.keys.map((key) => key.source)).toEqual(["grok-account", "voice-key", "perspicax-key", "org-account", "org-key"]);
+    expect(permitted.ok && permitted.keys.map((key) => key.key)).toEqual([ACCOUNT, MINE_KEY, OWN_KEY, ORG_ACCOUNT, ORG_KEY]);
     const app = await resolveVoiceKeys(deps, { principalId: "p-ada", sub: "sub-ada" });
     expect(app.ok && app.keys.map((key) => key.source)).toEqual(["grok-account", "org-account"]);
     const acting = await resolveVoiceKeys({ ...deps, credentialPolicy: () => ({ ...policy, actingAs: "service-desk" }) }, { principalId: "p-ada", sub: "sub-ada" }, undefined, { phoneLine: true });
-    expect(acting.ok && acting.keys.map((key) => key.source)).toEqual(["org-account", "org-key"]);
+    expect(acting.ok && acting.keys.map((key) => key.source)).toEqual(["org-account"]);
+    expect(acting).toMatchObject({ confirm: { from: "org-account", to: "org-key" } });
     const keysOff = await resolveVoiceKeys({ ...deps, credentialPolicy: () => ({ ...policy, personalKeysEnabled: false }) }, { principalId: "p-ada", sub: "sub-ada" }, undefined, { phoneLine: true });
-    expect(keysOff.ok && keysOff.keys.map((key) => key.source)).toEqual(["grok-account", "org-account", "org-key"]);
+    expect(keysOff.ok && keysOff.keys.map((key) => key.source)).toEqual(["grok-account", "org-account"]);
+    expect(keysOff).toMatchObject({ confirm: { to: "org-key" } });
   });
 
   // M-20261126-145: the failure now names the first cause (the person's account

@@ -358,15 +358,17 @@ function accountForm(form: CredentialForm | null): boolean {
   return form === "personal-account" || form === "org-account";
 }
 
-/** A phone line keeps every form the policy still allows. The in-app voice
- * asks before a paid key; a live call has no confirm step. */
+/** A phone line keeps this person's accounts (and paid keys only when the
+ * same paid-fallback permission as the in-app voice allows them). */
 export interface ResolveVoiceKeysOptions {
   phoneLine?: boolean;
 }
 
 /** The voice order stays. The policy only drops a form or asks before a
  * paid key. A solo server, and a caller with no policy, is unchanged.
- * `phoneLine` keeps the full order for that person (D-20261127-029). */
+ * `phoneLine` keeps this person's accounts for call fallback; a paid key
+ * enters that list only when `paidKeyConfirmed` is set (same setting as
+ * the in-app voice). */
 async function governVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, threadId: string | undefined, resolved: VoiceKeys, options?: ResolveVoiceKeysOptions): Promise<VoiceKeys> {
   if (!resolved.ok || !deps.organization || !deps.credentialPolicy) return resolved;
   const policy = { ...await deps.credentialPolicy(speaker, threadId), aspect: "voice" as const };
@@ -404,23 +406,44 @@ async function governVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, threadId: s
   return { ok: true, keys, ...(confirm ? { confirm } : {}) };
 }
 
-/** Phone line: account, this person's keys, then the organization. A form
- * the policy forbids (Act as, personal keys off) stays out. Never a confirm
- * hold, and never another person's key (the list was already that person's). */
+/** Phone line: this person's accounts, then the organization account. A paid
+ * key sits in the list only when the person permitted the paid fallback
+ * (`paidKeyConfirmed`), the same setting as the in-app voice. A form the
+ * policy forbids (Act as, personal keys off) stays out. Never another
+ * person's key (the list was already that person's). */
 function phoneLineKeys(resolved: Extract<VoiceKeys, { ok: true }>, policy: CredentialPolicy, decision: CredentialDecision): VoiceKeys {
   if (!decision.ok && decision.reason !== "confirm_paid_key") {
     const cause = decision.reason === "no_credentials" ? "no_credentials" : decision.reason;
     return { ok: false, cause, error: decision.error };
   }
-  const keys = resolved.keys.filter((entry) => {
+  const allowPaid = policy.paidKeyConfirmed === true;
+  const eligible = resolved.keys.filter((entry) => {
     const form = voiceCredentialForm(entry.source);
     if (!form) return true;
     if (form === "personal-key" && !personalKeysEnabled(policy)) return false;
     if (personalCredential(form) && !personalCredentialAllowed(policy)) return false;
     return true;
   });
+  const hasAccount = eligible.some((entry) => accountForm(voiceCredentialForm(entry.source)));
+  const keys = eligible.filter((entry) => {
+    const form = voiceCredentialForm(entry.source);
+    if (!form) return true;
+    if (paidApiKey({ form }) && hasAccount && !allowPaid) return false;
+    return true;
+  });
   if (!keys.length) return { ok: false, cause: "no_credentials", error: decision.ok ? "No credential serves this voice." : decision.error };
-  return { ok: true, keys };
+  const withheld = eligible.find((entry) => {
+    const form = voiceCredentialForm(entry.source);
+    return form !== null && paidApiKey({ form }) && !keys.includes(entry);
+  });
+  const withheldForm = withheld ? voiceCredentialForm(withheld.source) : null;
+  const fromForm = keys.map((entry) => voiceCredentialForm(entry.source)).find((form) => form && accountForm(form));
+  const confirm = withheld && withheldForm && fromForm
+    ? { from: fromForm, to: withheldForm, form: withheldForm, via: withheld.source, aspect: "voice" as const }
+    : decision.ok === false && decision.reason === "confirm_paid_key"
+      ? decision.confirm
+      : undefined;
+  return { ok: true, keys, ...(confirm ? { confirm } : {}) };
 }
 
 /** A connected Grok account speaks on the xAI API root. Every other

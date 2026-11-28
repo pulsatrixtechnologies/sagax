@@ -8,12 +8,13 @@ resolver keeps its own order (`docs/credential-order.md`).
 | --- | --- | --- | --- | --- | --- | --- |
 | Personal account | `subscription` | `grok-account` | `grok-account` | `grok-account` | `grok-account` | own account connectors |
 | Organization account | `org-account` (Grok) | `org-account` | `org-account` | `org-account` | `org-account` | own account connectors |
-| Personal API key | `speaker-key` | `perspicax-key` | `voice-key`, `perspicax-key` | same | same, kept in the list | hub, not account connectors |
-| Organization API key | `org-key` | `org-key` | `org-key` | `org-key` | `org-key`, kept in the list | hub, not account connectors |
+| Personal API key | `speaker-key` | `perspicax-key` | `voice-key`, `perspicax-key` | same | same, when paid fallback is permitted | hub, not account connectors |
+| Organization API key | `org-key` | `org-key` | `org-key` | `org-key` | `org-key`, when paid fallback is permitted | hub, not account connectors |
 
 Realtime, speech and the phone line share `resolveVoiceKeys`. The app
-asks before a paid key. The phone line passes `phoneLine`, so the list
-stays the full order for that person (D-20261127-029).
+asks before a paid key. The phone line passes `phoneLine` and keeps
+accounts for call fallback. A paid key enters that list only when the
+person permitted the paid fallback (same setting as the in-app voice).
 
 Live surfaces stay the ones that already exist. Turn access names the
 text form of a turn. `GET /api/bots/<id>/voice/status` names the voice

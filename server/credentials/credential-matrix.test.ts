@@ -85,7 +85,7 @@ describe("credential matrix (#5180)", () => {
     expect(sources).toEqual(["grok-account", "perspicax-key", "perspicax-key", "org-account", "org-key"]);
   });
 
-  it("voice: realtime and speech share the order, and a phone line keeps it under a policy", async () => {
+  it("voice: realtime and speech share the order, and a phone line keeps paid keys only when permitted", async () => {
     for (const form of CREDENTIAL_FORMS) {
       for (const aspect of ["realtime", "speech", "phone"] as const) {
         expect(CREDENTIAL_MATRIX[form][aspect].via).toBe(CREDENTIAL_MATRIX[form].realtime.via);
@@ -105,15 +105,18 @@ describe("credential matrix (#5180)", () => {
     const open = await resolveVoiceKeys(deps, { principalId: ADA, sub: "sub-ada" });
     const line = await resolveVoiceKeys(deps, { principalId: ADA, sub: "sub-ada" }, undefined, { phoneLine: true });
     expect(open.ok && open.keys.map((key) => key.source)).toEqual(["grok-account", "org-account"]);
-    expect(line.ok && line.keys.map((key) => key.source)).toEqual(["grok-account", "voice-key", "perspicax-key", "org-account", "org-key"]);
-    const sources = line.ok ? line.keys.map((key) => key.source) : [];
+    expect(line.ok && line.keys.map((key) => key.source)).toEqual(["grok-account", "org-account"]);
+    expect(line).toMatchObject({ confirm: { to: "personal-key", aspect: "voice" } });
+    const permitted = await resolveVoiceKeys({ ...deps, credentialPolicy: () => ({ ...policy, paidKeyConfirmed: true }) }, { principalId: ADA, sub: "sub-ada" }, undefined, { phoneLine: true });
+    const sources = permitted.ok ? permitted.keys.map((key) => key.source) : [];
+    expect(sources).toEqual(["grok-account", "voice-key", "perspicax-key", "org-account", "org-key"]);
     for (const form of CREDENTIAL_FORMS) {
       const cell = CREDENTIAL_MATRIX[form].phone;
       expect(sources, form).toContain(cell.via);
       for (const extra of cell.also ?? []) expect(sources, extra).toContain(extra);
     }
-    expect(JSON.stringify(line)).not.toContain("BEN");
-    expect(JSON.stringify(line)).not.toContain(BEN);
+    expect(JSON.stringify(permitted)).not.toContain("BEN");
+    expect(JSON.stringify(permitted)).not.toContain(BEN);
   });
 
   it("connectors: an account loads them, a key does not, and the person stays the hub principal", () => {

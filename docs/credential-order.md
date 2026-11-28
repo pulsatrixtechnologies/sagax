@@ -27,10 +27,10 @@ Grok engine, then `org-key`.
 Voice, realtime, speech, and a phone line (`resolveVoiceKeys`,
 `server/voice/voice-mode.ts`): the connected Grok account, the person's
 voice key, the person's Perspicax key, the organization account, the
-organization key. A phone line (`phoneLine`) keeps that full list for the
-line's owner, so a dead account falls back onto that person's own keys
-and then the organization (D-20261127-029). The in-app voice still asks
-before it spends a paid key.
+organization key. A phone line (`phoneLine`) keeps the line owner's
+accounts for call fallback. A paid key enters that list only when the
+person permitted the paid fallback (`paidKeyConfirmed`), the same setting
+as the in-app voice.
 
 Images (`chatImageCredentials`, `server/media/chat-image.ts`): the same
 account-then-key order at each level.
@@ -48,8 +48,8 @@ These are decided and implemented. They are not a second order:
 - A fallback from one account or subscription onto another proceeds.
   A fallback onto a paid API key (personal or organization) waits for a
   confirmation the turn can show and `POST /api/me/credential-confirm` can
-  answer. A phone line has no confirm step, so it keeps the keys in the
-  list instead of waiting.
+  answer. A phone line uses the same permission: without it, paid keys stay
+  out of the line's order even after an account failure.
 - Personal API keys inside an organization are on unless an admin turns
   them off.
 

@@ -28,7 +28,8 @@ function voiceCell(via: string, also: readonly string[] | undefined, note: strin
 }
 
 /** Realtime, speech and the phone line share one voice list. The phone
- * line passes `phoneLine` so a policy does not drop the later forms. */
+ * line passes `phoneLine`. A paid key stays in that list only when the
+ * person permitted the paid fallback (same setting as the in-app voice). */
 const VOICE_ROWS: Record<CredentialForm, Pick<CredentialMatrixCell, "via" | "also" | "note">> = {
   "personal-account": { via: "grok-account", note: "The person's connected Grok account, first." },
   "personal-key": { via: "voice-key", also: ["perspicax-key"], note: "The person's voice key, then their Perspicax xAI key." },
@@ -41,11 +42,14 @@ function voiceAspect(aspect: "realtime" | "speech" | "phone"): Record<Credential
   const out = {} as Record<CredentialForm, CredentialMatrixCell>;
   for (const form of CREDENTIAL_FORMS) {
     const row = VOICE_ROWS[form];
+    const paid = form === "personal-key" || form === "org-key";
     out[form] = voiceCell(
       row.via,
       row.also,
       phone
-        ? `${row.note} The phone line keeps it in the list (phoneLine, D-20261127-029).`
+        ? paid
+          ? `${row.note} The phone line keeps it only when the person permitted the paid fallback (same setting as the in-app voice).`
+          : `${row.note} The phone line keeps this account in the list (phoneLine).`
         : `${row.note} Same order. Under a policy the app asks before a paid key; the key still serves after that confirm.`,
     );
   }

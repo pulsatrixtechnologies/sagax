@@ -10,9 +10,11 @@
 // is taken over: GET / and /assets/* of the local origin come from the bundle,
 // with the server's own headers (server/static-ui.ts). The first request for
 // anything else (the API, another origin, a file the bundle does not hold)
-// hands the scheme back at once and goes to the network untouched; from then
-// on Chromium talks to the server directly, as before. Pure apart from the
-// injected fetch and file reader, so node:test covers every rule.
+// hands the scheme back at once and goes to the network; the caller's fetch
+// must re-apply the desktop owner capability (protocol.handle skips
+// webRequest; electron/boot-ui-forward.mjs, #5320). From then on Chromium
+// talks to the server directly. Pure apart from the injected fetch and file
+// reader, so node:test covers every rule.
 import path from "node:path";
 
 /** The server's headers for the UI (server/static-ui.ts PAGE_HEADERS and

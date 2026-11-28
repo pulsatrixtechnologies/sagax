@@ -41,6 +41,7 @@ import { activateExistingWindow, releaseSingleInstanceLock } from "./single-inst
 import { bootFailureMessage, listeningSignal, pollServerIdentity, SERVER_BOOT_TIMEOUT_MS, SERVER_LISTENING_GRACE_MS } from "./server-boot-probe.mjs";
 import { createServerSupervisor } from "./server-supervisor.mjs";
 import { createBootUiHandler } from "./boot-ui.mjs";
+import { forwardBootUiRequest } from "./boot-ui-forward.mjs";
 import { createUiSnapshotStore } from "./ui-snapshot.mjs";
 import { serverChildLaunch } from "./server-child-launch.mjs";
 import { packageUrlFromCommandLine, packageUrlFromDeepLink } from "./package-link.mjs";
@@ -790,7 +791,12 @@ function installBootUi(port) {
     origin: () => `http://127.0.0.1:${port}`,
     staticDir: path.join(process.resourcesPath, "ui"),
     readFile: (file) => fs.promises.readFile(file),
-    fetch: (request, init) => net.fetch(request, init),
+    // protocol.handle skips session.webRequest: re-apply the owner capability
+    // on the forward path so the first renderer mutations are not refused (#5320).
+    fetch: (request, init) => forwardBootUiRequest(request, init, {
+      fetch: (input, forwardInit) => net.fetch(input, forwardInit),
+      token: desktopMutationToken,
+    }),
     release: () => {
       try { protocol.unhandle("http"); } catch {}
       slog("boot UI: http handed back to the network");
@@ -4025,9 +4031,27 @@ function createWindow({ deferNavigation = false } = {}) {
             }
             const health = await healthResponse.json();
             if (!ownerMutationResponse.ok) {
-              throw new Error(
-                \`desktop mutation capability failed: \${ownerMutationResponse.status} \${ownerMutationResponse.statusText}\`,
-              );
+              // #5320: print the refusal code and auth/capability state so a
+              // hard-death 401 names the cause (product vs fixture).
+              let refusal = null;
+              try { refusal = await ownerMutationResponse.clone().json(); }
+              catch { try { refusal = await ownerMutationResponse.text(); } catch { refusal = null; } }
+              const sessionProbe = await fetch("/api/auth/session")
+                .then(async (response) => ({
+                  status: response.status,
+                  body: await response.json().catch(() => null),
+                }))
+                .catch((error) => ({ error: String(error?.message ?? error) }));
+              throw new Error(JSON.stringify({
+                message: "desktop mutation capability failed",
+                status: ownerMutationResponse.status,
+                statusText: ownerMutationResponse.statusText,
+                refusal,
+                refusalCode: refusal && typeof refusal === "object" ? refusal.code ?? null : null,
+                sessionProbe,
+                cookie: document.cookie || "",
+                initialCapabilities,
+              }));
             }
             let capabilities = initialCapabilities;
             let cuaCrashReason = null;

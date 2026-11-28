@@ -183,6 +183,25 @@ export function enginePose(mood: ShapeMood, state: AvatarState = "idle", moodSet
 }
 
 /**
+ * What mountAvatar (Fluffy / Glass) takes for an EnginePose (#5539, #5415).
+ * Thinking keeps the body: the engine's own `thinking` state is three dots, so
+ * the mount gets `idle` plus the at-work lean. Mood stays apart from state
+ * (#5540): happy eyes on any activity the person set, or on a finished turn.
+ */
+export interface MountPose {
+  state: AvatarState;
+  mood: AvatarMood;
+  /** Lean and gaze of the app's at-work pose; absent when the engine state draws the body itself. */
+  atWork: boolean;
+}
+
+export function mountPose(pose: EnginePose): MountPose {
+  // motion set: the app's own rest face (engineFrame), never a mark-only engine state
+  if (pose.motion != null) return { state: "idle", mood: pose.mood, atWork: pose.motion === "thinking" };
+  return { state: pose.state, mood: pose.mood, atWork: false };
+}
+
+/**
  * The pose a shape holds at work, as the engine drew its `thinking` until
  * 0.2: the body turned a little, tipped up and rolled, the eyes up and away
  * under two different lids. Since 0.3 the engine's `thinking` replaces the
@@ -190,7 +209,7 @@ export function enginePose(mood: ShapeMood, state: AvatarState = "idle", moodSet
  * changes only with the owner's word, shape-object-look.regression.test.ts),
  * so this pose is asked of the engine's `idle` instead.
  */
-const AT_WORK = { yaw: 0.12, pitch: 0.08, gazeX: 0.55, gazeY: -0.8, lids: [0.22, 0.32] as const };
+export const AT_WORK = { yaw: 0.12, pitch: 0.08, gazeX: 0.55, gazeY: -0.8, lids: [0.22, 0.32] as const };
 /** The engine's own figures a look target goes through (its motion.ts: LOOK_YAW, LOOK_PITCH, LOOK_EYES, BASE_YAW, BASE_PITCH). */
 const LOOK = { yaw: 0.32, pitch: 0.18, eyes: 0.7, baseYaw: -0.3, basePitch: 0.2 };
 

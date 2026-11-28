@@ -112,7 +112,7 @@ describe("a bot in a material divides into cells that wear it", () => {
     expect($("[data-heavy-membrane]")!.getAttribute("opacity")).toBe("0");
     // the still has its own eyes: the drawn ones are off
     expect(cells()[0]!.querySelector("[data-heavy-eyes]")!.getAttribute("opacity")).toBe("0");
-    expect(asked[0]).toMatchObject({ color: "#f2a51a", state: "idle" });
+    expect(asked[0]).toMatchObject({ color: "#f2a51a", pose: { state: "idle" } });
   });
 
   it("every expert wears the bot's own still once the pile has closed up, never one of its own colour; the flat volume is off", async () => {

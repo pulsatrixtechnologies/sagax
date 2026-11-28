@@ -24,7 +24,7 @@
 // history, or past its first round when the row first shows is drawn
 // finished and never replayed; under reduced motion every step lands at once.
 import { useEffect, useId, useLayoutEffect, useMemo, useRef } from "react";
-import type { AvatarDefinition, AvatarMood, AvatarState, Matrix } from "open-bot-avatar";
+import type { AvatarDefinition, Matrix } from "open-bot-avatar";
 import type { CanvasMaterial } from "open-bot-avatar/dom";
 
 import { t } from "@/lib/i18n";
@@ -33,7 +33,7 @@ import { HeavyDivisionSim, type DivisionCell } from "@/lib/heavy-division";
 import { botAvatarProfile } from "../../shared/bot-avatar";
 import { completeMascotLook, DEFAULT_ENGINE_LOOK, engineLookOf, type MascotAvatarDef, type MascotShape, type ShapeMotion } from "../../shared/mascot-look";
 import type { BotAvatarProps } from "./Avatar";
-import { eyeMarkup, lookDefinition, moodFrame, runtimeStill, stateStill, type StillFrame } from "./shape-avatar";
+import { eyeMarkup, lookDefinition, moodFrame, runtimeStill, stateStill, type EnginePose, type StillFrame } from "./shape-avatar";
 import { shapeLook } from "./shape-look";
 import { useShapeMaterial } from "./shape-material";
 import { materialStill, type MaterialStill } from "./shape-material-still";
@@ -65,7 +65,7 @@ export interface DivisionArt {
   /** The person's motion setting for this mascot (the picker's gear). */
   motion: ShapeMotion;
   /** The look's material when the page paints it: the cells wear its stills. */
-  material: { definition: AvatarDefinition; finish: CanvasMaterial; depth: number | undefined; state: AvatarState; mood: AvatarMood } | null;
+  material: { definition: AvatarDefinition; finish: CanvasMaterial; depth: number | undefined; pose: EnginePose } | null;
   /** The look asks for a material the page cannot paint (or has not yet): flat cells with a simple volume. */
   shaded: boolean;
   /** The bot's mascot is a character or a photo: a round in its colour divides, and the pile is the bot's own character (D-20261126-037). */
@@ -128,8 +128,8 @@ export function useDivisionArt(bot: DivisionBot | null | undefined): DivisionArt
     return pose.motion ? (still ? moodFrame(still, pose.motion) : null) : stateStill(definition, pose.state, pose.mood, depth);
   }, [definition, look.bakedId, baked, depth, pose.motion, pose.state, pose.mood]);
   const material = useMemo(
-    () => (finish && definition ? { definition, finish, depth: look.chosenDepth, state: pose.state, mood: pose.mood } : null),
-    [finish, definition, look.chosenDepth, pose.state, pose.mood],
+    () => (finish && definition ? { definition, finish, depth: look.chosenDepth, pose } : null),
+    [finish, definition, look.chosenDepth, pose],
   );
   const shaded = settings.material !== "flat";
   return useMemo(() => {
@@ -524,7 +524,7 @@ export function HeavyDivision({ art, count, running, runId, settled = false, fai
     }
     let alive = true;
     const px = Math.ceil((100 * size) / (live.current?.span ?? 84));
-    void materialStill({ definition: material.definition, material: material.finish, color: art.color, ink: art.ink, depth: material.depth, state: material.state, mood: material.mood, px })
+    void materialStill({ definition: material.definition, material: material.finish, color: art.color, ink: art.ink, depth: material.depth, pose: material.pose, px })
       .then((own) => {
         if (!alive) return;
         stills.current = { own, version: (stills.current?.version ?? 0) + 1 };

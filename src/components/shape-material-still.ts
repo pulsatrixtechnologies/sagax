@@ -5,8 +5,10 @@
 // across the page, copied into a small 2D canvas, which is read back here as
 // an image and dropped. No context is added per drawing, and nothing is
 // painted again for the same body, colour and size: the image is kept.
-import type { AvatarDefinition, AvatarMood, AvatarState } from "open-bot-avatar";
+// Mount options follow mountPose (#5539, #5540): thinking keeps the body.
+import type { AvatarDefinition } from "open-bot-avatar";
 import { mountAvatar, type CanvasMaterial } from "open-bot-avatar/dom";
+import { AT_WORK, mountPose, type EnginePose } from "./shape-avatar";
 
 /** A material still, placed in the body's 0..100 box (the canvas overhangs it by the material's reach). */
 export interface MaterialStill {
@@ -22,8 +24,7 @@ export interface MaterialStillRequest {
   color: string;
   ink: string;
   depth: number | undefined;
-  state: AvatarState;
-  mood: AvatarMood;
+  pose: EnginePose;
   /** How wide the body's 0..100 box is drawn, in CSS pixels. */
   px: number;
 }
@@ -34,13 +35,27 @@ const kept = new WeakMap<AvatarDefinition, Map<string, Promise<MaterialStill | n
 
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-async function paint({ definition, material, color, ink, depth, state, mood, px }: MaterialStillRequest): Promise<MaterialStill | null> {
+async function paint({ definition, material, color, ink, depth, pose, px }: MaterialStillRequest): Promise<MaterialStill | null> {
   // laid out (a still paints only once its host has a size), out of sight and out of the way
   const host = document.createElement("span");
   host.setAttribute("aria-hidden", "true");
   host.style.cssText = `position:fixed;left:0;top:0;width:${px}px;height:${px}px;opacity:0;pointer-events:none;contain:strict;transform:translateX(-300vw)`;
   document.body.append(host);
-  const avatar = mountAvatar(host, { definition, material, color, eyeColor: ink, ...(depth === undefined ? {} : { depth }), state, mood, still: true, reducedMotion: true, label: "" });
+  const mounted = mountPose(pose);
+  const lean = mounted.atWork ? { yaw: AT_WORK.yaw, pitch: AT_WORK.pitch } : undefined;
+  const avatar = mountAvatar(host, {
+    definition,
+    material,
+    color,
+    eyeColor: ink,
+    ...(depth === undefined ? {} : { depth }),
+    state: mounted.state,
+    mood: mounted.mood,
+    ...(lean ? { view: lean, lookAt: { x: AT_WORK.gazeX, y: AT_WORK.gazeY } } : {}),
+    still: true,
+    reducedMotion: true,
+    label: "",
+  });
   try {
     for (let frame = 0; frame < PATIENCE; frame += 1) {
       await nextFrame();
@@ -69,7 +84,8 @@ export function materialStill(request: MaterialStillRequest): Promise<MaterialSt
   if (typeof document === "undefined" || typeof requestAnimationFrame !== "function") return Promise.resolve(null);
   let byLook = kept.get(request.definition);
   if (!byLook) kept.set(request.definition, (byLook = new Map()));
-  const key = [request.material.id, request.color, request.ink, request.depth ?? "", request.state, request.mood, Math.round(request.px), typeof window === "undefined" ? 1 : window.devicePixelRatio || 1].join("|");
+  const mounted = mountPose(request.pose);
+  const key = [request.material.id, request.color, request.ink, request.depth ?? "", mounted.state, mounted.mood, mounted.atWork ? "work" : "", Math.round(request.px), typeof window === "undefined" ? 1 : window.devicePixelRatio || 1].join("|");
   let pending = byLook.get(key);
   if (!pending) {
     pending = paint(request);

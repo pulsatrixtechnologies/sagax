@@ -137,6 +137,35 @@ public enum ShapeMath {
         path.closeSubpath()
     }
 
+    /// A closed curve from the desktop's path string (two-decimal cubic segments).
+    public static func smoothClosedPath(_ d: String, into path: CGMutablePath) {
+        guard !d.isEmpty else { return }
+        // Parse: M x y C c1x c1y c2x c2y toX toY Z
+        // Handle letter-number concatenation (M0, C10, Z)
+        let regex = try! NSRegularExpression(pattern: "([A-Z])|(-?[0-9]*\\.?[0-9]+)", options: [])
+        let rawTokens: [Double] = regex.matches(in: d, range: NSRange(d.startIndex..., in: d))
+            .compactMap { match in
+                let s = String(d[Range(match.range, in: d)!])
+                if s == "M" || s == "C" || s == "Z" { return nil }
+                return Double(s)
+            }
+        guard rawTokens.count >= 2 else { return }
+        // First pair is start (M x y), rest are C segments: c1x c1y c2x c2y toX toY
+        var points: [CGPoint] = [CGPoint(x: rawTokens[0], y: rawTokens[1])]
+        var i = 2
+        while i + 5 < rawTokens.count {
+            points.append(CGPoint(x: rawTokens[i], y: rawTokens[i + 1]))   // control1
+            points.append(CGPoint(x: rawTokens[i + 2], y: rawTokens[i + 3])) // control2
+            points.append(CGPoint(x: rawTokens[i + 4], y: rawTokens[i + 5])) // to
+            i += 6
+        }
+        // If we have leftover toX toY
+        if i + 1 < rawTokens.count {
+            points.append(CGPoint(x: rawTokens[i], y: rawTokens[i + 1]))
+        }
+        smoothClosedPath(points, into: path)
+    }
+
     // MARK: Colours
 
     static func rgb(_ hex: String) -> (Double, Double, Double) {

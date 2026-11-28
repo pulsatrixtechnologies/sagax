@@ -186,6 +186,35 @@ final class ShapeVolumeTests: XCTestCase {
         XCTAssertEqual(ShapeVolume.eyeStyle(.idle), .capsule)
     }
 
+    func testThePathCaseDrawsBakedStillEyesAsTheDesktopWritesThem() throws {
+        // The phone's baked stills handle { shape: "path", d } via eyeMarkup.
+        // styledEyes returns .path with the raw d string for the path style,
+        // which the phone reads from ShapeStillArt.swift as the eyes' path data.
+        let eyes = [ShapeOutline(start: .zero, segments: [(c1: CGPoint(x: 10, y: 10), c2: CGPoint(x: 20, y: 20), to: CGPoint(x: 30, y: 30))])]
+        // path style: returns .path with the raw d string
+        let styled = ShapeVolume.styledEyes(eyes, .path)
+        XCTAssertEqual(styled.count, 1)
+        // The d string should match the ShapeOutline's d representation
+        let d = styled.compactMap {
+            if case .path(let pd) = $0 { return pd }
+            return nil
+        }.first ?? ""
+        let expected = eyes[0].d
+        XCTAssertEqual(d, expected, "path case stores the raw d string")
+        // d() returns the raw string for .path case
+        XCTAssertEqual(ShapeVolume.d(styled), d)
+        // path() draws the .path case as a smooth closed path
+        let cgPath = ShapeVolume.path(styled)
+        XCTAssertNotNil(cgPath)
+        // The .path case produces a non-empty bounding box
+        let bounds = cgPath.boundingBox
+        XCTAssertGreaterThan(bounds.width, 0, "path bounding box has width > 0")
+        XCTAssertGreaterThan(bounds.height, 0, "path bounding box has height > 0")
+        // capsule returns .outline, not .path
+        let capsule = ShapeVolume.styledEyes(eyes, .capsule)
+        XCTAssertNotNil(capsule.first)
+    }
+
     /// The body's thickness (`bodyDepth`) still thins the slices of a
     /// naturally thin body (a tube, a teardrop's tip), measured on its own radii.
     func testAThinBodyThinsItsSlices() {

@@ -559,6 +559,13 @@ settings.section.workspaces
 settings.serverMode.signedInAs
 settings.servers.connectSubtitle
 settings.servers.connectTitle
+settings.share.broader
+settings.share.control
+settings.share.controlHelp
+settings.share.intro
+settings.share.small
+settings.share.terminal
+settings.share.terminalHelp
 settings.threadDisplay.short
 settings.threadDisplay.show
 settings.threadDisplay.title

@@ -1262,6 +1262,7 @@ import { PageDataApprovals } from "./pages/page-data-approvals.ts";
 import { pageActVerdict } from "./pages/page-act-verdict.ts";
 import { PageLinkApprovals } from "./pages/page-link-approvals.ts";
 import { createBotSource } from "./pages/sources/bot.ts";
+import { pageBotSourceVisible } from "./pages/sources/page-bot-visible.ts";
 import { createTeamBoardSource } from "./pages/sources/team-board.ts";
 import { createTeamBoardRoutes } from "./routes/team-board.ts";
 import { TEAM_BOARD_ENTRIES_PER_BOT, TEAM_BOARD_WORK_WINDOW_MS, waitingCardOf } from "./team-board/board.ts";
@@ -21765,6 +21766,7 @@ routines = new RoutineManager({
   // 2026-10-15: "Disabled · 5 routines" in the conversation the change came
   // from (server/routines/routine-chat-events.ts); each viewer sees their own.
   onEnabledChanged: (routine, change) => {
+    if (routine.botId) pageDataWatch.botChanged(routine.botId);
     if (!threadStillExists(change.threadId)) return;
     recordRoutineToggle(store, {
       threadId: change.threadId,
@@ -21782,6 +21784,7 @@ routines = new RoutineManager({
   // 2026-10-21 "Created/Updated/Deleted routine · <name>" in the
   // conversation a bot's routine change came from (server/routines/routine-chat-events.ts).
   onRoutineChanged: (routine, change) => {
+    if (routine.botId) pageDataWatch.botChanged(routine.botId);
     if (!threadStillExists(change.threadId)) return;
     recordRoutineChange(store, {
       threadId: change.threadId,
@@ -21900,6 +21903,7 @@ routines = new RoutineManager({
   },
   interruptGoal: interruptRoutineGroupGoal,
   onRunChanged: (run) => {
+    if (run.botId) pageDataWatch.botChanged(run.botId);
     if (run.verifiesRunId && !run.problems && (run.status === "completed" || run.status === "nothing_to_report")) {
       recordInvestigationRecovery(run.verifiesRunId, run);
     }
@@ -28514,9 +28518,15 @@ pageSources.register(createBotSource({
     const bot = pageBotRecord(botId);
     return bot ? { name: bot.name } : null;
   },
+  // Owner or bot.use (same as mayUseBot). Audience visibleTo alone is not
+  // enough: a shared-page reader with default everyone must not read bot
+  // state without the right to use that bot (#5461, D-20261127-013).
   visible: (auth, botId) => {
     const bot = pageBotRecord(botId);
-    return Boolean(bot && visibleTo(viewerFor(auth)).bot(bot.id));
+    return pageBotSourceVisible({
+      botExists: Boolean(bot),
+      mayUseBot: Boolean(bot && canOnBot(authzViewerFor(auth), "bot.use", botFacts(bot))),
+    });
   },
   approvalMode: (botId) => {
     const bot = pageBotRecord(botId);

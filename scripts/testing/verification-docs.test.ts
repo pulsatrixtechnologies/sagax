@@ -150,3 +150,54 @@ describe("docs/verification recipes cite things that exist", () => {
     expect(broken).toEqual([]);
   });
 });
+
+// #5536 put the twelve device-only sub-cases of #2642, #2643 and #2644 into one
+// owner schedule. Nothing runs those rows automatically, so the easy failure is
+// a row that quietly disappears, points at a slot with no steps, or is left
+// blank, and the parent issues close on an unchecked box. This reads the recipe
+// and refuses all three.
+describe("docs/verification/owner-device-runs.md keeps every device row checkable", () => {
+  const RECIPE = "owner-device-runs.md";
+  const SUB_CASES = ["M-1", "M-2", "M-3", "M-4", "V-1", "V-2", "V-3", "V-4", "P-1", "P-2", "P-3", "P-4"];
+  // The parents' own closing words: a third state is not a verdict.
+  const VERDICTS = ["not run", "conforms", "does not conform", "inconclusive"];
+  // absent on a branch that has not written the schedule yet: read it empty so
+  // the rows below fail with their own message instead of taking the file down
+  const recipe = existsSync(join(DOCS, RECIPE)) ? text(RECIPE) : "";
+  // Slots are declared as headings, so a row cannot name a slot nobody wrote.
+  const slots = [...recipe.matchAll(/^## Slot ([A-Z])\b/gm)].map((match) => match[1]!).sort();
+  const rows = [...recipe.matchAll(/^\|\s*([MVP]-\d)\s*\|\s*([A-Z])\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|\s*$/gm)]
+    .map((match) => ({ subCase: match[1]!, slot: match[2]!, evidence: match[3]!, verdict: match[4]! }));
+
+  it("exists, is linked from README.md, and names its three parent issues", () => {
+    expect(recipes).toContain(RECIPE);
+    const linked = new Set([...text("README.md").matchAll(/\]\(([^)#\s]+\.md)/g)].map((match) => match[1]!));
+    expect(linked.has(RECIPE)).toBe(true);
+    for (const parent of [2642, 2643, 2644]) {
+      expect(recipe).toContain(`issues/${parent}`);
+    }
+  });
+
+  it("has exactly one row per sub-case, on a slot that has steps", () => {
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.map((row) => row.subCase).sort()).toEqual([...SUB_CASES].sort());
+    expect(slots.length).toBeGreaterThan(0);
+    expect([...new Set(rows.map((row) => row.slot))].every((slot) => slots.includes(slot))).toBe(true);
+    // every slot's heading names the sub-cases it covers
+    for (const slot of slots) {
+      const heading = recipe.match(new RegExp(`^## Slot ${slot}\\..*$`, "m"))?.[0] ?? "";
+      expect(heading).toMatch(/[MVP]-\d+( to [MVP]-\d+)?/);
+    }
+  });
+
+  it("names the evidence each row needs and the verdict it ended on", () => {
+    expect(rows.filter((row) => row.evidence.length < 10)).toEqual([]);
+    expect(rows.filter((row) => !VERDICTS.includes(row.verdict)).map((row) => `${row.subCase}: ${row.verdict}`)).toEqual([]);
+  });
+
+  it("keeps the device-only results out of the public tree", () => {
+    // the parents forbid a real number, voice or name in this repository
+    expect(recipe).toMatch(/masked/);
+    expect(recipe).toMatch(/outside (?:this |the )?repository/i);
+  });
+});

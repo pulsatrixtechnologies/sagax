@@ -2,7 +2,10 @@
 // entry, an expense, a planned entry, a configuration, an attachment, a
 // company's contact or site, each added, changed or removed, a planned
 // entry marked done, and a payment recorded on an invoice (M-20261127-140).
-// The app sends
+// The windows of the other plugins (M-20261127-141, M-20261127-146) add
+// theirs: a threat's changes undone, its endpoint isolated or reconnected,
+// its verdict; a backup run now; an SMS sent in a conversation; a post's
+// reply, pin, bookmark and removal. The app sends
 // one action through the record's detail route
 // (`POST /api/me/records/:product/:kind/:id/detail { action, id?, set }`),
 // the server checks it here, applies the organization's rules to it as a
@@ -24,6 +27,10 @@ export const RECORD_ACTIONS = [
   "contact.add", "contact.update", "contact.remove",
   "site.add", "site.update", "site.remove",
   "payment.add",
+  "threat.rollback", "threat.isolate", "threat.reconnect", "threat.verdict",
+  "backup.run",
+  "message.send",
+  "post.reply", "post.pin", "post.unpin", "post.remove", "post.bookmark", "post.unbookmark",
 ] as const;
 export type RecordActionName = (typeof RECORD_ACTIONS)[number];
 
@@ -34,6 +41,9 @@ export const RECORD_NOTE_KINDS = ["discussion", "internal", "resolution"] as con
 export type RecordNoteKind = (typeof RECORD_NOTE_KINDS)[number];
 export const RECORD_PLAN_KINDS = ["meeting", "resource", "activity"] as const;
 export type RecordPlanKind = (typeof RECORD_PLAN_KINDS)[number];
+/** A threat's verdict, as the person gives it. */
+export const RECORD_VERDICTS = ["true_positive", "false_positive"] as const;
+export type RecordVerdict = (typeof RECORD_VERDICTS)[number];
 
 /** The lists a form picks from, read like a field's choices (`section=choices&field=`). */
 export const RECORD_ACTION_CHOICES = ["work_type", "expense_type", "member", "configuration", "where"] as const;
@@ -42,6 +52,10 @@ export type RecordActionChoice = (typeof RECORD_ACTION_CHOICES)[number];
 export const RECORD_NOTE_MAX = 20_000;
 export const RECORD_LINE_NOTE_MAX = 4_000;
 export const RECORD_SUBJECT_MAX = 200;
+/** An SMS a person sends from a conversation (ten segments). */
+export const RECORD_MESSAGE_MAX = 1_600;
+/** A reply to a post. */
+export const RECORD_REPLY_MAX = 4_000;
 export const RECORD_FILE_NAME_MAX = 255;
 /** A contact's or a site's name, title, phone and address line. */
 export const RECORD_NAME_MAX = 50;
@@ -84,6 +98,7 @@ const PLAN_KIND: Rule = { type: "one", of: RECORD_PLAN_KINDS };
 const CONTACT_FIELDS: Record<string, Rule> = { first_name: TEXT(RECORD_NAME_MAX, 1), last_name: TEXT(RECORD_NAME_MAX), title: TEXT(RECORD_NAME_MAX), phone: TEXT(RECORD_PHONE_MAX), email: TEXT(RECORD_EMAIL_MAX) };
 /** A company's site. */
 const SITE_FIELDS: Record<string, Rule> = { name: TEXT(RECORD_NAME_MAX, 1), address: TEXT(RECORD_NAME_MAX), city: TEXT(RECORD_NAME_MAX), phone: TEXT(RECORD_PHONE_MAX) };
+const NOTHING = { id: false, fields: {} } as const;
 
 /** Each action: whether it names an entry, the fields it may set, the ones it must. */
 const SHAPES: Record<RecordActionName, { id: boolean; fields: Record<string, Rule>; required?: readonly string[]; some?: boolean }> = {
@@ -115,6 +130,19 @@ const SHAPES: Record<RecordActionName, { id: boolean; fields: Record<string, Rul
   "site.remove": { id: true, fields: {} },
   // ConnectWise has no reference or note on a payment; the console drops them (perspicax#2474, M-20261127-101).
   "payment.add": { id: false, fields: { amount: AMOUNT, date: DAY }, required: ["amount", "date"] },
+  "threat.rollback": NOTHING,
+  "threat.isolate": NOTHING,
+  "threat.reconnect": NOTHING,
+  "threat.verdict": { id: false, fields: { verdict: { type: "one", of: RECORD_VERDICTS } }, required: ["verdict"] },
+  "backup.run": NOTHING,
+  "message.send": { id: false, fields: { text: TEXT(RECORD_MESSAGE_MAX, 1) }, required: ["text"] },
+  // a reply to the post (no id) or to one of its replies (`to`, that reply's id)
+  "post.reply": { id: false, fields: { text: TEXT(RECORD_REPLY_MAX, 1), to: ID }, required: ["text"] },
+  "post.pin": NOTHING,
+  "post.unpin": NOTHING,
+  "post.remove": NOTHING,
+  "post.bookmark": NOTHING,
+  "post.unbookmark": NOTHING,
 };
 
 const ENTRY_ID = /^[A-Za-z0-9._:-]{1,64}$/;

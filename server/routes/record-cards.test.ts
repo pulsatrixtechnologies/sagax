@@ -10,7 +10,7 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import type { CustomRule } from "../../shared/custom-rules.ts";
 import type { PersonProductsCall } from "../perspicax/person-products.ts";
 import { createRecordCardsClient, recordCardPath } from "../perspicax/record-cards.ts";
-import { createRecordCardsRoutes, fieldChange, recordReadOrgRule, recordRuleInput, recordWrite, type RecordCardsRouteDeps, type RecordReadRule } from "./record-cards.ts";
+import { actionSends, actionVerb, createRecordCardsRoutes, fieldChange, recordReadOrgRule, recordRuleInput, recordWrite, type RecordCardsRouteDeps, type RecordReadRule } from "./record-cards.ts";
 import { PASS } from "./table.ts";
 
 const REF = { product: "nimbus_desk", kind: "ticket", id: "481516" };
@@ -315,6 +315,31 @@ describe("the record window's actions", () => {
     expect(answer.status).toBe(403);
     expect(answer.body).toEqual({ state: "org_refused", rule: { id: "o1", text: "rule" } });
     expect(denied.calls).toEqual([]);
+  });
+
+  it("reads an SMS or a reply as a send, and another plugin's write as that product's write (M-20261127-141)", () => {
+    expect(actionVerb(recordWrite({ action: "message.send", set: { text: "Bonjour" } }) as never)).toBe("create");
+    expect(actionSends(recordWrite({ action: "message.send", set: { text: "Bonjour" } }) as never)).toBe(true);
+    expect(actionSends(recordWrite({ action: "post.reply", set: { text: "Merci" } }) as never)).toBe(true);
+    expect(actionSends(recordWrite({ action: "post.pin" }) as never)).toBe(false);
+    expect(actionVerb(recordWrite({ action: "post.remove" }) as never)).toBe("delete");
+    expect(actionVerb(recordWrite({ action: "threat.isolate" }) as never)).toBe("update");
+    const threat = { product: "acme_guard", kind: "threat", id: "1873402291" };
+    const rule: CustomRule = { id: "o2", ownerId: "p-admin", botId: null, when: "modifier AcmeGuard", behavior: "deny", riskScope: [], enabled: true, createdAt: 1, updatedAt: 1, org: true, products: ["acme_guard"] };
+    expect(recordReadOrgRule([rule], threat, "AcmeGuard", undefined, recordWrite({ action: "threat.isolate" })!).kind).toBe("deny");
+    expect(recordReadOrgRule([{ ...rule, when: "lire AcmeGuard" }], threat, "AcmeGuard", undefined, recordWrite({ action: "threat.isolate" })!).kind).toBe("none");
+  });
+
+  it("holds an SMS and a reply on X to the organization's Refuse rules on sending and on writing (M-20261127-146)", () => {
+    const sms = { product: "twilio_api", kind: "message", id: "AC0001:SM6f3e12d0" };
+    const post = { product: "x_api", kind: "post", id: "1861402200417" };
+    const refuse = (when: string, products: string[]): CustomRule => ({ id: "o3", ownerId: "p-admin", botId: null, when, behavior: "deny", riskScope: [], enabled: true, createdAt: 1, updatedAt: 1, org: true, products });
+    const send = recordWrite({ action: "message.send", set: { text: "Bonjour" } })!;
+    const reply = recordWrite({ action: "post.reply", set: { text: "Merci" } })!;
+    for (const when of ["envoyer un SMS", "envoyer avec Twilio", "modifier Twilio"]) expect(recordReadOrgRule([refuse(when, ["twilio_api"])], sms, "Twilio", undefined, send).kind, when).toBe("deny");
+    for (const when of ["publier sur X", "répondre sur X", "modifier X"]) expect(recordReadOrgRule([refuse(when, ["x_api"])], post, "X", undefined, reply).kind, when).toBe("deny");
+    // a rule on reading still does not hold a send
+    expect(recordReadOrgRule([refuse("lire Twilio", ["twilio_api"])], sms, "Twilio", undefined, send).kind).toBe("none");
   });
 
   it("passes the console's code on when it refuses an action it does not take", async () => {

@@ -5561,6 +5561,12 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
   /* x.com's own stack (Chirp is theirs: the system faces it falls back to) */
   font-family: TwitterChirp, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
+/* X's blue and green, read by a post's own buttons (its record window) and the
+   bars of its statistics (`.x-blue`, outside a post) */
+:is(.x-post, .x-blue) {
+  --x-blue: #1d9bf0;
+  --x-green: #00ba7c;
+}
 /* #4640: the fan of published posts. The cards move only when motion is welcome. */
 .x-stack-card {
   transform-origin: 50% 50%;
@@ -5597,4 +5603,47 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
    colours » the way a colour wheel does. Decorative, never text. */
 .custom-swatch-ring {
   background: conic-gradient(from 0deg, #f43f5e, #f59e0b, #84cc16, #10b981, #06b6d4, #6366f1, #d946ef, #f43f5e);
+}
+
+/* A folder's record window wears the macOS Finder's look (M-20261127-146):
+   its folder blue, its selection, its seven tags, its file badges. Dark by
+   default, light under the light skins (the list the X cards and the
+   composer read); :is() so no line reads as a skin's own block to the tools
+   that look one up. The components only read these. An X post's window reads
+   the X cards' own `.x-post` tokens above. */
+:is(:root, [data-skin]) {
+  --finder-sidebar: color-mix(in srgb, var(--color-popover-ink) 4%, transparent);
+  --finder-sidebar-glyph: #0a84ff;
+  --finder-selection: #0a5fd6;
+  --finder-selection-ink: #ffffff;
+  --finder-folder: #5aa8f0;
+  --finder-folder-tab: #3a86d6;
+  --finder-folder-shine: color-mix(in srgb, #8cc4f7 55%, transparent);
+  --finder-page: #ececec;
+  --finder-page-fold: #c9c9c9;
+  --finder-ext-ink: #ffffff;
+  --finder-ext-pdf: #e5534b;
+  --finder-ext-sheet: #1f9d55;
+  --finder-ext-doc: #2b6cd4;
+  --finder-ext-slide: #e0782f;
+  --finder-ext-drawing: #3b6fd8;
+  --finder-ext-image: #9b6ae0;
+  --finder-ext-archive: #8e8e93;
+  --finder-ext-audio: #e0457b;
+  --finder-ext-video: #5856d6;
+  --finder-ext-other: #8e8e93;
+  --finder-tag-red: #ff5f57;
+  --finder-tag-orange: #ffa53a;
+  --finder-tag-yellow: #ffd60a;
+  --finder-tag-green: #3ccf63;
+  --finder-tag-blue: #3b8ef7;
+  --finder-tag-purple: #bf5af2;
+  --finder-tag-gray: #98989d;
+}
+:is([data-skin="pulsatrix-light"], [data-skin="atelier"], [data-skin="lagoon"], [data-skin="linen"],
+  [data-skin="daylight"], [data-skin="retro98"], [data-skin="meadow"]) {
+  --finder-sidebar-glyph: #007aff;
+  --finder-selection: #0063e1;
+  --finder-page: #ffffff;
+  --finder-page-fold: #d8d8d8;
 }

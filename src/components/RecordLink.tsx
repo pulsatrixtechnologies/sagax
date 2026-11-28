@@ -8,7 +8,7 @@
 // Nothing here navigates, and the chip is a button with no address: the link's
 // own scheme is never handed to the shell, shown in a status bar, copied as a
 // link address or opened by a middle click (a thread reference is the same).
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import { FileText } from "lucide-react";
 
 import { RecordCard, RecordProductMark } from "@/components/RecordCard";
@@ -30,6 +30,7 @@ import { accountWindow } from "@/components/record-window/account/AccountWindow"
 import type { AccountTab } from "@/components/record-window/account/account-model";
 import { boardWindow, type BoardView } from "@/components/record-window/board/BoardWindow";
 import { invoiceWindow, type InvoiceView } from "@/components/record-window/invoice/InvoiceWindow";
+import { usePluginWindow } from "@/components/record-window/plugins/PluginWindow";
 import { useStoreOptional } from "@/state/store";
 import { recordKey, recordMarkdown, type RecordRef } from "../../shared/record-cards";
 
@@ -148,6 +149,10 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
   onBotAsk?: (text: string) => void;
 }) {
   const [trail, setTrail] = useState<Array<{ ref: RecordRef; label: string }>>([]);
+  // the records left by Back, for a way forward (a folder's ›); opening another record forgets them
+  const [ahead, setAhead] = useState<Array<{ ref: RecordRef; label: string }>>([]);
+  const goBack = trail.length ? () => { setAhead((steps) => [trail.at(-1)!, ...steps]); setTrail((steps) => steps.slice(0, -1)); } : undefined;
+  const goForward = ahead.length ? () => { setTrail((steps) => [...steps, ahead[0]!].slice(-RECORD_TRAIL_MAX)); setAhead((steps) => steps.slice(1)); } : undefined;
   // a card opened by a click stays the opened card while it fades out (never the tooltip's layout for its 120 ms)
   const [opened, setOpened] = useState(pinned);
   if (pinned && !opened) setOpened(true);
@@ -164,10 +169,20 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
   const kindWindow = refKind === "ticket" || refKind === "board" || refKind === "invoice" || account !== null;
   const detail = useRecordDetail(current.ref, kindWindow && Boolean(read.card), refreshCard);
   const { refresh: refreshDetail } = detail;
-  const refresh = useCallback(() => { refreshCard(); refreshDetail(); }, [refreshCard, refreshDetail]);
   // each record of the way keeps the tab the person chose, back and forth
   const [tabs, setTabs] = useState<Record<string, AccountTab>>({});
   const key = recordKey(current.ref);
+  // a record of another plugin with a window of its own (a threat, a page, a conversation, M-20261127-141)
+  const plugin = usePluginWindow({
+    record: current.ref, label: current.label, card: read.card, now: Date.now(), ask: onBotAsk,
+    compose: onAsk ? () => onAsk(current.ref, current.label) : undefined,
+    back: goBack,
+    forward: goForward,
+    onChanged: refreshCard,
+  });
+  const refreshPlugin = useRef(plugin.refresh);
+  refreshPlugin.current = plugin.refresh;
+  const refresh = useCallback(() => { refreshCard(); refreshDetail(); refreshPlugin.current?.(); }, [refreshCard, refreshDetail]);
   const link = recordMarkdown(current.label, current.ref);
   // what the person set in a window (its tab, a board's filters), kept while this card is open:
   // coming back to a record on the way finds it as it was left
@@ -196,7 +211,7 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
   const way = [{ ref: record, label }, ...trail];
   const crumbs = trail.length ? way.map((step, index) => {
     const words = /^#?\d+$/.test(step.label.trim()) ? `${recordKindName(findRecordKind(products, step.ref).kind) ?? t("recordCard.kindFallback")} ${step.label}` : step.label;
-    return { label: words, ...(index < way.length - 1 ? { onOpen: () => setTrail((steps) => steps.slice(0, index)) } : {}) };
+    return { label: words, ...(index < way.length - 1 ? { onOpen: () => { setAhead([]); setTrail((steps) => steps.slice(0, index)); } } : {}) };
   }) : undefined;
   return (
     <RecordCard
@@ -205,11 +220,11 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
       label={current.label}
       kindName={recordKindName(kind)}
       product={product ? { name: product.name, ...(product.icon?.url ? { iconUrl: product.icon.url } : {}) } : undefined}
-      read={detail.detail ? { ...read, refresh } : read}
+      read={detail.detail || plugin.layout ? { ...read, refresh } : read}
       window={!read.card ? undefined : account ? accountWindow({
         kind: account, card: read.card, detail: detail.detail, type, now,
         tab: tabs[key], onTab: (tab) => setTabs((now) => ({ ...now, [key]: tab })), idPrefix: `record-${account}-${current.ref.id.replace(/[^A-Za-z0-9_-]/g, "_")}`,
-      }) : layout}
+      }) : layout ?? plugin.layout}
       edits={detail.edits}
       titleEdit={detail.title}
       trail={crumbs}
@@ -221,6 +236,7 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
       onSignIn={onSignIn}
       onOpenRecord={(ref, words) => {
         pin();
+        setAhead([]);
         setTrail((steps) => {
           // a record already on the way (the root card included) is gone back to, never pushed again
           const way = [{ ref: record, label }, ...steps];
@@ -229,7 +245,7 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
           return [...steps, { ref, label: words }].slice(-RECORD_TRAIL_MAX);
         });
       }}
-      onBack={trail.length ? () => setTrail((steps) => steps.slice(0, -1)) : undefined}
+      onBack={goBack}
     />
   );
 }

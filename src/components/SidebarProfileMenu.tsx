@@ -56,7 +56,10 @@ import {
   Smartphone,
   Trophy,
   Wrench,
+  LayoutTemplate,
 } from "lucide-react";
+import { useUiCustomize } from "@/components/ui-customize";
+import { useUiLayout } from "@/lib/ui-layout/preference";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { useOrgApprovalsCount } from "@/lib/org-approvals";
 import { waitingOnPersonCount } from "@/lib/bot-unread";
@@ -270,6 +273,7 @@ export interface ProfileMenuHandlers {
   onTeamMap: () => void;
   onRemoteSessions: () => void;
   onSettings: () => void;
+  onCustomize: () => void;
   onAchievements: () => void;
   onShortcuts: () => void;
   onReleaseNotes: () => void;
@@ -329,6 +333,8 @@ export function profileMenuItems(input: {
   canAddOrganization: boolean;
   /** Sign out: an organization server only */
   signOut: boolean;
+  /** Hide the account menu Usage row (sidebar zone customize, #5443). */
+  hideAccountUsage?: boolean;
   /** Lot 6: which Switch account row is being renamed in place. */
   renaming?: { id: string; draft: string; defaultName: string } | null;
   onRenameDraft?: (draft: string) => void;
@@ -475,7 +481,7 @@ export function profileMenuItems(input: {
       : []),
   ];
   return [
-    {
+    ...(input.hideAccountUsage ? [] : [{
       key: "usage",
       label: t("sidebar.account.usage"),
       icon: <Gauge size={18} />,
@@ -493,7 +499,7 @@ export function profileMenuItems(input: {
       ],
       submenuWidth: input.usageRows.some((row) => row.state === "windows") ? 400 : 228,
       onSelect: () => {},
-    },
+    }]),
     ...(input.mobile ? [{
       key: "mobile",
       label: t("sidebar.account.mobile"),
@@ -512,6 +518,12 @@ export function profileMenuItems(input: {
       label: t("sidebar.menu.settings"),
       icon: <SettingsIcon size={18} />,
       onSelect: input.handlers.onSettings,
+    },
+    {
+      key: "customize",
+      label: t("ui.customize.action"),
+      icon: <LayoutTemplate size={18} />,
+      onSelect: input.handlers.onCustomize,
     },
     ...(tools.length > 0 ? [{
       key: "tools",
@@ -614,6 +626,22 @@ function useAccountMenuData(enabled: boolean, refresh = 0, open = false): Accoun
     monthCost,
     targets: listSwitchTargets(environments, t("sidebar.account.solo")),
   };
+}
+
+/** The footer avatar, always in its real colours; no presence dot (the
+ * reference design's foot, 2026-10-16). Kept out of SidebarProfileMenu so
+ * that function stays under the client function-size ratchet (#1383). */
+function FootAvatar({ url, initials, size }: { url?: string | null; initials: string; size: number }) {
+  return (
+    <span className="relative flex shrink-0 rounded-full">
+      {url ? (
+        <img src={url} alt="" style={{ width: size, height: size }} className="rounded-full object-cover" />
+      ) : (
+        // the reference's monogram: 14px medium from 36px up, 12px below
+        <InitialsAvatar initials={initials} size={size} fontSize={size >= 36 ? 14 : 12} />
+      )}
+    </span>
+  );
 }
 
 export function SidebarProfileMenu({ avatarOnly = false, withName = false, places = [], memberLine = true }: {
@@ -727,6 +755,11 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
     else void Promise.resolve(window.ogb?.environments?.setName?.(id, { label })).then(done, () => {});
   };
   const updateWaits = update?.phase === "downloaded";
+  const uiCustomize = useUiCustomize();
+  const storedLayout = useUiLayout();
+  const accountUsageHidden = uiCustomize.active
+    ? uiCustomize.draft.zones.sidebar.hidden.includes("accountUsage")
+    : storedLayout.zones.sidebar.hidden.includes("accountUsage");
   const profileItems = profileMenuItems({
     usagePercent: account.percent,
     usageName: account.percentName,
@@ -751,6 +784,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
     accounts,
     canAddOrganization: !business && Boolean(window.ogb?.environments),
     signOut: lockedServer,
+    hideAccountUsage: accountUsageHidden,
     renaming,
     onRenameDraft: (draft) => setRenaming((current) => (current ? { ...current, draft } : current)),
     onRenameSave: () => {
@@ -765,6 +799,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
       onTeamMap: () => dispatch({ type: "showTeamMap" }),
       onRemoteSessions: () => dispatch({ type: "showRemoteSessions" }),
       onSettings: () => dispatch({ type: "toggleAppSettings" }),
+      onCustomize: () => uiCustomize.begin(),
       onAchievements: openAchievements,
       onShortcuts: () => {
         // The menu item unmounts; let the dialog restore the profile button.
@@ -799,18 +834,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   // a place in the menu asking for attention while the menu is folded away
   const placeAttention = places.some((item) => item.attention);
 
-  const avatar = (size: number) => (
-    // the footer avatar, always in its real colours; no presence dot (the reference
-    // design's foot, 2026-10-16)
-    <span className="relative flex shrink-0 rounded-full">
-      {profile?.avatarUrl ? (
-        <img src={profile.avatarUrl} alt="" style={{ width: size, height: size }} className="rounded-full object-cover" />
-      ) : (
-        // the reference's monogram: 14px medium from 36px up, 12px below
-        <InitialsAvatar initials={initials} size={size} fontSize={size >= 36 ? 14 : 12} />
-      )}
-    </span>
-  );
+  const avatar = (size: number) => <FootAvatar url={profile?.avatarUrl} initials={initials} size={size} />;
 
   // The approvals dot on the avatar's bottom-right corner opens the
   // Approvals screen (the #approvals screen). It is a button of its own, a

@@ -24,14 +24,14 @@ import { ComposerMeter } from "../ComposerMeter";
 import { ComposerWarningDialogs } from "./ComposerWarningDialogs";
 import { composeMessage } from "@/lib/composer-attachments";
 import type { MemeAttachmentPick } from "../MemePicker";
-import { composerBarSlots, useComposerBarLayout, type ComposerBarItem } from "@/lib/composer-bar-layout";
-import { usagePillPlacement } from "@/lib/usage-pill-preferences";
+import { composerBarSlots, type ComposerBarItem } from "@/lib/composer-bar-layout";
 import {
   ComposerBarContextMenu,
   ComposerBelowDropZone,
   ComposerCustomizeChrome,
   ComposerMovable,
   useComposerCustomize,
+  useComposerCustomizeLayout,
 } from "./ComposerCustomize";
 import { ComposerPlusCluster } from "./ComposerPlusCluster";
 import { ModelPicker } from "../ModelPicker";
@@ -144,8 +144,7 @@ export function ComposerShell({
 
   const composerShellClass = useChatComposerShellClass();
   const composerBottomSpaceStyle = useComposerBottomSpaceStyle();
-  const layout = useComposerBarLayout();
-  const placement = usagePillPlacement.use();
+  const { layout, placement } = useComposerCustomizeLayout();
   const customize = useComposerCustomize();
   const [memesOpen, setMemesOpen] = useState(false);
   const showMeter = Boolean(bot && !group && !remoteClient);

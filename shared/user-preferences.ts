@@ -135,8 +135,12 @@ export const USER_PREFERENCE_KEYS = [
   "sagax.contextIndicator.v1",
   // Settings > Appearance > Conversation: order of the message bar's movable
   // buttons (+, model, usage, voice) and how many sit left of the field
-  // (src/lib/composer-bar-layout.ts, D-20261126-014)
+  // (src/lib/composer-bar-layout.ts, D-20261126-014). Kept for migration and
+  // mirror sync; source of truth after migrate is sagax.uiLayout.v1 (#5443).
   "sagax.composerBarLayout.v1",
+  // Whole-app customize layout, zone by zone (src/lib/ui-layout/, D-20261127-004,
+  // #5443). Absorbs composerBarLayout and usagePillPlacement.
+  "sagax.uiLayout.v1",
   // single stream: hours away or quiet before a return opens a fresh topic
   // (shared/fresh-topic.ts; "0" never)
   "sagax.freshTopicAfter.v1",

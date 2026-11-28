@@ -1,7 +1,8 @@
-// Customize mode for the message bar (D-20261126-014, D-20261127-001):
-// right-click > Customize; drag or arrow keys reorder +, model, usage, voice;
-// Escape or Done leaves; Reset restores the default order. Dragging usage
-// above or below the bar updates usagePillPlacement.
+// Customize mode for the message bar (D-20261126-014, D-20261127-001;
+// whole-app mode D-20261127-004, #5443): right-click > Customize enters the
+// global customize mode; drag or arrow keys reorder +, model, usage, voice
+// inside the composerBar zone; Escape or Cancel discard; Save persists.
+// Dragging usage above or below the bar updates usagePlacement on the draft.
 import { createPortal } from "react-dom";
 import {
   useCallback,
@@ -14,21 +15,19 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { GripVertical } from "lucide-react";
+import { EyeOff, GripVertical } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE, useMenuInWindow } from "../menu-look";
 import {
   type ComposerBarItem,
   type ComposerBarLayout,
-  getComposerBarLayout,
-  moveComposerBarItem,
-  nudgeComposerBarItem,
-  resetComposerBarLayout,
-  setComposerBarLayout,
-  setComposerBarSide,
+  useComposerBarLayout,
 } from "@/lib/composer-bar-layout";
 import { usagePillPlacement, type UsagePillPlacement } from "@/lib/usage-pill-preferences";
+import { useUiCustomize } from "@/components/ui-customize";
+import { isHideable } from "@/lib/ui-layout/registry";
+import { composerVisibleOrder, isComposerBarItem } from "@/lib/ui-layout/draft";
 
 export type ComposerCustomizeApi = {
   customizing: boolean;
@@ -51,71 +50,84 @@ export type ComposerCustomizeApi = {
     "data-composer-drop": string;
     "data-composer-drop-active"?: "1";
   };
+  /** Hide one movable composer item (draft). */
+  hideItem?: (id: ComposerBarItem) => void;
 };
 
+/** Layout + placement the composer should render (draft while customizing). */
+export function useComposerCustomizeLayout(): {
+  layout: ComposerBarLayout;
+  placement: UsagePillPlacement;
+  customizing: boolean;
+} {
+  const ui = useUiCustomize();
+  const storedLayout = useComposerBarLayout();
+  const storedPlacement = usagePillPlacement.use();
+  if (ui.active) {
+    const zone = ui.draft.zones.composerBar;
+    const slots = composerVisibleOrder(zone);
+    const order = [...slots.left, ...slots.right].filter(isComposerBarItem);
+    return {
+      layout: { order, left: slots.left.length },
+      placement: zone.usagePlacement ?? "inBar",
+      customizing: true,
+    };
+  }
+  return {
+    layout: storedLayout,
+    placement: storedPlacement,
+    customizing: false,
+  };
+}
+
 export function useComposerCustomize(): ComposerCustomizeApi {
-  const [customizing, setCustomizing] = useState(false);
-  const [dragging, setDragging] = useState<ComposerBarItem | null>(null);
+  const ui = useUiCustomize();
+  const customizing = ui.active;
   const dragId = useRef<ComposerBarItem | null>(null);
+  const dragging: ComposerBarItem | null =
+    ui.dragging?.zoneId === "composerBar" && isComposerBarItem(ui.dragging.id)
+      ? ui.dragging.id
+      : null;
 
   const end = useCallback(() => {
     dragId.current = null;
-    setDragging(null);
-    setCustomizing(false);
-  }, []);
-  const begin = useCallback(() => setCustomizing(true), []);
-  const reset = useCallback(() => {
-    setComposerBarLayout(resetComposerBarLayout());
-    usagePillPlacement.set("inBar");
-  }, []);
-
-  useEffect(() => {
-    if (!customizing) return;
-    const onKey = (event: Event) => {
-      const key = (event as globalThis.KeyboardEvent).key;
-      if (key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      dragId.current = null;
-      setDragging(null);
-      setCustomizing(false);
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [customizing]);
+    ui.cancel();
+  }, [ui]);
+  const begin = useCallback(() => ui.begin(), [ui]);
+  const reset = useCallback(() => ui.requestReset(), [ui]);
 
   const onItemKeyDown = useCallback((id: ComposerBarItem, event: ReactKeyboardEvent) => {
     if (!customizing) return;
-    const layout = getComposerBarLayout();
     if (event.key === "ArrowLeft") {
       event.preventDefault();
-      setComposerBarLayout(nudgeComposerBarItem(layout, id, -1));
+      ui.nudge("composerBar", id, -1);
       return;
     }
     if (event.key === "ArrowRight") {
       event.preventDefault();
-      setComposerBarLayout(nudgeComposerBarItem(layout, id, 1));
+      ui.nudge("composerBar", id, 1);
       return;
     }
     if (id === "usage" && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
       event.preventDefault();
-      const place = usagePillPlacement.get();
+      const place = ui.draft.zones.composerBar.usagePlacement ?? "inBar";
       const cycle: UsagePillPlacement[] = ["above", "inBar", "below"];
       const at = cycle.indexOf(place);
       const next = event.key === "ArrowUp"
         ? cycle[Math.max(0, at - 1)]!
         : cycle[Math.min(cycle.length - 1, at + 1)]!;
-      usagePillPlacement.set(next);
+      ui.setPlacement(next);
     }
-  }, [customizing]);
+  }, [customizing, ui]);
 
   const dragProps = useCallback((id: ComposerBarItem) => ({
     draggable: customizing,
     onDragStart: (event: DragEvent) => {
       if (!customizing) return;
       dragId.current = id;
-      setDragging(id);
+      ui.setDragging({ zoneId: "composerBar", id });
       event.dataTransfer.setData("text/sagax-composer-item", id);
+      event.dataTransfer.setData("text/sagax-ui-item", `composerBar:${id}`);
       event.dataTransfer.effectAllowed = "move";
     },
     onDragOver: (event: DragEvent) => {
@@ -128,24 +140,22 @@ export function useComposerCustomize(): ComposerCustomizeApi {
       event.preventDefault();
       const from = (event.dataTransfer.getData("text/sagax-composer-item") as ComposerBarItem) || dragId.current;
       dragId.current = null;
-      setDragging(null);
+      ui.setDragging(null);
       if (!from || from === id) return;
-      const layout = getComposerBarLayout();
-      const toIndex = layout.order.indexOf(id);
+      const zone = ui.draft.zones.composerBar;
+      const toIndex = zone.order.indexOf(id);
       if (toIndex < 0) return;
-      let next = moveComposerBarItem(layout, from, toIndex);
-      // dropping onto a target that sits across the field moves the side too
-      const targetOnLeft = layout.order.indexOf(id) < layout.left;
-      const fromOnLeft = layout.order.indexOf(from) < layout.left;
-      if (targetOnLeft !== fromOnLeft) next = setComposerBarSide(next, from, targetOnLeft ? "left" : "right");
-      setComposerBarLayout(next);
-      if (from === "usage") usagePillPlacement.set("inBar");
+      const targetOnLeft = zone.order.indexOf(id) < (zone.left ?? 0);
+      const fromOnLeft = zone.order.indexOf(from) < (zone.left ?? 0);
+      ui.move("composerBar", from, toIndex);
+      if (targetOnLeft !== fromOnLeft) ui.setSide(from, targetOnLeft ? "left" : "right");
+      if (from === "usage") ui.setPlacement("inBar");
     },
     onDragEnd: () => {
       dragId.current = null;
-      setDragging(null);
+      ui.setDragging(null);
     },
-  }), [customizing]);
+  }), [customizing, ui]);
 
   const dropZoneProps = useCallback((placement: Exclude<UsagePillPlacement, "inBar">) => ({
     onDragOver: (event: DragEvent) => {
@@ -157,19 +167,24 @@ export function useComposerCustomize(): ComposerCustomizeApi {
       if (!customizing) return;
       const from = event.dataTransfer.getData("text/sagax-composer-item") || dragId.current;
       dragId.current = null;
-      setDragging(null);
+      ui.setDragging(null);
       if (from !== "usage") return;
       event.preventDefault();
-      usagePillPlacement.set(placement);
+      ui.setPlacement(placement);
     },
     "data-composer-drop": placement,
     ...(dragging === "usage" ? { "data-composer-drop-active": "1" as const } : {}),
-  }), [customizing, dragging]);
+  }), [customizing, dragging, ui]);
 
-  return { customizing, dragging, begin, end, reset, onItemKeyDown, dragProps, dropZoneProps };
+  const hideItem = useCallback((id: ComposerBarItem) => {
+    if (!isHideable("composerBar", id)) return;
+    ui.hide("composerBar", id);
+  }, [ui]);
+
+  return { customizing, dragging, begin, end, reset, onItemKeyDown, dragProps, dropZoneProps, hideItem };
 }
 
-/** Right-click menu on the composer box: Customize. */
+/** Right-click menu on the composer box: Customize (opens global mode). */
 export function ComposerBarContextMenu({
   anchorRef,
   onCustomize,
@@ -237,13 +252,15 @@ export function ComposerBarContextMenu({
   );
 }
 
-/** Strip shown while customizing: Reset and Done. */
+/** Strip shown while customizing: no-op when the global chrome owns Save/Cancel/Reset. */
 export function ComposerCustomizeChrome({
   customizing,
   onReset,
   onDone,
   children,
   jiggleFrame = false,
+  /** When true (default in app), hide the local Done/Reset toolbar. */
+  globalChrome = true,
 }: {
   customizing: boolean;
   onReset: () => void;
@@ -251,14 +268,17 @@ export function ComposerCustomizeChrome({
   children: ReactNode;
   /** Freeze mid-jiggle for headless still captures. */
   jiggleFrame?: boolean;
+  globalChrome?: boolean;
 }) {
+  const showLocalToolbar = customizing && !globalChrome;
   return (
     <div
       data-composer-customize={customizing ? "1" : undefined}
+      data-ui-customize={customizing ? "1" : undefined}
       data-composer-jiggle-frame={customizing && jiggleFrame ? "1" : undefined}
       className="relative"
     >
-      {customizing && (
+      {showLocalToolbar && (
         <div
           data-composer-customize-toolbar=""
           className="mb-1 flex items-center justify-end gap-2 px-1"
@@ -286,7 +306,7 @@ export function ComposerCustomizeChrome({
   );
 }
 
-/** Wraps a movable control while customizing (jiggle + drag handle + keyboard). */
+/** Wraps a movable control while customizing (jiggle + drag handle + hide + keyboard). */
 export function ComposerMovable({
   id,
   customizing,
@@ -302,15 +322,18 @@ export function ComposerMovable({
 }) {
   if (!customizing) return <span className={className}>{children}</span>;
   const grabbed = api.dragging === id;
+  const canHide = isHideable("composerBar", id);
   return (
     <span
       data-composer-movable={id}
+      data-ui-movable={id}
+      data-ui-zone="composerBar"
       tabIndex={0}
       role="button"
       aria-grabbed={grabbed ? "true" : "false"}
       aria-label={t(`composer.customize.item.${id}`)}
       className={cn(
-        "composer-movable inline-flex items-center rounded-full outline-none ring-offset-1 focus-visible:ring-2 focus-visible:ring-accent",
+        "composer-movable ui-movable inline-flex items-center rounded-full outline-none ring-offset-1 focus-visible:ring-2 focus-visible:ring-accent",
         className,
       )}
       onKeyDown={(event) => api.onItemKeyDown(id, event)}
@@ -321,9 +344,27 @@ export function ComposerMovable({
         strokeWidth={2}
         aria-hidden="true"
         data-composer-movable-handle=""
-        className="composer-movable-handle shrink-0"
+        data-ui-movable-handle=""
+        className="composer-movable-handle ui-movable-handle shrink-0"
       />
       {children}
+      {canHide && api.hideItem ? (
+        <button
+          type="button"
+          data-ui-movable-hide={id}
+          aria-label={t("ui.customize.hide")}
+          title={t("ui.customize.hide")}
+          className="ui-movable-hide ml-0.5 inline-flex size-5 items-center justify-center rounded-full text-ink-tertiary hover:bg-menu-hover hover:text-ink"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            api.hideItem?.(id);
+          }}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <EyeOff size={12} strokeWidth={2} aria-hidden="true" />
+        </button>
+      ) : null}
     </span>
   );
 }
@@ -356,7 +397,6 @@ export function ComposerUsageDropZones({
       >
         {above ?? <span className="text-[11px] text-ink-tertiary">{t("composer.customize.dropAbove")}</span>}
       </div>
-      {/* below zone is rendered by the caller after the box */}
       <span data-composer-drop-below-host="" hidden />
     </>
   );

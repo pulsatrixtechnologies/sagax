@@ -1,37 +1,75 @@
 // Settings > Appearance > Conversation (owner 2026-11-26, M-20261126-106,
-// M-20261126-108, #5406; 2026-11-27, D-20261127-001, M-20261127-037): the
-// usage pill in the message bar, where it sits, its shape per place
-// (M-20261126-108), and the conversation's context indicator. Preferences of
-// the person, kept like the other appearance choices (localStorage, and per
-// person on an organization server through shared/user-preferences.ts),
-// changed by a bot through the settings tool (shared/settings-actions.ts).
-// The defaults are an agent's choice: the pill shown, in the bar after the
-// model choice, three circles in the message bar and the account menu, bars
-// for the menu bar place (the native icon itself stays two small bars,
-// D-20261127-014), the context shown. The message bar keeps
-// `sagax.usagePillShape.v1`, so a shape already saved still applies there.
+// M-20261126-108, #5406; 2026-11-27, D-20261127-001, M-20261127-037; unified
+// store D-20261127-004, #5443): the usage pill in the message bar, where it
+// sits, its shape per place (M-20261126-108), and the conversation's context
+// indicator. Preferences of the person, kept like the other appearance
+// choices (localStorage, and per person on an organization server through
+// shared/user-preferences.ts), changed by a bot through the settings tool
+// (shared/settings-actions.ts). Placement is a facade over sagax.uiLayout.v1;
+// the other choices stay on their own keys. The defaults are an agent's
+// choice: the pill shown, in the bar after the model choice, three circles in
+// the message bar and the account menu, bars for the menu bar place (the
+// native icon itself stays two small bars, D-20261127-014), the context
+// shown. The message bar keeps `sagax.usagePillShape.v1`, so a shape already
+// saved still applies there.
+import { useSyncExternalStore } from "react";
+
 import { localChoice } from "./local-choice";
+import {
+  getUiLayout,
+  setUiLayout,
+  subscribeUiLayout,
+  usagePlacementFromUi,
+} from "./ui-layout/preference";
+import { USAGE_PLACEMENTS as UI_USAGE_PLACEMENTS, type UsagePlacement } from "./ui-layout/types";
 
 const ON_OFF = ["on", "off"] as const;
 
 /** "Usage in the message bar": show or hide the pill (placement is separate). */
 export const usagePillInBar = localChoice<(typeof ON_OFF)[number]>("sagax.usagePillInBar.v1", ON_OFF, "on");
 
-export const USAGE_PILL_PLACEMENTS = ["inBar", "above", "below"] as const;
-export type UsagePillPlacement = (typeof USAGE_PILL_PLACEMENTS)[number];
+export const USAGE_PILL_PLACEMENTS = UI_USAGE_PLACEMENTS;
+export type UsagePillPlacement = UsagePlacement;
+
+function fitsPlacement(value: unknown): value is UsagePillPlacement {
+  return typeof value === "string" && (USAGE_PILL_PLACEMENTS as readonly string[]).includes(value);
+}
 
 /** Where the pill sits when it is shown: in the bar after the model (default),
- * above the bar at the right, or under the bar at the right (D-20261127-001). */
-export const usagePillPlacement = localChoice<UsagePillPlacement>(
-  "sagax.usagePillPlacement.v1",
-  USAGE_PILL_PLACEMENTS,
-  "inBar",
-);
+ * above the bar at the right, or under the bar at the right (D-20261127-001).
+ * Facade over sagax.uiLayout.v1 composerBar.usagePlacement. */
+export const usagePillPlacement = {
+  key: "sagax.usagePillPlacement.v1",
+  get(): UsagePillPlacement {
+    return usagePlacementFromUi(getUiLayout());
+  },
+  set(next: UsagePillPlacement): void {
+    if (!fitsPlacement(next)) return;
+    const current = getUiLayout();
+    if (current.zones.composerBar.usagePlacement === next) {
+      // Still write so legacy mirror stays aligned after a direct localStorage poke.
+    }
+    setUiLayout({
+      ...current,
+      zones: {
+        ...current.zones,
+        composerBar: {
+          ...current.zones.composerBar,
+          usagePlacement: next,
+        },
+      },
+    });
+  },
+  subscribe(listener: () => void): () => void {
+    return subscribeUiLayout(listener);
+  },
+  use(): UsagePillPlacement {
+    return useSyncExternalStore(this.subscribe, this.get, () => "inBar" as UsagePillPlacement);
+  },
+};
 
 export function parseUsagePillPlacement(value: string | null | undefined): UsagePillPlacement {
-  return (USAGE_PILL_PLACEMENTS as readonly string[]).includes(value ?? "")
-    ? (value as UsagePillPlacement)
-    : "inBar";
+  return fitsPlacement(value) ? value : "inBar";
 }
 
 export const USAGE_PILL_SHAPES = ["bars", "circles", "battery", "dots", "text"] as const;

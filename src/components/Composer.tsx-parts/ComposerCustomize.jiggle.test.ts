@@ -9,8 +9,9 @@ describe("composer customize jiggle (D-20261126-014)", () => {
   it("trembles movable controls while customizing", () => {
     expect(css).toMatch(/@keyframes composer-movable-jiggle/);
     expect(css).toMatch(
-      /\[data-composer-customize="1"\] \.composer-movable \{\s*[^}]*animation:\s*composer-movable-jiggle/,
+      /\[data-composer-customize="1"\] \.composer-movable[\s\S]*?animation:\s*composer-movable-jiggle/,
     );
+    expect(css).toMatch(/\[data-ui-customize="1"\] \.ui-movable/);
     expect(src).toMatch(/className=\{cn\(\s*"composer-movable/);
     expect(src).toMatch(/GripVertical/);
     expect(src).toMatch(/data-composer-movable-handle/);
@@ -18,16 +19,16 @@ describe("composer customize jiggle (D-20261126-014)", () => {
 
   it("stops the tremble under reduced motion and shows a dashed outline", () => {
     expect(css).toMatch(
-      /@media \(prefers-reduced-motion: reduce\) \{\s*\[data-composer-customize="1"\] \.composer-movable \{\s*animation:\s*none;/,
+      /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\[data-composer-customize="1"\] \.composer-movable[\s\S]*?animation:\s*none;/,
     );
     expect(css).toMatch(
-      /:root\[data-reduced-motion="true"\] \[data-composer-customize="1"\] \.composer-movable \{\s*animation:\s*none;/,
+      /:root\[data-reduced-motion="true"\] \[data-composer-customize="1"\] \.composer-movable[\s\S]*?animation:\s*none;/,
     );
     expect(css).toMatch(
-      /:root\[data-reduced-motion="true"\] \[data-composer-customize="1"\] \.composer-movable \{[^}]*outline:\s*1\.5px dashed/,
+      /:root\[data-reduced-motion="true"\] \[data-composer-customize="1"\] \.composer-movable[\s\S]*?outline:\s*1\.5px dashed/,
     );
     expect(css).toMatch(
-      /@media \(prefers-reduced-motion: reduce\) \{[^}]*\[data-composer-customize="1"\] \.composer-movable \{[^}]*outline:\s*1\.5px dashed/s,
+      /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\[data-composer-customize="1"\] \.composer-movable[\s\S]*?outline:\s*1\.5px dashed/,
     );
   });
 

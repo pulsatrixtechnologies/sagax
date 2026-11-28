@@ -48,7 +48,13 @@ describe("round controls, as the reference measures them (#4163)", () => {
     expect(head).toContain("<Search {...CIRCLE_ICON}");
     expect(head).toContain("<Plus {...CIRCLE_ICON}");
     expect(head.indexOf("<Search")).toBeLessThan(head.indexOf("<Plus"));
-    expect(head).toContain("const headButtons = <>{collapseButton}{searchButton}{newButton}</>");
+    // Default order collapse → search → new via sidebarHeadOrder / headById (#5017 / #5443).
+    expect(head).toContain("collapse: collapseButton");
+    expect(head).toContain("search: searchButton");
+    expect(head).toContain("new: newButton");
+    expect(head).toContain("sidebarHeadOrder(sidebarZone).map((id) => wrapHead(id, headById[id] ?? null))");
+    const orderSrc = read("./ui-layout/sidebar-order.ts");
+    expect(orderSrc).toContain('for (const id of ["collapse", "search", "new"])');
     expect(CIRCLE_ICON).toEqual({ size: 18, strokeWidth: 1.75 });
   });
 

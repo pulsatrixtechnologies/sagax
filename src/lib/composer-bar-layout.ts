@@ -1,18 +1,25 @@
-// Message bar button order (owner 2026-11-26, D-20261126-014): the movable
-// buttons (+, model, usage, voice). The text field and Send stay fixed. Per
-// person, synced like the other appearance preferences. Placement of the
-// usage pill itself lives in usage-pill-preferences.ts (D-20261127-001).
-// [choix d'agent]: the order stores a split so a button can sit left or right
-// of the fixed field.
+// Message bar button order (owner 2026-11-26, D-20261126-014; unified store
+// D-20261127-004, #5443): facade over sagax.uiLayout.v1. The movable buttons
+// (+, model, usage, voice). The text field and Send stay fixed. Placement of
+// the usage pill lives on the same store (usagePlacement). [choix d'agent]:
+// the order stores a split so a button can sit left or right of the fixed field.
 import { useSyncExternalStore } from "react";
 
 import type { UsagePillPlacement } from "./usage-pill-preferences";
+import {
+  composerLayoutFromUi,
+  getUiLayout,
+  setUiLayout,
+  subscribeUiLayout,
+  resetUiLayoutStoreForTests,
+} from "./ui-layout/preference";
+import { COMPOSER_BAR_COMPONENT_IDS } from "./ui-layout/types";
 
-export const COMPOSER_BAR_ITEMS = ["plus", "model", "usage", "voice"] as const;
+export const COMPOSER_BAR_ITEMS = COMPOSER_BAR_COMPONENT_IDS;
 export type ComposerBarItem = (typeof COMPOSER_BAR_ITEMS)[number];
 
 export type ComposerBarLayout = {
-  /** Movable buttons in left-to-right order. */
+  /** Movable buttons in left-to-right order (visible only). */
   order: readonly ComposerBarItem[];
   /** How many of the first items sit left of the fixed text field. */
   left: number;
@@ -31,7 +38,7 @@ function isItem(value: unknown): value is ComposerBarItem {
   return typeof value === "string" && (COMPOSER_BAR_ITEMS as readonly string[]).includes(value);
 }
 
-/** Parse the stored JSON. Missing or broken values become the default. */
+/** Parse the stored JSON (legacy shape). Missing or broken values become the default. */
 export function parseComposerBarLayout(raw: string | null | undefined): ComposerBarLayout {
   if (!raw) return { order: [...DEFAULT_COMPOSER_BAR_LAYOUT.order], left: DEFAULT_COMPOSER_BAR_LAYOUT.left };
   try {
@@ -81,7 +88,6 @@ export function moveComposerBarItem(layout: ComposerBarLayout, id: ComposerBarIt
   order.splice(from, 1);
   const clamped = Math.max(0, Math.min(order.length, toIndex));
   order.splice(clamped, 0, id);
-  // keep the same count left of the field when possible
   let left = layout.left;
   if (from < layout.left && clamped >= layout.left) left = Math.max(0, left - 1);
   else if (from >= layout.left && clamped < layout.left) left = Math.min(order.length, left + 1);
@@ -128,7 +134,6 @@ export function composerBarSlots(
   placement: UsagePillPlacement,
 ): { left: ComposerBarItem[]; right: ComposerBarItem[] } {
   const visible = layout.order.filter((item) => item !== "usage" || placement === "inBar");
-  // left count is over the full order; recount against the visible list
   let leftCount = 0;
   for (let i = 0; i < layout.left; i++) {
     const item = layout.order[i];
@@ -136,85 +141,77 @@ export function composerBarSlots(
   }
   leftCount = Math.max(0, Math.min(visible.length, leftCount));
   return {
-    left: visible.slice(0, leftCount),
-    right: visible.slice(leftCount),
+    left: visible.slice(0, leftCount) as ComposerBarItem[],
+    right: visible.slice(leftCount) as ComposerBarItem[],
   };
 }
 
-// ── store (localStorage + session, like model-favorites) ─────────────────
+// useSyncExternalStore needs the same object while the underlying uiLayout
+// reference is unchanged (React compares getSnapshot with Object.is).
+let cachedFromUi: ReturnType<typeof getUiLayout> | null = null;
+let cachedComposerLayout: ComposerBarLayout = {
+  order: DEFAULT_COMPOSER_BAR_LAYOUT.order,
+  left: DEFAULT_COMPOSER_BAR_LAYOUT.left,
+};
 
-let session: ComposerBarLayout | null = null;
-let cachedRaw: string | null | undefined;
-let cachedValue: ComposerBarLayout = resetComposerBarLayout();
-const listeners = new Set<() => void>();
-
-function storage(): Storage | undefined {
-  try { return globalThis.localStorage; } catch { return undefined; }
-}
-
-function read(): ComposerBarLayout {
-  if (session) return session;
-  let raw: string | null = null;
-  try { raw = storage()?.getItem(COMPOSER_BAR_LAYOUT_KEY) ?? null; } catch { raw = null; }
-  if (raw === cachedRaw) return cachedValue;
-  cachedRaw = raw;
-  cachedValue = parseComposerBarLayout(raw);
-  return cachedValue;
-}
-
-function emit(): void {
-  for (const listener of listeners) listener();
-}
-
-function onStorage(event: StorageEvent): void {
-  if (event.key !== COMPOSER_BAR_LAYOUT_KEY && event.key !== null) return;
-  if (event.storageArea && event.storageArea !== storage()) return;
-  session = null;
-  cachedRaw = undefined;
-  emit();
+function fromStore(): ComposerBarLayout {
+  const ui = getUiLayout();
+  if (ui === cachedFromUi) return cachedComposerLayout;
+  const { order, left } = composerLayoutFromUi(ui);
+  // Visible-only: drop ids that are hidden in uiLayout.
+  const hidden = new Set(ui.zones.composerBar.hidden);
+  const visible = order.filter((id): id is ComposerBarItem => isItem(id) && !hidden.has(id));
+  // Recount left against the visible list.
+  let visibleLeft = 0;
+  for (let i = 0; i < left; i++) {
+    const id = order[i];
+    if (id && isItem(id) && !hidden.has(id)) visibleLeft += 1;
+  }
+  const filled = visible.length ? visible : [...DEFAULT_COMPOSER_BAR_LAYOUT.order];
+  cachedFromUi = ui;
+  cachedComposerLayout = {
+    order: Object.freeze(filled) as readonly ComposerBarItem[],
+    left: Math.max(0, Math.min(filled.length, visibleLeft || (hidden.size ? 0 : DEFAULT_COMPOSER_BAR_LAYOUT.left))),
+  };
+  return cachedComposerLayout;
 }
 
 export function getComposerBarLayout(): ComposerBarLayout {
-  return read();
+  return fromStore();
 }
 
 export function setComposerBarLayout(next: ComposerBarLayout): void {
   const normalized = parseComposerBarLayout(serializeComposerBarLayout(next));
-  session = normalized;
-  const raw = serializeComposerBarLayout(normalized);
-  try {
-    const local = storage();
-    local?.setItem(COMPOSER_BAR_LAYOUT_KEY, raw);
-    if (local?.getItem(COMPOSER_BAR_LAYOUT_KEY) === raw) session = null;
-  } catch {
-    // session still holds the visible choice
-  }
-  cachedRaw = raw;
-  cachedValue = normalized;
-  emit();
+  const current = getUiLayout();
+  const hidden = current.zones.composerBar.hidden.filter((id) => isItem(id));
+  // Keep hidden ids out of the new visible order; preserve them in hidden.
+  const visible = normalized.order.filter((id) => !hidden.includes(id));
+  setUiLayout({
+    ...current,
+    zones: {
+      ...current.zones,
+      composerBar: {
+        ...current.zones.composerBar,
+        order: [...visible],
+        hidden: [...hidden],
+        left: Math.max(0, Math.min(visible.length, normalized.left)),
+        usagePlacement: current.zones.composerBar.usagePlacement ?? "inBar",
+      },
+    },
+  });
 }
 
 export function subscribeComposerBarLayout(listener: () => void): () => void {
-  listeners.add(listener);
-  if (listeners.size === 1 && typeof window !== "undefined") window.addEventListener("storage", onStorage);
-  return () => {
-    listeners.delete(listener);
-    if (listeners.size === 0 && typeof window !== "undefined") window.removeEventListener("storage", onStorage);
-  };
+  return subscribeUiLayout(listener);
 }
 
 export function useComposerBarLayout(): ComposerBarLayout {
   return useSyncExternalStore(subscribeComposerBarLayout, getComposerBarLayout, () => DEFAULT_COMPOSER_BAR_LAYOUT);
 }
 
-/** Test helper: drop the session override so localStorage is the source again. */
+/** Test helper: drop the unified store so localStorage is the source again. */
 export function resetComposerBarLayoutStoreForTests(): void {
-  session = null;
-  cachedRaw = undefined;
-  cachedValue = resetComposerBarLayout();
-  try { storage()?.removeItem(COMPOSER_BAR_LAYOUT_KEY); } catch { /* */ }
-  emit();
+  resetUiLayoutStoreForTests();
 }
 
-// silence unused when tree-shaken in some bundles
 void EMPTY_ORDER;

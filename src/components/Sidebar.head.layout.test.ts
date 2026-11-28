@@ -47,7 +47,8 @@ describe("sidebar head buttons", () => {
     // search, New, and Collapse sidebar (#5017) wear the same round control
     expect(buttons.match(/\bSIDEBAR_HEAD_BUTTON\b/g)).toHaveLength(3);
     expect(buttons).not.toContain("data-sidebar-bot-panel");
-    expect(sidebar).toContain("const railButtons = <>{searchButton}{newButton}</>");
+    // Rail foot: same head order minus collapse (#4093 / #5443).
+    expect(sidebar).toMatch(/const railButtons = \(\s*<>\s*\{sidebarHeadOrder\(sidebarZone\)\s*\.filter\(\(id\) => id !== "collapse"\)/);
     expect(buttons).not.toMatch(/CIRCLE_BUTTON\b(?!_)/);
     const head = sidebar.slice(sidebar.indexOf("<div data-sidebar-head"), sidebar.indexOf("{/* Bot list."));
     expect(head.match(/\{headButtons\}/g)).toHaveLength(1);

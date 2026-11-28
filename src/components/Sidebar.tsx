@@ -2,6 +2,7 @@ import { equalRows, peerBots, peerGroups } from "@/state/view-slices";
 import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { useThreadPrefetch, type ThreadPrefetchIntent } from "@/state/thread-prefetch";
 import {
+  Fragment,
   memo,
   useEffect,
   useId,
@@ -10,6 +11,7 @@ import {
   useState,
   useSyncExternalStore,
   type ComponentProps,
+  type ReactNode,
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
@@ -201,6 +203,14 @@ import { SidebarOverlays } from "./Sidebar.tsx-parts/SidebarOverlays";
 import { SidebarResizeHandle } from "./Sidebar.tsx-parts/SidebarResizeHandle";
 import { SidebarUnreadPillAbove, SidebarUnreadPillBelow } from "./Sidebar.tsx-parts/SidebarUnreadPills";
 import { routineRunsWaiting } from "./parallel-approvals";
+import { UiMovable, useUiCustomize } from "@/components/ui-customize";
+import { useUiLayout } from "@/lib/ui-layout/preference";
+import {
+  mergeSidebarSections,
+  orderedSidebarSections,
+  sidebarComponentHidden,
+  sidebarHeadOrder,
+} from "@/lib/ui-layout/sidebar-order";
 import { MENU_FIT_ROW, MENU_ROW, MENU_ROW_DANGER, MENU_SURFACE, MenuDivider, menuRow, useMenuInWindow } from "./menu-look";
 
 export type { MenuState, BotConfirmKind };
@@ -2573,8 +2583,49 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
       <PanelLeft {...CIRCLE_ICON} aria-hidden="true" />
     </button>
   ) : null;
-  const headButtons = <>{collapseButton}{searchButton}{newButton}</>;
-  const railButtons = <>{searchButton}{newButton}</>;
+  const uiCustomize = useUiCustomize();
+  const storedLayout = useUiLayout();
+  useEffect(() => {
+    if (!uiCustomize.active) return;
+    uiCustomize.ensureSidebarSections(roster.sectionIds);
+  }, [uiCustomize.active, roster.sectionIds, uiCustomize.ensureSidebarSections]);
+  const sidebarZone = uiCustomize.active
+    ? mergeSidebarSections(uiCustomize.draft.zones.sidebar, roster.sectionIds)
+    : mergeSidebarSections(storedLayout.zones.sidebar, roster.sectionIds);
+  const wrapHead = (id: string, node: ReactNode) => {
+    if (!node) return null;
+    if (sidebarComponentHidden(sidebarZone, id)) return null;
+    if (!uiCustomize.active) return <Fragment key={id}>{node}</Fragment>;
+    return (
+      <UiMovable
+        key={id}
+        zoneId="sidebar"
+        id={id}
+        label={t(`ui.customize.item.${id}` as "ui.customize.item.collapse")}
+      >
+        {node}
+      </UiMovable>
+    );
+  };
+  const headById: Record<string, ReactNode> = {
+    collapse: collapseButton,
+    search: searchButton,
+    new: newButton,
+  };
+  const headButtons = (
+    <>
+      {sidebarHeadOrder(sidebarZone).map((id) => wrapHead(id, headById[id] ?? null))}
+    </>
+  );
+  const railButtons = (
+    <>
+      {sidebarHeadOrder(sidebarZone)
+        .filter((id) => id !== "collapse")
+        .map((id) => wrapHead(id, headById[id] ?? null))}
+    </>
+  );
+  const showPinnedTiles = !sidebarComponentHidden(sidebarZone, "pinnedTiles");
+  const sectionIdsForList = orderedSidebarSections(sidebarZone, roster.sectionIds);
 
   return (
     <SidebarMascotProvider rootRef={sidebarRef}>
@@ -2679,23 +2730,42 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
             />
           </div>
         )}
-        <SidebarPinnedGrid
-          pinnedBots={primaryRow ? roster.pinnedBots.filter((bot) => bot.id !== primaryRow.id) : roster.pinnedBots}
-          density={density}
-          state={state}
-          viewerId={roster.viewerId}
-          showThreads={showThreads}
-          dispatch={dispatch}
-          setMenu={actions.setMenu}
-          renameBotId={actions.renameBotId}
-          onRenameStarted={() => actions.setRenameBotId(null)}
-        />
+        {showPinnedTiles ? (
+          uiCustomize.active ? (
+            <UiMovable zoneId="sidebar" id="pinnedTiles" label={t("ui.customize.item.pinnedTiles")} className="block w-full">
+              <SidebarPinnedGrid
+                pinnedBots={primaryRow ? roster.pinnedBots.filter((bot) => bot.id !== primaryRow.id) : roster.pinnedBots}
+                density={density}
+                state={state}
+                viewerId={roster.viewerId}
+                showThreads={showThreads}
+                dispatch={dispatch}
+                setMenu={actions.setMenu}
+                renameBotId={actions.renameBotId}
+                onRenameStarted={() => actions.setRenameBotId(null)}
+              />
+            </UiMovable>
+          ) : (
+            <SidebarPinnedGrid
+              pinnedBots={primaryRow ? roster.pinnedBots.filter((bot) => bot.id !== primaryRow.id) : roster.pinnedBots}
+              density={density}
+              state={state}
+              viewerId={roster.viewerId}
+              showThreads={showThreads}
+              dispatch={dispatch}
+              setMenu={actions.setMenu}
+              renameBotId={actions.renameBotId}
+              onRenameStarted={() => actions.setRenameBotId(null)}
+            />
+          )
+        ) : null}
         <SidebarSectionList
           density={density}
           quietRows={quietRows}
           q={roster.q}
           state={state}
-          sectionIds={roster.sectionIds}
+          sectionIds={sectionIdsForList}
+          customizeSections={uiCustomize.active}
           teamMap={roster.teamMap}
           botChats={roster.botChats}
           peopleDms={roster.peopleDms}

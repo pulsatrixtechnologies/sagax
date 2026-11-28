@@ -10,6 +10,7 @@ import { WorkspaceBackupRecovery } from "@/components/workspace-backup-recovery"
 import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { DesktopCapabilitiesProvider } from "@/components/DesktopCapabilities";
 import { DataWindowViewSync } from "@/components/DataWindowButton";
+import { UiCustomizeChrome, UiCustomizeProvider } from "@/components/ui-customize";
 import { MAUS_COLORS } from "@/lib/mascot";
 import { botSwitchActive, useBotAccent, useBotAccentEnabled, useBotSwitch } from "@/lib/bot-accent";
 import { usePageLookSync } from "@/lib/page-look-sync";
@@ -100,17 +101,20 @@ function Application() {
     <DesktopCapabilitiesProvider>
       <StoreProvider>
         <ConfirmProvider>
-          <ThreadRefsProvider>
-            <Shell />
-          </ThreadRefsProvider>
-          <WelcomeGate viewer={viewer} />
-          <GuidedTour />
-          <OpenAtLoginOffer />
-          <LiveCallHost />
-          <DataWindowViewSync />
-          <BotAccentSync />
-          <PageLookSync />
-          <ProvisionalInputGuard />
+          <UiCustomizeProvider>
+            <ThreadRefsProvider>
+              <Shell />
+            </ThreadRefsProvider>
+            <UiCustomizeChrome />
+            <WelcomeGate viewer={viewer} />
+            <GuidedTour />
+            <OpenAtLoginOffer />
+            <LiveCallHost />
+            <DataWindowViewSync />
+            <BotAccentSync />
+            <PageLookSync />
+            <ProvisionalInputGuard />
+          </UiCustomizeProvider>
         </ConfirmProvider>
       </StoreProvider>
     </DesktopCapabilitiesProvider>

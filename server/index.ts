@@ -34706,7 +34706,9 @@ const orgLink = createOrgLinkRoutes({
   // app's own voice would use for the person who owns it. The same function
   // as every voice route of the app, called for that person: the same order,
   // the same rights (`serverKeyAllowed` included), never another person's key.
-  voiceKeys: (principalId) => resolveVoiceKeys(voiceModeDeps, voiceSpeakerOf(principalId))
+  // phoneLine keeps that full order under the policy (D-20261127-029): a
+  // dead account falls back onto this person's keys, then the organization.
+  voiceKeys: (principalId) => resolveVoiceKeys(voiceModeDeps, voiceSpeakerOf(principalId), undefined, { phoneLine: true })
 });
 /** Lot C.3: the words each bot is writing now, for the member API's
  * streamed turn (server/people/member-live-text.ts). */

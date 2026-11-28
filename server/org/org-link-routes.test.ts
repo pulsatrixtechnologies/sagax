@@ -410,7 +410,9 @@ describe("POST /api/org/link/grok-sign-in with voice_keys: the app's own order f
       scheduler: { request: () => "started" },
       person: (sub) => w.people[sub] ?? null,
       grokSignIn: async () => ({ ok: false, error: "no_sign_in" }),
-      // the wiring of server/index.ts: the app's own function, for that person
+      // the wiring of server/index.ts: the app's own function, for that person,
+      // with the same policy the server passes, and phoneLine so the list
+      // stays the full order (D-20261127-029)
       voiceKeys: (principalId) => {
         resolved.push(principalId);
         return resolveVoiceKeys({
@@ -422,7 +424,8 @@ describe("POST /api/org/link/grok-sign-in with voice_keys: the app's own order f
           personalKey: (speaker) => w.voiceKeys[speaker.principalId],
           grokAccount: (speaker) => w.grok[speaker.principalId],
           orgAccount: () => w.orgAccount,
-        }, speakerOf(principalId));
+          credentialPolicy: () => ({ aspect: "voice", personalKeysEnabled: true, allowPersonalWhenActingAs: false, paidKeyConfirmed: false }),
+        }, speakerOf(principalId), undefined, { phoneLine: true });
       },
       log: (line) => lines.push(line),
     });

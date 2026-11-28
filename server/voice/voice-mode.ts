@@ -80,7 +80,7 @@ import { readForVoice } from "../tts/voice-reading.ts";
 import { speakableDelta } from "../tts/speech-text.ts";
 import { createListenSession } from "./voice-listen-session.ts";
 import { grokVoiceFailure, withVoiceAuth, type GrokVoiceFailure, type SpeechStream, type SpeechStreamHandlers, type SynthesizeOptions, type TranscriptionHandlers, type TranscriptionStream } from "../tts/grok.ts";
-import { paidApiKey, resolveCredential, type CredentialCandidate, type CredentialDecision, type CredentialForm, type CredentialPolicy } from "../../shared/credential-resolver.ts";
+import { paidApiKey, personalCredential, personalCredentialAllowed, personalKeysEnabled, resolveCredential, type CredentialCandidate, type CredentialDecision, type CredentialForm, type CredentialPolicy } from "../../shared/credential-resolver.ts";
 import {
   chainCallReason, noCallReason, realtimeKeyRefusedCallReason, realtimeNotConfiguredCallReason, realtimeNotOnServerCallReason,
   realtimeUnreachableCallReason, voiceNameCallReason, voiceSentenceLanguage, type NoCallLanguage,
@@ -358,9 +358,16 @@ function accountForm(form: CredentialForm | null): boolean {
   return form === "personal-account" || form === "org-account";
 }
 
+/** A phone line keeps every form the policy still allows. The in-app voice
+ * asks before a paid key; a live call has no confirm step. */
+export interface ResolveVoiceKeysOptions {
+  phoneLine?: boolean;
+}
+
 /** The voice order stays. The policy only drops a form or asks before a
- * paid key. A solo server, and a caller with no policy, is unchanged. */
-async function governVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, threadId: string | undefined, resolved: VoiceKeys): Promise<VoiceKeys> {
+ * paid key. A solo server, and a caller with no policy, is unchanged.
+ * `phoneLine` keeps the full order for that person (D-20261127-029). */
+async function governVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, threadId: string | undefined, resolved: VoiceKeys, options?: ResolveVoiceKeysOptions): Promise<VoiceKeys> {
   if (!resolved.ok || !deps.organization || !deps.credentialPolicy) return resolved;
   const policy = { ...await deps.credentialPolicy(speaker, threadId), aspect: "voice" as const };
   const candidates: CredentialCandidate[] = [];
@@ -371,6 +378,7 @@ async function governVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, threadId: s
   }
   const decision = resolveCredential({ aspect: "voice", candidates, policy });
   deps.auditCredential?.(decision, speaker, threadId);
+  if (options?.phoneLine) return phoneLineKeys(resolved, policy, decision);
   if (!decision.ok) {
     const cause = decision.reason === "no_credentials" ? "no_credentials" : decision.reason;
     return { ok: false, cause, error: decision.error, ...(decision.reason === "confirm_paid_key" ? { confirm: decision.confirm } : {}) };
@@ -396,6 +404,25 @@ async function governVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, threadId: s
   return { ok: true, keys, ...(confirm ? { confirm } : {}) };
 }
 
+/** Phone line: account, this person's keys, then the organization. A form
+ * the policy forbids (Act as, personal keys off) stays out. Never a confirm
+ * hold, and never another person's key (the list was already that person's). */
+function phoneLineKeys(resolved: Extract<VoiceKeys, { ok: true }>, policy: CredentialPolicy, decision: CredentialDecision): VoiceKeys {
+  if (!decision.ok && decision.reason !== "confirm_paid_key") {
+    const cause = decision.reason === "no_credentials" ? "no_credentials" : decision.reason;
+    return { ok: false, cause, error: decision.error };
+  }
+  const keys = resolved.keys.filter((entry) => {
+    const form = voiceCredentialForm(entry.source);
+    if (!form) return true;
+    if (form === "personal-key" && !personalKeysEnabled(policy)) return false;
+    if (personalCredential(form) && !personalCredentialAllowed(policy)) return false;
+    return true;
+  });
+  if (!keys.length) return { ok: false, cause: "no_credentials", error: decision.ok ? "No credential serves this voice." : decision.error };
+  return { ok: true, keys };
+}
+
 /** A connected Grok account speaks on the xAI API root. Every other
  * source stays an API key on api.x.ai. */
 function onThisKey<T>(candidate: { source: string }, run: () => T): T {
@@ -406,7 +433,7 @@ function onThisKey<T>(candidate: { source: string }, run: () => T): T {
  * Grok account, their voice key, their Perspicax key, the organization's
  * Grok account, the organization's key), or why none does. Never returns a
  * key to anyone but the caller of xAI. */
-export async function resolveVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, threadId?: string): Promise<VoiceKeys> {
+export async function resolveVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, threadId?: string, options?: ResolveVoiceKeysOptions): Promise<VoiceKeys> {
   const serverKey = (await deps.serverKey())?.trim();
   const accountToken = speaker.disabled ? undefined : (await deps.grokAccount?.(speaker))?.trim();
   const account: VoiceKeyCandidate | null = accountToken
@@ -416,7 +443,7 @@ export async function resolveVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, thr
     const keys: VoiceKeyCandidate[] = [];
     if (account) keys.push(account);
     if (serverKey) keys.push({ key: serverKey, via: "server", source: "server", last4: keyLast4(serverKey) });
-    return governVoiceKeys(deps, speaker, threadId, keys.length ? { ok: true, keys } : { ok: false, cause: "no_credentials" });
+    return governVoiceKeys(deps, speaker, threadId, keys.length ? { ok: true, keys } : { ok: false, cause: "no_credentials" }, options);
   }
   if (speaker.disabled) return { ok: false, cause: "payer_disabled" };
   const keys: VoiceKeyCandidate[] = [];
@@ -442,7 +469,7 @@ export async function resolveVoiceKeys(deps: KeyDeps, speaker: VoiceSpeaker, thr
   const orgAccount = orgAllowed ? (await deps.orgAccount?.(speaker))?.trim() : undefined;
   if (orgAccount && orgAccount !== accountToken) keys.push({ key: orgAccount, via: "org-key", source: "org-account", last4: null });
   if (serverKey && orgAllowed) keys.push({ key: serverKey, via: "org-key", source: "org-key", last4: keyLast4(serverKey) });
-  if (keys.length) return governVoiceKeys(deps, speaker, threadId, { ok: true, keys });
+  if (keys.length) return governVoiceKeys(deps, speaker, threadId, { ok: true, keys }, options);
   // Perspicax could not say: their key there may well exist
   if (perspicax) return { ok: false, cause: perspicax };
   // nothing of the organization's exists, or it exists and was not given to

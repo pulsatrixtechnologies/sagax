@@ -458,7 +458,9 @@ rules, covered by `server/org/org-link-routes.test.ts` and
   (`server/voice/voice-mode.ts`) gives for that person, the function behind
   every voice route of the app: `{voice_keys: [{source, auth, key}]}` in the
   app's order, or an empty list with the app's refusal `cause`. The line
-  tries them in that order, so its order is never written a second time and
+  tries them in that order (`phoneLine` on `resolveVoiceKeys`), including
+  under the credential policy, so a dead account falls back onto that
+  person's own keys (D-20261127-029). Its order is never written a second time and
   the rights are the app's (`serverKeyAllowed`, a person turned off). Never
   add a second route or a second order for a line. Names of sources in the
   log, never a value. Tests: `server/org/org-link-routes.test.ts`.

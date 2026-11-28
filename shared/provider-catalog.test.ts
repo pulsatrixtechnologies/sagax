@@ -58,8 +58,8 @@ describe("the provider catalog (#4329)", () => {
     const claude = providers.find((provider) => provider.id === "anthropic")!.connections[0]!;
     expect(claude.kind).toBe("account");
     expect(claude.recommended).toBe("claudeAgent");
-    // #4410 lot 1: pi also runs on the person's own Claude sign-in; Claude Code stays the recommendation
-    expect(claude.harnesses.filter((pair) => pair.mark === "works").map((pair) => pair.harness)).toEqual(["claudeAgent", "piAgent"]);
+    // #4410 lot 1 + #5523: pi and OpenCode also run on the person's own Claude sign-in; Claude Code stays the recommendation
+    expect(claude.harnesses.filter((pair) => pair.mark === "works").map((pair) => pair.harness)).toEqual(["claudeAgent", "piAgent", "opencodeGo"]);
     const server = providers.find((provider) => provider.id === "server:lab")!;
     expect(server.connections[0]).toMatchObject({ kind: "address", recommended: "openai-compat" });
     const computer = providers.find((provider) => provider.id === "computer")!;

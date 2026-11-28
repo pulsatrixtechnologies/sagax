@@ -4,17 +4,14 @@ import { harnessAllowed, harnessPairs, keyProvidersOfDriver, offeredHarnesses, r
 const works = (source: HarnessSource, place: "solo" | "organization" = "solo") => offeredHarnesses(source, place).map((pair) => pair.harness);
 
 describe("the harness matrix (#4329, design section 1)", () => {
-  it("#4410 lot 1: offers a Claude account under its own tool and pi, nothing more, with no added sentence", () => {
+  it("#4410: offers a Claude account under its own tool, pi and OpenCode, with no added sentence", () => {
     const source: HarnessSource = { kind: "subscription", vendor: "anthropic", driver: "claudeAgent" };
     for (const place of ["solo", "organization"] as const) {
-      expect(works(source, place)).toEqual(["claudeAgent", "piAgent"]);
+      expect(works(source, place)).toEqual(["claudeAgent", "piAgent", "opencodeGo"]);
       // the owner's answer 1: the pair carries no reason, notice or billing line
       expect(harnessPairs(source, place).find((pair) => pair.harness === "piAgent")).toEqual({ harness: "piAgent", role: "pi", mark: "works" });
+      expect(harnessPairs(source, place).find((pair) => pair.harness === "opencodeGo")).toEqual({ harness: "opencodeGo", role: "opencode", mark: "works" });
     }
-    // the later lots: still off, with the reason
-    const opencode = harnessPairs(source, "solo").find((pair) => pair.harness === "opencodeGo");
-    expect(opencode?.mark).toBe("no");
-    expect(opencode?.reason).toBeTruthy();
     expect(recommendedHarness(source, "solo")).toBe("claudeAgent");
   });
 

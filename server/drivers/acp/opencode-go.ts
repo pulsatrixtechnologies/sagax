@@ -9,6 +9,7 @@ import { dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from
 import { ATTACHMENTS_DIR } from "../../attachments/attachments.ts";
 import { DATA_DIR, OPENCODE_PROVIDER_ENV } from "../../config.ts";
 import { hostedWorkspaceConfigured } from "../../enterprise.ts";
+import type { TurnAccessInput } from "../../contracts.ts";
 import { decodeInjectId, hostApiKey, localHost, mergeLocalInject } from "../local-inject.ts";
 import { opencodeHostToolEnv, withheldWorkspace } from "../host-tools.ts";
 import { createAcpDriver, offeredModels, type AccountErrorCode, type AcpSupport } from "./core.ts";
@@ -573,6 +574,34 @@ export function ensureOpenCodeInjectModel(
   return native;
 }
 
+/** #4410 / #5523: point one OpenCode turn at the payer's own home and write
+ * a Claude subscription into auth.json when the plan carries one (never the
+ * server's ambient login). OPENCODE_AUTH_CONTENT stays in the child env so
+ * Sagax's own auth check sees it; the CLI reads the file under XDG_DATA_HOME. */
+export function opencodeApplyAccess(
+  env: Record<string, string | undefined>,
+  access: TurnAccessInput,
+  _instanceEnvironment?: Record<string, string>,
+): void {
+  if (access.engineHome) {
+    mkdirSync(access.engineHome, { recursive: true, mode: 0o700 });
+    env.XDG_DATA_HOME = access.engineHome;
+  }
+  const content = access.environment?.OPENCODE_AUTH_CONTENT?.trim();
+  if (content) {
+    env.OPENCODE_AUTH_CONTENT = content;
+    const root = env.XDG_DATA_HOME || join(env.HOME || env.USERPROFILE || homedir(), ".local", "share");
+    const authPath = join(root, "opencode", "auth.json");
+    mkdirSync(dirname(authPath), { recursive: true, mode: 0o700 });
+    writeFileSync(authPath, `${content}\n`, { mode: 0o600 });
+  }
+  for (const key of OPENCODE_PROVIDER_ENV) {
+    const value = access.environment?.[key];
+    if (value) env[key] = value;
+  }
+  if (access.environment?.OPENCODE_API_KEY) env.OPENCODE_API_KEY = access.environment.OPENCODE_API_KEY;
+}
+
 /** OpenCode 1.18 appends every process's log to one file under its xdg data folder. */
 export function openCodeLogPath(env: Record<string, string | undefined>): string {
   return join(env.XDG_DATA_HOME || join(env.HOME || env.USERPROFILE || homedir(), ".local", "share"), "opencode", "log", "opencode.log");
@@ -881,6 +910,7 @@ const support = (loadCatalog: OpenCodeCatalogLoader): AcpSupport => ({
   modelVariants: true,
   resolveTurnModel: (model, env) => model ? ensureOpenCodeInjectModel(model, env) : model,
   transformEnv: withholdProviderKeysWhenManaged,
+  applyAccess: opencodeApplyAccess,
   spawnFingerprint: openCodeLoginsFingerprint,
   // Organization server: no shell, file, web, subagent or skill tool of
   // OpenCode's own (server/drivers/host-tools.ts; verified on 1.18.34 with

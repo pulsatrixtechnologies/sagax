@@ -252,8 +252,8 @@ export function subscriptionDriver(driver: string): driver is SubscriptionDriver
 
 /** Drivers whose engine home is set per turn (engineHome), not a
  * Claude config dir or a CODEX_HOME. */
-export function homeDriver(driver: string): driver is "grokAgent" | "kimiAgent" | "geminiAgent" | "piAgent" {
-  return driver === "grokAgent" || driver === "kimiAgent" || driver === "geminiAgent" || driver === "piAgent";
+export function homeDriver(driver: string): driver is "grokAgent" | "kimiAgent" | "geminiAgent" | "piAgent" | "opencodeGo" {
+  return driver === "grokAgent" || driver === "kimiAgent" || driver === "geminiAgent" || driver === "piAgent" || driver === "opencodeGo";
 }
 
 /** What the server knows of a person: their Perspicax subject and whether
@@ -346,6 +346,17 @@ export function turnPayer(input: Pick<EngineCredentialInput, "speaker" | "owner"
  * sign-in; never in arguments, models.json or a file of pi's home. */
 export const PI_CLAUDE_SIGN_IN_ENV = "ANTHROPIC_OAUTH_TOKEN";
 
+/** #4410 / #5523: engines that may run Claude models on the payer's own
+ * Claude sign-in (pi via ANTHROPIC_OAUTH_TOKEN; OpenCode via auth.json oauth). */
+const CLAUDE_SIGN_IN_DRIVERS: ReadonlySet<string> = new Set(["piAgent", "opencodeGo"]);
+
+/** #4410 / #5523: OpenCode's auth.json entry for a Claude subscription, as
+ * one JSON object OpenCode's Anthropic provider accepts (type oauth). The
+ * short access token is renewed each turn; no refresh token is copied. */
+export function openCodeClaudeAuthContent(accessToken: string): string {
+  return JSON.stringify({ anthropic: { type: "oauth", access: accessToken } });
+}
+
 /** #4410: the payer's own Claude sign-in (the Claude engine's first account
  * folder) is there and not refused since: pi may run Claude models on it. */
 function claudeSignInServes(input: EngineCredentialInput, principalId: string): boolean {
@@ -382,8 +393,8 @@ export function resolveEngineAccess(input: EngineCredentialInput, skip: { key?: 
   if (signedIn && !expired && !skip.personalAccount) {
     return { ok: true, via: "subscription", ...who };
   }
-  // #4410: pi on the payer's own Claude sign-in (their bill, like a key of theirs)
-  const claudeAccount = !skip.signIn && !skip.personalAccount && driver === "piAgent" && !input.instance.keyOnly && !input.instance.personalOwner && claudeSignInServes(input, payer.principalId);
+  // #4410 / #5523: pi or OpenCode on the payer's own Claude sign-in (their bill, like a key of theirs)
+  const claudeAccount = !skip.signIn && !skip.personalAccount && CLAUDE_SIGN_IN_DRIVERS.has(driver) && !input.instance.keyOnly && !input.instance.personalOwner && claudeSignInServes(input, payer.principalId);
   const signIn = claudeAccount ? { claudeAccount: true as const } : {};
   const providers = input.instance.keyProvider ? [input.instance.keyProvider] : providersOfInstance(input.instance.instanceId, driver);
   const provider = facts?.sub ? providers.find((candidate) => input.hasKey(facts.sub!, candidate)) : undefined;
@@ -593,11 +604,13 @@ export interface MaterializeDeps {
   claudeSignIn?: (principalId: string) => Promise<ClaudeSignInToken | null>;
 }
 
-/** #4410: the payer's Claude sign-in as pi's variable, or null when it
- * cannot be read (the turn then runs on the plan's keys alone). */
-async function claudeSignInEnvironment(deps: MaterializeDeps, principalId: string): Promise<Record<string, string> | null> {
+/** #4410 / #5523: the payer's Claude sign-in as the harness variable, or null
+ * when it cannot be read (the turn then runs on the plan's keys alone). */
+async function claudeSignInEnvironment(deps: MaterializeDeps, principalId: string, driver: string): Promise<Record<string, string> | null> {
   const signIn = await deps.claudeSignIn?.(principalId).catch(() => null);
-  return signIn?.accessToken ? { [PI_CLAUDE_SIGN_IN_ENV]: signIn.accessToken } : null;
+  if (!signIn?.accessToken) return null;
+  if (driver === "opencodeGo") return { OPENCODE_AUTH_CONTENT: openCodeClaudeAuthContent(signIn.accessToken) };
+  return { [PI_CLAUDE_SIGN_IN_ENV]: signIn.accessToken };
 }
 
 export type MaterializedAccess =
@@ -625,13 +638,16 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
     const signIn = await deps.claudeSignIn?.(payer).catch(() => null);
     // unreadable since admission: the next steps serve, else the refusal
     if (!signIn) return materializeEngineAccess(input, planAfter(input, { ...skipped, signIn: true }), deps, { ...skipped, signIn: true });
+    const environment: Record<string, string> = driver === "opencodeGo"
+      ? { OPENCODE_AUTH_CONTENT: openCodeClaudeAuthContent(signIn.accessToken) }
+      : { [PI_CLAUDE_SIGN_IN_ENV]: signIn.accessToken };
     return {
       ok: true,
       plan,
       access: {
         via: "subscription",
         identity: `subscription:${payer}:claude`,
-        environment: { [PI_CLAUDE_SIGN_IN_ENV]: signIn.accessToken },
+        environment,
         engineHome: join(deps.dataDir, "principals", payer, `${driver}-key`),
       },
     };
@@ -642,7 +658,7 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
     return { ok: true, plan, access: { via: "subscription", identity: subscriptionIdentity(payer, input.instance.instanceId), ...where } };
   }
   if (keyVia(plan.via) && plan.localKey && payer) {
-    const signIn = plan.claudeAccount ? await claudeSignInEnvironment(deps, payer) : null;
+    const signIn = plan.claudeAccount ? await claudeSignInEnvironment(deps, payer, driver) : null;
     return { ok: true, plan, access: { via: plan.via, identity: `${plan.via}:${payer}:local${signIn ? "+claude" : ""}`, localKeyPrincipal: payer, ...(signIn ? { environment: signIn } : {}) } };
   }
   if (keyVia(plan.via) && plan.provider && payer) {
@@ -670,13 +686,13 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
           environment[keyEnvironment(other, driver)] = more.key;
           fingerprints.push(more.fingerprint || "key");
         }
-        // #4410: Claude models on the payer's sign-in when no Anthropic key of theirs pays them
-        if (plan.claudeAccount && !environment[keyEnvironment("anthropic", driver)]) {
-          const signIn = await claudeSignInEnvironment(deps, payer);
-          if (signIn) {
-            Object.assign(environment, signIn);
-            fingerprints.push("claude");
-          }
+      }
+      // #4410 / #5523: Claude models on the payer's sign-in when no Anthropic key of theirs pays them
+      if ((driver === "piAgent" || driver === "opencodeGo") && plan.claudeAccount && !environment[keyEnvironment("anthropic", driver)]) {
+        const signIn = await claudeSignInEnvironment(deps, payer, driver);
+        if (signIn) {
+          Object.assign(environment, signIn);
+          fingerprints.push("claude");
         }
       }
       return {
@@ -747,7 +763,7 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
     // #4410: the turn's payer's Claude sign-in beside the organization's keys
     // (their own warm pi: the identity names them)
     const signer = plan.claudeAccount ? turnPayer(input).principalId : "";
-    const signIn = signer ? await claudeSignInEnvironment(deps, signer) : null;
+    const signIn = signer ? await claudeSignInEnvironment(deps, signer, driver) : null;
     if (signIn) return { ok: true, plan, access: { via: "org-key", identity: `org-key:${signer}:claude`, environment: signIn, ...home } };
     return { ok: true, plan, access: { via: "org-key", identity: "org-key", ...home } };
   }

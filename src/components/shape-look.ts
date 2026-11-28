@@ -1,17 +1,23 @@
 // How a shape mascot's look paints its body: the shape and skin it draws,
 // the body's colour and the eyes' ink, the depth, which still it starts from
-// and the pose it holds at rest. These are ShapeMascot's own rules
-// (ShapeMascot.tsx, the top of the component), written once here for any
-// drawing that paints a bot's shape outside ShapeMascot (the Heavy row's
-// cell division, HeavyDivision.tsx); shape-look.test.ts holds the two
-// together, so they never drift apart.
+// and the pose it holds at rest. ShapeMascot reads these rules through
+// shapeLook (#5426), and so does every drawing that paints a bot's shape
+// outside the component (the Heavy row's cell division, HeavyDivision.tsx):
+// the rules are written once, here, and shape-look.test.ts keeps them honest
+// against what ShapeMascot actually draws.
 import { isHexColor, mascotHex } from "@/lib/mascot";
-import { DEFAULT_ENGINE_LOOK, MASCOT_SHAPES, SHAPE_DEPTH, SHAPE_SKINS, type EngineLook, type MascotAvatarDef, type MascotShape, type ShapeSkin } from "../../shared/mascot-look";
+import { DEFAULT_ENGINE_LOOK, MASCOT_SHAPES, SHAPE_DEPTH, SHAPE_SKIN_TIER, SHAPE_SKINS, type EngineLook, type MascotAvatarDef, type MascotShape, type ShapeSkin, type SkinTier } from "../../shared/mascot-look";
 import { bakedShapeFor, enginePose, type EnginePose, type ShapeMood } from "./shape-avatar";
-import { shapeSkinPaint } from "./ShapeMascot";
+import { shapeSkinBase, type ShapeSkinBase } from "./skin-fx/shape-skins";
 
 /** The eyes' ink when neither the person nor the skin gives one (a material's eyes). */
 export const FALLBACK_INK = "#151515";
+
+/** How a skin paints a shape: its body and eye colours, tier and effect family. Plain is the bot's colour. */
+export function shapeSkinPaint(skin: ShapeSkin, hex: string): ShapeSkinBase & { tier: SkinTier } {
+  const known = SHAPE_SKINS.includes(skin) ? skin : "plain";
+  return { ...shapeSkinBase(known, hex), tier: SHAPE_SKIN_TIER[known] };
+}
 
 export interface ShapeLookInput {
   shape: MascotShape;
@@ -32,7 +38,7 @@ export interface ShapeLook {
   settings: EngineLook;
   /** The bot's colour as #rrggbb. */
   hex: string;
-  paint: ReturnType<typeof shapeSkinPaint>;
+  paint: ShapeSkinBase & { tier: SkinTier };
   /** The body's fill (lower case): the skin's own fill, or the bot's colour under a material. */
   body: string;
   /** The eyes' ink (lower case): the person's choice, else the skin's. */

@@ -1,7 +1,9 @@
 // shape-look.ts writes ShapeMascot's look rules once for the drawings that
 // paint a bot's shape themselves (the Heavy row's division): the body's
 // colour, the eyes' ink and the pose it holds must be ShapeMascot's own, for
-// every skin and setting, or the two drift apart.
+// every skin and setting, or the two drift apart. ShapeMascot reads them
+// through shapeLook too (#5426), so the rules are written in one place.
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -62,5 +64,24 @@ describe("a shape's look, as ShapeMascot paints it", () => {
     const glass = shapeLook({ shape: "cat", skin: "gold", color: "blue", material: true });
     expect(glass.body).toBe(glass.hex.toLowerCase());
     expect(glass.ink).toBe("#151515");
+  });
+});
+
+describe("ShapeMascot reads its look through shapeLook (#5426)", () => {
+  const mascot = readFileSync(new URL("./ShapeMascot.tsx", import.meta.url), "utf8");
+  // The drawing must come from here, with the material the component's own hook
+  // paints; the rules it used to write at the top of the component are gone, and
+  // the colour and the ink's hex come from the shared helpers (mascot.ts).
+  it("asks for the look instead of computing its own", () => {
+    expect(mascot).toContain('from "./shape-look"');
+    expect(mascot).toContain("shapeLook({");
+    expect(mascot).toContain("material: material !== null");
+    expect(readFileSync(new URL("./shape-look.ts", import.meta.url), "utf8")).toContain("mascotHex(color)");
+  });
+
+  it("keeps no copy of the rules it used to write", () => {
+    for (const copied of ["hexOf", "const HEX", "#[0-9a-fA-F]", "#151515", "MASCOT_SHAPES.includes", "SHAPE_DEPTH.", "bakedShapeFor(", "enginePose("]) {
+      expect(mascot, `ShapeMascot still writes its own ${copied}`).not.toContain(copied);
+    }
   });
 });

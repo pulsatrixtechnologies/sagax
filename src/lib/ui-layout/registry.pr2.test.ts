@@ -67,7 +67,7 @@ describe("ui-layout PR2 registry (conversationHeader + botPage)", () => {
       hidden: ["tab:outcomes", "card:channels", "panel:coding"],
     };
     expect(botProfileTabOrder(zone)).toEqual(["tab:stats", "tab:general", "tab:knowledge"]);
-    expect(botGeneralCardOrder(zone)).toEqual(["card:more", "card:settings", "card:accounts"]);
+    expect(botGeneralCardOrder(zone)).toEqual(["card:more", "card:settings", "card:notifications", "card:accounts"]);
     expect(botPanelTabOrder(zone)).toEqual(["panel:library", "panel:activity"]);
   });
 });

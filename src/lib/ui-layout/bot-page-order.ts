@@ -4,7 +4,7 @@ import type { ZoneLayout } from "./types";
 import { BOT_PAGE_COMPONENT_IDS } from "./types";
 
 const PROFILE_TAB_IDS = ["tab:general", "tab:outcomes", "tab:knowledge", "tab:stats"] as const;
-const GENERAL_CARD_IDS = ["card:settings", "card:channels", "card:accounts", "card:more"] as const;
+const GENERAL_CARD_IDS = ["card:settings", "card:notifications", "card:channels", "card:accounts", "card:more"] as const;
 const PANEL_TAB_IDS = ["panel:activity", "panel:library", "panel:coding"] as const;
 
 export function botPageHidden(zone: ZoneLayout, id: string): boolean {

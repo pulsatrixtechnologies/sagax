@@ -43,6 +43,7 @@ export const BOT_PAGE_COMPONENT_IDS = [
   "tab:knowledge",
   "tab:stats",
   "card:settings",
+  "card:notifications",
   "card:channels",
   "card:accounts",
   "card:more",

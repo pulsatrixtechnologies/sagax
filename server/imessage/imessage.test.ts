@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -417,7 +417,8 @@ describe("files on an Apple app write come only from the bot's folder (#4158)", 
     };
     const call = (files: string[]) => ({ method: "tools/call", params: { name: "mac_mail_send", arguments: { to: ["a@example.com"], subject: "s", body: "b", files } } });
     expect(textOf(await handleMessagesMcp(call([file]), deps))).toBe("sent");
-    expect(runs[0]!.args.files).toEqual([file.replace(/^\/var\//, "/private/var/")]);
+    // botFile returns realpathSync so /tmp and /var resolve under /private on macOS (#5455).
+    expect(runs[0]!.args.files).toEqual([realpathSync(file)]);
     const outside = await handleMessagesMcp(call([join(tmpdir(), "nope.pdf")]), deps);
     expect(textOf(outside)).toContain("not in this bot's folder");
     expect(runs).toHaveLength(1);

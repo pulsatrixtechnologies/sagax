@@ -108,6 +108,9 @@ export const SLOT_KINDS: Readonly<Record<string, SlotKind>> = {
   "connector-cards/": "card",
   "vault-cards/": "card",
   "sign-in-cards/": "card",
+  // Chat app (show_html) message id and its approval id (#5485)
+  "apps/": "message",
+  "approvals/": "fake",
   // a group member is one of its bots (POST /api/groups/:id/members/:botId/compact)
   "members/": "bot",
   "resource-usage/ru_": "resourceUsage",

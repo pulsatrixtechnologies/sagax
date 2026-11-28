@@ -243,7 +243,7 @@ describe("renameWithRetry", () => {
   it("gives up rather than retrying forever", () => {
     const stub = failing(Number.MAX_SAFE_INTEGER, "EPERM");
     expect(() => renameWithRetry("a.tmp", "a", stub.rename)).toThrow(/EPERM/);
-    expect(stub.calls).toBe(6); // first attempt plus five backoffs
+    expect(stub.calls).toBe(8); // first attempt plus seven backoffs (#5455)
   });
 
   it("does not retry an error that will never clear", () => {

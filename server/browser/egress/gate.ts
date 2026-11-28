@@ -104,6 +104,15 @@ function readRequest(data: Buffer) {
  * By hand, because autoSelectFamily with a custom lookup does not always fall
  * back: on a host with no IPv6 route, a list whose first address is IPv6 left
  * the socket stalled until it timed out, the IPv4 answer never tried. */
+/** Drop a losing or superseded attempt: own any late ECONNRESET so vitest does
+ * not exit non-zero with no failing test (#5473, same class as #5438 EPIPE). */
+function dropAttempt(socket: Socket): void {
+  socket.removeAllListeners("connect");
+  socket.removeAllListeners("error");
+  socket.on("error", () => {});
+  socket.destroy();
+}
+
 export function connectChecked(port: number, addresses: readonly ResolvedAddress[], staggerMs = 250): Promise<Socket> {
   return new Promise((resolve, reject) => {
     const inFlight = new Set<Socket>();
@@ -115,9 +124,11 @@ export function connectChecked(port: number, addresses: readonly ResolvedAddress
       const attempt = connect({ host: address, port, family });
       inFlight.add(attempt);
       attempt.once("connect", () => {
-        if (settled) return void attempt.destroy();
+        if (settled) return void dropAttempt(attempt);
         settled = true;
-        for (const other of inFlight) if (other !== attempt) other.destroy();
+        for (const other of inFlight) if (other !== attempt) dropAttempt(other);
+        inFlight.clear();
+        inFlight.add(attempt);
         resolve(attempt);
       });
       attempt.once("error", (error: NodeJS.ErrnoException) => {

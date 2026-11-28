@@ -149,6 +149,10 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
   onBotAsk?: (text: string) => void;
 }) {
   const [trail, setTrail] = useState<Array<{ ref: RecordRef; label: string }>>([]);
+  // the records left by Back, for a way forward (a folder's ›); opening another record forgets them
+  const [ahead, setAhead] = useState<Array<{ ref: RecordRef; label: string }>>([]);
+  const goBack = trail.length ? () => { setAhead((steps) => [trail.at(-1)!, ...steps]); setTrail((steps) => steps.slice(0, -1)); } : undefined;
+  const goForward = ahead.length ? () => { setTrail((steps) => [...steps, ahead[0]!].slice(-RECORD_TRAIL_MAX)); setAhead((steps) => steps.slice(1)); } : undefined;
   // a card opened by a click stays the opened card while it fades out (never the tooltip's layout for its 120 ms)
   const [opened, setOpened] = useState(pinned);
   if (pinned && !opened) setOpened(true);
@@ -172,7 +176,8 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
   const plugin = usePluginWindow({
     record: current.ref, label: current.label, card: read.card, now: Date.now(), ask: onBotAsk,
     compose: onAsk ? () => onAsk(current.ref, current.label) : undefined,
-    back: trail.length ? () => setTrail((steps) => steps.slice(0, -1)) : undefined,
+    back: goBack,
+    forward: goForward,
     onChanged: refreshCard,
   });
   const refreshPlugin = useRef(plugin.refresh);
@@ -206,7 +211,7 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
   const way = [{ ref: record, label }, ...trail];
   const crumbs = trail.length ? way.map((step, index) => {
     const words = /^#?\d+$/.test(step.label.trim()) ? `${recordKindName(findRecordKind(products, step.ref).kind) ?? t("recordCard.kindFallback")} ${step.label}` : step.label;
-    return { label: words, ...(index < way.length - 1 ? { onOpen: () => setTrail((steps) => steps.slice(0, index)) } : {}) };
+    return { label: words, ...(index < way.length - 1 ? { onOpen: () => { setAhead([]); setTrail((steps) => steps.slice(0, index)); } } : {}) };
   }) : undefined;
   return (
     <RecordCard
@@ -231,6 +236,7 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
       onSignIn={onSignIn}
       onOpenRecord={(ref, words) => {
         pin();
+        setAhead([]);
         setTrail((steps) => {
           // a record already on the way (the root card included) is gone back to, never pushed again
           const way = [{ ref: record, label }, ...steps];
@@ -239,7 +245,7 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
           return [...steps, { ref, label: words }].slice(-RECORD_TRAIL_MAX);
         });
       }}
-      onBack={trail.length ? () => setTrail((steps) => steps.slice(0, -1)) : undefined}
+      onBack={goBack}
     />
   );
 }

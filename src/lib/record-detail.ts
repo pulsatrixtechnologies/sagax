@@ -658,13 +658,21 @@ export async function readDetailCounts(ref: RecordRef, fresh: boolean): Promise<
   return parseDetailCounts(await call(recordDetailPath(ref, { section: "counts", fresh: fresh ? 1 : undefined })));
 }
 
+/** A file of the record (an attachment, an image a note names, a recording)
+ * through the record's detail path, as the person: `{ contentType, base64,
+ * name? }` read into its bytes. The one reader of every window's files. */
+export async function readDetailBytes(ref: RecordRef, section: string, field: string): Promise<{ blob: Blob; name: string }> {
+  const body = await call<unknown>(recordDetailPath(ref, { section, field }));
+  if (!isObject(body) || typeof body.base64 !== "string") throw new Error("missing file");
+  const bytes = Uint8Array.from(atob(body.base64), char => char.charCodeAt(0));
+  return { blob: new Blob([bytes], { type: text(body.contentType) }), name: text(body.name) };
+}
+
 /** An attachment's bytes, through the same authenticated detail path, then
  * handed to the browser as a download. */
 export async function downloadAttachment(ref: RecordRef, id: string, name: string): Promise<void> {
-  const body = await call<unknown>(recordDetailPath(ref, { section: "download", field: id }));
-  if (!isObject(body) || typeof body.base64 !== "string") throw new Error("missing attachment");
-  const bytes = Uint8Array.from(atob(body.base64), char => char.charCodeAt(0));
-  downloadBlob(new Blob([bytes], { type: text(body.contentType) }), text(body.name) || name);
+  const file = await readDetailBytes(ref, "download", id);
+  downloadBlob(file.blob, file.name || name);
 }
 
 export async function readDetailPage(ref: RecordRef, tab: DetailSection, page: number, fresh: boolean, onDownloadError: () => void): Promise<RecordDetailPage> {
@@ -688,11 +696,9 @@ export async function readFieldChoices(ref: RecordRef, field: RecordEditField | 
  * reads it with the person's key): the browser never calls the product and
  * never holds a key. Only an image comes back (png, jpeg, gif or webp). */
 export async function readNoteImage(ref: RecordRef, src: string): Promise<Blob> {
-  const body = await call<unknown>(recordDetailPath(ref, { section: "image", field: src }));
-  if (!isObject(body) || typeof body.base64 !== "string") throw new Error("missing image");
-  const type = text(body.contentType);
-  if (!/^image\/(png|jpeg|gif|webp)$/.test(type)) throw new Error("not an image");
-  return new Blob([Uint8Array.from(atob(body.base64), char => char.charCodeAt(0))], { type });
+  const { blob } = await readDetailBytes(ref, "image", src);
+  if (!/^image\/(png|jpeg|gif|webp)$/.test(blob.type)) throw new Error("not an image");
+  return blob;
 }
 
 export async function writeField(ref: RecordRef, field: RecordEditField | typeof RECORD_TITLE_FIELD, value: string): Promise<void> {

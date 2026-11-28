@@ -17,7 +17,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { parseExclusion, parseLines, parseSteps, parseThreatView, type ThreatExclusion, type ViewStep } from "@/lib/record-plugin-views";
 import type { RecordCard as Card } from "../../../../shared/record-cards";
-import { AskButton, CardFacts, FactList, PluginNotes, SectionStatus, StatePill, Steps, TONE_TEXT, Tiles, WriteButton, tabCount, type PluginContext } from "./PluginParts";
+import { AskButton, FactList, PluginNotes, SectionStatus, StatePill, Steps, TONE_TEXT, Tiles, WriteButton, tabCount, type PluginContext } from "./PluginParts";
 import type { PluginWindowSpec } from "./PluginWindow";
 
 /** The card's own list as a timeline (a console that serves no `timeline` section). */
@@ -26,10 +26,10 @@ function cardSteps(card: Card): ViewStep[] {
 }
 
 function Overview({ ctx }: { ctx: PluginContext }) {
-  const { card, detail } = ctx;
+  const { detail } = ctx;
   const state = detail.section("view");
   const view = parseThreatView(state.data);
-  if (!view) return state.data || state.refused ? <CardFacts card={card} now={ctx.now} /> : <SectionStatus state={state} />;
+  if (!view) return <SectionStatus state={state} />;
   const verdict = view.verdict;
   const isolate = view.device?.isolated
     ? <WriteButton detail={detail} action={{ action: "threat.reconnect" }} label={t("recordWindow.threat.reconnect")} />
@@ -74,7 +74,7 @@ function Overview({ ctx }: { ctx: PluginContext }) {
               </ul>
             </RecordPod>
           )}
-          {view.file.length > 0 && <RecordPod title={t("recordWindow.threat.file")} data-record-threat-file=""><FactList facts={view.file} /></RecordPod>}
+          {view.file.length > 0 && <RecordPod title={t("recordWindow.attachments.file")} data-record-threat-file=""><FactList facts={view.file} /></RecordPod>}
         </div>
       )}
       {view.device && (
@@ -138,6 +138,7 @@ function Exclusions({ ctx }: { ctx: PluginContext }) {
 export const THREAT_WINDOW: PluginWindowSpec = {
   first: "overview",
   open: ["view", "timeline", "notes"],
+  core: "view",
   reads: { overview: ["view"], timeline: ["timeline"], device: ["view"], notes: ["notes"], exclusions: ["exclusions"] },
   tabs: (ctx) => {
     const { detail } = ctx;

@@ -3701,17 +3701,18 @@ same frame, their tabs across the window under the head:
   its status, from and to, service, segments, price, an error with its cause
   and what to do); tabs Conversation, Log (a grid), Calls, Number, Media only
   when it has some.
-- **X, a post** (M-20261127-146): drawn as X shows it, in X's own inks (the
-  one exception to the app's look), its replies and its statistics.
-- **A folder** (M-20261127-146): the Finder's sidebar, toolbar, icon, list and
-  column views and path bar, whatever plugin serves it; its search and a tag
-  are its one filter.
+- **X, a post** (M-20261127-146): drawn as X shows it by the chat's own X
+  card (`XPostItem`, X's own inks, the one exception to the app's look), its
+  reply, bookmark and share as buttons; its replies and its statistics.
+- **A folder** (M-20261127-146): the Finder's sidebar, toolbar (back and
+  forward along the window's trail), icon, list and column views and path
+  bar, whatever plugin serves it; its search and a tag are its one filter.
 
 Agent's choices: the tones of a step, a day or a pill are the success,
 warning and danger tokens; an action a bot does with the person (create a
 ticket, restore files, suggest a reply) is a button with the sparkle that
-asks the conversation's bot; a console that serves only the card shows the
-card's facts. Captures: `scripts/capture/record-window-plugins.mjs` of
+asks the conversation's bot; a console that serves only the card leaves the
+frame's own view of the card. Captures: `scripts/capture/record-window-plugins.mjs` of
 `src/gallery/record-window-plugins.html`.
 
 ## The bot row menu and a bot's own window (owner, 2026-11-17, #4639)

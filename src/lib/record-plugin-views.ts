@@ -18,6 +18,7 @@
 // console does not send is not drawn. A value shaped like a GUID is never a
 // label on screen (the app's rule): such a fact or tile is left out.
 import { isGuid } from "./record-card-format";
+import { readXPost, type XPostView } from "../../shared/x-post";
 import { RECORD_TONES, validRecordRef, type RecordRef, type RecordTone } from "../../shared/record-cards";
 
 type Raw = Record<string, unknown>;
@@ -291,31 +292,18 @@ export function smsSegments(text: string): { chars: number; segments: number; en
 
 // ── X: a post ────────────────────────────────────────────────────────────
 
-export interface PostAuthor { name: string; handle: string; verified?: boolean }
-export interface PostCounts { replies?: string; reposts?: string; likes?: string; views?: string; bookmarks?: string }
-export interface PostView { author: PostAuthor; when: string; text: string; media: Array<{ label?: string; alt?: string }>; counts: PostCounts; tiles: ViewTile[]; pinned?: boolean }
-const authorOf = (raw: unknown): PostAuthor | undefined => {
-  if (!isObject(raw)) return undefined;
-  const name = textOf(raw.name, 80), handle = textOf(raw.handle, 40).replace(/^@/, "");
-  return name && handle ? clean({ name, handle, verified: raw.verified === true ? true : undefined }) : undefined;
-};
-const countsOf = (raw: unknown): PostCounts => isObject(raw)
-  ? clean({ replies: optionalText(raw.replies, 20), reposts: optionalText(raw.reposts, 20), likes: optionalText(raw.likes, 20), views: optionalText(raw.views, 20), bookmarks: optionalText(raw.bookmarks, 20) })
-  : {};
+/** A post: X's own post as the chat's X cards read it (`readXPost`, shared/x-post.ts), and the window's parts beside it. */
+export interface PostView { post: XPostView; tiles: ViewTile[]; pinned?: boolean; bookmarked?: boolean }
 export function parsePostView(raw: unknown): PostView | undefined {
   const view = viewOf(raw);
-  const author = view ? authorOf(view.author) : undefined;
-  if (!view || !author) return undefined;
-  return clean({
-    author, when: textOf(view.when, 80), text: textOf(view.text, 25_000),
-    media: listOf(view.media, 4).map((one) => clean({ label: optionalText(one.label, 200), alt: optionalText(one.alt, 1_000) })),
-    counts: countsOf(view.counts), tiles: parseTiles(view.tiles), pinned: view.pinned === true ? true : undefined,
-  });
+  const post = view ? readXPost(view.post) : null;
+  if (!view || !post) return undefined;
+  return clean({ post, tiles: parseTiles(view.tiles), pinned: view.pinned === true ? true : undefined, bookmarked: view.bookmarked === true ? true : undefined });
 }
-export interface PostReply { id: string; author: PostAuthor; when: string; text: string; inReplyTo?: string; counts: PostCounts }
-export function parseReply(line: Raw): PostReply | null {
-  const id = idOf(line.id), author = authorOf(line.author), text = textOf(line.text, 25_000);
-  return id && author && text ? clean({ id, author, when: textOf(line.when, 80), text, inReplyTo: optionalText(line.in_reply_to, 40)?.replace(/^@/, ""), counts: countsOf(line.counts) }) : null;
+/** A reply under the post: X's own post, with its id (a reply is answered by it). */
+export function parseReply(line: Raw): (XPostView & { id: string }) | null {
+  const post = readXPost(line);
+  return post?.id && idOf(post.id) ? { ...post, id: post.id } : null;
 }
 export interface PostStats { hourlyTitle?: string; hourly: Array<{ label: string; value: number; text?: string }>; sourcesTitle?: string; sources: Array<{ label: string; share: number; text?: string }> }
 export function parsePostStats(raw: unknown): PostStats | undefined {

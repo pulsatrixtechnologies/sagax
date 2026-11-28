@@ -3,7 +3,7 @@
 // tags), the toolbar (back, forward, the icon, list and column views, share,
 // tags, search), the icon, list and column views with the column view's
 // preview, and the path bar at the bottom. A folder opens in the same window
-// with a way back (M-20261127-101); a file opens through the record's own
+// with a way back and forward (M-20261127-101); a file opens through the record's own
 // route. The search and a tag are the window's one filter (M-20261127-139).
 // The Finder's look is its own: its inks are the `--finder-*` tokens of the
 // stylesheet, never written here.
@@ -23,7 +23,7 @@ import { cn } from "@/lib/cn";
 import { downloadBlob } from "@/lib/diagram-view";
 import { t } from "@/lib/i18n";
 import { FOLDER_TAGS, parseFolderItem, parseFolderView, parseLines, type FolderItem, type FolderPlace, type FolderTag, type FolderView } from "@/lib/record-plugin-views";
-import { AskButton, CardFacts, SectionStatus, type PluginContext } from "./PluginParts";
+import { AskButton, SectionStatus, type PluginContext } from "./PluginParts";
 import type { PluginWindowSpec } from "./PluginWindow";
 
 type FinderView = "icons" | "list" | "columns";
@@ -72,6 +72,7 @@ function TagDot({ tag, className }: { tag?: FolderTag; className?: string }) {
   return <span role="img" aria-label={t(`recordWindow.folder.tag.${tag}` as "recordWindow.folder.tag.red")} className={cn("inline-block size-2.5 shrink-0 rounded-full", className)} style={{ backgroundColor: `var(--finder-tag-${tag})` }} data-finder-tag={tag} />;
 }
 
+const GROUP_TITLES = { favorites: "recordWindow.folder.favorites", locations: "recordWindow.folder.locations", tags: "recordWindow.plugin.tags" } as const;
 const PLACE_ICONS: Record<string, typeof Folder> = { recents: Clock, desktop: Monitor, documents: FileText, downloads: ArrowDownToLine, server: Server, drive: HardDrive, cloud: Cloud };
 
 function Place({ place, tag, onTag }: { place: FolderPlace; tag?: FolderTag; onTag: (tag: FolderTag | undefined) => void }) {
@@ -92,7 +93,7 @@ function Sidebar({ view, tag, onTag }: { view?: FolderView; tag?: FolderTag; onT
     <aside className="record-scroll hidden w-[190px] shrink-0 flex-col gap-3 overflow-y-auto border-e border-popover-hairline [background-color:var(--finder-sidebar)] px-2 py-3 @min-[40rem]:flex" aria-label={t("recordWindow.folder.sidebar")} data-finder-sidebar="">
       {groups.map(({ group, places }) => (
         <div key={group} className="flex flex-col gap-0.5">
-          <h3 className="px-2 pb-0.5 text-[11px] font-semibold leading-4 text-popover-ink-secondary">{t(`recordWindow.folder.${group}` as "recordWindow.folder.favorites")}</h3>
+          <h3 className="px-2 pb-0.5 text-[11px] font-semibold leading-4 text-popover-ink-secondary">{t(GROUP_TITLES[group])}</h3>
           <ul className="flex flex-col gap-0.5">{places.map((place) => <Place key={`${group}-${place.label}`} place={place} tag={tag} onTag={onTag} />)}</ul>
         </div>
       ))}
@@ -106,7 +107,7 @@ function TagMenu({ tag, onTag }: { tag?: FolderTag; onTag: (tag: FolderTag | und
   usePopoverDismiss(open, root, () => setOpen(false));
   return (
     <span ref={root} className="relative inline-flex" onKeyDown={(event) => { if (open && event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); } }}>
-      <button type="button" className={RECORD_ICON_BUTTON} aria-haspopup="menu" aria-expanded={open} aria-label={t("recordWindow.folder.tags")} title={t("recordWindow.folder.tags")} onClick={() => setOpen(!open)} data-finder-tags="">
+      <button type="button" className={RECORD_ICON_BUTTON} aria-haspopup="menu" aria-expanded={open} aria-label={t("recordWindow.plugin.tags")} title={t("recordWindow.plugin.tags")} onClick={() => setOpen(!open)} data-finder-tags="">
         {tag ? <TagDot tag={tag} /> : <Tag size={15} aria-hidden="true" />}
       </button>
       {open && (
@@ -137,6 +138,12 @@ function SearchField({ text, tag, onText, onTag }: { text: string; tag?: FolderT
         className="min-w-0 flex-1 bg-transparent text-[13px] leading-5 text-popover-ink placeholder:text-popover-placeholder focus-visible:outline-none" />
     </label>
   );
+}
+
+/** A file's name as the person's request names it: one line, 120 characters at most (it reaches the bot as the person's words). */
+function nameInPrompt(name: string): string {
+  const line = [...name].map((char) => { const code = char.codePointAt(0) ?? 0; return code < 32 || code === 127 ? " " : char; }).join("").replace(/\s+/g, " ").trim();
+  return line.length > 120 ? `${line.slice(0, 119)}…` : line;
 }
 
 function fold(text: string): string {
@@ -188,8 +195,8 @@ function Preview({ ctx, item, onFile }: { ctx: PluginContext; item?: FolderItem;
         {item.shared && <><dt className="text-popover-ink-secondary">{t("recordWindow.folder.shared")}</dt><dd>{item.shared}</dd></>}
       </dl>
       <span className="mt-1 flex flex-wrap justify-center gap-2">
-        <button type="button" className={cn(RECORD_ACTION, "bg-popover-field")} onClick={onOpen}>{t("recordWindow.folder.open")}</button>
-        {!item.folder && <AskButton ask={ctx.ask} label={t("recordWindow.folder.summarize")} prompt={t("recordWindow.folder.summarizePrompt", { name: item.name, record: ctx.link })} />}
+        <button type="button" className={cn(RECORD_ACTION, "bg-popover-field")} onClick={onOpen}>{t("recordWindow.attachments.openShort")}</button>
+        {!item.folder && <AskButton ask={ctx.ask} label={t("recordWindow.folder.summarize")} prompt={t("recordWindow.folder.summarizePrompt", { name: nameInPrompt(item.name), record: ctx.link })} />}
       </span>
     </div>
   );
@@ -212,7 +219,7 @@ function Finder({ ctx }: { ctx: PluginContext }) {
   const parent = view && view.path.length > 1 ? view.path[view.path.length - 2] : undefined;
   const openParent = useOpenRef(parent?.ref);
   if (!itemsState.data) {
-    return <div className="record-scroll min-h-0 flex-1 overflow-y-auto p-4">{itemsState.refused ? <CardFacts card={card} now={ctx.now} /> : <SectionStatus state={itemsState} />}</div>;
+    return <div className="p-4"><SectionStatus state={itemsState} /></div>;
   }
   const onFile = (item: FolderItem) => {
     setFailed(false);
@@ -279,8 +286,8 @@ function Finder({ ctx }: { ctx: PluginContext }) {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2 border-b border-popover-hairline px-3 py-2" data-finder-toolbar="">
           <span className="inline-flex rounded-lg bg-popover-field">
-            <button type="button" className={RECORD_ICON_BUTTON} disabled={!back} onClick={back} aria-label={t("recordWindow.folder.back")} title={t("recordWindow.folder.back")}><ChevronLeft size={16} aria-hidden="true" /></button>
-            <button type="button" className={RECORD_ICON_BUTTON} disabled aria-label={t("recordWindow.folder.forward")} title={t("recordWindow.folder.forward")}><ChevronRight size={16} aria-hidden="true" /></button>
+            <button type="button" className={RECORD_ICON_BUTTON} disabled={!back} onClick={back} data-finder-back="" aria-label={t("recordWindow.folder.back")} title={t("recordWindow.folder.back")}><ChevronLeft size={16} aria-hidden="true" /></button>
+            <button type="button" className={RECORD_ICON_BUTTON} disabled={!ctx.forward} onClick={ctx.forward} aria-label={t("recordWindow.folder.forward")} title={t("recordWindow.folder.forward")} data-finder-forward=""><ChevronRight size={16} aria-hidden="true" /></button>
           </span>
           <b dir="auto" className="min-w-0 truncate text-[14px]">{card.title}</b>
           <span className="ms-auto inline-flex rounded-lg bg-popover-field p-0.5" role="group" aria-label={t("recordWindow.folder.views")}>
@@ -291,7 +298,7 @@ function Finder({ ctx }: { ctx: PluginContext }) {
               </button>
             ))}
           </span>
-          {ctx.ask && <button type="button" className={RECORD_ICON_BUTTON} aria-label={t("recordWindow.folder.share")} title={t("recordWindow.folder.share")} onClick={() => ctx.ask!(t("recordWindow.folder.sharePrompt", { name: selected?.name ?? card.title, record: ctx.link }))} data-finder-share=""><Share size={15} aria-hidden="true" /></button>}
+          {ctx.ask && <button type="button" className={RECORD_ICON_BUTTON} aria-label={t("recordWindow.plugin.share")} title={t("recordWindow.plugin.share")} onClick={() => ctx.ask!(t("recordWindow.folder.sharePrompt", { name: nameInPrompt(selected?.name ?? card.title), record: ctx.link }))} data-finder-share=""><Share size={15} aria-hidden="true" /></button>}
           <TagMenu tag={tag} onTag={setTag} />
           <SearchField text={text} tag={tag} onText={setText} onTag={setTag} />
         </div>
@@ -315,6 +322,7 @@ function Finder({ ctx }: { ctx: PluginContext }) {
 export const FOLDER_WINDOW: PluginWindowSpec = {
   first: "items",
   open: ["view", "items"],
+  core: "items",
   reads: { items: ["view", "items"] },
   tabs: () => [],
   sides: () => true,

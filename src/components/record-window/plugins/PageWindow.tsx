@@ -19,7 +19,7 @@ import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
 import { parseLines, parsePageView, parseRevision, type PageBookEntry } from "@/lib/record-plugin-views";
-import { CardFacts, FactList, PluginFiles, SectionStatus, Steps, tabCount, type PluginContext } from "./PluginParts";
+import { FactList, PluginFiles, SectionStatus, Steps, tabCount, type PluginContext } from "./PluginParts";
 import type { PluginWindowSpec } from "./PluginWindow";
 
 function BookEntry({ entry }: { entry: PageBookEntry }) {
@@ -44,7 +44,7 @@ function Page({ ctx }: { ctx: PluginContext }) {
   const { card, detail } = ctx;
   const state = detail.section("view");
   const view = parsePageView(state.data);
-  if (!view) return <div className="record-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">{state.data || state.refused ? <CardFacts card={card} now={ctx.now} /> : <SectionStatus state={state} />}</div>;
+  if (!view) return <div className="p-4"><SectionStatus state={state} /></div>;
   const link = card.openUrl;
   return (
     <RecordSplit
@@ -83,7 +83,7 @@ function Page({ ctx }: { ctx: PluginContext }) {
               <FactList facts={view.facts} labelWidth="7rem" />
               {view.tags.length > 0 && (
                 <div className="mt-2.5 grid min-w-0 gap-x-4 [grid-template-columns:minmax(0,7rem)_minmax(0,1fr)]">
-                  <span className="text-[13px] leading-7 text-popover-ink-secondary">{t("recordWindow.page.tags")}</span>
+                  <span className="text-[13px] leading-7 text-popover-ink-secondary">{t("recordWindow.plugin.tags")}</span>
                   <span className="flex min-w-0 flex-wrap gap-1.5">{view.tags.map((tag) => <span key={tag} className="inline-flex h-7 items-center rounded-full bg-popover-hover px-2.5 text-[13px] leading-[18px]" data-record-tag="">{tag}</span>)}</span>
                 </div>
               )}
@@ -112,6 +112,7 @@ function Revisions({ ctx }: { ctx: PluginContext }) {
 export const PAGE_WINDOW: PluginWindowSpec = {
   first: "page",
   open: ["view"],
+  core: "view",
   reads: { page: ["view"], revisions: ["revisions"], attachments: ["attachments"] },
   tabs: (ctx) => {
     const { detail } = ctx;

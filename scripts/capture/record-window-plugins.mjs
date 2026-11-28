@@ -58,6 +58,9 @@ vite.stderr?.on("data", (chunk) => { log += chunk; });
 const mark = (fill, text, ink = "#fff") => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${fill}"/><text x="32" y="42" font-size="26" font-family="system-ui" font-weight="700" text-anchor="middle" fill="${ink}">${text}</text></svg>`;
 const MARKS = { s1: mark("#6b46c1", "S1"), ax: mark("#1f9d8b", "Ax"), bs: mark("#2f7fd6", "B"), tw: mark("#e5304a", "T"), x: mark("#000", "X"), files: mark("#3a86d6", "F") };
 const WINDOW = "[data-record-window]";
+// the X post's pictures on X's own CDN (invented: a boot check's screen and a round picture)
+const X_MEDIA = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAGAAAAA2CAIAAAC3LQuFAAAEkklEQVR42u3UNw7sBBRAUVbAJIdm4p+cOtuTPDk7u2URrISFsSyKp2u9isYI8YWls4Jb3F9+bTuKC0/U2htssSvU23sc4ItG+4iTchbN9gVX3ESrfVceeAqj/cIbn4LZ/iJAKKx2hFhJhN1OkSEXv1SBqkAlA3UcxYUnap0NttgV6p09DvBFo3PESTmLZueCK26i1bkrDzyF0XnhjU/B7HwRIBRWJ0KsJMLupMiQiypQFahsoK6juPBErbvBFrtCvbvHAb5odI84KWfR7F5wxU20unflgacwui+88SmY3S8ChMLqRoiVRNjdFBlyUQWqApUN1HMUF56o9TbYYleo9/Y4wBeN3hEn5SyavQuuuIlW76488BRG74U3PgWz90WAUFi9CLGSCLuXIkMuqkBVoLKB+o7iwhO1/gZb7Ar1/h4H+KLRP+KknEWzf8EVN9Hq35UHnsLov/DGp2D2vwgQCqsfIVYSYfdTZMhFFagKVDbQwFFceKI22GCLXaE+2OMAXzQGR5yUs2gOLrjiJlqDu/LAUxiDF974FMzBFwFCYQ0ixEoi7EGKDLmoAlWBygb64SguPOH/+fvPyPwRIBTWjwixkgj7R4oMuagCVYHKBho6igtP/KyBhgFCYQ0jxEoi7GGKDLmoApULVBtusMWuUB/ucYAvGsMjTspZNIcXXHETreFdeeApjOELb3wK5vCLfzDQyFFceKI22mCLXaE+2uMAXzRGR5yUs2iOLrjiJlqju/LAUxijF974FMzRFwFCYY0ixEoi7FGKDLmoAlWBygYaO4oLT9TGG2yxK9THexzgi8b4iJNyFs3xBVfcRGt8Vx54CmP8whufgjn+IkAorHGEWEmEPU6RIRdVoCpQ2UATR3Hhid9+/+P/wJ6kyJCLKlC5QLXJBlvsCvXJHgf4ojE54qScRXNywRU30ZrclQeewpi88ManYE6+CBAKaxIhVhLxt4GmjuLCE7XpBlvsCvXpHgf4ojE94qScRXN6wRU30ZrelQeewpi+8ManYE6/CBAKaxohVhJhT1NkyEUVqApUNtDMUVx44j+7VWP2xqdgzr4IEAprFiFWEmHPUmTIRRWoXKDabIMtdoX6bI8DfNGYHXFSzqI5u+CKm2jN7soDT2HMXvjXAs0dxYUnavMNttgV6vM9DvBFY37ESTmL5vyCK26iNb8rDzyFMX/hjU/BnH8RIBTWPEKsJMKep8iQiypQFahsoIWjuPBEbbHBFrtCfbHHAb5oLI44KWfRXFxwxU20FnflgacwFi+88SmYiy8ChMJaRIiVRNiLFBlyUQWqApUNtHQUF56oLTfYYleoL/c4wBeN5REn5SyaywuuuInW8q488BTG8oU3PgVz+UWAUFjLCLGSCHuZIkMuqkBVoLKBVo7iwhO11QZb7Ar11R4H+KKxOuKknEVzdcEVN9Fa3ZUHnsJYvfDGp2CuvggQCmsVIVYSYa9SZMhFFagKVDbQ2lFceKK23mCLXaG+3uMAXzTWR5yUs2iuL7jiJlrru/LAUxjrF974FMz1FwFCYa0jxEoi7HWKDLmoAlWBygX6C6iDom+MN2WfAAAAAElFTkSuQmCC", "base64");
+const X_AVATAR = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAc0lEQVR42mN49voDTRHDoLNAo+IOlS0AmogfkW8BQaOJsYaBKqbjsYOBWqbjsoOBiqZjtYOBuqZj2sFAddPR7KCjBVQ0HdmOUQsGjQVUNx1ux2gcjCgLhn5hR4/6gB41Gj3qZHq0KujRLqJHy45ObVMKEQBw3foxsDUEEwAAAABJRU5ErkJggg==", "base64");
 
 // what each capture opens: the chip's kind, then the steps to its state
 const PLAN = [
@@ -83,6 +86,7 @@ try {
       const context = await browser.newContext({ viewport: { width: 1320, height: 940 }, deviceScaleFactor: 2 });
       const page = await context.newPage();
       await page.route("https://marks.example/*", (route) => route.fulfill({ contentType: "image/svg+xml", body: MARKS[new URL(route.request().url()).pathname.slice(1).replace(/\.svg$/, "")] ?? MARKS.files }));
+      await page.route("https://pbs.twimg.com/**", (route) => route.fulfill({ contentType: "image/png", body: route.request().url().includes("/media/") ? X_MEDIA : X_AVATAR }));
       page.on("pageerror", (error) => console.error("page error:", String(error).slice(0, 400)));
       const shot = async (name) => {
         const path = join(outDir, `${name}-${label}-${lang}.png`);
@@ -112,9 +116,9 @@ try {
           await shot(name);
         }
       }
-      // a console that serves the threat's card only: its facts, nothing more
+      // a console that serves the threat's card only: the frame's own view of the card, nothing more
       await open("threat", { console: "card" });
-      await page.waitForSelector('[data-record-plugin-served="no"]', { timeout: 15_000 });
+      await page.waitForSelector(`${WINDOW} [data-record-pane="left"]`, { timeout: 15_000 });
       await shot("threat-card-only");
       await context.close();
     }

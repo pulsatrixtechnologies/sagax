@@ -284,9 +284,10 @@ export function pluginConsole(lang: Lang, cardOnly: boolean) {
   };
 
   // ── X: a post ──
-  const post = { pinned: false, replies: [
-    { id: "1861500000001", author: { name: "Lina Roy", handle: "lina_ti" }, when: L("2 j", "2d"), text: L("On fait ça aussi, ça a sauvé un client le mois passé.", "We do that too, it saved a customer last month."), in_reply_to: "nimbus_msp", counts: { replies: "1", reposts: "0", likes: "5", views: "310" } },
-    { id: "1861500000002", author: { name: "Omar B.", handle: "omar_b" }, when: L("2 j", "2d"), text: L("Ça coûte combien pour 3 serveurs ?", "How much for 3 servers?"), in_reply_to: "nimbus_msp", counts: { replies: "0", reposts: "0", likes: "2", views: "204" } },
+  // X's own posts, as the X API gives them (the chat's X cards read the same, shared/x-post.ts readXPost); pictures on X's own CDN
+  const post = { pinned: false, bookmarked: false, replies: [
+    { id: "1861500000001", handle: "lina_ti", name: "Lina Roy", avatarUrl: "https://pbs.twimg.com/profile_images/lina.png", created_at: "2026-11-25T15:40:00-05:00", text: L("On fait ça aussi, ça a sauvé un client le mois passé.", "We do that too, it saved a customer last month."), in_reply_to_screen_name: "nimbus_msp", public_metrics: { reply_count: 1, retweet_count: 0, like_count: 5, impression_count: 310 } },
+    { id: "1861500000002", handle: "omar_b", name: "Omar B.", created_at: "2026-11-25T16:05:00-05:00", text: L("Ça coûte combien pour 3 serveurs ?", "How much for 3 servers?"), in_reply_to_screen_name: "nimbus_msp", public_metrics: { reply_count: 0, retweet_count: 0, like_count: 2, impression_count: 204 } },
   ] as Raw[] };
   const postCard = (): Raw => ({
     ...meta("post", L("Publication", "Post")), id: P.post.record, number: L("Publication du 25 nov.", "Post of Nov 25"), title: L("Publication du 25 nov. 2026", "Post of Nov 25, 2026"),
@@ -295,12 +296,15 @@ export function pluginConsole(lang: Lang, cardOnly: boolean) {
   });
   const postSection = (name: string): Raw | null => {
     switch (name) {
-      case "counts": return { counts: { replies: post.replies.length }, actions: ["post.reply", "post.pin", "post.unpin", "post.remove"] };
+      case "counts": return { counts: { replies: post.replies.length }, actions: ["post.reply", "post.pin", "post.unpin", "post.remove", "post.bookmark", "post.unbookmark"] };
       case "view": return { view: {
-        author: { name: "Nimbus MSP", handle: "nimbus_msp", verified: true }, when: L("25 nov.", "Nov 25"),
-        text: L("Votre sauvegarde a-t-elle été testée ce mois-ci ? Chez nos clients, chaque serveur redémarre en machine virtuelle tous les matins pour le prouver. #TI #PME", "Was your backup tested this month? At our customers, every server boots as a virtual machine every morning to prove it. #IT #SMB"),
-        media: [{ label: L(`Vérification de démarrage · ACME-SRV01 · ${clock("2026-11-25T04:10")}`, `Boot check · ACME-SRV01 · ${clock("2026-11-25T04:10")}`), alt: L("Capture de la vérification de démarrage", "Screenshot of the boot check") }],
-        counts: { replies: String(2 + post.replies.length), reposts: "6", likes: "38", views: L("12,4 k", "12.4K") },
+        post: {
+          id: P.post.record, handle: "nimbus_msp", name: "Nimbus MSP", verified: true, avatarUrl: "https://pbs.twimg.com/profile_images/nimbus.png", created_at: "2026-11-25T09:00:00-05:00",
+          text: L("Votre sauvegarde a-t-elle été testée ce mois-ci ? Chez nos clients, chaque serveur redémarre en machine virtuelle tous les matins pour le prouver. #TI #PME", "Was your backup tested this month? At our customers, every server boots as a virtual machine every morning to prove it. #IT #SMB"),
+          media: [{ type: "photo", url: "https://pbs.twimg.com/media/boot-check.png", alt: L("Capture de la vérification de démarrage d'ACME-SRV01", "Screenshot of ACME-SRV01's boot check") }],
+          public_metrics: { reply_count: 2 + post.replies.length, retweet_count: 6, like_count: 38, impression_count: 12_400, bookmark_count: 9 },
+        },
+        bookmarked: post.bookmarked,
         tiles: [{ label: L("Engagement", "Engagement"), value: L("3,1 %", "3.1%"), detail: L("deux fois ta moyenne", "twice your average") }, { label: L("Clics sur le lien", "Link clicks"), value: "84" }, { label: L("Nouveaux abonnés", "New followers"), value: "12" }, { label: L("Enregistrements", "Bookmarks"), value: "9" }],
         pinned: post.pinned,
       } };
@@ -397,10 +401,12 @@ export function pluginConsole(lang: Lang, cardOnly: boolean) {
         case "attachment.add": files.unshift({ id: `f${files.length + 3}`, name: String(set.name), size: "1 Ko", date: day("2026-11-27T13:50"), author: NOOR }); return true;
         case "attachment.remove": files.splice(files.findIndex((one) => one.id === body.id), 1); return true;
         case "message.send": sms.push([`SMnew${sms.length}`, "out", "2026-11-27T13:50", "sent", today, String(set.text), NOOR]); return true;
-        case "post.reply": post.replies.push({ id: `18615000000${post.replies.length + 3}`, author: { name: "Nimbus MSP", handle: "nimbus_msp", verified: true }, when: L("maintenant", "now"), text: String(set.text), in_reply_to: "nimbus_msp", counts: {} }); return true;
+        case "post.reply": post.replies.push({ id: `18615000000${post.replies.length + 3}`, handle: "nimbus_msp", name: "Nimbus MSP", verified: true, created_at: new Date(PLUGIN_NOW).toISOString(), text: String(set.text), in_reply_to_screen_name: "nimbus_msp" }); return true;
         case "post.pin": post.pinned = true; return true;
         case "post.unpin": post.pinned = false; return true;
         case "post.remove": return true;
+        case "post.bookmark": post.bookmarked = true; return true;
+        case "post.unbookmark": post.bookmarked = false; return true;
         default: return false;
       }
     },

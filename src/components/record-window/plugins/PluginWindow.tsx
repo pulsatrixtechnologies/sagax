@@ -4,9 +4,10 @@
 // under the head, out of what scrolls (M-20261127-134). A tab with nothing in
 // it where nothing can be added is hidden (M-20261127-143).
 //
-// While the console says whether it serves the kind, the window waits; a
-// console that serves nothing more than the card shows the card's own facts
-// (CardFacts): the window never fills a part the console did not send.
+// While the console says whether it serves the kind, and when it serves
+// nothing more than the card (or refuses the kind's main section), the frame
+// draws its own view of the card (its facts, its people, its dates, its
+// notes): the window never fills a part the console did not send.
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { RecordWindowTabs, type RecordTab } from "@/components/record-window/RecordBlocks";
 import type { RecordWindowLayout } from "@/components/RecordCard";
@@ -17,7 +18,7 @@ import { BACKUP_WINDOW } from "./BackupWindow";
 import { CONVERSATION_WINDOW } from "./ConversationWindow";
 import { FOLDER_WINDOW } from "./FolderWindow";
 import { PAGE_WINDOW } from "./PageWindow";
-import { CardFacts, type PluginContext } from "./PluginParts";
+import type { PluginContext } from "./PluginParts";
 import { pluginWindowOf, type PluginWindowKind } from "./plugin-windows";
 import { POST_WINDOW } from "./PostWindow";
 import { THREAT_WINDOW } from "./ThreatWindow";
@@ -29,6 +30,8 @@ export interface PluginWindowSpec {
   first: string;
   /** the sections read when the window opens (the tabs' counts, the first tab) */
   open: readonly string[];
+  /** the kind's main section: refused, the window is the frame's own view of the card */
+  core: string;
   /** the sections a tab reads */
   reads: Readonly<Record<string, readonly string[]>>;
   /** the tabs, their counts and whether the person can add to them (none: the window has no tabs) */
@@ -50,7 +53,7 @@ const SPECS: Record<PluginWindowKind, PluginWindowSpec> = {
 const SCROLL = "record-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain";
 
 /** The layout of a plugin's record window, or undefined for a record that has none (or no card yet). */
-export function usePluginWindow({ record, label, card, now, ask, compose, back, onChanged }: {
+export function usePluginWindow({ record, label, card, now, ask, compose, back, forward, onChanged }: {
   record: RecordRef;
   label: string;
   card: Card | null;
@@ -61,6 +64,8 @@ export function usePluginWindow({ record, label, card, now, ask, compose, back, 
   compose?: () => void;
   /** back to the record this one replaced (the Finder's ‹) */
   back?: () => void;
+  /** on to the record left by back (the Finder's ›) */
+  forward?: () => void;
   onChanged: () => void;
 }): { layout?: RecordWindowLayout; refresh?: () => void } {
   const kind = pluginWindowOf(record);
@@ -76,15 +81,12 @@ export function usePluginWindow({ record, label, card, now, ask, compose, back, 
   useEffect(() => { if (want && spec) want(spec.open); }, [want, spec, served]);
   useEffect(() => { if (want && spec) want(spec.reads[tab] ?? []); }, [want, spec, tab, served]);
   if (!kind || !spec || !card || !detail) return {};
-  const ctx: PluginContext = { card, detail, type: recordWindowType(record), now, link: recordMarkdown(label, record), ask, compose, back };
-  if (detail.served === false) {
-    return { layout: { body: <div className={SCROLL} data-record-plugin={kind} data-record-plugin-served="no"><div className="p-4"><CardFacts card={card} now={now} /></div></div> }, refresh: detail.refresh };
-  }
+  // the frame's own view of the card until the console serves more, or when it serves no more
+  if (detail.served !== true || detail.section(spec.core).refused) return { refresh: detail.refresh };
+  const ctx: PluginContext = { card, detail, type: recordWindowType(record), now, link: recordMarkdown(label, record), ask, compose, back, forward };
   const tabs = spec.tabs(ctx);
   const panel = `${id}-panel-${tab}`;
-  const body = detail.served === undefined
-    ? <p role="status" className="p-6 text-popover-ink-secondary">{t("recordCard.loading")}</p>
-    : spec.body(ctx, tab, setTab);
+  const body = spec.body(ctx, tab, setTab);
   const sides = spec.sides?.(tab) ?? false;
   return {
     layout: {

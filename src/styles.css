@@ -5599,22 +5599,14 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
   background: conic-gradient(from 0deg, #f43f5e, #f59e0b, #84cc16, #10b981, #06b6d4, #6366f1, #d946ef, #f43f5e);
 }
 
-/* The two record windows that wear another product's look (M-20261127-146):
-   an X post, drawn the way X shows it (X's own inks: its dim and light
-   themes), and a folder, drawn like the macOS Finder (its folder blue, its
-   selection, its seven tags, its file badges). Dark by default, light under
-   the light skins; :is() so no line reads as a skin's own block to the
-   tools that look one up. The components only read these. */
+/* A folder's record window wears the macOS Finder's look (M-20261127-146):
+   its folder blue, its selection, its seven tags, its file badges. Dark by
+   default, light under the light skins (the list the X cards and the
+   composer read); :is() so no line reads as a skin's own block to the tools
+   that look one up. The components only read these. An X post's window reads
+   the X cards' own `.x-post` tokens above; `.x-blue` is X's blue of its
+   statistics' bars. */
 :is(:root, [data-skin]) {
-  --x-surface: #000000;
-  --x-ink: #e7e9ea;
-  --x-secondary: #71767b;
-  --x-line: #2f3336;
-  --x-hover: #080808;
-  --x-media: #16181c;
-  --x-accent: #1d9bf0;
-  --x-on-accent: #ffffff;
-  --x-like: #f91880;
   --finder-sidebar: color-mix(in srgb, var(--color-popover-ink) 4%, transparent);
   --finder-sidebar-glyph: #0a84ff;
   --finder-selection: #0a5fd6;
@@ -5645,17 +5637,11 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
 }
 :is([data-skin="pulsatrix-light"], [data-skin="atelier"], [data-skin="lagoon"], [data-skin="linen"],
   [data-skin="daylight"], [data-skin="retro98"], [data-skin="meadow"]) {
-  --x-surface: #ffffff;
-  --x-ink: #0f1419;
-  --x-secondary: #536471;
-  --x-line: #eff3f4;
-  --x-hover: #f7f9f9;
-  --x-media: #f7f9f9;
   --finder-sidebar-glyph: #007aff;
   --finder-selection: #0063e1;
   --finder-page: #ffffff;
   --finder-page-fold: #d8d8d8;
 }
-.x-look {
-  font-family: "Chirp", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+.x-blue {
+  --x-blue: #1d9bf0;
 }

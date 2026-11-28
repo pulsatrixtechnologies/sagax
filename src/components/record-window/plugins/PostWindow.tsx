@@ -1,75 +1,27 @@
-// An X post in the record window (M-20261127-146), drawn the way X shows it:
-// the avatar, the name, the badge, the handle, the text, the media, the bar
-// of replies, reposts, likes and views, the bookmark and the share; then its
-// replies and its statistics. Beside it, the post's tiles and its actions
-// (Write a follow-up through a bot, Pin to the profile, Delete). X's own
-// look is the one exception to the app's look: its inks are the `--x-*`
-// tokens of the stylesheet, never written here.
+// An X post in the record window (M-20261127-146), drawn the way X shows it
+// by the chat's own X card (XPostCards.tsx `XPostItem`, its tokens `.x-post`
+// in styles.css): the picture, the name, the badge, the handle, the text, the
+// media, the row of replies, reposts, likes and views, the bookmark and the
+// share, here as buttons (reply opens the form, the bookmark is written when
+// the console takes it, share copies the post's link). Then its replies and
+// its statistics. Beside it, the post's tiles and its actions (Write a
+// follow-up through a bot, Pin to the profile, Delete).
 //
-// The console's sections: `view` (author, when, text, media, counts, tiles,
-// pinned), `replies`, `stats` (a view: hourly, sources). No plugin serves X
-// posts yet: the window waits for one.
-import { useState, type ReactNode } from "react";
-import { BadgeCheck, Bookmark, ChartNoAxesColumn, Heart, MessageCircle, MoreHorizontal, Repeat2, Share } from "lucide-react";
-import { RECORD_ACTION, RecordAvatar, RecordEntryForm, RecordPod } from "@/components/record-window/RecordBlocks";
+// The console's sections: `view` (`post`, an X post as the X API or the chat's
+// cards give it, read by `readXPost`; tiles, pinned, bookmarked), `replies`
+// (X posts), `stats` (a view: hourly, sources). No plugin serves X posts yet:
+// the window waits for one.
+import { useState } from "react";
+import { RECORD_ACTION, RECORD_LINK_ACTION, RecordEntryForm, RecordPod } from "@/components/record-window/RecordBlocks";
 import { RecordSplit } from "@/components/record-window/RecordSplit";
+import { XPostItem } from "@/components/XPostCards";
 import { cn } from "@/lib/cn";
+import { copyText } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
-import { parseLines, parsePostStats, parsePostView, parseReply, type PostAuthor, type PostCounts, type PostReply, type PostView } from "@/lib/record-plugin-views";
+import { parseLines, parsePostStats, parsePostView, parseReply, type PostView } from "@/lib/record-plugin-views";
 import { RECORD_REPLY_MAX } from "../../../../shared/record-actions";
-import { AskButton, CardFacts, SectionStatus, Tiles, WriteButton, tabCount, type PluginContext } from "./PluginParts";
+import { AskButton, SectionStatus, Tiles, WriteButton, tabCount, type PluginContext } from "./PluginParts";
 import type { PluginWindowSpec } from "./PluginWindow";
-
-const X_SECONDARY = "[color:var(--x-secondary)]";
-
-/** The text with its hashtags, mentions and links in X's blue. */
-function PostText({ text, className }: { text: string; className?: string }) {
-  const parts = text.split(/(#[\p{L}\p{N}_]+|@[A-Za-z0-9_]{1,15}|https?:\/\/[^\s]+)/u);
-  return (
-    <p dir="auto" className={cn("whitespace-pre-wrap break-words text-[15px] leading-5", className)} data-x-text="">
-      {parts.map((part, index) => index % 2 === 1 ? <span key={index} className="[color:var(--x-accent)]">{part}</span> : part)}
-    </p>
-  );
-}
-
-function Head({ author, when }: { author: PostAuthor; when: string }) {
-  return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-1 text-[15px] leading-5">
-      <b className="font-bold">{author.name}</b>
-      {author.verified && <BadgeCheck size={18} role="img" aria-label={t("recordWindow.post.verified")} className="shrink-0 [color:var(--x-accent)]" />}
-      <span className={X_SECONDARY}>@{author.handle}{when && ` · ${when}`}</span>
-    </div>
-  );
-}
-
-function Count({ icon, value, label, tone, onClick }: { icon: ReactNode; value?: string; label: string; tone?: string; onClick?: () => void }) {
-  const inner = <>{icon}{value && <span>{value}</span>}</>;
-  const look = cn("inline-flex items-center gap-1.5 text-[13px] leading-4", tone ?? X_SECONDARY);
-  return onClick
-    ? <button type="button" className={cn(look, "rounded-full hover:[color:var(--x-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus")} aria-label={label} title={label} onClick={onClick}>{inner}</button>
-    : <span className={look} role="img" aria-label={value ? `${label}: ${value}` : label} title={label}>{inner}</span>;
-}
-
-function Bar({ counts, small = false, onReply }: { counts: PostCounts; small?: boolean; onReply?: () => void }) {
-  const size = small ? 16 : 18;
-  return (
-    <div className="mt-3 flex min-w-0 max-w-[26rem] items-center justify-between gap-3" data-x-bar="">
-      <Count icon={<MessageCircle size={size} aria-hidden="true" />} value={counts.replies} label={t("recordWindow.post.replies")} onClick={onReply} />
-      <Count icon={<Repeat2 size={size} aria-hidden="true" />} value={counts.reposts} label={t("recordWindow.post.reposts")} />
-      <Count icon={<Heart size={size} aria-hidden="true" />} value={counts.likes} label={t("recordWindow.post.likes")} tone="[color:var(--x-like)]" />
-      <Count icon={<ChartNoAxesColumn size={size} aria-hidden="true" />} value={counts.views} label={t("recordWindow.post.views")} />
-      <span className="flex items-center gap-3">
-        <Count icon={<Bookmark size={size} aria-hidden="true" />} value={counts.bookmarks} label={t("recordWindow.post.bookmarks")} />
-        <Count icon={<Share size={size} aria-hidden="true" />} label={t("recordWindow.post.share")} />
-      </span>
-    </div>
-  );
-}
-
-/** X's round avatar: the initials in X's blue (the console sends no picture). */
-function Avatar({ name, small = false }: { name: string; small?: boolean }) {
-  return <span className={cn("shrink-0 [&>span]:[background-color:var(--x-accent)] [&>span]:[color:var(--x-on-accent)]", small ? "[&>span]:size-9" : "[&>span]:size-10")}><RecordAvatar name={name} size="lg" /></span>;
-}
 
 function ReplyForm({ ctx, to, onDone }: { ctx: PluginContext; to?: string; onDone: () => void }) {
   return (
@@ -80,29 +32,21 @@ function ReplyForm({ ctx, to, onDone }: { ctx: PluginContext; to?: string; onDon
   );
 }
 
-function Post({ view, onStats, onReply }: { view: PostView; onStats: () => void; onReply?: () => void }) {
+/** The post, the X card's own, its reply, bookmark and share as buttons. */
+function Post({ ctx, view, onReply }: { ctx: PluginContext; view: PostView; onReply?: () => void }) {
+  const [shared, setShared] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const { detail, card } = ctx;
+  const mark = view.bookmarked ? "post.unbookmark" as const : "post.bookmark" as const;
+  const link = view.post.url ?? card.openUrl;
   return (
-    <article className="x-look overflow-hidden rounded-2xl border [border-color:var(--x-line)] [background-color:var(--x-surface)] [color:var(--x-ink)]" data-x-post="">
-      <div className="flex min-w-0 gap-3 p-4">
-        <Avatar name={view.author.name} />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex min-w-0 items-start gap-2">
-            <span className="min-w-0 flex-1"><Head author={view.author} when={view.when} /></span>
-            <MoreHorizontal size={18} aria-hidden="true" className={X_SECONDARY} />
-          </div>
-          <PostText text={view.text} className="mt-0.5" />
-          {view.media.map((media, index) => (
-            <div key={index} role="img" aria-label={media.alt ?? media.label ?? t("recordWindow.post.media")} className="relative mt-3 flex aspect-video min-w-0 items-end overflow-hidden rounded-2xl border [border-color:var(--x-line)] [background-color:var(--x-media)]" data-x-media="">
-              {media.label && <span className={cn("p-3 text-[13px] leading-4", X_SECONDARY)}>{media.label}</span>}
-            </div>
-          ))}
-          <Bar counts={view.counts} onReply={onReply} />
-        </div>
-      </div>
-      <button type="button" className="block w-full border-t px-4 py-3 text-start text-[15px] leading-5 [border-color:var(--x-line)] [color:var(--x-accent)] hover:[background-color:var(--x-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" onClick={onStats} data-x-stats-link="">
-        {t("recordWindow.post.showStats")}
-      </button>
-    </article>
+    <XPostItem post={view.post} card actions={{
+      onReply,
+      bookmarked: view.bookmarked,
+      onBookmark: detail.can(mark) && !busy ? () => { setBusy(true); detail.write({ action: mark }).catch(() => {}).finally(() => setBusy(false)); } : undefined,
+      onShare: link ? () => { void copyText(link).then(() => { setShared(true); setTimeout(() => setShared(false), 1_500); }); } : undefined,
+      shared,
+    }} />
   );
 }
 
@@ -123,12 +67,13 @@ function PostTab({ ctx, setTab }: { ctx: PluginContext; setTab: (tab: string) =>
   const state = ctx.detail.section("view");
   const view = parsePostView(state.data);
   const [replying, setReplying] = useState(false);
-  if (!view) return <div className="record-scroll min-h-0 flex-1 overflow-y-auto p-4">{state.data || state.refused ? <CardFacts card={ctx.card} now={ctx.now} /> : <SectionStatus state={state} />}</div>;
+  if (!view) return <div className="p-4"><SectionStatus state={state} /></div>;
   return (
     <RecordSplit type={ctx.type} fallback={760} least={420} rightLeast={320}
       left={
         <div className="flex min-w-0 flex-col gap-3 p-4">
-          <Post view={view} onStats={() => setTab("stats")} onReply={ctx.detail.can("post.reply") ? () => setReplying(true) : undefined} />
+          <Post ctx={ctx} view={view} onReply={ctx.detail.can("post.reply") ? () => setReplying(true) : undefined} />
+          <button type="button" className={cn(RECORD_LINK_ACTION, "self-start")} onClick={() => setTab("stats")} data-x-stats-link="">{t("recordWindow.post.showStats")}</button>
           {replying && <ReplyForm ctx={ctx} onDone={() => setReplying(false)} />}
         </div>
       }
@@ -149,21 +94,18 @@ function PostTab({ ctx, setTab }: { ctx: PluginContext; setTab: (tab: string) =>
   );
 }
 
-function Reply({ ctx, reply }: { ctx: PluginContext; reply: PostReply }) {
+function Reply({ ctx, reply, divider }: { ctx: PluginContext; reply: NonNullable<ReturnType<typeof parseReply>>; divider: boolean }) {
   const [replying, setReplying] = useState(false);
   return (
-    <li className="flex min-w-0 gap-3 border-b px-4 py-3 last:border-b-0 [border-color:var(--x-line)]" data-x-reply="">
-      <Avatar name={reply.author.name} small />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Head author={reply.author} when={reply.when} />
-        {reply.inReplyTo && <span className={cn("text-[13px] leading-4", X_SECONDARY)}>{t("recordWindow.post.inReplyTo")} <span className="[color:var(--x-accent)]">@{reply.inReplyTo}</span></span>}
-        <PostText text={reply.text} className="mt-0.5" />
-        <Bar counts={reply.counts} small />
-        <div className="mt-2 flex flex-wrap items-start gap-2 [color:var(--color-popover-ink)]">
+    <li data-x-reply="">
+      <XPostItem post={reply} divider={divider} actions={ctx.detail.can("post.reply") ? { onReply: () => setReplying(true) } : undefined} />
+      <div className="flex flex-col gap-2 pb-3 pe-4 ps-[68px]">
+        <div className="flex flex-wrap items-start gap-2">
           {ctx.detail.can("post.reply") && !replying && <button type="button" className={RECORD_ACTION} onClick={() => setReplying(true)} data-x-reply-open="">{t("recordWindow.post.reply")}</button>}
-          <AskButton ask={ctx.ask} label={t("recordWindow.post.suggest")} prompt={t("recordWindow.post.suggestPrompt", { handle: reply.author.handle, text: reply.text, record: ctx.link })} />
+          {/* the reply is named by its author, never by its words: a third party's text never becomes the person's request */}
+          <AskButton ask={ctx.ask} label={t("recordWindow.plugin.suggestReply")} prompt={t("recordWindow.post.suggestPrompt", { handle: reply.handle, record: ctx.link })} />
         </div>
-        {replying && <div className="mt-2"><ReplyForm ctx={ctx} to={reply.id} onDone={() => setReplying(false)} /></div>}
+        {replying && <ReplyForm ctx={ctx} to={reply.id} onDone={() => setReplying(false)} />}
       </div>
     </li>
   );
@@ -174,8 +116,8 @@ function Replies({ ctx }: { ctx: PluginContext }) {
   if (!state.data) return <SectionStatus state={state} />;
   const replies = parseLines(state.data, parseReply);
   return (
-    <ul className="x-look max-w-[40rem] overflow-hidden rounded-2xl border [border-color:var(--x-line)] [background-color:var(--x-surface)] [color:var(--x-ink)]" aria-label={t("recordWindow.post.repliesTab")}>
-      {replies.map((reply) => <Reply key={reply.id} ctx={ctx} reply={reply} />)}
+    <ul className="x-post max-w-[40rem] overflow-hidden rounded-2xl border border-[var(--x-quote-line)] bg-[var(--x-bg)]" aria-label={t("recordWindow.post.repliesTab")}>
+      {replies.map((reply, index) => <Reply key={reply.id} ctx={ctx} reply={reply} divider={index > 0} />)}
     </ul>
   );
 }
@@ -193,7 +135,7 @@ function Stats({ ctx }: { ctx: PluginContext }) {
           <div className="flex h-36 min-w-0 items-end gap-3 px-2" role="list">
             {stats.hourly.map((one) => (
               <div key={one.label} role="listitem" aria-label={one.text ? `${one.label}: ${one.text}` : one.label} title={one.text} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1.5">
-                <span className="w-full max-w-10 rounded-md [background-color:var(--x-accent)]" style={{ height: `${Math.max(4, (one.value / most) * 100)}%` }} />
+                <span className="x-blue w-full max-w-10 rounded-md bg-[var(--x-blue)]" style={{ height: `${Math.max(4, (one.value / most) * 100)}%` }} />
                 <span className="text-[13px] leading-4 text-popover-ink-secondary">{one.label}</span>
               </div>
             ))}
@@ -206,7 +148,7 @@ function Stats({ ctx }: { ctx: PluginContext }) {
             <div key={one.label} className="grid min-w-0 items-center gap-3 [grid-template-columns:minmax(0,8rem)_minmax(0,1fr)_auto]">
               <span className="truncate">{one.label}</span>
               <span role="progressbar" aria-label={one.label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(one.share)} className="block h-2 overflow-hidden rounded-full bg-popover-hover">
-                <span className="block h-full rounded-full [background-color:var(--x-accent)]" style={{ width: `${one.share}%` }} />
+                <span className="x-blue block h-full rounded-full bg-[var(--x-blue)]" style={{ width: `${one.share}%` }} />
               </span>
               <span className="text-[13px] leading-4 text-popover-ink-secondary">{one.text ?? `${one.share} %`}</span>
             </div>
@@ -220,6 +162,7 @@ function Stats({ ctx }: { ctx: PluginContext }) {
 export const POST_WINDOW: PluginWindowSpec = {
   first: "post",
   open: ["view", "replies"],
+  core: "view",
   reads: { post: ["view"], replies: ["replies"], stats: ["stats"] },
   tabs: (ctx) => {
     const { detail } = ctx;

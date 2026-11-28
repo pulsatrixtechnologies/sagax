@@ -5,7 +5,7 @@
 // The windows of the other plugins (M-20261127-141, M-20261127-146) add
 // theirs: a threat's changes undone, its endpoint isolated or reconnected,
 // its verdict; a backup run now; an SMS sent in a conversation; a post's
-// reply, pin and removal. The app sends
+// reply, pin, bookmark and removal. The app sends
 // one action through the record's detail route
 // (`POST /api/me/records/:product/:kind/:id/detail { action, id?, set }`),
 // the server checks it here, applies the organization's rules to it as a
@@ -30,7 +30,7 @@ export const RECORD_ACTIONS = [
   "threat.rollback", "threat.isolate", "threat.reconnect", "threat.verdict",
   "backup.run",
   "message.send",
-  "post.reply", "post.pin", "post.unpin", "post.remove",
+  "post.reply", "post.pin", "post.unpin", "post.remove", "post.bookmark", "post.unbookmark",
 ] as const;
 export type RecordActionName = (typeof RECORD_ACTIONS)[number];
 
@@ -141,6 +141,8 @@ const SHAPES: Record<RecordActionName, { id: boolean; fields: Record<string, Rul
   "post.pin": NOTHING,
   "post.unpin": NOTHING,
   "post.remove": NOTHING,
+  "post.bookmark": NOTHING,
+  "post.unbookmark": NOTHING,
 };
 
 const ENTRY_ID = /^[A-Za-z0-9._:-]{1,64}$/;

@@ -11,7 +11,7 @@
 // (messages), `calls` (a recording through `recording`), `number` (a view),
 // `media` (files). A console that serves no `conversation` shows the card's
 // facts (the one message the card is).
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, Check, CheckCheck, Download, Pause, Play, Plus, TriangleAlert } from "lucide-react";
 import { RECORD_ACTION, RECORD_PRIMARY, RecordAddButton, RecordPod } from "@/components/record-window/RecordBlocks";
 import { RecordGrid, type RecordColumn } from "@/components/record-window/RecordGrid";
@@ -21,7 +21,7 @@ import { downloadBlob } from "@/lib/diagram-view";
 import { t } from "@/lib/i18n";
 import { parseCall, parseConversationView, parseLines, parseMessage, parseNumberView, smsSegments, type CallRow, type SmsMessage } from "@/lib/record-plugin-views";
 import { RECORD_MESSAGE_MAX } from "../../../../shared/record-actions";
-import { AskButton, CardFacts, FactList, PluginFiles, SectionStatus, StatePill, Steps, TONE_TEXT, tabCount, type PluginContext } from "./PluginParts";
+import { AskButton, FactList, PluginFiles, SectionStatus, StatePill, Steps, TONE_TEXT, tabCount, type PluginContext } from "./PluginParts";
 import type { PluginWindowSpec } from "./PluginWindow";
 
 /** Twilio's word for a message's state, as its glyph. */
@@ -44,6 +44,7 @@ function isRecord(message: SmsMessage, recordId: string): boolean {
 }
 
 function Compose({ ctx, onDone }: { ctx: PluginContext; onDone: () => void }) {
+  const field = useId();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -57,8 +58,8 @@ function Compose({ ctx, onDone }: { ctx: PluginContext; onDone: () => void }) {
   return (
     <form className="flex min-w-0 flex-col gap-2 rounded-xl bg-popover-field p-3" data-record-sms-compose="" onSubmit={(event) => { event.preventDefault(); send(); }}
       onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onDone(); } }}>
-      <label className="sr-only" htmlFor="record-sms-text">{t("recordWindow.conversation.write")}</label>
-      <textarea id="record-sms-text" autoFocus rows={3} maxLength={RECORD_MESSAGE_MAX} value={text} dir="auto" placeholder={t("recordWindow.conversation.write")}
+      <label className="sr-only" htmlFor={field}>{t("recordWindow.conversation.write")}</label>
+      <textarea id={field} autoFocus rows={3} maxLength={RECORD_MESSAGE_MAX} value={text} dir="auto" placeholder={t("recordWindow.conversation.write")}
         className="min-h-16 min-w-0 resize-y rounded-lg bg-popover px-2.5 py-1.5 text-[14px] leading-5 text-popover-ink placeholder:text-popover-placeholder [field-sizing:content] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); send(); } }} />
       <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -114,7 +115,7 @@ function Conversation({ ctx, composing, setComposing }: { ctx: PluginContext; co
     const side = end.current?.closest<HTMLElement>("[data-record-side]");
     if (side) side.scrollTop = side.scrollHeight;
   }, [messages.length, composing]);
-  if (!state.data) return <div className="record-scroll min-h-0 flex-1 overflow-y-auto p-4">{state.refused ? <CardFacts card={card} now={ctx.now} /> : <SectionStatus state={state} />}</div>;
+  if (!state.data) return <div className="p-4"><SectionStatus state={state} /></div>;
   const selected = messages.find((one) => one.id === chosen) ?? messages.find((one) => isRecord(one, card.id)) ?? messages.at(-1);
   let day = "";
   // the month's numbers and + Message across both sides, out of what scrolls (the mockup's row)
@@ -163,7 +164,7 @@ function Conversation({ ctx, composing, setComposing }: { ctx: PluginContext; co
                 );
               })}
               <div ref={end} />
-              <div className="flex justify-end pt-1"><AskButton ask={ctx.ask} label={t("recordWindow.conversation.suggest")} prompt={t("recordWindow.conversation.suggestPrompt", { record: ctx.link })} /></div>
+              <div className="flex justify-end pt-1"><AskButton ask={ctx.ask} label={t("recordWindow.plugin.suggestReply")} prompt={t("recordWindow.conversation.suggestPrompt", { record: ctx.link })} /></div>
             </RecordPod>
             {composing && <Compose ctx={ctx} onDone={() => setComposing(false)} />}
           </div>
@@ -212,22 +213,35 @@ function Calls({ ctx }: { ctx: PluginContext }) {
   const state = ctx.detail.section("calls");
   const [playing, setPlaying] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
-  const audio = useRef<HTMLAudioElement | null>(null);
-  useEffect(() => () => { audio.current?.pause(); }, []);
+  // one recording at a time: the one playing, and the last ask (a recording read after another click, or after the tab closed, never plays)
+  const audio = useRef<{ player: HTMLAudioElement; url: string } | null>(null);
+  const asked = useRef(0);
+  const stop = () => {
+    const now = audio.current;
+    audio.current = null;
+    if (!now) return;
+    now.player.pause();
+    URL.revokeObjectURL(now.url);
+  };
+  useEffect(() => () => { asked.current += 1; stop(); }, []);
   if (!state.data) return <SectionStatus state={state} />;
   const rows = parseLines(state.data, parseCall);
   const listen = (call: CallRow) => {
     setFailed(false);
-    if (playing === call.id) { audio.current?.pause(); setPlaying(null); return; }
-    audio.current?.pause();
+    const again = playing === call.id;
+    const mine = ++asked.current;
+    stop();
+    setPlaying(null);
+    if (again) return;
     ctx.detail.bytes("recording", call.id).then((blob) => {
+      if (asked.current !== mine) return;
       const url = URL.createObjectURL(blob);
       const player = new Audio(url);
-      audio.current = player;
-      player.onended = () => { setPlaying(null); URL.revokeObjectURL(url); };
+      audio.current = { player, url };
+      player.onended = () => { if (audio.current?.player === player) { stop(); setPlaying(null); } };
       setPlaying(call.id);
       return player.play();
-    }).catch(() => { setPlaying(null); setFailed(true); });
+    }).catch(() => { if (asked.current === mine) { stop(); setPlaying(null); setFailed(true); } });
   };
   return (
     <RecordPod>
@@ -288,6 +302,7 @@ function ConversationBody({ ctx, tab, setTab }: { ctx: PluginContext; tab: strin
 export const CONVERSATION_WINDOW: PluginWindowSpec = {
   first: "conversation",
   open: ["view", "conversation", "number"],
+  core: "conversation",
   reads: { conversation: ["view", "conversation"], log: ["log"], calls: ["calls"], number: ["number"], media: ["media"] },
   tabs: (ctx) => {
     const { detail } = ctx;

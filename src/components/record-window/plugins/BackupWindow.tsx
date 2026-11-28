@@ -14,7 +14,7 @@ import { RecordList, type RecordColumn } from "@/components/record-window/Record
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { parseBackupView, parseLines, parseRestorePoint, type BackupVolume, type RestorePoint } from "@/lib/record-plugin-views";
-import { AskButton, CardFacts, FactList, Meter, SectionStatus, TONE_FILL, Tiles, WriteButton, tabCount, type PluginContext } from "./PluginParts";
+import { AskButton, FactList, Meter, SectionStatus, TONE_FILL, Tiles, WriteButton, tabCount, type PluginContext } from "./PluginParts";
 import type { PluginWindowSpec } from "./PluginWindow";
 
 function Volume({ volume, big = false }: { volume: BackupVolume; big?: boolean }) {
@@ -40,10 +40,10 @@ function Volume({ volume, big = false }: { volume: BackupVolume; big?: boolean }
 }
 
 function Overview({ ctx }: { ctx: PluginContext }) {
-  const { card, detail } = ctx;
+  const { detail } = ctx;
   const state = detail.section("view");
   const view = parseBackupView(state.data);
-  if (!view) return state.data || state.refused ? <CardFacts card={card} now={ctx.now} /> : <SectionStatus state={state} />;
+  if (!view) return <SectionStatus state={state} />;
   return (
     <>
       <Tiles tiles={view.tiles} />
@@ -114,6 +114,7 @@ function Volumes({ ctx }: { ctx: PluginContext }) {
 export const BACKUP_WINDOW: PluginWindowSpec = {
   first: "overview",
   open: ["view"],
+  core: "view",
   reads: { overview: ["view"], points: ["restore_points"], volumes: ["view"] },
   tabs: (ctx) => {
     const { detail } = ctx;

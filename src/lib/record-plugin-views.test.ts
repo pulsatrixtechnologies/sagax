@@ -121,13 +121,23 @@ describe("a conversation", () => {
 });
 
 describe("a post", () => {
-  it("needs its author, drops the @ of a handle, keeps the counts as sent", () => {
-    expect(parsePostView({ view: { text: "Hi" } })).toBeUndefined();
-    const view = parsePostView({ view: { author: { name: "Nimbus MSP", handle: "@nimbus_msp", verified: true }, when: "Nov 25", text: "Tested? #IT", counts: { likes: "38", views: "12.4K", junk: 1 } } });
-    expect(view).toMatchObject({ author: { name: "Nimbus MSP", handle: "nimbus_msp", verified: true }, counts: { likes: "38", views: "12.4K" } });
-    expect(view?.counts).not.toHaveProperty("junk");
-    expect(parseReply({ id: "1", author: { name: "Lina", handle: "lina" }, text: "Same here", in_reply_to: "@nimbus_msp" })?.inReplyTo).toBe("nimbus_msp");
-    expect(parseReply({ id: "1", author: { name: "Lina", handle: "lina" } })).toBeNull();
+  it("reads the post as the chat's X cards do (readXPost), and its tiles beside it", () => {
+    expect(parsePostView({ view: { tiles: [] } })).toBeUndefined();
+    const view = parsePostView({ view: {
+      post: { id: "1861402200417", handle: "@nimbus_msp", name: "Nimbus MSP", verified: true, text: "Tested? #IT", metrics: { likes: 38, views: 12400 }, media: [{ type: "photo", url: "https://pbs.twimg.com/media/boot.png" }] },
+      tiles: [{ label: "Engagement", value: "3.1%" }], bookmarked: true, junk: 1,
+    } });
+    expect(view?.post).toMatchObject({ id: "1861402200417", handle: "nimbus_msp", verified: true, metrics: { likes: 38, views: 12400 }, url: "https://x.com/nimbus_msp/status/1861402200417" });
+    expect(view?.post.media).toEqual([{ type: "photo", url: "https://pbs.twimg.com/media/boot.png" }]);
+    expect(view).toMatchObject({ tiles: [{ label: "Engagement", value: "3.1%" }], bookmarked: true });
+    expect(view).not.toHaveProperty("junk");
+    // a handle that is not X's is no post
+    expect(parsePostView({ view: { post: { handle: "not a handle!", text: "x" } } })).toBeUndefined();
+  });
+
+  it("reads a reply with its id and the handle it answers, never one without an id", () => {
+    expect(parseReply({ id: "1861500000001", handle: "lina_ti", name: "Lina Roy", text: "Same here", in_reply_to_screen_name: "nimbus_msp" })).toMatchObject({ id: "1861500000001", replyTo: { handle: "nimbus_msp" } });
+    expect(parseReply({ handle: "lina_ti", text: "No id" })).toBeNull();
     expect(parsePostStats({ view: { hourly: [{ label: "1 h", value: 3.1 }, { label: "2 h", value: -1 }], sources: [{ label: "For you", share: 62 }, { label: "Odd", share: 120 }] } }))
       .toEqual({ hourly: [{ label: "1 h", value: 3.1 }], sources: [{ label: "For you", share: 62 }] });
     expect(parsePostStats({ view: {} })).toBeUndefined();

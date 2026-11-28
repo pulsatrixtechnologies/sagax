@@ -4,17 +4,12 @@
 // its record in the window when the person may.
 import { useEffect, useState } from "react";
 import { Download, FileText, Monitor, Plus } from "lucide-react";
-import { RECORD_ACTION, RecordEntryForm, RecordRowActions } from "@/components/record-window/RecordBlocks";
+import { RECORD_ACTION, RecordEntryForm, RecordRowActions, RecordSectionStatus as Status } from "@/components/record-window/RecordBlocks";
 import { RecordList, type RecordColumn } from "@/components/record-window/RecordGrid";
 import type { RecordDetail } from "@/components/useRecordDetail";
 import { t } from "@/lib/i18n";
 import { attachmentOf, type AttachmentRow, type ConfigurationRow, type RecordChoice } from "@/lib/record-detail";
 import { RecordName } from "./parts";
-
-function Status({ state }: { state: { loading: boolean; error: string; page?: unknown } }) {
-  if (state.error) return <p role="status" className="py-2 text-popover-ink-secondary">{state.error}</p>;
-  return <p role="status" className="py-2 text-popover-ink-secondary">{t("recordCard.loading")}</p>;
-}
 
 export function TicketConfigurationsTab({ detail }: { detail: RecordDetail }) {
   const state = detail.section("configurations");

@@ -2,13 +2,12 @@
 // M-20261127-146), over the frame's own blocks (RecordBlocks.tsx): a tone's
 // dot and pill, tiles, a list of labelled facts, a timeline, a meter, a
 // button that asks a bot in the chat, a button that writes, a record's notes
-// and its files, and the card's own facts when the console serves no more.
+// and its files.
 // Painted from the popover tokens; no colour of its own.
 import { useState, type ReactNode } from "react";
 import { Download, FileText, Sparkles } from "lucide-react";
-import { FieldValue } from "@/components/RecordCard";
 import { RecordMarkdown } from "@/components/RecordMarkdown";
-import { RECORD_ACTION, RECORD_PRIMARY, RecordAddButton, RecordAvatar, RecordEntryForm, RecordPod, RecordRowActions } from "@/components/record-window/RecordBlocks";
+import { RECORD_ACTION, RECORD_PRIMARY, RecordAddButton, RecordAvatar, RecordEntryForm, RecordPod, RecordRowActions, RecordSectionStatus } from "@/components/record-window/RecordBlocks";
 import { RecordList, type RecordColumn } from "@/components/record-window/RecordGrid";
 import { RecordName } from "@/components/record-window/ticket/parts";
 import { cn } from "@/lib/cn";
@@ -18,8 +17,8 @@ import { formatRelative } from "@/lib/record-card-format";
 import { attachmentOf } from "@/lib/record-detail";
 import { parseFile, parseLines, parseNote, type PluginFile, type PluginNote, type ViewFact, type ViewStep, type ViewTile } from "@/lib/record-plugin-views";
 import type { RecordCard as Card, RecordTone } from "../../../../shared/record-cards";
-import type { RecordAction } from "../../../../shared/record-actions";
-import type { PluginDetail, PluginSectionState } from "./usePluginDetail";
+import { RECORD_NOTE_MAX, type RecordAction } from "../../../../shared/record-actions";
+import type { PluginDetail } from "./usePluginDetail";
 
 /** What a window of another plugin is given (PluginWindow.tsx). */
 export interface PluginContext {
@@ -36,6 +35,8 @@ export interface PluginContext {
   compose?: () => void;
   /** back to the record this one replaced */
   back?: () => void;
+  /** on to the record left by back */
+  forward?: () => void;
 }
 
 export const TONE_TEXT: Record<RecordTone, string> = { open: "text-popover-ink-secondary", waiting: "text-warning", done: "text-success", alert: "text-danger" };
@@ -160,10 +161,8 @@ export function WriteButton({ label, action, detail, primary = false, icon }: { 
   );
 }
 
-/** A section's state while it has no data: loading, or why not. */
-export function SectionStatus({ state }: { state: PluginSectionState }) {
-  return <p role="status" className="py-2 text-popover-ink-secondary">{state.error || t("recordCard.loading")}</p>;
-}
+/** A section's state while it has no data: the frame's one status block. */
+export const SectionStatus = RecordSectionStatus;
 
 /** A tab's count: the console's, else the lines read, else unknown (shown). Refused: none (hidden). */
 export function tabCount(detail: PluginDetail, section: string, read?: number): number | undefined {
@@ -181,7 +180,7 @@ export function PluginNotes({ detail, now }: { detail: PluginDetail; now: number
   const lang = activeLocale();
   const form = (note?: PluginNote) => (
     <RecordEntryForm data-record-note-form=""
-      fields={[{ key: "text", label: t("recordWindow.notes.text"), kind: "textarea", required: true, value: note?.text ?? "", placeholder: t("recordWindow.plugin.notePlaceholder") }]}
+      fields={[{ key: "text", label: t("recordWindow.notes.text"), kind: "textarea", required: true, max: RECORD_NOTE_MAX, value: note?.text ?? "", placeholder: t("recordWindow.plugin.notePlaceholder") }]}
       submitLabel={note ? t("recordWindow.save") : t("recordWindow.notes.send")}
       onCancel={() => { setWriting(false); setEditing(null); }}
       onSubmit={async (values) => {
@@ -266,42 +265,6 @@ export function PluginFiles({ detail, section = "attachments", add = true }: { d
                 <RecordRowActions name={row.name} onRemove={detail.can("attachment.remove") ? () => detail.write({ action: "attachment.remove", id: row.id }) : undefined} />
               </>
             )} />
-        </RecordPod>
-      )}
-    </div>
-  );
-}
-
-/** The card's own facts (its fields, its text, its list), when the console serves no more of the record: nothing invented. */
-export function CardFacts({ card, now }: { card: Card; now: number }) {
-  const lang = activeLocale();
-  const fields = card.fields ?? [];
-  const lines = card.lines?.items ?? [];
-  return (
-    <div className="flex min-w-0 flex-col gap-4" data-record-card-facts="">
-      {card.description?.text && <RecordPod><RecordMarkdown text={card.description.text} /></RecordPod>}
-      {fields.length > 0 && (
-        <RecordPod>
-          <dl className="grid min-w-0 gap-x-4 gap-y-2.5 [grid-template-columns:minmax(0,10rem)_minmax(0,1fr)]">
-            {fields.map((field, index) => (
-              <div key={`${field.label}-${index}`} className="contents">
-                <dt className="text-[13px] leading-[22px] text-popover-ink-secondary">{field.label}</dt>
-                <dd className="min-w-0 break-words"><FieldValue field={field} label={field.label} now={now} lang={lang} tz={card.tz} /></dd>
-              </div>
-            ))}
-          </dl>
-        </RecordPod>
-      )}
-      {lines.length > 0 && (
-        <RecordPod title={card.lines?.title} count={card.lines?.total}>
-          <ul className="flex min-w-0 flex-col divide-y divide-popover-hairline">
-            {lines.map((line, index) => (
-              <li key={index} className="flex min-w-0 items-baseline justify-between gap-3 py-2">
-                <span dir="auto" className="min-w-0 break-words"><RecordName name={line.label} recordRef={line.ref} /></span>
-                {(line.detail || line.value) && <span className="shrink-0 text-[13px] text-popover-ink-secondary">{[line.detail, line.value].filter(Boolean).join(" · ")}</span>}
-              </li>
-            ))}
-          </ul>
         </RecordPod>
       )}
     </div>

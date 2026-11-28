@@ -14,6 +14,8 @@
 //               own, as the account that posted it (picture, name, badge,
 //               @handle), with a quiet Posted chip; several posts of one turn
 //               are a fan of cards like photos in iMessage (XPostStack).
+//               A post's record window (M-20261127-146) draws the same post and
+//               hands it `actions`: reply, bookmark and share become buttons.
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy } from "lucide-react";
 
@@ -261,9 +263,22 @@ const METRICS: { key: "replies" | "reposts" | "likes" | "views"; icon: keyof typ
   { key: "views", icon: "views", hover: "group-hover/m:text-[#1d9bf0]", label: "rich.x.views" },
 ];
 
+/** What a post's own buttons do where the post can be acted on (its record window): absent, the row only shows. */
+export interface XPostActions {
+  /** open the reply form */
+  onReply?: () => void;
+  bookmarked?: boolean;
+  onBookmark?: () => void;
+  /** copy the post's link; `shared` once copied */
+  onShare?: () => void;
+  shared?: boolean;
+}
+
+const X_BUTTON = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d9bf0] disabled:opacity-50";
+
 /** X's action row: reply, repost, like, views with their counts when known (muted icons otherwise), bookmark and share.
  * A post the person's bot just published carries the quiet Posted chip in place of bookmark and share. */
-function XFooter({ post }: { post: XPostView }) {
+function XFooter({ post, actions }: { post: XPostView; actions?: XPostActions }) {
   const language = activeLocale();
   const metrics = post.metrics ?? {};
   const label = (key: (typeof METRICS)[number]) => {
@@ -273,14 +288,19 @@ function XFooter({ post }: { post: XPostView }) {
   const item = "group/m flex min-w-0 flex-1 items-center gap-1 text-[13px] text-[var(--x-sub)]";
   return (
     <div data-x-metrics="" className="-ms-2 mt-3 flex w-[calc(100%+0.5rem)] items-center">
-      {METRICS.map((metric) => (
-        <span key={metric.key} data-x-metric={metric.key} title={label(metric)} aria-label={label(metric)} className={item}>
-          <span className="flex size-[30px] items-center justify-center rounded-full transition-colors group-hover/m:bg-[#1d9bf0]/10 sm:size-[34.75px]">
-            <XIcon name={metric.icon} className={metric.hover} />
-          </span>
-          <span className="-ms-1 min-w-4 whitespace-nowrap tabular-nums">{metrics[metric.key] === undefined ? "" : xCount(metrics[metric.key]!, language)}</span>
-        </span>
-      ))}
+      {METRICS.map((metric) => {
+        const inner = (
+          <>
+            <span className="flex size-[30px] items-center justify-center rounded-full transition-colors group-hover/m:bg-[#1d9bf0]/10 sm:size-[34.75px]">
+              <XIcon name={metric.icon} className={metric.hover} />
+            </span>
+            <span className="-ms-1 min-w-4 whitespace-nowrap tabular-nums">{metrics[metric.key] === undefined ? "" : xCount(metrics[metric.key]!, language)}</span>
+          </>
+        );
+        return metric.key === "replies" && actions?.onReply
+          ? <button key={metric.key} type="button" data-x-metric={metric.key} title={label(metric)} aria-label={label(metric)} className={cn(item, X_BUTTON, "text-start")} onClick={actions.onReply}>{inner}</button>
+          : <span key={metric.key} data-x-metric={metric.key} title={label(metric)} aria-label={label(metric)} className={item}>{inner}</span>;
+      })}
       {post.posted ? (
         <span data-x-posted-chip="" role="status" className="ms-auto me-2 inline-flex shrink-0 items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--x-sub)_16%,transparent)] px-2 py-0.5 text-[12px] font-medium text-[var(--x-sub)]">
           <Check size={12} aria-hidden="true" className="text-[#00ba7c]" />
@@ -288,12 +308,26 @@ function XFooter({ post }: { post: XPostView }) {
         </span>
       ) : (
         <span className="ms-auto flex shrink-0 items-center">
-          <span data-x-metric="bookmark" title={t("rich.x.bookmark")} aria-label={t("rich.x.bookmark")} className="flex size-[34.75px] items-center justify-center rounded-full text-[var(--x-sub)]">
-            <XIcon name="bookmark" />
-          </span>
-          <span data-x-metric="share" title={t("rich.x.share")} aria-label={t("rich.x.share")} className="flex size-[34.75px] items-center justify-center rounded-full text-[var(--x-sub)]">
-            <XIcon name="share" />
-          </span>
+          {actions?.onBookmark ? (
+            <button type="button" data-x-metric="bookmark" aria-pressed={Boolean(actions.bookmarked)} title={t("rich.x.bookmark")} aria-label={t("rich.x.bookmark")} onClick={actions.onBookmark}
+              className={cn("flex size-[34.75px] items-center justify-center rounded-full hover:bg-[#1d9bf0]/10 hover:text-[#1d9bf0]", actions.bookmarked ? "text-[#1d9bf0]" : "text-[var(--x-sub)]", X_BUTTON)}>
+              <XIcon name="bookmark" />
+            </button>
+          ) : (
+            <span data-x-metric="bookmark" title={t("rich.x.bookmark")} aria-label={t("rich.x.bookmark")} className="flex size-[34.75px] items-center justify-center rounded-full text-[var(--x-sub)]">
+              <XIcon name="bookmark" />
+            </span>
+          )}
+          {actions?.onShare ? (
+            <button type="button" data-x-metric="share" title={actions.shared ? t("media.linkCopied") : t("rich.x.share")} aria-label={actions.shared ? t("media.linkCopied") : t("rich.x.share")} onClick={actions.onShare}
+              className={cn("flex size-[34.75px] items-center justify-center rounded-full text-[var(--x-sub)] hover:bg-[#1d9bf0]/10 hover:text-[#1d9bf0]", X_BUTTON)}>
+              {actions.shared ? <Check size={18} aria-hidden="true" className="text-[#00ba7c]" /> : <XIcon name="share" />}
+            </button>
+          ) : (
+            <span data-x-metric="share" title={t("rich.x.share")} aria-label={t("rich.x.share")} className="flex size-[34.75px] items-center justify-center rounded-full text-[var(--x-sub)]">
+              <XIcon name="share" />
+            </span>
+          )}
         </span>
       )}
     </div>
@@ -327,11 +361,13 @@ function openOnX(url: string, event: { preventDefault(): void }) {
 
 /** One post on X: the picture, the header, the text, the media, the reply's parent, the quote, the action row.
  * As a timeline row it has no frame of its own; with `card` it is a card with one border and X's logo in the corner. */
-export function XPostItem({ post, divider = false, card = false, accountPicture, style, className }: {
+export function XPostItem({ post, divider = false, card = false, accountPicture, actions, style, className }: {
   post: XPostView;
   divider?: boolean;
   card?: boolean;
   accountPicture?: string;
+  /** the post's own buttons where it can be acted on (its record window) */
+  actions?: XPostActions;
   style?: CSSProperties;
   className?: string;
 }) {
@@ -345,7 +381,7 @@ export function XPostItem({ post, divider = false, card = false, accountPicture,
         <XMediaView media={post.media} />
         {post.quoted && <XQuote post={post.quoted} />}
         {post.replyTo?.post && <XQuote post={post.replyTo.post} compact />}
-        <XFooter post={post} />
+        <XFooter post={post} actions={actions} />
       </div>
       {card && <span data-x-logo="" aria-hidden="true" className="pointer-events-none absolute end-4 top-3 text-[var(--x-ink)]"><XIcon name="logo" size={18} /></span>}
     </>

@@ -24,6 +24,11 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { actionFailure } from "@/lib/record-detail";
 
+/** A section of the window that has no rows to draw: its failure, else it is still read, else it holds nothing. */
+export function RecordSectionStatus({ state }: { state: { loading: boolean; error: string } }) {
+  return <p role="status" className="py-2 text-popover-ink-secondary">{state.error || (state.loading ? t("recordCard.loading") : t("recordCard.related.empty"))}</p>;
+}
+
 /** A tab or a block with nothing in it where nothing can be added is hidden (M-20261127-143). Unknown counts are shown. */
 export function recordShown(count: number | undefined, canAdd: boolean): boolean {
   return canAdd || count === undefined || count > 0;

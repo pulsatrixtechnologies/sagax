@@ -122,14 +122,30 @@ describe("a SentinelOne threat", () => {
     expect(document.querySelectorAll("[data-record-step]")).toHaveLength(6);
   });
 
-  it("leaves a console that serves the card only to the card's facts: no tab, no write", async () => {
+  it("leaves a console that serves the card only to the frame's own view of the card: its facts, its list, no tab, no write", async () => {
     await open("threat", true);
-    expect(document.querySelector('[data-record-plugin-served="no"]')).toBeTruthy();
+    expect(document.querySelector("[data-record-plugin]")).toBeNull();
     expect(windowTabs()).toEqual([]);
-    expect(document.querySelector("[data-record-card-facts]")!.textContent).toContain("Trojan");
+    expect(document.querySelector('[data-record-pane="left"]')!.textContent).toContain("Trojan");
+    expect(document.querySelector('[data-record-pane="right"]')!.textContent).toContain("Static AI detection");
     expect(document.querySelector("[data-record-write]")).toBeNull();
     expect(document.querySelector("[data-record-threat-verdict]")).toBeNull();
     expect(calls.filter((call) => call.url.includes("/detail")).map((call) => new URL(call.url, "http://x").searchParams.get("section"))).toEqual(["counts"]);
+  });
+
+  it("leaves the frame's own view too when the console refuses the kind's main section", async () => {
+    override = (section) => section === "view" ? null : undefined;
+    await open("threat");
+    expect(document.querySelector("[data-record-plugin]")).toBeNull();
+    expect(document.querySelector('[data-record-pane="left"]')!.textContent).toContain("Trojan");
+  });
+
+  it("offers no write when the console lists none (a console that sends no list)", async () => {
+    override = (section) => section === "counts" ? { counts: { timeline: 7, notes: 1 } } : undefined;
+    await open("threat");
+    expect(document.querySelector("[data-record-threat-verdict]")).toBeTruthy();
+    expect(document.querySelector("[data-record-write]")).toBeNull();
+    expect(document.querySelector("[data-record-plugin-notes] [data-record-add]")).toBeNull();
   });
 
   it("writes a note after its +, never before (M-20261127-110)", async () => {
@@ -214,15 +230,45 @@ describe("a Twilio conversation", () => {
     expect(document.querySelectorAll("[data-record-call]")).toHaveLength(2);
     expect(document.querySelectorAll("[data-record-listen]")).toHaveLength(2);
   });
+
+  it("plays one recording at a time and lets none go on, or leak, once the tab closes", async () => {
+    const players: Array<{ paused: boolean; src: string }> = [];
+    class FakeAudio { paused = true; onended: (() => void) | null = null; constructor(public src: string) { players.push(this); } play() { this.paused = false; return Promise.resolve(); } pause() { this.paused = true; } }
+    vi.stubGlobal("Audio", FakeAudio);
+    let made = 0;
+    const revoked: string[] = [];
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => `blob:${++made}`, revokeObjectURL: (url: string) => { revoked.push(url); } }));
+    await open("conversation");
+    await tab("calls");
+    const listen = () => [...document.querySelectorAll<HTMLElement>("[data-record-listen]")];
+    await act(async () => listen()[0]!.click());
+    await settle();
+    expect(players.map((one) => one.paused)).toEqual([false]);
+    await act(async () => listen()[1]!.click());
+    await settle();
+    expect(players.map((one) => one.paused)).toEqual([true, false]);
+    expect(revoked).toEqual(["blob:1"]);
+    // another one, then the tab closes: nothing plays on, every address is dropped
+    await act(async () => listen()[0]!.click());
+    await settle();
+    await tab("number");
+    expect(players.filter((one) => !one.paused)).toHaveLength(0);
+    expect(revoked).toEqual(["blob:1", "blob:2", "blob:3"]);
+  });
 });
 
 describe("an X post", () => {
-  it("draws the post the X way and deletes it only after asking", async () => {
+  it("draws the post with the chat's X card, bookmarks it, and deletes it only after asking", async () => {
     await open("post");
     expect(windowTabs()).toEqual(["post", "replies", "stats"]);
     const post = document.querySelector("[data-x-post]")!;
     expect(post.textContent).toContain("@nimbus_msp");
-    expect(post.querySelectorAll("[data-x-bar] [role=img], [data-x-bar] button").length).toBeGreaterThanOrEqual(5);
+    expect([...post.querySelectorAll("[data-x-metric]")].map((one) => one.getAttribute("data-x-metric"))).toEqual(["replies", "reposts", "likes", "views", "bookmark", "share"]);
+    await act(async () => post.querySelector<HTMLElement>('button[data-x-metric="bookmark"]')!.click());
+    await settle();
+    expect(writes()).toEqual([{ action: "post.bookmark" }]);
+    expect(document.querySelector('[data-x-post] button[data-x-metric="bookmark"]')!.getAttribute("aria-pressed")).toBe("true");
+    calls = [];
     await act(async () => document.querySelector<HTMLElement>("[data-record-post-remove]")!.click());
     expect(writes()).toEqual([]);
     await act(async () => button("Yes, delete")!.click());
@@ -269,6 +315,14 @@ describe("a folder of files", () => {
     await act(async () => { folder.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); });
     await settle();
     expect(document.querySelector('[data-record-window="files/folder"] [data-finder]')).toBeTruthy();
+    expect(document.querySelector("[data-record-window-head]")!.textContent).toContain("Contracts");
+    // back to the customer's folder, then forward again (the Finder's ‹ and ›)
+    expect(document.querySelector<HTMLButtonElement>("[data-finder-forward]")!.disabled).toBe(true);
+    await act(async () => document.querySelector<HTMLElement>("[data-finder-back]")!.click());
+    await settle();
+    expect(document.querySelector("[data-record-window-head]")!.textContent).toContain("Acme Fabrication");
+    await act(async () => document.querySelector<HTMLElement>("[data-finder-forward]")!.click());
+    await settle();
     expect(document.querySelector("[data-record-window-head]")!.textContent).toContain("Contracts");
   });
 });

@@ -14,12 +14,16 @@
 // A live update is a new revision: the frame is keyed by it, so an update is
 // a clean remount, never a reload mistaken for the page navigating away. A
 // skin change is posted to the frame instead of reloading it, so a running
-// app keeps its state across a theme change.
+// app keeps its state across a theme change. The compact toolbar (versions,
+// Updated, Share, Open tab) follows the OMB PageTools idea without removing
+// PageSurface or the Electron window paths (#5462, R3).
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { ArrowUpRight, ChevronLeft, ChevronRight, Share2 } from "lucide-react";
 import geistLatin from "@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?inline";
 
 import { activeLocale, t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
+import { useAppPageVersion } from "@/lib/app-page-version";
 import { buildWidgetDocument, clampWidgetHeight, WIDGET_MESSAGE } from "@/lib/rich-blocks";
 import { acceptWidgetOpen } from "@/lib/sandboxed-open";
 import { widgetFontFace, type WidgetTheme } from "@/lib/widget-kit";
@@ -37,6 +41,8 @@ const FONT_FACE = widgetFontFace(geistLatin);
 const NO_CARDS: readonly AppCapCard[] = [];
 const noCards = () => NO_CARDS;
 const noSubscribe = () => () => {};
+const TOOL =
+  "flex size-7 shrink-0 items-center justify-center rounded-full text-ink-tertiary transition-colors hover:bg-ink/[0.07] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-40";
 
 function SandboxedAppFrame({ srcDoc, title, theme, onEscaped, hostFrame, onReady }: {
   srcDoc: string;
@@ -95,6 +101,72 @@ function SandboxedAppFrame({ srcDoc, title, theme, onEscaped, hostFrame, onReady
   );
 }
 
+function AppMessageToolbar({ version }: { version: ReturnType<typeof useAppPageVersion> }) {
+  const hasHistory = version.last > version.first;
+  return (
+    <div data-app-tools="" className="flex flex-wrap items-center gap-x-1.5 gap-y-2 border-t border-hairline/40 px-3 py-2">
+      <div className="flex items-center gap-0.5 text-[13px] text-ink-secondary">
+        {hasHistory ? (
+          <>
+            <button
+              type="button"
+              className={TOOL}
+              aria-label={t("chat.preview.older")}
+              title={t("chat.preview.older")}
+              disabled={version.rev <= version.first}
+              onClick={() => version.show(version.rev - 1)}
+            >
+              <ChevronLeft size={15} aria-hidden="true" />
+            </button>
+            <span data-app-version="" className="min-w-6 text-center tabular-nums">
+              {t("chat.preview.version", { n: String(version.rev + 1) })}
+            </span>
+            <button
+              type="button"
+              className={TOOL}
+              aria-label={t("chat.preview.newer")}
+              title={t("chat.preview.newer")}
+              disabled={version.latest}
+              onClick={() => version.show(version.rev + 1)}
+            >
+              <ChevronRight size={15} aria-hidden="true" />
+            </button>
+          </>
+        ) : (
+          <span data-app-version="" className="min-w-6 tabular-nums text-ink-tertiary">
+            {t("chat.preview.version", { n: String((version.rev ?? 0) + 1) })}
+          </span>
+        )}
+        {version.flash ? (
+          <span role="status" data-app-updated="" className="ms-1 rounded-full bg-accent/15 px-2 py-px font-medium text-accent-text">
+            {t("chat.preview.updated")}
+          </span>
+        ) : null}
+      </div>
+      <div className="ms-auto flex flex-wrap items-center gap-1">
+        <button
+          type="button"
+          className={TOOL}
+          disabled
+          aria-label={t("chat.preview.share")}
+          title={t("chat.preview.shareUnavailable")}
+        >
+          <Share2 size={15} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className={TOOL}
+          disabled
+          aria-label={t("chat.preview.openTab")}
+          title={t("chat.preview.openTabNeedsLink")}
+        >
+          <ArrowUpRight size={15} aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AppMessageComponent({ message, botId, threadId }: { message: Message; botId?: string; threadId?: string }) {
   const payload = message.app;
   const frameRef = useRef<HTMLDivElement>(null);
@@ -102,7 +174,9 @@ function AppMessageComponent({ message, botId, threadId }: { message: Message; b
   const theme = useWidgetTheme(frameRef);
   const firstTheme = useRef(theme);
   const [escapes, setEscapes] = useState(0);
-  const html = payload?.html ?? "";
+  const version = useAppPageVersion(payload ?? { v: 1, html: "" });
+  const page = payload ? version.page : { html: "" };
+  const html = page.html;
   const caps = useMemo(() => pageCapabilitiesOf(html), [html]);
   const lang = activeLocale().toLowerCase().startsWith("fr") ? "fr" as const : "en" as const;
   // built once per page: a skin change is posted to the frame, not reloaded.
@@ -142,15 +216,16 @@ function AppMessageComponent({ message, botId, threadId }: { message: Message; b
       : null;
   }
 
-  const title = payload.title?.trim() || t("app.title");
+  const title = (page.title ?? payload.title)?.trim() || t("app.title");
   const blocked = escapes >= 2;
+  const frameKey = `${version.rev}:${html.length}:${html.slice(0, 24)}`;
 
   return (
     <div ref={frameRef} dir="ltr" className={cn("my-2 min-w-0")}>
       <WidgetCardFrame
         // an update is a new revision: remount the frame so it is a clean
         // replace, and reset the escape count with it
-        key={payload.rev ?? 0}
+        key={frameKey}
         label={title}
         title={title}
         meta={t("app.live")}
@@ -173,6 +248,7 @@ function AppMessageComponent({ message, botId, threadId }: { message: Message; b
             </div>
           </div>
         ))}
+        <AppMessageToolbar version={version} />
       </WidgetCardFrame>
     </div>
   );

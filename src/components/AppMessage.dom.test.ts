@@ -92,4 +92,24 @@ describe("AppMessage", () => {
     expect(mount({ id: "e1", text: "[app] nothing", app: { v: 1, html: "" } } as Partial<Message> & { id: string }).querySelector("iframe")).toBeNull();
     expect(mount({ id: "e2", text: "[app] nothing" } as Partial<Message> & { id: string }).textContent).toContain("[app] nothing");
   });
+
+  it("shows the compact toolbar with a version label", () => {
+    const host = mount(appRow("abc-123", "<p>x</p>", { title: "Live", rev: 1 }));
+    expect(host.querySelector("[data-app-tools]")).not.toBeNull();
+    expect(host.querySelector("[data-app-version]")?.textContent).toMatch(/v2|2/);
+  });
+
+  it("steps through history without appending a second frame", () => {
+    const host = mount(appRow("abc-123", "<p>now</p>", {
+      title: "Live",
+      rev: 1,
+      history: [{ html: "<p>was</p>", title: "Live" }],
+    }));
+    const buttons = host.querySelectorAll<HTMLButtonElement>("[data-app-tools] button");
+    // older, newer, share, open tab
+    expect(buttons.length).toBeGreaterThanOrEqual(2);
+    act(() => buttons[0]!.click());
+    expect(host.querySelectorAll("iframe")).toHaveLength(1);
+    expect(host.querySelector("iframe")!.getAttribute("srcdoc")).toContain("<p>was</p>");
+  });
 });

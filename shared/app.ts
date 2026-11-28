@@ -22,6 +22,9 @@ export const APP_VERSION = 1;
 /** How many `uses` entries one call may name. */
 const APP_USES_MAX = 40;
 
+/** How many earlier html revisions a live app keeps for the chat stepper. */
+export const APP_HISTORY_LIMIT = 10;
+
 /** Model input past any of these is refused with one sentence naming the
  * field. `html` is held well under the widget sandbox's comfortable size so
  * a live update stays cheap to re-render. */
@@ -33,11 +36,18 @@ export const APP_LIMITS = {
   fallback: 1_500,
 } as const;
 
+/** One earlier revision of a live app, oldest first when stored on history. */
+export interface AppHistoryEntry {
+  html: string;
+  title?: string;
+}
+
 /** One live app row's stored payload. `html` is the page as it is drawn,
  * already scrubbed of anything that reads as a secret. `rev` counts how many
  * times `update_html` has replaced the page (absent: never): a renderer
  * remounts the frame on a new revision so an update is a clean replace, not a
- * reload mistaken for the page navigating away. */
+ * reload mistaken for the page navigating away. `history` keeps earlier
+ * pages (capped) so the chat toolbar can step back without another round trip. */
 export interface AppPayload {
   v: 1;
   html: string;
@@ -45,6 +55,27 @@ export interface AppPayload {
    * its accessible name. Never an id. */
   title?: string;
   rev?: number;
+  /** Earlier revisions before the current html, oldest first, at most
+   * APP_HISTORY_LIMIT. Absent until the first update_html. */
+  history?: AppHistoryEntry[];
+}
+
+/** Push the current page onto history before a live replace. Caps length. */
+export function pushAppHistory(
+  previous: Pick<AppPayload, "html" | "title" | "history">,
+  nextHtml: string,
+  nextTitle?: string,
+): AppHistoryEntry[] {
+  const entry: AppHistoryEntry = {
+    html: previous.html,
+    ...(previous.title ? { title: previous.title } : {}),
+  };
+  // Skip a no-op replace that would only grow history with identical pages.
+  if (entry.html === nextHtml && (entry.title ?? "") === (nextTitle ?? previous.title ?? "")) {
+    return previous.history ? [...previous.history] : [];
+  }
+  const prior = previous.history ?? [];
+  return [...prior, entry].slice(-APP_HISTORY_LIMIT);
 }
 
 function byteLength(value: string): number {

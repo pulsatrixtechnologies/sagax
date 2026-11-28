@@ -23,9 +23,32 @@ function freshStore(): ArtifactStore {
 
 type Sent = { status: number; body: any };
 
-function internal(store: ArtifactStore, opts: { owns?: boolean; botId?: string } = {}) {
-  const route = createArtifactInternalRoutes({ artifacts: () => store, ownsThread: () => opts.owns ?? true, speaker: () => "p-1" });
-  return async (body: Record<string, unknown>, path = "/api/internal/artifacts") => {
+function internal(store: ArtifactStore, opts: { owns?: boolean; botId?: string; chat?: boolean } = {}) {
+  const chatRows: Array<{ id: string; artifactCard?: { artifactId: string; title: string; rev: number }; text?: string }> = [];
+  let next = 1;
+  const chat = opts.chat === false
+    ? undefined
+    : {
+      messagesFor: () => chatRows as never,
+      appendMessage: (_threadId: string, message: Record<string, unknown>) => {
+        const full = { ...message, id: `m${next++}`, at: 1 };
+        chatRows.push(full as never);
+        return full as never;
+      },
+      patchMessage: (_threadId: string, messageId: string, patch: Record<string, unknown>) => {
+        const index = chatRows.findIndex((row) => row.id === messageId);
+        if (index < 0) return null;
+        chatRows[index] = { ...chatRows[index], ...patch };
+        return chatRows[index] as never;
+      },
+    };
+  const route = createArtifactInternalRoutes({
+    artifacts: () => store,
+    ownsThread: () => opts.owns ?? true,
+    speaker: () => "p-1",
+    ...(chat ? { chat } : {}),
+  });
+  return Object.assign(async (body: Record<string, unknown>, path = "/api/internal/artifacts") => {
     const sent: Sent[] = [];
     const out = await route({
       res: {} as ServerResponse,
@@ -36,7 +59,7 @@ function internal(store: ArtifactStore, opts: { owns?: boolean; botId?: string }
       readBody: async () => body,
     });
     return { out, sent: sent[0] };
-  };
+  }, { chatRows });
 }
 
 function client(store: ArtifactStore, over: Partial<ArtifactRouteDeps> = {}) {
@@ -97,6 +120,24 @@ describe("POST /api/internal/artifacts (the bot's tools)", () => {
     expect((await internal(store, { owns: false })({ tool: "list_artifacts" })).sent?.status).toBe(403);
     expect((await internal(store)({ tool: "show_widget" })).sent?.status).toBe(400);
     expect((await internal(store)({}, "/api/internal/other")).out).toBe(PASS);
+  });
+
+  it("places one chat card on save and patches it on update", async () => {
+    const store = freshStore();
+    const call = internal(store);
+    const saved = await call({ tool: "save_artifact", args: { title: "CPU", html: "<b>1</b>" } });
+    const id = saved.sent?.body.artifact.id as string;
+    expect(call.chatRows).toHaveLength(1);
+    expect(call.chatRows[0]).toMatchObject({
+      artifactCard: { artifactId: id, title: "CPU", rev: 1 },
+      text: "Artifact saved: CPU",
+    });
+    await call({ tool: "update_artifact", args: { artifact_id: id, title: "CPU live" } });
+    expect(call.chatRows).toHaveLength(1);
+    expect(call.chatRows[0]).toMatchObject({
+      artifactCard: { artifactId: id, title: "CPU live" },
+      text: expect.stringContaining("Artifact updated: CPU live"),
+    });
   });
 });
 

@@ -25,6 +25,7 @@ import { ActivityRun } from "../ActivityRun";
 import { CwActivityWidgets, CwWidgetView, shownCwWidget } from "../cw/CwWidgetView";
 import { OwnerSettled, OwnerWait } from "../OwnerWait";
 import { PagePublishCard } from "../PublishedPages";
+import { SagaxArtifactChatCard } from "../artifacts/SagaxArtifactChatCard";
 import { OutboundCard } from "../OutboundCard";
 import { ListeningRowLine } from "../ListeningCard";
 import { AccessNoticeRow } from "../AccessCard";
@@ -426,6 +427,14 @@ export function MessagesListItem({
             message={m}
             threadLatestVersion={latestPageVersionById.get(m.pagePublish.pageId)}
           />
+        </MessageBoundary>
+      );
+    }
+    // a saved artifact's chat card (save_artifact / update_artifact, #5462)
+    if (m.artifactCard && m.role === "bot") {
+      return (
+        <MessageBoundary fallbackText={m.text ?? ""}>
+          <SagaxArtifactChatCard message={m} botId={botId} />
         </MessageBoundary>
       );
     }

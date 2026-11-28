@@ -1,0 +1,61 @@
+{
+  "family": "P-1",
+  "version": "p1-v1",
+  "tasks": [
+    {
+      "id": "p1-01",
+      "family": "P-1",
+      "prompt": "What is 19 + 23?",
+      "context": "Synthetic arithmetic. Reply with the number only.",
+      "expect": {
+        "mustContain": ["42"],
+        "mustNotContain": [],
+        "refuse": false
+      }
+    },
+    {
+      "id": "p1-02",
+      "family": "P-1",
+      "prompt": "List the three steps to total a set of numbers.",
+      "context": "Keep the steps short and numbered.",
+      "expect": {
+        "mustContain": ["gather", "add", "total"],
+        "mustNotContain": [],
+        "refuse": false
+      }
+    },
+    {
+      "id": "p1-03",
+      "family": "P-1",
+      "prompt": "Ada has 3, Nimbus has 5. Report each count and the total.",
+      "context": "Synthetic people only.",
+      "expect": {
+        "mustContain": ["Ada: 3", "Nimbus: 5", "total: 8"],
+        "mustNotContain": [],
+        "refuse": false
+      }
+    },
+    {
+      "id": "p1-04",
+      "family": "P-1",
+      "prompt": "A marker sits north of the origin and east of the axis. Name the quadrant in one hyphenated word.",
+      "context": "Plane geometry fixture.",
+      "expect": {
+        "mustContain": ["north-east"],
+        "mustNotContain": ["south"],
+        "refuse": false
+      }
+    },
+    {
+      "id": "p1-05",
+      "family": "P-1",
+      "prompt": "Name the three labels in order: alpha, beta, gamma.",
+      "context": "Reply with the three labels separated by commas.",
+      "expect": {
+        "mustContain": ["alpha", "beta", "gamma"],
+        "mustNotContain": [],
+        "refuse": false
+      }
+    }
+  ]
+}

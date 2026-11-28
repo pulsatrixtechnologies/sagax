@@ -47,6 +47,7 @@
     "health-scan": "node --experimental-strip-types server/health-scan.ts",
     "control:omb": "node --experimental-strip-types scripts/control-omb.ts",
     "eval": "node --experimental-strip-types evals/runners/run-evals.ts",
+    "eval:blind-pair": "node --experimental-strip-types evals/blind-pair/run-blind-pair.ts",
     "dev:desktop": "node scripts/prepare-cloudflared.mjs --current && node scripts/dev-desktop.mjs",
     "build": "tsc -b && tsc -p server && vite build",
     "typecheck": "tsc -b && tsc -p server && tsc -p src/gallery",

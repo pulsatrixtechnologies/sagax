@@ -28,7 +28,7 @@ quietly deleted.
 | --- | --- | --- | --- | --- |
 | A. Phone conversation | every release | on the release candidate, after the local gates of `docs/releasing.md` step 4 and before the tag | 40 min | nothing |
 | B. Inbound voice call | every release that touches voice, the line or the phone | a call window booked with the owner, weekdays inside the person's allowed hours | 30 min | the owner's number must be verified for the line |
-| C. Blind pairs | once per QA lot, never at a release cut | four sittings of 45 min, one per task family, only after the pair harness of [#5533](https://github.com/pulsatrixtechnologies/sagax/issues/5533) exists | 45 min per family | #5533 |
+| C. Blind pairs | once per QA lot, never at a release cut | four sittings of 45 min, one per task family; offline fixture harness is `pnpm eval:blind-pair` ([blind-pair-harness.md](blind-pair-harness.md), [#5533](https://github.com/pulsatrixtechnologies/sagax/issues/5533)) | 45 min per family | nothing |
 
 Slots A and B sit beside the release checks that already run live on the same
 candidate: the connector live check
@@ -102,15 +102,20 @@ the carrier, the verified number, real audio and the interruption.
 
 ## Slot C. Blind pairs (P-1 to P-4)
 
-Runs only once the harness of
-[#5533](https://github.com/pulsatrixtechnologies/sagax/issues/5533) exists: it
-sends one prompt, with one context, to both assistants, and anonymizes the two
-outputs before anyone reads them. Nothing here needs a live assistant on a
-Mac, and no Sagax code is involved in the comparison itself; the offline
-behaviour evals (`pnpm eval`, `evals/README.md`) cover the harness side.
+The offline fixture harness of
+[#5533](https://github.com/pulsatrixtechnologies/sagax/issues/5533) is
+`pnpm eval:blind-pair` (recipe [blind-pair-harness.md](blind-pair-harness.md)):
+it freezes the grid under a sha256 manifest, sends one prompt with one context
+to two scripted assistants, anonymizes the outputs as Assistant A / Assistant B,
+and scores with a deterministic fixture judge. No live LLM and no network. The
+owner sittings below reuse that same frozen grid when a live pair is judged by
+a person. The offline behaviour evals (`pnpm eval`, `evals/README.md`) stay the
+harness-side gate for product behaviour; this slot is the comparison protocol.
 
 1. [ ] Freeze the grid and its expected results, record the hash on #2644, and
-   check that hash again before the first send of each sitting.
+   check that hash again before the first send of each sitting (`pnpm
+   eval:blind-pair` prints the manifest sha256; the files live under
+   `evals/blind-pair/rubric/`).
 2. [ ] One sitting per task family: five pairs minimum, in random order.
 3. [ ] Hand the anonymized outputs to a judge who is not the operator of either
    side, and record who judged.

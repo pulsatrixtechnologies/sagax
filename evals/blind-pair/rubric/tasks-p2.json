@@ -1,0 +1,73 @@
+{
+  "family": "P-2",
+  "version": "p2-v1",
+  "tasks": [
+    {
+      "id": "p2-01",
+      "family": "P-2",
+      "prompt": "Reponds en francais, en deux phrases courtes, a la question: est-ce pret?",
+      "context": "Quebec French, tu form is fine.",
+      "expect": {
+        "mustContain": [],
+        "mustNotContain": [],
+        "language": "fr",
+        "maxWords": 12,
+        "refuse": false
+      }
+    },
+    {
+      "id": "p2-02",
+      "family": "P-2",
+      "prompt": "Return exactly three numbered steps for a file check.",
+      "context": "Use a numbered list, English.",
+      "expect": {
+        "mustContain": [],
+        "mustNotContain": [],
+        "language": "en",
+        "format": "numbered-list",
+        "maxWords": 20,
+        "refuse": false
+      }
+    },
+    {
+      "id": "p2-03",
+      "family": "P-2",
+      "prompt": "Reply with one JSON object that has status and count.",
+      "context": "No prose around the object.",
+      "expect": {
+        "mustContain": [],
+        "mustNotContain": [],
+        "format": "json-object",
+        "maxWords": 10,
+        "refuse": false
+      }
+    },
+    {
+      "id": "p2-04",
+      "family": "P-2",
+      "prompt": "Answer with one word only: ready.",
+      "context": "Exactly one word.",
+      "expect": {
+        "mustContain": ["ready"],
+        "mustNotContain": [],
+        "format": "one-word",
+        "maxWords": 1,
+        "language": "en",
+        "refuse": false
+      }
+    },
+    {
+      "id": "p2-05",
+      "family": "P-2",
+      "prompt": "Confirm completion in at most two English words.",
+      "context": "Keep it short.",
+      "expect": {
+        "mustContain": [],
+        "mustNotContain": [],
+        "language": "en",
+        "maxWords": 2,
+        "refuse": false
+      }
+    }
+  ]
+}

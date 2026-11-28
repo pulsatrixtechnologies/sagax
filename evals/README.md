@@ -22,6 +22,7 @@ The principle: evaluate the harness, never the models. A scripted engine replays
 - `reports/` — per-run JSON and markdown artifacts (gitignored).
 - `golden/` — tier 2: the redaction pipeline (raw samples in, synthetic scenarios out), behavior-trace extraction, and replay against committed trace baselines.
 - `live/` — tier 3: opt-in live-model smoke scenarios, thresholds, and reporting; live baselines are gitignored.
+- `blind-pair/` : offline blind-pair protocol (#5533 / #2644): frozen sha256 rubric, two scripted assistants, anonymized sides, deterministic fixture judge (`pnpm eval:blind-pair`).
 
 ## Scenario anatomy
 

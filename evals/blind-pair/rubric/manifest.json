@@ -1,0 +1,25 @@
+{
+  "version": "blind-pair-v1",
+  "files": [
+    {
+      "file": "tasks-p1.json",
+      "family": "P-1",
+      "sha256": "70c7e651e763ac18be611a80a4bb48b9a2498a198caf9020156cd2ed45d276fd"
+    },
+    {
+      "file": "tasks-p2.json",
+      "family": "P-2",
+      "sha256": "3153115fac5aab06f7eeb12b22eb9debc2a721876ebc47ef90e4ff1d4f8787cd"
+    },
+    {
+      "file": "tasks-p3.json",
+      "family": "P-3",
+      "sha256": "2e36b809f88cf93a37c9288609736ee5a9d1ce4eb7ddf3e166ad40e66a5e61ae"
+    },
+    {
+      "file": "tasks-p4.json",
+      "family": "P-4",
+      "sha256": "910a2171b91a6b6a78c32ba7eef41ba3e57daeb23f41f710d28b9afb4a930a36"
+    }
+  ]
+}

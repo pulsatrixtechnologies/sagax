@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,7 +10,7 @@ const fixture = (name) => fileURLToPath(new URL(`./testing/runner-guard-fixtures
 const guard = (dir) => spawnSync(process.execPath, [script, dir], { encoding: "utf8" });
 
 describe("check-runner-labels", () => {
-  it.each(["hosted", "hosted-matrix"])("passes %s", (name) => {
+  it.each(["hosted", "hosted-matrix", "hosted-matrix-include"])("passes %s", (name) => {
     const r = guard(fixture(name));
     expect(r.status, r.stderr + r.stdout).toBe(0);
     expect(r.stdout).toMatch(/every job uses a GitHub-hosted runner/);
@@ -18,12 +18,28 @@ describe("check-runner-labels", () => {
 
   it.each([
     ["self-hosted", /uses a self-hosted label/],
+    ["matrix-self-hosted", /uses a self-hosted label/],
     ["unknown-runner", /not a GitHub-hosted label/],
     ["foo-latest", /not a GitHub-hosted label/],
   ])("fails %s", (name, expected) => {
     const r = guard(fixture(name));
     expect(r.status, r.stderr + r.stdout).toBe(1);
     expect(r.stderr).toMatch(expected);
+  });
+
+  it("desktop-install-smoke.yml matrix.runner values are hosted", () => {
+    const dir = mkdtempSync(join(tmpdir(), "runner-guard-desktop-install-"));
+    try {
+      copyFileSync(
+        fileURLToPath(new URL("../.github/workflows/desktop-install-smoke.yml", import.meta.url)),
+        join(dir, "desktop-install-smoke.yml"),
+      );
+      const r = guard(dir);
+      expect(r.status, r.stderr + r.stdout).toBe(0);
+      expect(r.stdout).toMatch(/every job uses a GitHub-hosted runner/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("repository workflows use only GitHub-hosted runners", () => {

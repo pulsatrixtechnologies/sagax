@@ -71,6 +71,15 @@ describe("browser tab: a live preview like the VM's screen", () => {
     expect(document.querySelector("[data-screen-controls]")).toBeNull();
   });
 
+  it("keeps the docked panel's shared top row above a browser that cannot show (M-20261127-181)", async () => {
+    browserEngine.current = { kind: "unavailable", installable: true };
+    const bar = vi.fn(() => createElement("div", { "data-docked-bar": "" }));
+    await act(async () => root.render(createElement(BrowserPanel, { bot, live: true, docked: { title: "Assistant’s browser", bar } })));
+    expect(bar).toHaveBeenCalledWith({ leading: null });
+    const shown = document.querySelector("[data-docked-bar]")!;
+    expect(shown.nextElementSibling?.querySelector("figure")).not.toBeNull();
+  });
+
   it("lets a member watch and keeps installing the engine for an admin", async () => {
     api.mockImplementation(async (path: string) => path === "/api/auth/session" ? { scopes: ["client"] } : { ok: true });
     await act(async () => root.render(createElement(BrowserPanel, { bot })));

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RemoteSessionView } from "../../shared/remote-session";
 import type { DesktopBridgeStatus } from "@/lib/desktop-bridge";
-import { activePlace, environmentWatchable, frameTime, screenPlaces } from "./screen-places";
+import { activePlace, environmentWatchable, fitScreen, frameTime, screenPlaces } from "./screen-places";
 
 const session = (id: string, state: "connected" | "ended" = "connected") => ({ id, state }) as unknown as RemoteSessionView;
 const bridge = (connected: boolean) => ({ connected }) as unknown as DesktopBridgeStatus;
@@ -45,5 +45,32 @@ describe("the places of the screen panel (#4452, lot d)", () => {
 
   it("formats the time of a last picture", () => {
     expect(frameTime(new Date(2026, 10, 19, 14, 32, 5).getTime(), "en-US")).toMatch(/2:32:05/);
+  });
+});
+
+describe("the VM's screen fits the panel (M-20261127-181)", () => {
+  const desktop = { width: 1280, height: 800 };
+  it.each([
+    ["a narrow tall panel: the whole width", { width: 360, height: 700 }, { width: 360, height: 225 }],
+    ["the default panel: the whole width", { width: 480, height: 820 }, { width: 480, height: 300 }],
+    ["a wide panel: the whole width", { width: 900, height: 820 }, { width: 900, height: 562 }],
+    ["a wide short panel: the whole height", { width: 960, height: 420 }, { width: 672, height: 420 }],
+    ["a room of the desktop's own shape: all of it", { width: 640, height: 400 }, { width: 640, height: 400 }],
+  ])("%s", (_case, room, fitted) => {
+    const box = fitScreen(room, desktop)!;
+    expect(box).toEqual(fitted);
+    expect(box.width <= room.width && box.height <= room.height).toBe(true);
+    expect(box.width === Math.floor(room.width) || box.height === Math.floor(room.height)).toBe(true);
+    expect(Math.abs(box.width / box.height - desktop.width / desktop.height)).toBeLessThan(0.01);
+  });
+
+  it("keeps a phone-shaped picture's proportions too", () => {
+    expect(fitScreen({ width: 480, height: 820 }, { width: 390, height: 844 })).toEqual({ width: 378, height: 820 });
+  });
+
+  it("fills the room until the picture and the room are both known", () => {
+    expect(fitScreen({ width: 480, height: 820 }, null)).toBeNull();
+    expect(fitScreen({ width: 0, height: 0 }, desktop)).toBeNull();
+    expect(fitScreen({ width: 480, height: 820 }, { width: 0, height: 0 })).toBeNull();
   });
 });

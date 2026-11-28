@@ -21,8 +21,8 @@ export function PillTabs<T extends string>({ tabs, tab, onTab, ariaLabel, idPref
   label: (tab: T) => ReactNode;
   /** Beside the label: a count, an attention dot. */
   after?: (tab: T) => ReactNode;
-  /** The page's own data attributes on each tab. */
-  tabAttributes?: (tab: T) => Record<`data-${string}`, string | undefined>;
+  /** The page's own data attributes on each tab, and its tooltip. */
+  tabAttributes?: (tab: T) => Record<`data-${string}`, string | undefined> & { title?: string };
   tabClassName?: (tab: T) => string | false | undefined;
   /** Wrap each tab button (customize mode grip). */
   wrapTab?: (id: T, node: ReactNode) => ReactNode;

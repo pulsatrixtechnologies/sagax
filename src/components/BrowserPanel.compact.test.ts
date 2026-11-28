@@ -1,14 +1,16 @@
 // @vitest-environment happy-dom
 // Compact docked browser chrome (M-20261127-064): two rows, editable URL,
-// status pill, Take control, empty state, no framed card. Its sizes are the
-// app's own (M-20261127-179): pinned here by the shared classes they use.
+// Take control in the screen panel's shared top row (M-20261127-181), empty
+// state, no framed card. Its sizes are the app's own (M-20261127-179): pinned
+// here by the shared classes they use.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { LiveBrowserView, type LiveBrowserViewProps } from "./BrowserPanel.tsx-parts/LiveBrowserView";
 import { CIRCLE_BUTTON, CIRCLE_ICON, CIRCLE_LABEL, CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
 import { PLAIN_FIELD } from "./SettingsPrimitives";
-import { SCREEN_PANEL_TOP_ROW } from "./ScreenPanelChrome";
+import { FOLD_CHIP, FOLD_CHIP_LABEL, SCREEN_PANEL_TOP_ROW, ScreenPanelBar } from "./ScreenPanelChrome";
+import { liveBrowserViewProps } from "@/testing/live-browser-view-props";
 import type { Bot } from "@/state/store";
 
 vi.mock("@/lib/i18n", async (importOriginal) => {
@@ -35,6 +37,7 @@ vi.mock("@/lib/i18n", async (importOriginal) => {
         "browser.profile.current": `Browser profile: ${vars?.name ?? ""}`,
         "browser.control.giveBack": "Give back control",
         "sandboxDesktop.takeControl": "Take control",
+        "sandboxDesktop.controlling": "You have control",
         "browser.panel.browseWith": `Browse with ${vars?.name ?? ""}`,
         "browser.panel.browseWithHint": "Open a page in the address bar, or let the bot navigate.",
         "browser.live.opening": "Opening the live browser…",
@@ -45,75 +48,20 @@ vi.mock("@/lib/i18n", async (importOriginal) => {
 });
 
 const bot = { id: "pepper", name: "Pepper" } as unknown as Bot;
-const ref = <T,>(value: T) => ({ current: value });
 
 function base(over: Partial<LiveBrowserViewProps> = {}): LiveBrowserViewProps {
-  return {
-    bot,
-    allowed: true,
-    frame: null,
-    tabs: [],
-    addressBar: { value: "", error: "", readOnly: false, change: vi.fn(), focus: vi.fn(), blur: vi.fn(), revert: vi.fn(() => false), submit: vi.fn() },
-    connected: true,
-    control: { held: false, controlling: false, owned: false },
-    pending: false,
-    error: "",
-    showProfiles: false,
-    setShowProfiles: vi.fn(),
-    showTyping: false,
-    setShowTyping: vi.fn(),
-    masked: false,
-    setMasked: vi.fn(),
-    takeControl: vi.fn(),
-    handBack: vi.fn(),
-    viewport: { width: 800, height: 600 },
-    takeStatus: "",
-    busy: false,
-    reconnecting: false,
-    showNetwork: false,
-    setShowNetwork: vi.fn(),
-    recording: false,
-    recordingStartedAt: null,
-    taught: undefined,
-    setTaught: vi.fn(),
-    teachNote: "",
-    addressInput: ref(null),
-    profilesButton: ref(null),
-    profilesPopover: ref(null),
-    typingPopover: ref(null),
-    typingField: ref(null),
-    menuSummary: ref(null),
-    menu: { root: ref(null), toggled: vi.fn() },
-    profileName: "own",
-    interactive: true,
-    typingReady: false,
-    commandsReady: true,
-    heldElsewhere: false,
-    taking: false,
-    mine: false,
-    pageTitle: "",
+  return liveBrowserViewProps(bot, {
     holder: "Pepper is using the browser",
-    pill: "pill",
-    generation: ref(1),
-    viewer: ref("v1"),
-    browserControl: ref(null),
-    command: vi.fn(),
-    input: vi.fn(),
-    reconnect: vi.fn(),
-    execute: vi.fn(async () => {}),
-    startRecording: vi.fn(async () => {}),
-    stopRecording: vi.fn(async () => {}),
-    discardRecording: vi.fn(async () => {}),
-    action: vi.fn(async () => ({})),
-    confirm: vi.fn(async () => true),
-    setError: vi.fn(),
     docked: {
       title: "Pepper’s browser",
-      chrome: createElement("div", { "data-screen-panel-chrome": "" }, "chrome"),
-      placeSelector: createElement("div", { "data-screen-place-select": "" }, "places"),
+      bar: (slots) => createElement(ScreenPanelBar, {
+        ...slots,
+        places: createElement("div", { "data-screen-place-select": "" }, "places"),
+        tools: createElement("div", { "data-screen-panel-chrome": "" }, "chrome"),
+      }),
     },
     ...over,
-  };
+  });
 }
 
 describe("compact LiveBrowserView", () => {
@@ -135,14 +83,34 @@ describe("compact LiveBrowserView", () => {
     expect(html).toContain("Browse with Pepper");
   });
 
-  it("puts Take control on the address row while the bot has the browser", () => {
-    const html = renderToStaticMarkup(createElement(LiveBrowserView, base({
+  it("puts Take control in the shared top row, not on the address row, while the bot has the browser", () => {
+    const host = document.createElement("div");
+    host.innerHTML = renderToStaticMarkup(createElement(LiveBrowserView, base({
       frame: { seq: 1, data: "x", viewerId: "v1", generation: 1 },
     })));
-    expect(html).toContain('data-browser-holder="bot"');
-    expect(html).toContain("data-browser-take");
-    expect(html).toContain("Take control");
-    expect(html).not.toContain("min-h-10 items-center gap-2 border-b border-hairline/40 px-3");
+    const take = host.querySelector('[data-browser-holder="bot"][data-browser-take]')!;
+    expect(take.textContent).toBe("Take control");
+    expect(take.getAttribute("title")).toBe("Pepper is using the browser");
+    expect(take.closest("[data-screen-panel-bar]")).not.toBeNull();
+    expect(host.querySelector("[data-browser-address-row] [data-screen-control]")).toBeNull();
+    expect(host.querySelector("[data-browser-address-row] [data-screen-place-select]")).toBeNull();
+    expect(host.innerHTML).not.toContain("min-h-10 items-center gap-2 border-b border-hairline/40 px-3");
+  });
+
+  it("says You have control on the same switch while the person drives, and hands back from it", () => {
+    const handBack = vi.fn();
+    const host = document.createElement("div");
+    host.innerHTML = renderToStaticMarkup(createElement(LiveBrowserView, base({
+      frame: { seq: 1, data: "x", viewerId: "v1", generation: 1 },
+      control: { held: true, controlling: true, owned: true },
+      mine: true,
+      handBack,
+    })));
+    const mine = host.querySelector('[data-browser-holder="you"][data-browser-give-back]')!;
+    expect(mine.getAttribute("aria-pressed")).toBe("true");
+    expect(mine.textContent).toBe("You have control");
+    expect(mine.getAttribute("title")).toBe("Give back control");
+    expect(host.querySelectorAll("[data-screen-control]")).toHaveLength(1);
   });
 
   it("keeps a full-width left-aligned address field", () => {
@@ -174,29 +142,28 @@ describe("compact LiveBrowserView sizes, the app's own (M-20261127-179)", () => 
   };
 
   it("draws every round control as the chat header's: CIRCLE_BUTTON with the CIRCLE_ICON glyph", () => {
-    for (const over of [{}, { control: { held: true, controlling: true, owned: true } }]) {
-      const host = parse(over);
-      const round = [...host.querySelectorAll("[data-browser-tabs] > div > button, [data-browser-address-row] button:not([data-browser-take]):not([role=menuitem]), [data-browser-address-row] summary")];
-      // + (new tab); back, forward, reload; give back while held; profiles; the menu
-      expect(round.length).toBeGreaterThanOrEqual(6);
-      for (const element of round) {
-        expect(classes(element.getAttribute("class")), element.outerHTML.slice(0, 120)).toEqual(expect.arrayContaining(classes(CIRCLE_BUTTON)));
-        expect(glyph(element)).toEqual(CIRCLE_ICON);
-      }
+    const host = parse();
+    const round = [...host.querySelectorAll("[data-browser-tabs] > button, [data-browser-address-row] button:not([role=menuitem]), [data-browser-address-row] summary")];
+    // + (new tab); back, forward, reload; profiles; the menu
+    expect(round.length).toBeGreaterThanOrEqual(5);
+    for (const element of round) {
+      expect(classes(element.getAttribute("class")), element.outerHTML.slice(0, 120)).toEqual(expect.arrayContaining(classes(CIRCLE_BUTTON)));
+      expect(glyph(element)).toEqual(CIRCLE_ICON);
     }
   });
 
-  it("keeps the holder chip on screen in every state: its label folds, the chip never goes", () => {
-    for (const control of [{ held: false, controlling: false, owned: false }, { held: true, controlling: true, owned: true }]) {
-      const chip = parse({ control }).querySelector("[data-browser-holder-pill]")!;
+  it("draws Take control as the 36px labelled chip that folds on a narrow bar", () => {
+    for (const over of [{}, { control: { held: true, controlling: true, owned: true }, mine: true }]) {
+      const chip = parse(over).querySelector("[data-screen-control]")!;
       const list = classes(chip.getAttribute("class"));
-      expect(list.some((name) => /(^|:)hidden$/.test(name))).toBe(false);
-      expect(list).toContain("group-data-[fold=all]/screenbar:w-9");
-      expect(classes(chip.querySelector("span")!.getAttribute("class"))).toContain("group-data-[fold=all]/screenbar:sr-only");
+      expect(list).toEqual(expect.arrayContaining(classes(CIRCLE_LABEL_BUTTON).filter((name) => !/^(bg|text|border|hover:bg)-/.test(name))));
+      expect(list).toEqual(expect.arrayContaining(classes(FOLD_CHIP)));
+      expect(classes(chip.querySelector("span")!.getAttribute("class"))).toEqual(expect.arrayContaining(classes(FOLD_CHIP_LABEL)));
+      expect(glyph(chip)).toEqual(CIRCLE_ICON);
     }
   });
 
-  it("draws the page tabs, the holder and Take control as the 36px labelled chip, in the app's 13px type", () => {
+  it("draws the page tabs as the 36px labelled chip, in the app's 13px type", () => {
     const host = parse();
     const tabs = [...host.querySelectorAll("[data-browser-tab]")];
     expect(tabs).toHaveLength(2);
@@ -204,22 +171,20 @@ describe("compact LiveBrowserView sizes, the app's own (M-20261127-179)", () => 
       const list = classes(tab.getAttribute("class"));
       expect(list).toEqual(expect.arrayContaining(["h-9", "rounded-full", "text-[13px]", "leading-[18px]"]));
       expect(classes(tab.querySelector("button[aria-label]")!.getAttribute("class"))).toContain("ui-icon-button");
-      // the select button is the whole chip up to the close, globe included
       const select = tab.querySelector("button[data-browser-tab-title]")!;
       expect(classes(select.getAttribute("class"))).toContain("self-stretch");
       expect(select.querySelector("svg")).not.toBeNull();
     }
     expect(classes(CIRCLE_LABEL)).toEqual(expect.arrayContaining(["h-9", "rounded-full", "border-circle-ring", "bg-circle", "text-[13px]", "leading-[18px]"]));
-    expect(classes(host.querySelector("[data-browser-holder-pill]")!.getAttribute("class"))).toEqual(expect.arrayContaining(classes(CIRCLE_LABEL).filter((name) => name !== "border-circle-ring" && name !== "bg-circle" && name !== "text-ink")));
     const take = host.querySelector("[data-browser-take]")!;
     expect(classes(take.getAttribute("class"))).toEqual(expect.arrayContaining(["h-9", "rounded-full", "text-[13px]", "bg-accent", "text-accent-ink"]));
     expect(CIRCLE_LABEL_BUTTON.startsWith(CIRCLE_LABEL)).toBe(true);
   });
 
-  it("uses the app's field for the address and the frame's header height for the tab row", () => {
+  it("uses the app's field for the address and the frame's header height for the shared top row", () => {
     const host = parse();
     expect(classes(host.querySelector("[data-browser-address-row] input")!.getAttribute("class"))).toEqual(expect.arrayContaining(classes(PLAIN_FIELD)));
-    expect(classes(host.querySelector("[data-browser-tabs]")!.getAttribute("class"))).toEqual(expect.arrayContaining(classes(SCREEN_PANEL_TOP_ROW)));
+    expect(classes(host.querySelector("[data-screen-panel-bar]")!.getAttribute("class"))).toEqual(expect.arrayContaining(classes(SCREEN_PANEL_TOP_ROW)));
     expect(SCREEN_PANEL_TOP_ROW).toContain("min-h-(--app-topbar-height)");
     const row = host.querySelector("[data-browser-address-row]")!;
     expect(classes(row.getAttribute("class"))).toContain("group/screenbar");
@@ -229,9 +194,9 @@ describe("compact LiveBrowserView sizes, the app's own (M-20261127-179)", () => 
   });
 
   it("keeps no undersized control or type in the two rows", () => {
-    for (const over of [{}, { control: { held: true, controlling: true, owned: true } }, { tabs: [] }]) {
+    for (const over of [{}, { control: { held: true, controlling: true, owned: true }, mine: true }, { tabs: [] }]) {
       const host = parse(over);
-      const rows = [...host.querySelectorAll("[data-browser-tabs], [data-browser-address-row]")].map((row) => {
+      const rows = [...host.querySelectorAll("[data-screen-panel-bar], [data-browser-address-row]")].map((row) => {
         const copy = row.cloneNode(true) as HTMLElement;
         copy.querySelectorAll("[role=menu]").forEach((menu) => menu.remove());
         // a tab's own close is the app's 28px icon button (ui-icon-button), its glyph 14px

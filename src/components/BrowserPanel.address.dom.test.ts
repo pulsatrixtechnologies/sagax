@@ -14,6 +14,7 @@ const api = vi.hoisted(() => vi.fn());
 vi.mock("@/state/store", () => ({ api, useStore: () => ({ state: { config: { browserProfiles: [] }, computerControl: {} } }) }));
 vi.mock("./BrowserProfilesManager", () => ({ BrowserProfilesManager: () => null }));
 import { LiveBrowser } from "./BrowserPanel";
+import { ScreenPanelBar } from "./ScreenPanelChrome";
 
 class FakeSource {
   static all: FakeSource[] = [];
@@ -39,7 +40,8 @@ const navigations = () => api.mock.calls.map(([, init]) => JSON.parse(String(ini
 const field = () => host.querySelector("input[aria-label='Browser address']") as HTMLInputElement;
 const alertText = () => [...host.querySelectorAll("[role=alert]")].map((node) => node.textContent).join(" ");
 // Each page tab is a box with its select button first, then its close button.
-const tabLabels = () => [...host.querySelectorAll("[data-browser-tabs] > div > div > button:first-of-type")].map((node) => node.textContent);
+// Docked tabs sit in the shared top row (ScreenPanelBar leading, M-20261127-181).
+const tabLabels = () => [...host.querySelectorAll("[data-browser-tabs] > div > button:first-of-type")].map((node) => node.textContent);
 const emit = async (name: string, data?: unknown) => { await act(async () => FakeSource.all[0]!.emit(name, data)); };
 const type = (text: string) => act(() => {
   const input = field();
@@ -64,7 +66,16 @@ beforeEach(async () => {
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
-  await act(async () => root.render(createElement(LiveBrowser, { bot, docked: { title: "Nimbus’s browser", chrome: null } })));
+  await act(async () => root.render(createElement(LiveBrowser, {
+    bot,
+    docked: {
+      title: "Nimbus’s browser",
+      bar: (slots) => createElement(ScreenPanelBar, {
+        ...slots,
+        tools: createElement("div", { "data-screen-panel-chrome": "" }),
+      }),
+    },
+  })));
   await emit("ready", { viewerId: "v1" });
   await emit("tabs", { tabs: [{ tabId: "t1", title: "test at DuckDuckGo", url: SEARCH, active: true }] });
 });

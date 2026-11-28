@@ -674,8 +674,11 @@ function BrowserNote({ caption, children }: { caption: string; children: ReactNo
 
 /** `live`: the screen side panel (#4452) draws the live browser in place, in its
  * own column, instead of the Computer tab's preview square and its window.
- * `docked`: compact chrome from the side panel (tabs + Detach / Expand / Close). */
+ * `docked`: the side panel's shared top row (page tabs, Take control, place
+ * selector, Mark up, Detach, Expand, Close); a browser that cannot show keeps
+ * that row above its note, so Close and the place selector never vanish. */
 export function BrowserPanel({ bot, signIn, live = false, onDescriber, docked }: { bot: Bot; signIn?: BrowserSignIn | undefined; live?: boolean; onDescriber?: ((describe: BrowserDescriber | null) => void) | undefined; docked?: LiveBrowserDocked }) {
+  const note = (body: ReactNode) => docked ? <>{docked.bar({ leading: null })}<div className="p-3">{body}</div></> : body;
   const { state } = useStore();
   const engine = state.config?.browserEngine;
   const [requested, setRequested] = useState(false);
@@ -690,16 +693,16 @@ export function BrowserPanel({ bot, signIn, live = false, onDescriber, docked }:
     finally { setRequested(false); }
   };
   const caption = t("computer.browserOf", { name: bot.name });
-  if (bot.browser === false) return <BrowserNote caption={caption}><p className="text-[13px] text-ink-secondary">{t("browser.panel.enable")}</p></BrowserNote>;
+  if (bot.browser === false) return note(<BrowserNote caption={caption}><p className="text-[13px] text-ink-secondary">{t("browser.panel.enable")}</p></BrowserNote>);
   // Watching and taking over a session the bot already opened is for anyone
   // who can use the bot. Installing the engine on this computer stays admin.
   if (engine?.kind === "engine" && !installing && !engine.installError) {
     return live ? <LiveBrowser key={bot.id} bot={bot} signIn={signIn} onDescriber={onDescriber} docked={docked} /> : <BrowserComputerScreen key={bot.id} bot={bot} signIn={signIn} />;
   }
-  return <BrowserNote caption={caption}>
+  return note(<BrowserNote caption={caption}>
     <div className="text-[15px] font-medium text-ink">{engine?.kind === "engine" ? t("browser.panel.incomplete") : t("browser.panel.notInstalled")}</div>
     <p className="text-[13px] leading-relaxed text-ink-secondary">{engine?.kind === "engine" ? t("browser.panel.incompleteHint") : <BrowserUnavailableNote config={state.config} />}</p>
     {engine?.installable || engine?.kind === "engine" ? <button type="button" onClick={() => void install()} disabled={installing || admin !== true} className="rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-accent-ink disabled:opacity-60">{installing ? t("browser.panel.installing") : engine?.kind === "engine" ? t("browser.panel.retryInstall") : t("browser.panel.install")}</button> : null}
     {(engine?.installError || error) && <p role="alert" className="text-[12px] text-danger">{error ?? engine?.installError}</p>}
-  </BrowserNote>;
+  </BrowserNote>);
 }

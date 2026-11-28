@@ -30,14 +30,17 @@ export type ScreenMarksState = ReturnType<typeof useScreenMarks>;
  * browser's frame, the remote computer's or Local VM's picture, or the VM's
  * VNC canvas. One finder for every place of the panel (#4452). */
 const FRAME_PICTURE = "img[data-browser-frame], img[data-remote-session-shot], img[data-local-live-frame]";
-function frameImage(host: HTMLElement | null) {
+const FRAME_CANVAS = "[data-sandbox-desktop] canvas";
+/** Any element that draws a place's picture, loaded or not. */
+export const SCREEN_PICTURE = `${FRAME_PICTURE}, ${FRAME_CANVAS}`;
+export function frameImage(host: HTMLElement | null) {
   const picture = host?.querySelector<HTMLImageElement>(FRAME_PICTURE) ?? null;
   if (picture) {
     if (!picture.complete || !picture.naturalWidth) return null;
     const page = browserFrameSize(picture.naturalWidth, picture.naturalHeight, Number(picture.dataset.frameWidth) || picture.naturalWidth, Number(picture.dataset.frameHeight) || picture.naturalHeight);
     return { image: picture, width: picture.naturalWidth, height: picture.naturalHeight, page };
   }
-  const canvas = host?.querySelector<HTMLCanvasElement>("[data-sandbox-desktop] canvas") ?? null;
+  const canvas = host?.querySelector<HTMLCanvasElement>(FRAME_CANVAS) ?? null;
   if (!canvas?.width || !canvas.height) return null;
   return { image: canvas, width: canvas.width, height: canvas.height, page: { width: canvas.width, height: canvas.height } };
 }

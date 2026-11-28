@@ -1,11 +1,12 @@
 // Live browser chrome and page (extracted from LiveBrowser for #1383).
-// Compact docked layout (M-20261127-064): one tab row with panel actions, one
-// address row with a full-width editable URL, status pill and Take control
-// icon; the page fills the rest with no framed card and no letterbox bands.
-// Its controls are the app's own sizes (M-20261127-179): the chat header's
-// round buttons and glyphs (CIRCLE_BUTTON, CIRCLE_ICON), the 36px labelled
-// chip (CIRCLE_LABEL) for the tabs, the holder and Take control, the app's
-// field (PLAIN_FIELD) for the address; while the address row cannot hold its
+// Compact docked layout (M-20261127-064): the screen panel's shared top row
+// (ScreenPanelBar, M-20261127-181) holds the page tabs on the left and Take
+// control at the spot it has in the VM; under it one address row with a
+// full-width editable URL, profiles and the menu; the page fills the rest with
+// no framed card and no letterbox bands. Its controls are the app's own sizes
+// (M-20261127-179): the chat header's round buttons and glyphs (CIRCLE_BUTTON,
+// CIRCLE_ICON), the 36px labelled chip (CIRCLE_LABEL) for the page tabs, the
+// app's field (PLAIN_FIELD) for the address; while a row cannot hold its
 // labels it folds them (ScreenBar), never a size and never a control.
 import type { RefObject, Dispatch, FormEvent, SetStateAction, ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Bot as BotIcon, EllipsisVertical, Globe, Hand, Loader2, LockKeyhole, Plus, RotateCw, UserRound, X } from "lucide-react";
@@ -24,8 +25,8 @@ import { MENU_FIT_ROW, MENU_ROW, MENU_SURFACE } from "../menu-look";
 import { AnchoredPopover } from "../AnchoredPopover";
 import { PILL, PLAIN_FIELD, PRIMARY_PILL } from "../SettingsPrimitives";
 import { panelStageRef } from "@/lib/browser-panel-viewport";
-import { CIRCLE_ICON, CIRCLE_LABEL, CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
-import { FOLD_CHIP, FOLD_CHIP_LABEL, SCREEN_PANEL_TOOL, SCREEN_PANEL_TOP_ROW, ScreenBar } from "../ScreenPanelChrome";
+import { CIRCLE_ICON, CIRCLE_LABEL } from "@/lib/circle-button";
+import { SCREEN_PANEL_TOOL, ScreenBar, type ScreenControlState, type ScreenPanelBarSlots } from "../ScreenPanelChrome";
 import type { AddressBar } from "./useAddressBar";
 
 interface BrowserTab { tabId: string; title: string; url: string; active: boolean }
@@ -37,14 +38,13 @@ const DOCKED_TAB = cn(CIRCLE_LABEL, "max-w-48 gap-0 pl-0 pr-1 font-normal");
 /** Its select button fills the chip up to the close, globe included: the whole tab is the target. */
 const DOCKED_TAB_SELECT = "flex min-w-0 items-center gap-1 self-stretch pl-3 pr-0.5 text-left disabled:cursor-default";
 const DOCKED_TAB_IDLE = "border-transparent bg-transparent text-ink-secondary hover:bg-circle-hover hover:text-ink";
-/** Take control: the top bar's labelled button in the accent, the one action of the row. */
-const DOCKED_TAKE = cn(CIRCLE_LABEL_BUTTON, "border-transparent bg-accent text-accent-ink hover:bg-accent hover:brightness-110 disabled:opacity-50", FOLD_CHIP);
 
-/** Chrome the docked screen panel injects into the tab and address rows. */
+/** The docked screen panel: its name, and its one top row, which the browser
+ * fills with its page tabs and its Take control. Mark up draws over the page
+ * only (`stageOverlay`), never over the two rows (M-20261127-180). */
 export type LiveBrowserDocked = {
   title: string;
-  chrome: ReactNode;
-  placeSelector?: ReactNode;
+  bar: (slots: ScreenPanelBarSlots) => ReactNode;
   /** Drawn over the page only (the marks overlay), never over the two rows. */
   stageOverlay?: ReactNode;
 };
@@ -134,34 +134,46 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
   // The docked panel draws the app's sizes; the large window keeps its own bar.
   const tool = compact ? SCREEN_PANEL_TOOL : iconBtn;
   const glyph = compact ? CIRCLE_ICON : { size: 15 };
-  const tabsRow = (
-    <div data-browser-tabs="" className={compact ? SCREEN_PANEL_TOP_ROW : "flex min-h-12 items-center gap-0.5 px-2 pt-1.5"}>
-      <div className={cn("flex min-w-0 flex-1 items-center overflow-x-auto", compact ? "gap-1" : "gap-0.5")}>
-        {/* A page with no title yet reads as its site, never as a new tab (tabLabel). */}
-        {tabs.length ? tabs.map((tab) => (
-          <div key={tab.tabId} data-browser-tab="" className={compact ? cn(DOCKED_TAB, !tab.active && DOCKED_TAB_IDLE) : cn("flex max-w-44 shrink-0 items-center gap-0.5 rounded-lg px-0.5 text-[12px]", tab.active ? "bg-inset text-ink" : "text-ink-secondary")}>
-            {compact ? (
-              <button data-browser-tab-title="" className={DOCKED_TAB_SELECT} disabled={!commandsReady} onClick={() => command({ type: "tab-select", tabId: tab.tabId })} title={tab.title || tab.url}>
-                <Globe size={16} strokeWidth={1.75} className="shrink-0 opacity-60" aria-hidden="true" />
-                <span className="truncate">{tabLabel(tab) || t("browser.tab.new")}</span>
-              </button>
-            ) : (
-              <>
-                <Globe size={12} className="ml-1 shrink-0 opacity-60" aria-hidden="true" />
-                <button data-browser-tab-title="" className="truncate px-1 py-1.5 text-left disabled:cursor-default" disabled={!commandsReady} onClick={() => command({ type: "tab-select", tabId: tab.tabId })} title={tab.title || tab.url}>{tabLabel(tab) || t("browser.tab.new")}</button>
-              </>
-            )}
-            <button className={compact ? "ui-icon-button shrink-0 rounded-full" : button} aria-label={tabLabel(tab) ? t("browser.tab.close", { title: tabLabel(tab) }) : t("browser.tab.closeUntitled")} disabled={!commandsReady} onClick={() => command({ type: "tab-close", tabId: tab.tabId })}><X size={compact ? 14 : 12} strokeWidth={compact ? 1.75 : 2} /></button>
-          </div>
-        )) : (
-          <div data-browser-tab="" className={compact ? cn(DOCKED_TAB, "gap-1 px-3 text-ink-secondary") : "flex items-center gap-1.5 rounded-lg bg-inset px-2 py-1 text-[12px] text-ink-secondary"}><Globe size={compact ? 16 : 12} strokeWidth={compact ? 1.75 : 2} aria-hidden="true" /><span data-browser-tab-title="">{t("browser.tab.new")}</span></div>
-        )}
-        <button className={`${tool} shrink-0`} disabled={!commandsReady} aria-label={t("browser.tab.new")} title={t("browser.tab.new")} onClick={() => command({ type: "tab-new" })}><Plus {...glyph} /></button>
-      </div>
-      {!compact && (
-        <button ref={profilesButton} type="button" className={`${button} rounded-xl bg-inset p-2`} title={t("browser.profile.current", { name: profileName })} aria-label={t("browser.profiles.open")} aria-expanded={showProfiles} aria-haspopup="dialog" onClick={() => { handBack(); setShowProfiles((open) => !open); }}><UserRound size={16} /></button>
+
+  const pageTabs = (
+    <div data-browser-tabs={compact ? "" : undefined} className={cn("flex min-w-0 flex-1 items-center overflow-x-auto", compact ? "gap-1" : "gap-0.5")}>
+      {/* A page with no title yet reads as its site, never as a new tab (tabLabel). */}
+      {tabs.length ? tabs.map((tab) => (
+        <div key={tab.tabId} data-browser-tab="" className={compact ? cn(DOCKED_TAB, !tab.active && DOCKED_TAB_IDLE) : cn("flex max-w-44 shrink-0 items-center gap-0.5 rounded-lg px-0.5 text-[12px]", tab.active ? "bg-inset text-ink" : "text-ink-secondary")}>
+          {compact ? (
+            <button data-browser-tab-title="" className={DOCKED_TAB_SELECT} disabled={!commandsReady} onClick={() => command({ type: "tab-select", tabId: tab.tabId })} title={tab.title || tab.url}>
+              <Globe size={16} strokeWidth={1.75} className="shrink-0 opacity-60" aria-hidden="true" />
+              <span className="truncate">{tabLabel(tab) || t("browser.tab.new")}</span>
+            </button>
+          ) : (
+            <>
+              <Globe size={12} className="ml-1 shrink-0 opacity-60" aria-hidden="true" />
+              <button data-browser-tab-title="" className="truncate px-1 py-1.5 text-left disabled:cursor-default" disabled={!commandsReady} onClick={() => command({ type: "tab-select", tabId: tab.tabId })} title={tab.title || tab.url}>{tabLabel(tab) || t("browser.tab.new")}</button>
+            </>
+          )}
+          <button className={compact ? "ui-icon-button shrink-0 rounded-full" : button} aria-label={tabLabel(tab) ? t("browser.tab.close", { title: tabLabel(tab) }) : t("browser.tab.closeUntitled")} disabled={!commandsReady} onClick={() => command({ type: "tab-close", tabId: tab.tabId })}><X size={compact ? 14 : 12} strokeWidth={compact ? 1.75 : 2} /></button>
+        </div>
+      )) : (
+        <div data-browser-tab="" className={compact ? cn(DOCKED_TAB, "gap-1 px-3 text-ink-secondary") : "flex min-w-0 items-center gap-1.5 rounded-lg bg-inset px-2 py-1 text-[12px] text-ink-secondary"}><Globe size={compact ? 16 : 12} strokeWidth={compact ? 1.75 : 2} aria-hidden="true" /><span data-browser-tab-title="" className={compact ? undefined : "truncate"}>{t("browser.tab.new")}</span></div>
       )}
-      {compact && docked?.chrome}
+      <button className={`${tool} shrink-0`} disabled={!commandsReady} aria-label={t("browser.tab.new")} title={t("browser.tab.new")} onClick={() => command({ type: "tab-new" })}><Plus {...glyph} /></button>
+    </div>
+  );
+
+  // Docked: who has the browser is the shared switch's state, at the spot the
+  // VM's Take control has; its tooltip says who drives and on which page.
+  const dockedControl: ScreenControlState | null = compact && allowed && connected && !heldElsewhere ? {
+    on: mine,
+    onChange: (next) => { if (next) takeControl(); else handBack(); },
+    disabled: !mine && (taking || pending),
+    title: mine ? t("browser.control.giveBack") : pageTitle ? `${holder} · ${pageTitle}` : holder,
+    attributes: mine ? { "data-browser-holder": "you", "data-browser-give-back": "" } : { "data-browser-holder": "bot", "data-browser-take": "" },
+  } : null;
+
+  const tabsRow = docked ? docked.bar({ leading: pageTabs, control: dockedControl }) : (
+    <div data-browser-tabs="" className="flex min-h-12 items-center gap-0.5 px-2 pt-1.5">
+      {pageTabs}
+      <button ref={profilesButton} type="button" className={`${button} rounded-xl bg-inset p-2`} title={t("browser.profile.current", { name: profileName })} aria-label={t("browser.profiles.open")} aria-expanded={showProfiles} aria-haspopup="dialog" onClick={() => { handBack(); setShowProfiles((open) => !open); }}><UserRound size={16} /></button>
     </div>
   );
 
@@ -193,35 +205,6 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
           ? cn(PLAIN_FIELD, "flex-1 text-left")
           : "mx-1 min-w-0 flex-1 rounded-md bg-inset/60 px-2 py-1 text-center text-[12px] outline-none placeholder:text-ink-secondary focus:bg-inset focus:text-left focus:ring-1 focus:ring-accent/50"}
       />
-      {compact && docked?.placeSelector}
-      {compact && allowed && connected && !heldElsewhere && (
-        <span data-browser-holder={mine ? "you" : "bot"} className="flex shrink-0 items-center gap-1">
-          <span
-            data-browser-holder-pill=""
-            className={cn(CIRCLE_LABEL, "max-w-[11rem]", FOLD_CHIP, mine && "border-accent-border bg-accent/15 text-accent-text")}
-            title={pageTitle ? `${holder} · ${pageTitle}` : holder}
-          >
-            {mine ? <Hand {...CIRCLE_ICON} className="shrink-0" aria-hidden="true" /> : <BotIcon {...CIRCLE_ICON} className="shrink-0" aria-hidden="true" />}
-            <span className={cn("truncate", FOLD_CHIP_LABEL)}>{mine ? holder : bot.name}</span>
-          </span>
-          {mine ? (
-            <button type="button" data-browser-give-back="" onClick={handBack}
-              className={tool}
-              aria-label={t("browser.control.giveBack")}
-              title={t("browser.control.giveBack")}>
-              <BotIcon {...glyph} aria-hidden="true" />
-            </button>
-          ) : (
-            <button type="button" data-browser-take="" disabled={taking || pending} onClick={takeControl}
-              className={DOCKED_TAKE}
-              aria-label={t("sandboxDesktop.takeControl")}
-              title={t("sandboxDesktop.takeControl")}>
-              <Hand {...CIRCLE_ICON} className="shrink-0" aria-hidden="true" />
-              <span className={cn("max-w-[9rem] truncate", FOLD_CHIP_LABEL)}>{t("sandboxDesktop.takeControl")}</span>
-            </button>
-          )}
-        </span>
-      )}
       {compact && (
         <button ref={profilesButton} type="button" className={tool} title={docked?.title ? `${t("browser.profile.current", { name: profileName })} · ${docked.title}` : t("browser.profile.current", { name: profileName })} aria-label={t("browser.profiles.open")} aria-expanded={showProfiles} aria-haspopup="dialog" onClick={() => { handBack(); setShowProfiles((open) => !open); }}><UserRound {...glyph} /></button>
       )}

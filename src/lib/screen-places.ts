@@ -7,6 +7,7 @@ import type { RemoteSessionView } from "../../shared/remote-session";
 import type { ServerEnvironmentStatus } from "@/lib/server-environment";
 import type { DesktopBridgeStatus } from "@/lib/desktop-bridge";
 import { effectivePlace, orgComputerFor } from "@/lib/place";
+import { containedBox } from "@/lib/screen-marks";
 import type { Bot } from "@/state/store";
 
 export type ScreenPlace = "browser" | "vm" | "remote";
@@ -58,4 +59,17 @@ export function activePlace(places: readonly ScreenPlace[], picked: ScreenPlace 
 /** "Last picture at 14:32:05": the time of the newest frame of a place that has no live stream. */
 export function frameTime(at: number, locale?: string): string {
   return new Date(at).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit", second: "2-digit" });
+}
+
+export type ScreenSize = { width: number; height: number };
+
+/** The size a VM's or remote computer's screen takes in the panel
+ * (M-20261127-181): the whole width or the whole height of the room,
+ * whichever it reaches first at the picture's own proportions, in whole
+ * pixels. Null until both are known: the dark frame then fills the room. */
+export function fitScreen(room: ScreenSize, picture: ScreenSize | null): ScreenSize | null {
+  if (!picture) return null;
+  const box = containedBox({ left: 0, top: 0, width: room.width, height: room.height }, picture.width, picture.height);
+  const width = Math.floor(box.width), height = Math.floor(box.height);
+  return width >= 1 && height >= 1 ? { width, height } : null;
 }

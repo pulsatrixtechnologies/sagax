@@ -740,6 +740,18 @@ dessous (« écran de » suivi du nom du bot).
   Cmd/Ctrl+Maj+Échap ferment toujours la fenêtre selon les règles clavier existantes ;
   fermer ou replier rend le contrôle. Pour le navigateur du bot, la coquille est la
   même sans le contrôle segmenté (sa propre barre dit qui conduit).
+- **Panneau d'écran latéral** (Cmd+Maj+B, à côté du chat ; propriétaire, M-20261127-181) :
+  une seule rangée du haut pour chaque lieu. À gauche, ce qui est propre au lieu (les
+  onglets de pages du navigateur, le nom de la VM ou de l'ordinateur distant) ; à droite,
+  toujours dans cet ordre : Prendre le contrôle (le même interrupteur partout ; « Tu as le
+  contrôle » quand la personne conduit), sélecteur de lieu (Navigateur, VM, Ordinateur
+  distant), Annoter, Détacher, Agrandir, Fermer. Un bouton ne bouge jamais quand on passe
+  d'un lieu à l'autre : Prendre le contrôle, le seul qu'un lieu peut ne pas avoir (une VM
+  locale), est à gauche du sélecteur, qui ne se déplace donc pas sous le pointeur. Le navigateur ajoute une seule rangée dessous (précédent,
+  suivant, recharger, l'adresse, profils, menu). L'écran de la VM ou de l'ordinateur
+  distant occupe toute la largeur ou toute la hauteur libre à ses propres proportions,
+  collé sous la rangée du haut comme la page du navigateur, sans bande vide au-dessus, et
+  suit chaque redimensionnement du panneau et de la fenêtre.
 - Réglages de l'ordinateur (Réglages > Ordinateur) : exécution sur cet ordinateur
   (demander, toujours, jamais), routage du trafic par cet ordinateur avec une phrase
   qui dit l'état actuel, liste des appareils (icône, nom, point vert « en ligne

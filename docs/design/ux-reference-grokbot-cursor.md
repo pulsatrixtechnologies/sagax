@@ -3616,6 +3616,23 @@ tab (M-20261127-108), the totals with the B, NC and DNB share (success,
 warning, the secondary ink), one list by day, each entry's tag changed in
 place (M-20261127-138). Not built: the Data tab (no recorded instruction).
 
+The company's and the contact's window (M-20261127-140, D-20261127-010):
+the tabs across the window with their counts (M-20261127-117), the body one
+column that scrolls. The Profile is Sagax's own drawing of the mockup, not the
+product's screen (M-20261127-123): a head with the record's mark (its
+initials on the pods' fill, agent's choice: no picture is sent), its context
+in one line and round buttons to call, write, open its site and its LinkedIn
+page; four figures, each a button to its tab; at the left "Coming up" as
+dated cards and "What moved" as a timeline with one icon per kind; at the
+right the key contacts with their role, then the contact details (a contact:
+its preferences). Tickets use the board's grid (M-20261127-145) with the next
+planned entry and who in its tooltip (M-20261127-129); Activities list what
+comes then what is done, "Done" on each row; Contacts, Projects,
+Opportunities, Attachments and Sites are cards; Configurations are grouped by
+type; Agreements draw the block of hours as a ring; Finance and Data are
+figures and one-series bars in the accent. A contact opens in the same window
+with the trail back to its company (M-20261127-101).
+
 Captures: `scripts/capture/record-window.mjs` (headless Chrome, DPR 2) of
 `src/gallery/record-window.html`: every tab of the ticket window, the note
 being written, the + menu, the completed entries, a billing menu, the

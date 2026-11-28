@@ -26,8 +26,10 @@ import { useSharedPersonProducts } from "@/lib/person-products";
 import { findRecordKind, peekRecordCard, prefetchRecordCard, readRecordCard, recordKindName, useRecordCard } from "@/lib/record-cards";
 import { placeRecordWindow, recordWindowType } from "@/lib/record-window-layout";
 import { TicketWindow } from "@/components/record-window/ticket/TicketWindow";
+import { accountWindow } from "@/components/record-window/account/AccountWindow";
+import type { AccountTab } from "@/components/record-window/account/account-model";
 import { useStoreOptional } from "@/state/store";
-import { recordMarkdown, type RecordRef } from "../../shared/record-cards";
+import { recordKey, recordMarkdown, type RecordRef } from "../../shared/record-cards";
 
 /** The text a link's children spell (a label is plain text). */
 export function nodeText(node: ReactNode): string {
@@ -151,11 +153,18 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
   const { product, kind } = findRecordKind(products, current.ref);
   const read = useRecordCard(current.ref, { enabled: true });
   // a ticket card becomes the ticket window once the card is read (its tabs, its
-  // fields column, its writes); a server without the detail route leaves the original card
+  // fields column, its writes); a server without the detail route leaves the original card.
+  // A company and a contact become their window at once (M-20261127-140): the card's facts,
+  // then the sections the console serves for them
   const { refresh: refreshCard } = read;
-  const detail = useRecordDetail(current.ref, current.ref.kind === "ticket" && Boolean(read.card), refreshCard);
+  const refKind = current.ref.kind;
+  const account = refKind === "company" || refKind === "contact" ? refKind : null;
+  const detail = useRecordDetail(current.ref, (refKind === "ticket" || account !== null) && Boolean(read.card), refreshCard);
   const { refresh: refreshDetail } = detail;
   const refresh = useCallback(() => { refreshCard(); refreshDetail(); }, [refreshCard, refreshDetail]);
+  // each record of the way keeps the tab the person chose, back and forth
+  const [tabs, setTabs] = useState<Record<string, AccountTab>>({});
+  const key = recordKey(current.ref);
   const link = recordMarkdown(current.label, current.ref);
   // the way here, from the chip's record to this one (M-20261119-084): a number reads with its kind
   const way = [{ ref: record, label }, ...trail];
@@ -171,7 +180,10 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
       kindName={recordKindName(kind)}
       product={product ? { name: product.name, ...(product.icon?.url ? { iconUrl: product.icon.url } : {}) } : undefined}
       read={detail.detail ? { ...read, refresh } : read}
-      window={detail.detail && read.card ? {
+      window={!read.card ? undefined : account ? accountWindow({
+        kind: account, card: read.card, detail: detail.detail, type: recordWindowType(current.ref), now: Date.now(),
+        tab: tabs[key], onTab: (tab) => setTabs((now) => ({ ...now, [key]: tab })), idPrefix: `record-${account}-${current.ref.id.replace(/[^A-Za-z0-9_-]/g, "_")}`,
+      }) : detail.detail ? {
         body: <TicketWindow card={read.card} detail={detail.detail} type={recordWindowType(current.ref)} now={Date.now()}
           onScheduleMe={onBotAsk ? () => onBotAsk(t("recordWindow.schedule.mePrompt", { record: link })) : undefined}
           onDispatch={onBotAsk ? () => onBotAsk(t("recordWindow.schedule.dispatchPrompt", { record: link })) : undefined} />,

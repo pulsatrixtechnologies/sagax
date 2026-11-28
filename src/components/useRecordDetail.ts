@@ -1,4 +1,5 @@
-// The detail of one open ticket window (M-20261127-101): its counts, the
+// The detail of one open record window (M-20261127-101: a ticket, a company,
+// a contact): its counts, the
 // sections each tab reads (on demand, a section kept for the card's time to
 // live, every page of it joined), the choices of a field or a form, the
 // field writes, the title written in place and the window's actions (a note,
@@ -25,14 +26,17 @@ const DEPENDENTS: Partial<Record<RecordEditField, RecordEditField[]>> = {
   subtype: ["item"],
 };
 
-/** The sections an action changes: read again once it is written. */
+/** The sections an action changes: read again once it is written, when the window showed them
+ * (a company's sheet says what moved and what comes, so most writes change it too). */
 const CHANGES: Record<string, DetailSection[]> = {
-  note: ["notes"],
+  note: ["notes", "sheet"],
   time: ["time"],
   expense: ["expenses"],
-  schedule: ["schedule", "activities"],
+  schedule: ["schedule", "activities", "sheet"],
   configuration: ["configurations"],
-  attachment: ["attachments"],
+  attachment: ["attachments", "sheet"],
+  contact: ["contacts", "sheet"],
+  site: ["sites", "sheet"],
 };
 
 /** The title written in place: the console listed it as editable. */
@@ -48,6 +52,8 @@ export interface DetailSectionState<K extends DetailSection> {
 
 export interface RecordDetail {
   counts: Partial<Record<DetailSection, number>>;
+  /** the counts answer came: the tabs it names can be drawn (a company's tabs wait for it) */
+  known: boolean;
   countError: string;
   /** the console takes this action for the record (a console that lists none: any is tried) */
   can: (action: RecordActionName) => boolean;
@@ -71,6 +77,7 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
   const [titleEditable, setTitleEditable] = useState(false);
   const [actions, setActions] = useState<ReadonlySet<RecordActionName> | null>(null);
   const [counts, setCounts] = useState<Partial<Record<DetailSection, number>>>({});
+  const [countsKnown, setCountsKnown] = useState(false);
   const [countError, setCountError] = useState("");
   const [missing, setMissing] = useState(false);
   // the sections read, for one record: a page of another record (the one before) is never shown
@@ -81,6 +88,8 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
   const [revision, setRevision] = useState(0);
   const cache = useRef(new Map<DetailSection, Entry>());
   const wanted = useRef(new Set<DetailSection>());
+  // a section a write changed while the window did not show it: read fresh when it is shown
+  const changedUnseen = useRef(new Set<DetailSection>());
   const choiceCache = useRef(new Map<string, { at: number; read: Promise<RecordChoice[]> }>());
   const source = useMemo(() => {
     if (!enabled) return undefined;
@@ -93,6 +102,7 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
     // another record: nothing kept of the last one (before any child asks for a section)
     cache.current = new Map();
     wanted.current = new Set();
+    changedUnseen.current = new Set();
     choiceCache.current = new Map();
   }
   live.current = source?.token;
@@ -105,6 +115,7 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
     setTitleEditable(false);
     setActions(null);
     setCounts({});
+    setCountsKnown(false);
     setCountError("");
     setMissing(false);
     setSaved({});
@@ -158,6 +169,7 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
     readDetailCounts(source.record, revision > 0).then((read) => {
       if (!current) return;
       setCounts(read.counts);
+      setCountsKnown(true);
       setFields(read.fields);
       setTitleEditable(read.title);
       setActions(read.actions);
@@ -173,7 +185,8 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
     for (const tab of tabs) {
       wanted.current.add(tab);
       const entry = cache.current.get(tab);
-      if (!entry || Date.now() - entry.at >= RECORD_CARD_TTL_MS) load(tab, false);
+      const fresh = changedUnseen.current.delete(tab);
+      if (fresh || !entry || Date.now() - entry.at >= RECORD_CARD_TTL_MS) load(tab, fresh);
     }
   }, [load]);
 
@@ -239,6 +252,7 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
     if (!source || missing) return undefined;
     return {
       counts,
+      known: countsKnown,
       countError,
       can: (action) => actions === null || actions.has(action),
       section: <K extends DetailSection>(tab: K) => ((pages.token === source.token ? pages.map[tab] : undefined) ?? { loading: true, error: "" }) as unknown as DetailSectionState<K>,
@@ -246,7 +260,10 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
       write: async (action) => {
         await writeAction(source.record, action);
         if (live.current !== source.token) return;
-        for (const tab of CHANGES[action.action.split(".")[0]!] ?? []) load(tab, true);
+        for (const tab of CHANGES[action.action.split(".")[0]!] ?? []) {
+          if (wanted.current.has(tab)) load(tab, true);
+          else { cache.current.delete(tab); changedUnseen.current.add(tab); }
+        }
         // the counts, the card's own facts (its hours) and a note's time follow the write
         setRevision((value) => value + 1);
         changed.current();
@@ -262,7 +279,7 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
       readImage: (src) => readNoteImage(source.record, src),
       notice: downloadError ? t("recordCard.related.downloadFailed") : undefined,
     };
-  }, [source, missing, counts, countError, actions, pages, want, load, downloadError]);
+  }, [source, missing, counts, countsKnown, countError, actions, pages, want, load, downloadError]);
 
   return { detail, edits, title, refresh, missing };
 }

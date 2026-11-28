@@ -48,6 +48,10 @@ const { OutcomesCard } = await import("@/components/bot-profile/BotProfilePage.t
 const { outcomesOf } = await import("../../shared/outcomes");
 const { productRows } = await import("@/components/plugins/ProductRows");
 const { ProductDetailView } = await import("@/components/plugins/ProductDetailView");
+const { AccountProfile } = await import("@/components/record-window/account/AccountProfile");
+const { cardTicketRows, profileView } = await import("@/components/record-window/account/account-model");
+const { TicketGrid } = await import("@/components/record-window/TicketGrid");
+const { parseRecordCard } = await import("../../shared/record-cards");
 
 const BOT_ID = "5752d21c-e77c-4a83-84f0-66048216a5df";
 const THREAD_ID = "d4eb1f10-ceef-428a-afdd-d53d1194c2e7";
@@ -299,5 +303,22 @@ describe("no UUID on screen", () => {
     expectNoUuid(text);
     expect(text).toContain("Service Desk");
     expect(text).toContain("Technicians");
+  });
+  it("a company's window names its contacts and its tickets, never their ids (M-20261127-101)", () => {
+    const ref = (kind: string, id: string) => ({ product: "nimbus_desk", kind, id });
+    const card = parseRecordCard({
+      product: { id: "nimbus_desk", name: "Nimbus Desk" }, kind: { id: "company", name: "Company" }, id: "7310", number: "Acme", title: "Acme",
+      people: [{ role: "contact", label: "Main contact", name: "Ada Lindqvist", ref: ref("contact", BOT_ID) }],
+      fields: [{ label: "Phone", value: "418 555-0100", type: "phone" }],
+      lines: { state: "ok", title: "Open tickets", total: 1, items: [{ label: "Printer offline", detail: "New", ref: ref("ticket", THREAD_ID) }] },
+      notes: { state: "none", items: [] }, cached: false,
+    })!;
+    const view = profileView("company", card, undefined, "en");
+    const text = visibleText(createElement("div", null,
+      createElement(AccountProfile, { kind: "company", view, when: { now: 0 }, shown: new Set(["sheet", "tickets"] as const), onTab: () => {} }),
+      createElement(TicketGrid, { type: "nimbus_desk/company", rows: cardTicketRows(card)!.rows, label: "Tickets", now: 0 })));
+    expectNoUuid(text);
+    expect(text).toContain("Ada Lindqvist");
+    expect(text).toContain("Printer offline");
   });
 });

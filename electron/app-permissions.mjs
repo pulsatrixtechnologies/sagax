@@ -240,8 +240,19 @@ export function externalMailUrl(rawUrl) {
   return url.toString();
 }
 
-/** The one policy window.open follows: web links, or a mail draft. */
+// A tel: link (a record window's Call button, M-20261127-101) goes to the
+// OS phone app (a softphone, a paired phone), which only dials once the
+// person confirms there. A number and its extension only: digits, `+`, the
+// separators people write, `;ext=`.
+const TEL = /^tel:\+?[0-9 ().-]{3,40}(;ext=[0-9]{1,10})?$/i;
+export function externalTelUrl(rawUrl) {
+  if (typeof rawUrl !== "string" || !TEL.test(rawUrl)) throw new Error("Only phone links can be opened here");
+  return `tel:${rawUrl.slice(4).replace(/[ ().-]/g, "")}`;
+}
+
+/** The one policy window.open follows: web links, a mail draft or a phone number. */
 export function externalOpenUrl(rawUrl) {
   if (typeof rawUrl === "string" && /^mailto:/i.test(rawUrl)) return externalMailUrl(rawUrl);
+  if (typeof rawUrl === "string" && /^tel:/i.test(rawUrl)) return externalTelUrl(rawUrl);
   return externalWebUrl(rawUrl);
 }

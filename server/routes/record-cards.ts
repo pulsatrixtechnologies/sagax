@@ -50,9 +50,9 @@ export type RecordWrite = { field: string; value: string } | RecordAction;
 /** The most a write's body may be: an attachment's base64 and its few fields. */
 export const RECORD_WRITE_BODY_MAX = RECORD_FILE_BASE64_MAX + 64 * 1024;
 
-/** The write a body asks: a field change first, else an action. */
-export function recordWrite(body: unknown): RecordWrite | null {
-  return fieldChange(body) ?? parseRecordAction(body);
+/** The write a body asks: a field change first, else an action. `recordKind` is the fiche's kind from the route (a ticket's note.add needs its kind). */
+export function recordWrite(body: unknown, recordKind?: string): RecordWrite | null {
+  return fieldChange(body) ?? parseRecordAction(body, recordKind);
 }
 
 /** The verb a rule reads for an action. */
@@ -149,7 +149,7 @@ export function createRecordCardsRoutes(deps: RecordCardsRouteDeps): RouteHandle
     if (method === "POST") {
       let body;
       try { body = await readBody(req, RECORD_WRITE_BODY_MAX); } catch { return send(400, { error: "invalid field change" }); }
-      const asked = recordWrite(body);
+      const asked = recordWrite(body, ref.kind);
       if (!asked) return send(400, { error: "invalid field change" });
       change = asked;
     }

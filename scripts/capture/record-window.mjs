@@ -3,13 +3,15 @@
  * Headless screenshots of the record window (M-20261127-101): the ticket
  * window in each tab (Notes, Schedule, Time & expenses, Configurations,
  * Attachments), the note being written, the Schedule's + menu and its
- * completed entries, the window narrow (one column), a company's window, and
- * the frame's shared pieces, dark and light, French and English. With
+ * completed entries, the window narrow (one column), a company's window in
+ * each tab and a contact's (M-20261127-140), the company drawn from its card
+ * alone (a console with no section for it), and the frame's shared pieces,
+ * dark and light, French and English. With
  * `--mockup DIR`, each ticket capture is also set beside the mockup's capture
  * of the same state (DIR/<name>.png), in `side-<name>-<skin>-<lang>.png`.
  * Synthetic data only (src/gallery/record-window.html). Headless Chrome: no
  * window opens, never the owner's port 5173.
- * Usage: node scripts/capture/record-window.mjs [--out DIR] [--mockup DIR] [--lang fr|en|both]
+ * Usage: node scripts/capture/record-window.mjs [--out DIR] [--mockup DIR] [--lang fr|en|both] [--only ticket|account]
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -24,6 +26,7 @@ const outDir = resolve(arg("--out") ?? join(root, "docs", "screenshots", "record
 const mockupDir = arg("--mockup") ? resolve(arg("--mockup")) : undefined;
 const langs = (arg("--lang") ?? "both") === "both" ? ["fr", "en"] : [arg("--lang")];
 const skins = [{ id: "pulsatrix", label: "dark" }, { id: "daylight", label: "light" }];
+const only = arg("--only");
 
 async function freePort() {
   for (let candidate = 5300; candidate <= 5399; candidate += 1) {
@@ -88,38 +91,79 @@ try {
         await page.locator(`[data-record-tab="${name}"]`).click();
         await page.waitForSelector(`[data-record-ticket-tab="${name}"]`, { timeout: 10_000 });
       };
-      await open();
-      await page.waitForSelector("[data-record-note]", { timeout: 15_000 });
-      await shot("ticket-notes");
-      await page.locator("[data-record-note-new]").click();
-      await shot("ticket-notes-compose");
-      await page.keyboard.press("Escape");
-      await tab("plan");
-      await page.waitForSelector("[data-plan-row]", { timeout: 15_000 });
-      await shot("ticket-plan");
-      await page.locator("[data-record-plan] [data-record-add]").click();
-      await shot("ticket-plan-addmenu");
-      await page.locator("[data-record-plan] [data-record-add]").click();
-      await page.locator("[data-record-show-done]").click();
-      await shot("ticket-plan-done");
-      await tab("time");
-      await page.waitForSelector("[data-record-entry]", { timeout: 15_000 });
-      await shot("ticket-time");
-      await page.locator("[data-record-entry] [data-billing]").first().click();
-      await shot("ticket-time-billing");
-      await page.locator("[data-record-entry] [data-billing]").first().click();
-      await tab("configurations");
-      await shot("ticket-configurations");
-      await tab("attachments");
-      await page.waitForSelector("[data-record-attachment]", { timeout: 15_000 });
-      await shot("ticket-attachments");
-      await page.locator('[data-record-company-card] [data-record-company-link]').click();
-      await page.waitForSelector(`${WINDOW}[data-record-window="nimbus_desk/company"][data-record-state="card"]`, { timeout: 15_000 });
-      await shot("company-from-ticket");
-      await open("ticket", { width: 720, height: 900 });
-      await page.waitForSelector("[data-record-note]", { timeout: 15_000 });
-      await shot("ticket-narrow");
-      await page.setViewportSize({ width: 1320, height: 940 });
+      if (only !== "account") {
+        await open();
+        await page.waitForSelector("[data-record-note]", { timeout: 15_000 });
+        await shot("ticket-notes");
+        await page.locator("[data-record-note-new]").click();
+        await shot("ticket-notes-compose");
+        await page.keyboard.press("Escape");
+        await tab("plan");
+        await page.waitForSelector("[data-plan-row]", { timeout: 15_000 });
+        await shot("ticket-plan");
+        await page.locator("[data-record-plan] [data-record-add]").click();
+        await shot("ticket-plan-addmenu");
+        await page.keyboard.press("Escape");
+        await page.locator("[data-record-show-done]").click();
+        await shot("ticket-plan-done");
+        await tab("time");
+        await page.waitForSelector("[data-record-entry]", { timeout: 15_000 });
+        await shot("ticket-time");
+        await page.locator("[data-record-entry] [data-billing]").first().click();
+        await shot("ticket-time-billing");
+        await page.keyboard.press("Escape");
+        await tab("configurations");
+        await shot("ticket-configurations");
+        await tab("attachments");
+        await page.waitForSelector("[data-record-attachment]", { timeout: 15_000 });
+        await shot("ticket-attachments");
+        await page.locator('[data-record-company-card] [data-record-company-link]').click();
+        await page.waitForSelector(`${WINDOW}[data-record-window="nimbus_desk/company"][data-record-state="card"]`, { timeout: 15_000 });
+        await shot("company-from-ticket");
+        await open("ticket", { width: 720, height: 900 });
+        await page.waitForSelector("[data-record-note]", { timeout: 15_000 });
+        await shot("ticket-narrow");
+        await page.setViewportSize({ width: 1320, height: 940 });
+      }
+      if (only !== "ticket") {
+        // a company's window, each tab; then a contact opened from it, each tab, and back
+        const account = async (name) => {
+          await page.locator(`[data-record-window-tabs] [data-record-tab="${name}"]`).click();
+          await page.waitForSelector(`[data-record-account-tab="${name}"] [data-record-tab-panel], [data-record-account-tab="${name}"] [data-record-profile]`, { timeout: 30_000 });
+          await page.waitForFunction(() => !document.querySelector("[data-record-account-tab] [role=status]")?.textContent?.match(/Chargement|Loading/), null, { timeout: 10_000 }).catch(() => {});
+        };
+        await open("company");
+        await page.waitForSelector("[data-record-profile=company] [data-record-tiles]", { timeout: 15_000 });
+        await shot("company-sheet");
+        for (const name of ["notes", "contacts", "tickets", "activities", "projects", "opportunities", "agreements", "configurations", "attachments", "sites", "finance", "data"]) {
+          await account(name);
+          await shot(`company-${name}`);
+        }
+        await account("contacts");
+        await page.locator("[data-record-tab-panel=contacts] [data-record-add-entry=contact]").click();
+        await shot("company-contacts-new");
+        await page.keyboard.press("Escape");
+        await account("sheet");
+        await page.locator("[data-record-key-contacts] [data-record-ref-link]").first().click();
+        await page.waitForSelector(`${WINDOW}[data-record-window="nimbus_desk/contact"] [data-record-profile=contact] [data-record-tiles]`, { timeout: 15_000 });
+        await shot("contact-sheet");
+        for (const name of ["tickets", "activities", "configurations", "attachments", "notes", "history"]) {
+          await account(name);
+          await shot(`contact-${name}`);
+        }
+        await page.locator("[aria-label=Retour], [aria-label=Back]").first().click();
+        await page.waitForSelector(`${WINDOW}[data-record-window="nimbus_desk/company"]`, { timeout: 15_000 });
+        await page.goto(`${base}?${new URLSearchParams({ skin: id, lang, scene: "ticket", console: "old" })}`);
+        await page.waitForSelector(`[data-gallery-chat] [data-record-link="company"]`, { timeout: 60_000 });
+        await page.locator(`[data-record-link="company"]`).first().click();
+        await page.waitForSelector("[data-record-profile=company] [data-record-facts-pod]", { timeout: 15_000 });
+        await shot("company-from-card");
+        await page.setViewportSize({ width: 720, height: 900 });
+        await open("company");
+        await page.waitForSelector("[data-record-profile=company] [data-record-tiles]", { timeout: 15_000 });
+        await shot("company-narrow");
+        await page.setViewportSize({ width: 1320, height: 940 });
+      }
       await page.goto(`${base}?${new URLSearchParams({ skin: id, lang, scene: "frame" })}`);
       await page.waitForSelector("[data-gallery-frame] [data-record-grid]", { timeout: 60_000 });
       await shot("frame");

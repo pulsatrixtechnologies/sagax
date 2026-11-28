@@ -102,6 +102,41 @@ describe("the listen session", () => {
     expect(t.frames.some((frame) => frame.type === "transcript" && frame.text === "stale")).toBe(false);
   });
 
+  it("lastError is the current socket's own cause: a reopen and heard words clear an old one (#5416)", async () => {
+    vi.useFakeTimers();
+    const t = make();
+    t.upstreams[0]!.open();
+    await t.session.ready;
+    t.upstreams[0]!.handlers.onError("That account has no credits left");
+    expect(t.session.lastError).toBe("That account has no credits left");
+    // the socket drops: the reopened one has no cause of its own yet, so the
+    // route must not read the old credits error against its key
+    t.upstreams[0]!.drop();
+    await t.tick(LISTEN_BACKOFF_MS[0]);
+    expect(t.upstreams).toHaveLength(2);
+    expect(t.session.lastError).toBeUndefined();
+    // the reopened socket's own error is a cause, until it proves it serves
+    t.upstreams[1]!.open();
+    await t.tick(0);
+    t.upstreams[1]!.handlers.onError("rate limited");
+    expect(t.session.lastError).toBe("rate limited");
+    t.upstreams[1]!.words("bonjour");
+    expect(t.session.lastError).toBeUndefined();
+    // and reopens that only close leave no cause at all: the page closing
+    // after the backoff is never blamed on the old credits error
+    for (const wait of LISTEN_BACKOFF_MS) {
+      await t.tick(wait);
+      t.upstreams.at(-1)!.drop();
+    }
+    // heard words reset the failure count, so the backoff runs once more
+    // before the page closes and the route reads the cause
+    await t.tick(2_000);
+    t.upstreams.at(-1)!.drop();
+    expect(t.closePage).toHaveBeenCalledWith(1011);
+    expect(t.session.lastError).toBeUndefined();
+    t.session.close();
+  });
+
   it("closes the page (1011) only after every reopen in a row failed; a success resets the count", async () => {
     vi.useFakeTimers();
     const t = make();

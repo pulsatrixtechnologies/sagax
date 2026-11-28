@@ -198,7 +198,20 @@ describe("the key a voice failure is about (2026-10-28)", () => {
     expect(t(busy.key, busy.params)).toBe("OpenAI is rate-limiting this server's OpenAI key. It comes back by itself; the answers stay in the chat.");
     expect(voiceKeyFallbackNote({ used: { source: "perspicax-key", last4: "n8Qq", provider: "openai" }, skipped: [{ source: "org-key", last4: "c0Je", failure: "quota" }] }, translate))
       .toBe("the organization's xAI key ···c0Je was refused (no credits). The voice now runs on your OpenAI key ···n8Qq.");
-    for (const key of ["voiceMode.key.other.own", "voiceMode.key.other.org", "voiceMode.key.other.server", "voiceMode.keyAction.other.own", "voiceMode.keyAction.other.org", "voiceMode.provider.quota.namedOther", "voiceMode.provider.key.namedOther", "voiceMode.provider.busy.namedOther"]) {
+    // #5416: the plain "down" and "voice" lines say xAI, so an OpenAI key
+    // gets the line that names OpenAI, and never an xAI sentence
+    const downNote = voiceErrorNote("transcribe-failed", "down", new VoiceProviderError("no answer", "down", 502, { key: { source: "perspicax-key", last4: "n8Qq", provider: "openai" } }), translate);
+    expect(downNote).toMatchObject({ key: "voiceMode.provider.down.namedOther", retry: false, clearsOnVoice: true });
+    expect(t(downNote.key, downNote.params)).toBe("OpenAI voice is not answering right now. The answers stay in the chat.");
+    const voiceNote = voiceErrorNote("speech-failed", "voice", new VoiceProviderError("no such voice", "voice", 400, { key: { source: "voice-key", last4: "Wez8", provider: "openai" } }), translate);
+    expect(voiceNote).toMatchObject({ key: "voiceMode.provider.voice.namedOther", retry: false, clearsOnVoice: true });
+    expect(t(voiceNote.key, voiceNote.params)).toBe("OpenAI no longer has the chosen voice. Pick another one in the call settings.");
+    // an xAI key keeps the plain line, and a key of another provider that
+    // says nothing about itself keeps it too (nothing to name)
+    const xaiDown = voiceErrorNote("speech-failed", "down", new VoiceProviderError("no answer", "down", 502, { key: { source: "voice-key", last4: "Wez8" } }), translate);
+    expect(xaiDown).toEqual({ key: "voiceMode.provider.down", retry: false, clearsOnVoice: true });
+    expect(voiceErrorNote("speech-failed", "voice", new VoiceProviderError("no such voice", "voice", 400), translate).key).toBe("voiceMode.provider.voice");
+    for (const key of ["voiceMode.key.other.own", "voiceMode.key.other.org", "voiceMode.key.other.server", "voiceMode.keyAction.other.own", "voiceMode.keyAction.other.org", "voiceMode.provider.quota.namedOther", "voiceMode.provider.key.namedOther", "voiceMode.provider.busy.namedOther", "voiceMode.provider.down.namedOther", "voiceMode.provider.voice.namedOther"]) {
       expect(en).toHaveProperty([key]);
       expect(fr).toHaveProperty([key]);
     }

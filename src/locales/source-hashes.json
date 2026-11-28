@@ -19540,6 +19540,8 @@
       "voiceMode.provider.quota.namedOther": "df5791daeed2573855b5b67e63e531fb10ba535089fdf3ecd3f8be7e7fc9691f",
       "voiceMode.provider.key.namedOther": "d79f7ad4f2bda15c32268ed8919ebe01ebb06a49d50ebaea88e02d447e67974f",
       "voiceMode.provider.busy.namedOther": "057d93df9bcc82e4676e6ae91b24514b7d153bc2ea5af6809c7c0f6a968506bc",
+      "voiceMode.provider.down.namedOther": "c3902e2500f54d901f64c1bd2d405b69154da46561780bfc458420f792a8b90a",
+      "voiceMode.provider.voice.namedOther": "7bf5244af362a626bedb02ef0912a3e3d5d4da719bc816fe11928a7e20531122",
       "listening.otherProvider": "dda6a3b29c6f9eaf7e7a4c17a7f384e40d015d25a0858d80937a60cfdca37b34",
       "image.error.payerDisabled": "56cb64f33f1eba04ea594951945b1f6cd52991c9ebf1d385c2944e4b3b8b2180",
       "image.error.orgXaiNotGiven": "cb8c48b7d4b860e0cf971fe14815ed5487d9cb0f44e040e6fd572cf1e1d6fe59",

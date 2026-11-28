@@ -62,7 +62,9 @@ export interface ListenSessionDeps {
 export interface ListenSession {
   /** true once xAI's socket first opened, false when it did not */
   ready: Promise<boolean>;
-  /** xAI's last error on this session (scrubbed, never a key) */
+  /** What the current xAI socket last said against this call (scrubbed, never
+   * a key). A new open and words heard on the socket clear it: the cause the
+   * route reads is never one an older socket left (#5416). */
   readonly lastError: string | undefined;
   /** PCM from the page */
   audio(pcm: Uint8Array): void;
@@ -114,11 +116,17 @@ export function createListenSession(deps: ListenSessionDeps): ListenSession {
 
   const connect = (reason: "first" | "reconnect" | "rotate") => {
     let mine: TranscriptionStream | null = null;
+    // this socket starts with no cause: what an older one said is not a
+    // reason to blame a key or a provider in Events later (#5416)
+    lastError = undefined;
     const handlers: TranscriptionHandlers = {
       onTranscript: (event: TranscriptEvent) => {
         if (upstream !== mine || closed) return;
         lastActivity = now();
         failures = 0;
+        // words came through this socket: anything it said before is behind
+        // the call, and is not the reason if it stops serving later (#5416)
+        lastError = undefined;
         deps.sendText(listenTranscriptFrame(event));
       },
       onError: (message) => {

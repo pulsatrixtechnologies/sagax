@@ -105,15 +105,18 @@ function useXAccount(threadId: string | undefined, botId: string | undefined, wa
   return account;
 }
 
-/** A published post with the account that posted it: what the post lacks is filled in. */
-function withAccount(post: XPostView, account: XAccountView | null): XPostView {
+/** A published post with the account that posted it: what the post lacks is filled in.
+ * A URL-learned placeholder (name === handle, no avatar) yields to the connected account. */
+export function withAccount(post: XPostView, account: XAccountView | null): XPostView {
   if (!account || !post.posted) return post;
+  const placeholder = Boolean(post.handle) && post.name === post.handle && !post.avatarUrl;
   const handle = post.handle || account.handle;
+  const name = placeholder && account.name ? account.name : (post.name || account.name);
   return {
     ...post,
     handle,
-    name: post.name || account.name,
-    verified: post.handle ? post.verified : account.verified,
+    name,
+    verified: post.handle && !placeholder ? post.verified : account.verified,
     ...(post.avatarUrl || account.avatarUrl ? { avatarUrl: post.avatarUrl ?? account.avatarUrl } : {}),
   };
 }

@@ -459,7 +459,7 @@ the bot's profile or of a pinned face:
 | Nothing | `idle` | The bot's own face, as before |
 | A card or a question waits for the person (`activity: "waiting-on-you"`, an options card) | `waiting` | Leans, eyes as slits |
 | The last step failed | `blocked` | An exclamation mark in the body's place |
-| A turn runs, nothing on screen yet | `thinking` | Three dots in the body's place |
+| A turn runs, nothing on screen yet | `thinking` | The bot's own body at work (never the engine's three dots, #5415); mount paths use `mountPose` (#5539) |
 | A turn runs, a step is on screen | `working` | Bent over its work; ribbons sweep round it (live only) |
 | A finished turn is unread | `done` | Happy; live, it turns in a cage of ribbons |
 
@@ -481,7 +481,7 @@ keys it had (`withEngineLook`; `engineLookOf` fills the defaults in):
 | Key | Values | Default (today's drawing) |
 |---|---|---|
 | `material` | `flat`, `fluffy`, `glass` | `flat` |
-| `mood` | `neutral`, `happy` | `neutral` |
+| `mood` | `neutral`, `happy` | `neutral` (eyes on top of any state, #5540; phone eye morph is #5541) |
 | `eyeColor` | `#rrggbb` | the skin's own ink |
 | `depth` | 0 to 14 | the engine's natural depth (6); the Outline skin is flat |
 | `followPointer` | boolean | `true` |

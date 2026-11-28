@@ -9,7 +9,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { MASCOT_SHAPES } from "../../shared/mascot-look";
 import { AGENT_STATES, MAUS_COLORS } from "@/lib/mascot";
 import { BotAvatar, type BotAvatarProps } from "./Avatar";
-import { enginePose, moodFrame, runtimeStill, shapeDefinition, shapesMarkup, stateStill, stillUrl } from "./shape-avatar";
+import { enginePose, moodFrame, mountPose, runtimeStill, shapeDefinition, shapesMarkup, stateStill, stillUrl } from "./shape-avatar";
 import { bakedStill, loadAllBakedStills } from "./shape-stills";
 import { ShapeMascot, shapeSkinPaint, skinFace } from "./ShapeMascot";
 
@@ -119,6 +119,20 @@ describe("the mascot takes the engine's state from the bot's activity", () => {
     expect(enginePose("idle", "waiting", "happy")).toEqual({ state: "waiting", mood: "happy", motion: null });
     expect(enginePose("working", "idle", "happy")).toEqual({ state: "idle", mood: "happy", motion: "happy" });
     expect(enginePose("idle", "done", "neutral")).toEqual({ state: "done", mood: "happy", motion: null });
+  });
+
+  it("hands mountAvatar a body for thinking, and the mood apart from the state (#5539, #5540)", () => {
+    // thinking: idle + at-work lean, never the engine's three-dot state
+    expect(mountPose(enginePose("idle", "thinking", "neutral"))).toEqual({ state: "idle", mood: "neutral", atWork: true });
+    expect(mountPose(enginePose("idle", "thinking", "happy"))).toEqual({ state: "idle", mood: "happy", atWork: false });
+    // working / waiting / blocked / done: the engine's own state, mood on top
+    expect(mountPose(enginePose("idle", "working", "happy"))).toEqual({ state: "working", mood: "happy", atWork: false });
+    expect(mountPose(enginePose("idle", "waiting", "neutral"))).toEqual({ state: "waiting", mood: "neutral", atWork: false });
+    expect(mountPose(enginePose("idle", "blocked", "happy"))).toEqual({ state: "blocked", mood: "happy", atWork: false });
+    expect(mountPose(enginePose("idle", "done", "neutral"))).toEqual({ state: "done", mood: "happy", atWork: false });
+    // at rest the app's face stays (baked moods), mount gets idle
+    expect(mountPose(enginePose("working", "idle", "neutral"))).toEqual({ state: "idle", mood: "neutral", atWork: true });
+    expect(mountPose(enginePose("happy", "idle", "neutral"))).toEqual({ state: "idle", mood: "happy", atWork: false });
   });
 
   it("draws the engine's ribbons live, each piece with its ribbon's gradient", () => {

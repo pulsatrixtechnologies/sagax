@@ -181,13 +181,16 @@ struct ComposerCascadeReasoning<LabelContent: View>: View {
     }
 }
 
-/// All models as cascading system menus (#5338): provider, then account, then
-/// model. A provider with one account opens on its models. Favorites lead.
+/// Custom / All models as cascading system menus (#5338, #5529): provider,
+/// then account, then model. A provider with one account opens on its models.
+/// Favorites lead. On the iPad mode menu, Manage models sits at the foot
+/// (`onManage`); the phone sheet leaves it nil.
 struct ComposerCascadeAllModels<LabelContent: View>: View {
     let list: ComposerModes.ManualList
     let favoriteKeys: [String]
     let onPick: (ModelMenuRow) -> Void
     let onStar: (ModelMenuRow) -> Void
+    var onManage: (() -> Void)? = nil
     @ViewBuilder var label: () -> LabelContent
 
     var body: some View {
@@ -204,6 +207,13 @@ struct ComposerCascadeAllModels<LabelContent: View>: View {
             }
             ForEach(list.providers) { provider in
                 providerMenu(provider)
+            }
+            if let onManage {
+                Divider()
+                Button(action: onManage) {
+                    Label(String(localized: "Manage models"), systemImage: "gearshape")
+                }
+                .accessibilityIdentifier("model-menu-providers")
             }
         } label: {
             label()

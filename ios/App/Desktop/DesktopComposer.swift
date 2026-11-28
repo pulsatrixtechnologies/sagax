@@ -56,8 +56,6 @@ struct DesktopComposerPill: View {
     @State private var callHelpOpen = false
     /// A room: text to speech is set up on the computer.
     @State private var roomSpeechConfigured = false
-    /// The model menu (#477, #478, #518), as the desktop chip opens it.
-    @State private var modelMenuOpen = false
     /// Teach a task is offered on this server (`features.teachTask`, #4209).
     @State private var teachTask = false
     @State private var menu: DesktopComposerMenu? = DesktopComposerPill.parityMenu
@@ -176,12 +174,13 @@ struct DesktopComposerPill: View {
         }
     }
 
-    /// #2106: compact model label in the chat bar (web `data-tour="model"`).
-    /// Opens ModelMenuSheet; a pick writes the bot default for every thread.
+    /// #2106 / #5529: compact mode chip in the chat bar (web `data-tour="model"`).
+    /// Opens DesktopModelMenu (280 px Custom + Effort); a pick writes the bot
+    /// default for every thread.
     private var modelChip: some View {
         Button {
             menu = nil
-            if bot != nil { modelMenuOpen = true } else { openModel() }
+            openModel()
         } label: {
             HStack(spacing: 4) {
                 Text(verbatim: modelLabel ?? "")
@@ -200,16 +199,7 @@ struct DesktopComposerPill: View {
         .hoverEffect(.highlight)
         .accessibilityLabel(Text("Model: \(modelLabel ?? "")"))
         .accessibilityIdentifier("desktop-composer-model-chip")
-        .popover(isPresented: $modelMenuOpen) {
-            if let bot {
-                ModelMenuSheet(bot: bot, close: { modelMenuOpen = false })
-                    .environmentObject(session)
-                    .frame(minWidth: 340, idealWidth: 360, minHeight: 480, idealHeight: 560)
-            }
-        }
-        .onValueChange(of: modelMenuOpen) { open in
-            if !open { Task { await loadModelLabel() } }
-        }
+        .desktopTourAnchor("model")
     }
 
     /// `ComposerPlusMenu` (useComposerVoice.ts plusItems): min 220 wide,
@@ -443,24 +433,35 @@ struct DesktopComposerPill: View {
         .accessibilityIdentifier("desktop-composer-send")
     }
 
-    /// The bot's model by its catalogue label ("Claude Sonnet 5").
+    /// The chat bar chip (#5408 / #5529): the mode name (and effort when set),
+    /// or the model the person pinned by hand under Custom.
     private func loadModelLabel() async {
         guard let bot, session.canAdminister || session.canEditBotField(bot, "modelSelection") else { modelLabel = nil; return }
         let selection = bot.currentTaskModelSelection
+        if let mode = ComposerModes.mode(of: selection) {
+            let name: String
+            switch mode {
+            case .auto: name = String(localized: "Auto")
+            case .fast: name = String(localized: "Fast")
+            case .expert: name = String(localized: "Expert")
+            case .heavy: name = String(localized: "Heavy")
+            }
+            // Auto alone until a level is chosen (D-20261126-017); forced modes
+            // name their imposed level when the preview has one.
+            if let effort = selection.effort, !effort.isEmpty, mode != .auto {
+                modelLabel = "\(name) · \(UltracodeEffort.label(effort))"
+            } else if mode == .auto, let effort = selection.effort, !effort.isEmpty {
+                modelLabel = "\(name) · \(UltracodeEffort.label(effort))"
+            } else {
+                modelLabel = name
+            }
+            return
+        }
         let instances = await DesktopModelCatalog.shared.instances(session)
         let instance = instances.first { $0.instanceId == selection.instanceId }
         let modelId = selection.model.isEmpty ? (instance?.models.default ?? "") : selection.model
         let label = instance?.models.options.first { $0.id == modelId }?.label ?? modelId
-        // M-20261119-015: and the account it runs on, while the provider has several
-        let listed = instances.filter { $0.snapshot.isAvailable && $0.snapshot.authenticated != false }
-        let account = instance.flatMap {
-            ModelMenu.accountLabel($0, among: listed, labels: ModelMenuLabels(
-                auto: "", autoHint: "", useBotModel: { $0 }, local: "", defaultTag: "", loadedTag: "",
-                accountNumbered: { String(localized: "Account \($0)") }
-            ), engineLabel: { DesktopEngineRail.label($0) })
-        }
-        let chip = [label, account].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
-        modelLabel = chip.isEmpty ? nil : chip
+        modelLabel = label.isEmpty ? nil : label
     }
 }
 

@@ -186,17 +186,19 @@ final class DesktopChatSweepUITests: XCTestCase {
         _ = try? api("DELETE", "/api/routines/\(id)")
     }
 
-    /// The model menu (ModelPicker windowOnly): search, the models, Providers.
+    /// The mode menu (#5529 / #5408): Auto…Heavy, Custom, Effort; Manage models
+    /// under Custom. Hooks keep desktop-mode-all (Custom) and desktop-mode-reasoning (Effort).
     @MainActor
     func testModelMenuIsThePopover() throws {
         let app = launch("chat-model-picker")
-        XCTAssertTrue(element(app, "desktop-model-menu").waitForExistence(timeout: 20), "the model menu")
+        XCTAssertTrue(element(app, "desktop-model-menu").waitForExistence(timeout: 20), "the mode menu")
         XCTAssertTrue(element(app, "desktop-mode-auto").exists)
-        let all = element(app, "desktop-mode-all")
-        XCTAssertTrue(all.waitForExistence(timeout: 10))
-        all.tap()
-        XCTAssertTrue(element(app, "desktop-model-search").exists, "its search field")
-        XCTAssertTrue(element(app, "model-menu-providers").exists, "Providers at its foot")
+        XCTAssertTrue(element(app, "desktop-mode-fast").exists)
+        XCTAssertTrue(element(app, "desktop-mode-expert").exists)
+        XCTAssertTrue(element(app, "desktop-mode-heavy").exists)
+        XCTAssertTrue(element(app, "desktop-mode-all").waitForExistence(timeout: 10), "Custom")
+        XCTAssertTrue(element(app, "desktop-mode-reasoning").exists, "Effort")
+        XCTAssertFalse(element(app, "desktop-model-picker").exists, "the old 880 pt window is gone")
     }
 
     /// The guided first run opens on its first step with the terms over it.

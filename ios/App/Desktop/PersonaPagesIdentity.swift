@@ -35,11 +35,14 @@ struct PersonaIdentityPage: View {
     @State private var viewerId = "local-owner"
 
     var body: some View {
+        // PersonaOverview / BotProfileAvatarCard: header then description then
+        // At a glance; 20 pt between blocks matches the desktop stack.
         VStack(alignment: .leading, spacing: 20) {
             header
             descriptionSection
             summary
         }
+        .padding(.top, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("persona-overview")

@@ -2,9 +2,9 @@
 
 ## The chat bar of the desktop app (owner 2026-11-25, #5372)
 
-M-20261125-070 to M-20261125-076, M-20261125-084. Desktop only for now: the
-iPhone, the iPad and the console's chat keep the menu described further down
-until their own lots.
+M-20261125-070 to M-20261125-076, M-20261125-084. The iPad desktop shell
+takes the same chat bar mode menu (#5529). The iPhone and the console's
+chat keep the menu described further down until their own lots.
 
 Build stopped everywhere (owner 2026-11-26, D-20261126-005, #5398): it is no
 mode of Sagax. The server never picks it (Auto included), answers no `build`
@@ -135,9 +135,10 @@ Effort           <level>  ›   (the levels of the model in use)
 The modes and their order are one definition shared with the Perspicax
 console, `shared/mode-menu.ts`, which imports nothing; the console keeps a
 byte-identical copy (`console/src/lib/mode-menu.ts`) pinned by its hash, and
-each side runs the same cases. The file is unchanged: the console, the iPhone
-and the iPad keep its rows (Reasoning, All models) until their own lots; the
-Custom and Effort rows are the desktop's (`src/components/ModeMenu.tsx`).
+each side runs the same cases. The file is unchanged: the console and the
+iPhone keep its rows (Reasoning, All models) until their own lots; the
+Custom and Effort rows are the desktop's and the iPad's
+(`src/components/ModeMenu.tsx`, `ios/App/Desktop/DesktopModelMenu.swift`).
 
 The button reads the mode's name ("Expert ⌄"), or the model the person picked
 by hand. A hovered or focused mode opens a small tooltip beside the

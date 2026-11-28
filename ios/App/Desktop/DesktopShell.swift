@@ -521,11 +521,9 @@ struct DesktopShell: View {
                     .frame(maxHeight: .infinity)
                     .transition(.move(edge: .leading))
             }
-            // the desktop's model menu (ModelPicker windowOnly, "Lot 7: the
-            // full window is gone"): a popover at the window's leading edge,
-            // a tap outside closes it. The desktop pins the menu's bottom
-            // at 96 pt from the top (#1979, its top falls off the screen):
-            // here its top sits there instead.
+            // the chat bar mode menu (#5529 / #5408): 280 px Custom + Effort.
+            // A tap outside closes it. Anchored near the top leading edge so
+            // the parity surface and the chip share one host.
             if model.modelPickerOpen, let bot = selectedBot {
                 Color.black.opacity(0.001)
                     .ignoresSafeArea()

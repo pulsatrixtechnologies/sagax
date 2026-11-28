@@ -54,9 +54,9 @@ Rules only. How the code works (files, routes, tests, history) lives in
 ## Design
 
 - Every UI change reads `docs/design/ux-reference-grokbot-cursor.md` (section 8 holds the appearance rules per surface) and passes the UX gate there, with headless before and after captures beside the conforming neighbour page (2026-11-07).
-- The composer mode menu follows `docs/model-modes.md`: Auto, Fast, Expert, Heavy, Custom, then Effort (one name everywhere, never Reasoning) (2026-11-26, #5408).
+- The composer mode menu follows `docs/model-modes.md`: Auto, Fast, Expert, Heavy, Custom, then Effort (one name everywhere, never Reasoning) (2026-11-26, #5408; iPad #5529).
 - Under Auto, the person's choice always holds. Any Effort level she clicks, even the "Recommended" one, is sent and used every turn, even under Auto. Until she clicks one, the Effort row shows no value and no level is checked: Auto decides turn by turn. Clicking the checked level again hands it back to Auto (D-20261126-017).
-- The chat bar's model chip sits inside the message box, just before the voice button (2026-11-26, #5408).
+- The chat bar's model chip sits inside the message box, just before the voice button (2026-11-26, #5408; iPad #5529).
 - Build is no mode: the server never picks it and no menu offers it; a stored or sent Build is Auto, never an error (2026-11-26, #5398).
 - The chat bar's voice button does the mode the person used last; dictation before any use (2026-11-26, #5399).
 - A bot's title always sits under its name, plain secondary grey, never a tag, pill or outline, on every surface (2026-11-06).

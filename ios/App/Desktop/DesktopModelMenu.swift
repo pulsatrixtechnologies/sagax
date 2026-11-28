@@ -1,5 +1,8 @@
-// The iPad composer mode menu (#5338): modes stay on screen; Reasoning and
-// All models open as the system's nested menus, shared with the phone sheet.
+// The iPad composer mode menu (#5529, desktop #5408 / ModeMenu.tsx): 280 px,
+// Auto / Fast / Expert / Heavy, Custom (cascade of favorites and providers,
+// Manage models at its foot), then Effort. Modes stay on screen; Custom and
+// Effort open as the system's nested menus (#5338). No "All models" row and
+// no Providers footer (those live under Custom / Manage models).
 import SwiftUI
 import CompanionCore
 
@@ -12,8 +15,8 @@ struct DesktopModelMenu: View {
     let close: () -> Void
     let openProviders: () -> Void
 
-    /// `MENU_WIDTH` (ModelPicker.tsx-parts/helpers.ts).
-    static let width: CGFloat = 340
+    /// `MODE_MENU_WIDTH` (ModeMenu.tsx): 280 so Custom names its model whole.
+    static let width: CGFloat = 280
 
     @State private var preview: ComposerModes.Preview?
 
@@ -30,6 +33,8 @@ struct DesktopModelMenu: View {
     private var current: Bot { session.state.bot(bot.id)?.projected(forThread: bot.threadId) ?? bot }
     private var selection: ModelSelection { current.currentTaskModelSelection }
     private var follows: Bool? { profile.tasks?.first { $0.threadId == bot.threadId }?.followsBotModel }
+    /// A model the person pinned by hand (Custom), not a mode.
+    private var pinned: Bool { selection.auto != true }
 
     private var menuLabels: ModelMenuLabels {
         ModelMenuLabels(
@@ -56,100 +61,136 @@ struct DesktopModelMenu: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            modesPage
-            VStack(spacing: 0) {
-                row(title: Text("Providers"), trailing: nil, chevron: true, id: "model-menu-providers") {
-                    close()
-                    openProviders()
-                }
+        modesPage
+            .padding(.vertical, 4)
+            .frame(width: Self.width, alignment: .leading)
+            .background(theme.menu, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline, lineWidth: 1))
+            .shadow(color: .black.opacity(0.5), radius: 25, y: 25)
+            .disabled(saving || current.busy == true)
+            .task {
+                config = await session.configStatus()
+                instances = await session.composerModelInstances(config: config)
+                preview = try? await session.settingsClient?.composerModePreview(botId: bot.id, threadId: bot.threadId)
+                _ = await favorites.load(session)
+                loaded = true
             }
-            .padding(.horizontal, 6)
-            .padding(.top, 4)
-            .overlay(alignment: .top) { Rectangle().fill(theme.hairline).frame(height: 1) }
-        }
-        .padding(.vertical, 4)
-        .frame(width: Self.width, alignment: .leading)
-        .background(theme.menu, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline, lineWidth: 1))
-        .shadow(color: .black.opacity(0.5), radius: 25, y: 25)
-        .disabled(saving || current.busy == true)
-        .task {
-            config = await session.configStatus()
-            instances = await session.composerModelInstances(config: config)
-            preview = try? await session.settingsClient?.composerModePreview(botId: bot.id, threadId: bot.threadId)
-            _ = await favorites.load(session)
-            loaded = true
-        }
-        .background {
-            Button("Close", action: close)
-                .keyboardShortcut(.escape, modifiers: [])
-                .opacity(0)
-                .accessibilityHidden(true)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(Text("Model"))
-        .accessibilityIdentifier("desktop-model-menu")
+            .background {
+                Button("Close", action: close)
+                    .keyboardShortcut(.escape, modifiers: [])
+                    .opacity(0)
+                    .accessibilityHidden(true)
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(Text("Model"))
+            .accessibilityIdentifier("desktop-model-menu")
     }
 
-    // MARK: Modes (#5091, cascade #5338)
+    // MARK: Modes (#5408 / #5529)
 
     private var modesPage: some View {
         let mode = ComposerModes.mode(of: selection)
         return VStack(alignment: .leading, spacing: 0) {
-            Text("Mode")
-                .font(theme.font(11.5))
-                .foregroundStyle(theme.inkSecondary)
-                .padding(.horizontal, 8)
-                .padding(.top, 6)
-                .padding(.bottom, 4)
             ForEach(ComposerModes.offered(preview), id: \.self) { candidate in
-                row(title: modeName(candidate), trailing: modeBlurb(candidate), chevron: false, checked: mode == candidate, id: "desktop-mode-\(candidate.rawValue)") {
-                    pickMode(candidate)
+                modeRow(candidate, checked: mode == candidate)
+            }
+            // Custom keeps the hook `desktop-mode-all` (desktop data-mode-row="all")
+            if !loaded || !manual.providers.isEmpty || !manual.top.isEmpty || !manual.favorites.isEmpty || pinnedLabel != nil {
+                ComposerCascadeAllModels(
+                    list: manual,
+                    favoriteKeys: favorites.keys,
+                    onPick: pick,
+                    onStar: { favorites.toggle($0.key, session: session) },
+                    onManage: {
+                        close()
+                        openProviders()
+                    }
+                ) {
+                    cascadeRow(
+                        icon: .slidersHorizontal,
+                        title: Text("Custom"),
+                        trailing: pinnedLabel.map { Text(verbatim: $0) },
+                        checked: pinned,
+                        chevron: true
+                    )
                 }
+                .accessibilityIdentifier("desktop-mode-all")
             }
             if levelRow.shown {
-                Divider()
+                Rectangle()
+                    .fill(theme.hairline)
+                    .frame(height: 1)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                // Effort keeps the hook `desktop-mode-reasoning` (desktop data-mode-row="reasoning")
                 ComposerCascadeReasoning(reasoning: levelRow, automatic: mode == .auto, pickEffort: setEffort) {
                     cascadeRow(
-                        title: Text("Reasoning"),
-                        trailing: Text(verbatim: levelRow.label(levelRow.value, automatic: mode == .auto)),
+                        icon: .gauge,
+                        title: Text("Effort"),
+                        trailing: effortTrailing(mode).map { Text(verbatim: $0) },
+                        checked: false,
                         chevron: !levelRow.disabled
                     )
                 }
                 .disabled(levelRow.disabled)
                 .accessibilityIdentifier("desktop-mode-reasoning")
             }
-            if !loaded || !manual.providers.isEmpty || !manual.top.isEmpty || !manual.favorites.isEmpty {
-                Divider()
-                ComposerCascadeAllModels(
-                    list: manual,
-                    favoriteKeys: favorites.keys,
-                    onPick: pick,
-                    onStar: { favorites.toggle($0.key, session: session) }
-                ) {
-                    cascadeRow(
-                        title: Text("All models"),
-                        trailing: pinnedLabel.map { Text(verbatim: $0) },
-                        chevron: true
-                    )
-                }
-                .accessibilityIdentifier("desktop-mode-all")
-            }
         }
         .padding(.horizontal, 6)
         .padding(.bottom, 4)
     }
 
-    /// A mode-menu row that opens a system nested menu; same metrics as `row`.
-    private func cascadeRow(title: Text, trailing: Text?, chevron: Bool) -> some View {
-        HStack(spacing: 0) {
-            title.font(theme.font(13)).foregroundStyle(theme.ink).lineLimit(1)
-            Spacer(minLength: 4)
-            if let trailing {
-                trailing.font(theme.font(13)).foregroundStyle(theme.inkSecondary).lineLimit(1)
+    /// D-20261126-017: under Auto with no level chosen, Effort shows no value.
+    private func effortTrailing(_ mode: ComposerMode?) -> String? {
+        if mode == .auto, levelRow.value == nil { return nil }
+        let text = levelRow.label(levelRow.value, automatic: mode == .auto)
+        return text.isEmpty ? nil : text
+    }
+
+    private func modeRow(_ candidate: ComposerMode, checked: Bool) -> some View {
+        Button { pickMode(candidate) } label: {
+            HStack(spacing: 8) {
+                DesktopIconView(icon: modeIcon(candidate), size: 15, strokeWidth: 1.75)
+                    .foregroundStyle(checked ? theme.ink : theme.inkSecondary)
+                    .frame(width: 16, height: 16)
+                Text(modeTitle(candidate))
+                    .font(theme.font(13))
+                    .foregroundStyle(theme.ink)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                iconSlot {
+                    if checked {
+                        DesktopIconView(icon: .check, size: 14).foregroundStyle(theme.accent)
+                    }
+                }
             }
-            Color.clear.frame(width: ModelMenuLayout.sideSlot, height: ModelMenuLayout.iconSlot)
+            .padding(.horizontal, 8)
+            .frame(height: 36)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .hoverEffect(.highlight)
+        .accessibilityIdentifier("desktop-mode-\(candidate.rawValue)")
+    }
+
+    private func cascadeRow(icon: DesktopIcon, title: Text, trailing: Text?, checked: Bool, chevron: Bool) -> some View {
+        HStack(spacing: 8) {
+            DesktopIconView(icon: icon, size: 15, strokeWidth: 1.75)
+                .foregroundStyle(checked ? theme.ink : theme.inkSecondary)
+                .frame(width: 16, height: 16)
+            title.font(theme.font(13)).foregroundStyle(theme.ink).lineLimit(1)
+            if let trailing {
+                trailing
+                    .font(theme.font(12))
+                    .foregroundStyle(theme.inkSecondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            } else {
+                Spacer(minLength: 4)
+            }
+            if checked {
+                DesktopIconView(icon: .check, size: 14).foregroundStyle(theme.accent)
+            }
             iconSlot {
                 if chevron {
                     DesktopIconView(icon: .chevronRight, size: 14).foregroundStyle(theme.inkSecondary)
@@ -157,30 +198,30 @@ struct DesktopModelMenu: View {
             }
         }
         .padding(.horizontal, 8)
-        .frame(height: 30)
+        .frame(height: 36)
         .contentShape(Rectangle())
     }
 
     private var pinnedLabel: String? {
-        guard selection.auto != true else { return nil }
+        guard pinned else { return nil }
         return sections.flatMap(\.rows).first { $0.kind == .model && $0.current }?.label ?? selection.model
     }
 
-    private func modeName(_ mode: ComposerMode) -> Text {
+    private func modeTitle(_ mode: ComposerMode) -> LocalizedStringKey {
         switch mode {
-        case .auto: Text("Auto")
-        case .fast: Text("Fast")
-        case .expert: Text("Expert")
-        case .heavy: Text("Heavy")
+        case .auto: "Auto"
+        case .fast: "Fast"
+        case .expert: "Expert"
+        case .heavy: "Heavy"
         }
     }
 
-    private func modeBlurb(_ mode: ComposerMode) -> Text {
+    private func modeIcon(_ mode: ComposerMode) -> DesktopIcon {
         switch mode {
-        case .auto: Text("Picks from the request")
-        case .fast: Text("Quick responses")
-        case .expert: Text("Thinks hard")
-        case .heavy: Text("Team of Experts")
+        case .auto: .sparkles
+        case .fast: .zap
+        case .expert: .brain
+        case .heavy: .layers
         }
     }
 
@@ -202,46 +243,15 @@ struct DesktopModelMenu: View {
         content().frame(width: ModelMenuLayout.iconSlot, height: ModelMenuLayout.iconSlot)
     }
 
-    /// #5051: Optimize for on one line under Auto, the small control at the right.
-    /// A 30 pt menu row. The trailing words end on one edge; the check and the
-    /// chevron share the icon slot (#5051).
-    private func row(title: Text, trailing: Text?, chevron: Bool, checked: Bool? = nil, id: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 0) {
-                title.font(theme.font(13)).foregroundStyle(theme.ink).lineLimit(1)
-                Spacer(minLength: 4)
-                if let trailing {
-                    trailing.font(theme.font(13)).foregroundStyle(theme.inkSecondary).lineLimit(1)
-                }
-                Color.clear.frame(width: ModelMenuLayout.sideSlot, height: ModelMenuLayout.iconSlot)
-                iconSlot {
-                    if checked == true {
-                        DesktopIconView(icon: .check, size: 14).foregroundStyle(theme.accent)
-                    } else if chevron {
-                        DesktopIconView(icon: .chevronRight, size: 14).foregroundStyle(theme.inkSecondary)
-                    }
-                }
-            }
-            .padding(.horizontal, 8)
-            .frame(height: 30)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .hoverEffect(.highlight)
-        .accessibilityIdentifier(id)
-    }
-
     // MARK: Pick
 
     private func pick(_ row: ModelMenuRow) {
         switch row.kind {
         case .auto:
-            // plain Auto: a composer mode also rides the Auto flag (#5091)
             guard selection.auto != true || selection.mode != nil else { return close() }
             var next = selection
             next.auto = true
             next.mode = nil
-            // Absent means Balance; store it so Optimize for shows the live choice.
             next.autoOptimize = selection.autoOptimize ?? .balance
             apply(next, updateBotDefault: true)
         case .follow:
@@ -250,13 +260,19 @@ struct DesktopModelMenu: View {
         case .model:
             guard let instance = instances.first(where: { $0.instanceId == row.instanceId }), let model = row.modelId else { return }
             if row.current && selection.auto != true { return close() }
-            // Pinning a model clears Auto and its Optimize preference.
             apply(ModelPickerRules.selectionForPick(selection, instance: instance, model: model, pinAccount: row.pinAccount), updateBotDefault: true)
         }
     }
 
     private func setEffort(_ level: String?) {
-        let next = levelRow.choosing(level, in: selection)
+        // Under Auto, clicking the checked level again hands it back (D-20261126-017).
+        let chosen: String?
+        if ComposerModes.mode(of: selection) == .auto, level != nil, level == levelRow.value {
+            chosen = nil
+        } else {
+            chosen = level
+        }
+        let next = levelRow.choosing(chosen, in: selection)
         apply(next, updateBotDefault: true, keepOpen: true)
     }
 

@@ -16132,5 +16132,22 @@
   "pages.pinToBarHint": "Keep this page one click away in the chat top bar",
   "pages.unpinFromBarHint": "Remove this page from the chat top bar",
   "pages.pinToBarFull": "You've pinned the maximum of {max} pages. Unpin one to pin this one.",
-  "chat.pinnedPages.label": "Pinned pages"
+  "chat.pinnedPages.label": "Pinned pages",
+  "ui.customize.item.title": "Conversation title",
+  "ui.customize.item.botPanel": "Bot panel",
+  "ui.customize.item.exportMenu": "Export and share",
+  "ui.customize.item.liveCall": "Live call",
+  "ui.customize.item.tasks": "Tasks",
+  "ui.customize.item.tab.general": "General tab",
+  "ui.customize.item.tab.outcomes": "Outcomes tab",
+  "ui.customize.item.tab.knowledge": "Knowledge tab",
+  "ui.customize.item.tab.stats": "Analytics tab",
+  "ui.customize.item.card.settings": "Settings card",
+  "ui.customize.item.card.notifications": "Notifications card",
+  "ui.customize.item.card.channels": "Channels card",
+  "ui.customize.item.card.accounts": "Accounts card",
+  "ui.customize.item.card.more": "More card",
+  "ui.customize.item.panel.activity": "Activity tab",
+  "ui.customize.item.panel.library": "Library tab",
+  "ui.customize.item.panel.coding": "Task tab"
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Captures of whole-app customize mode PR1 (D-20261127-004, #5443).
+ * Captures of whole-app customize mode (D-20261127-004, #5443).
+ * PR1: composer + sidebar. PR2: conversationHeader + botPage.
  * Headless Chrome only (channel: chrome). Ports 5300-5399.
  *
  *   node scripts/capture/ui-customize.mjs [--out DIR] [--port N]
@@ -16,7 +17,7 @@ const arg = (name, fallback) => {
   return index >= 0 ? process.argv[index + 1] : fallback;
 };
 const outDir = resolve(arg("--out", "/Users/Workspace/artifacts/sagax-ui-customize-2026-11-27/captures"));
-const port = Number(arg("--port", "5371"));
+const port = Number(arg("--port", "5372"));
 
 async function waitForServer(url, ms = 120_000) {
   const start = Date.now();
@@ -56,11 +57,17 @@ try {
       shots.push({ lang, scheme, skin, zone: "sidebar", customize: true, hidden: "", name: "sidebar-customize" });
       shots.push({ lang, scheme, skin, zone: "sidebar", customize: true, hidden: "search", name: "sidebar-hidden" });
       shots.push({ lang, scheme, skin, zone: "composerBar", customize: false, hidden: "", name: "composer-saved" });
+      shots.push({ lang, scheme, skin, zone: "conversationHeader", customize: true, hidden: "", name: "header-customize" });
+      shots.push({ lang, scheme, skin, zone: "conversationHeader", customize: true, hidden: "title", name: "header-hidden" });
+      shots.push({ lang, scheme, skin, zone: "conversationHeader", customize: false, hidden: "", name: "header-saved" });
+      shots.push({ lang, scheme, skin, zone: "botPage", customize: true, hidden: "", name: "botpage-customize" });
+      shots.push({ lang, scheme, skin, zone: "botPage", customize: true, hidden: "card:settings", name: "botpage-hidden" });
+      shots.push({ lang, scheme, skin, zone: "botPage", customize: false, hidden: "", name: "botpage-saved" });
     }
   }
 
   for (const shot of shots) {
-    const page = await browser.newPage({ viewport: { width: 960, height: 640 }, deviceScaleFactor: 2 });
+    const page = await browser.newPage({ viewport: { width: 960, height: 720 }, deviceScaleFactor: 2 });
     page.setDefaultTimeout(120_000);
     const query = new URLSearchParams({
       skin: shot.skin,

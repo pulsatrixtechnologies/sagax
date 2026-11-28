@@ -1,11 +1,20 @@
-/** Gallery for whole-app customize mode PR1 (D-20261127-004, #5443).
- * Real composer movables + a sidebar strip with head buttons, pinned tiles
- * stub, and a section block. ?skin=&lang=&zone=composerBar|sidebar&customize=1
- * &hidden=usage|search&jiggleFrame=1&chrome=1
+/** Gallery for whole-app customize mode (D-20261127-004, #5443).
+ * PR1: composer + sidebar. PR2: conversation header + bot page.
+ * ?skin=&lang=&zone=composerBar|sidebar|conversationHeader|botPage&customize=1
+ * &hidden=usage|search|title|card:settings&jiggleFrame=1&chrome=1
  */
 import { StrictMode, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { ArrowUp, AudioLines, PanelLeft, Paperclip, Plus, Search } from "lucide-react";
+import {
+  ArrowUp,
+  AudioLines,
+  PanelLeft,
+  PanelRight,
+  Paperclip,
+  Plus,
+  Search,
+  Ellipsis,
+} from "lucide-react";
 import { COMPOSER_PILL } from "../components/Composer.tsx-parts/ComposerEditor";
 import { COMPOSER_WIDE_ONLY, ComposerMicButton, SECONDARY_CIRCLE } from "../components/ComposerControls";
 import { ComposerMeterView } from "../components/ComposerMeter";
@@ -23,6 +32,9 @@ import { UiCustomizeChrome } from "../components/ui-customize/UiCustomizeChrome"
 import { UiCustomizeProvider, useUiCustomize } from "../components/ui-customize/UiCustomizeMode";
 import { UiMovable } from "../components/ui-customize/UiMovable";
 import { ConfirmProvider } from "../components/ConfirmProvider";
+import { ChatHeaderBar } from "../components/ChatHeaderBar";
+import { PillTabs } from "../components/PillTabs";
+import { CIRCLE_BUTTON, CIRCLE_ICON } from "../lib/circle-button";
 import {
   composerBarSlots,
   DEFAULT_COMPOSER_BAR_LAYOUT,
@@ -32,17 +44,32 @@ import { chatBarChipLabel } from "../lib/model-mode";
 import { parseUsagePillPlacement } from "../lib/usage-pill-preferences";
 import { hideInZone } from "../lib/ui-layout/draft";
 import { defaultUiLayout, setUiLayout, resetUiLayoutStoreForTests } from "../lib/ui-layout/preference";
+import {
+  conversationHeaderControlOrder,
+  conversationHeaderTitleVisible,
+} from "../lib/ui-layout/conversation-header-order";
+import {
+  botGeneralCardOrder,
+  botPanelTabOrder,
+  botProfileTabOrder,
+  panelTabComponentId,
+  profileTabComponentId,
+  profileTabFromComponentId,
+  panelTabFromComponentId,
+} from "../lib/ui-layout/bot-page-order";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import type { UsageAccount } from "../lib/usage-pill";
-import { CIRCLE_ICON } from "../lib/circle-button";
+import type { ZoneId } from "../lib/ui-layout/types";
+import { ZONE_IDS } from "../lib/ui-layout/types";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
 const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
 await loadLocale(params.get("lang") ?? "en");
-const zone = params.get("zone") === "sidebar" ? "sidebar" : "composerBar";
+const zoneParam = params.get("zone") ?? "composerBar";
+const zone: ZoneId = (ZONE_IDS as readonly string[]).includes(zoneParam) ? zoneParam as ZoneId : "composerBar";
 const customize = params.get("customize") === "1";
 const showChrome = params.get("chrome") !== "0";
 const jiggleFrame = params.get("jiggleFrame") === "1" || customize;
@@ -54,7 +81,13 @@ let seed = defaultUiLayout();
 seed.zones.composerBar.usagePlacement = place;
 for (const id of hiddenParam) {
   if (["plus", "model", "usage", "voice"].includes(id)) seed = hideInZone(seed, "composerBar", id);
-  else seed = hideInZone(seed, "sidebar", id);
+  else if (["collapse", "search", "new", "pinnedTiles", "accountUsage", "builtin:general"].includes(id) || id.startsWith("section:")) {
+    seed = hideInZone(seed, "sidebar", id);
+  } else if (["title", "botPanel", "exportMenu", "liveCall", "tasks"].includes(id)) {
+    seed = hideInZone(seed, "conversationHeader", id);
+  } else {
+    seed = hideInZone(seed, "botPage", id);
+  }
 }
 setUiLayout(seed);
 
@@ -245,15 +278,153 @@ function SidebarZone({ customizing }: { customizing: boolean }) {
   );
 }
 
+function HeaderZone({ customizing }: { customizing: boolean }) {
+  const ui = useUiCustomize();
+  const headerZone = ui.draft.zones.conversationHeader;
+  const titleVisible = conversationHeaderTitleVisible(headerZone);
+  const controls = conversationHeaderControlOrder(headerZone);
+  const byId: Record<string, ReactNode> = {
+    botPanel: (
+      <button type="button" data-chat-bot-panel="" className={CIRCLE_BUTTON} aria-label={t("ui.customize.item.botPanel")}>
+        <PanelRight size={18} strokeWidth={1.75} aria-hidden="true" />
+      </button>
+    ),
+    exportMenu: (
+      <button type="button" data-chat-export="" className={CIRCLE_BUTTON} aria-label={t("ui.customize.item.exportMenu")}>
+        <Ellipsis size={18} strokeWidth={1.75} aria-hidden="true" />
+      </button>
+    ),
+    liveCall: (
+      <span data-chat-live-call="" className="rounded-full border border-hairline px-2 py-1 text-[11px] text-ink-secondary">
+        {t("ui.customize.item.liveCall")}
+      </span>
+    ),
+    tasks: (
+      <button type="button" data-chat-tasks="" className="rounded-full border border-hairline px-2.5 py-1 text-[12px]">
+        {t("ui.customize.item.tasks")}
+      </button>
+    ),
+  };
+  const wrap = (id: string, node: ReactNode) => customizing
+    ? <UiMovable key={id} zoneId="conversationHeader" id={id} label={t(`ui.customize.item.${id}` as LocaleKey)}>{node}</UiMovable>
+    : <span key={id}>{node}</span>;
+  const title = (
+    <div data-chat-header-pill="" className="rounded-full border border-hairline bg-panel px-3 py-1.5 text-[13px] font-medium">
+      Ada
+    </div>
+  );
+  return (
+    <div data-gallery-zone="conversationHeader" className="relative h-[120px] w-[720px] overflow-hidden rounded-2xl border border-hairline bg-app">
+      <ChatHeaderBar
+        align="center"
+        center={titleVisible
+          ? (customizing
+            ? <UiMovable zoneId="conversationHeader" id="title" label={t("ui.customize.item.title")}>{title}</UiMovable>
+            : title)
+          : null}
+      >
+        <div data-chathead-controls="" className="flex items-center gap-2">
+          {controls.map((id) => wrap(id, byId[id] ?? null))}
+        </div>
+      </ChatHeaderBar>
+    </div>
+  );
+}
+
+function BotPageZone({ customizing }: { customizing: boolean }) {
+  const ui = useUiCustomize();
+  const botZone = ui.draft.zones.botPage;
+  const tabs = botProfileTabOrder(botZone)
+    .map((id) => profileTabFromComponentId(id))
+    .filter((id): id is "general" | "outcomes" | "knowledge" | "stats" => id !== null);
+  const cards = botGeneralCardOrder(botZone);
+  const panelTabs = botPanelTabOrder(botZone)
+    .map((id) => panelTabFromComponentId(id))
+    .filter((id): id is "activity" | "library" | "coding" => id !== null);
+  const activeTab = (tabs[0] ?? "general") as "general" | "outcomes" | "knowledge" | "stats";
+  const wrapTab = customizing
+    ? (id: typeof activeTab, node: ReactNode) => (
+        <UiMovable zoneId="botPage" id={profileTabComponentId(id)} label={t(`ui.customize.item.tab.${id}` as LocaleKey)}>
+          {node}
+        </UiMovable>
+      )
+    : undefined;
+  const cardLabel: Record<string, LocaleKey> = {
+    "card:settings": "ui.customize.item.card.settings",
+    "card:channels": "ui.customize.item.card.channels",
+    "card:accounts": "ui.customize.item.card.accounts",
+    "card:more": "ui.customize.item.card.more",
+  };
+  return (
+    <div data-gallery-zone="botPage" className="flex w-[720px] flex-col gap-4">
+      <div data-bot-profile-page="" className="rounded-2xl border border-hairline bg-app p-4">
+        <div className="mb-3 text-[15px] font-medium">Ada</div>
+        {tabs.length > 0 ? (
+          <PillTabs
+            tabs={tabs}
+            tab={activeTab}
+            onTab={() => undefined}
+            idPrefix="bot-profile"
+            ariaLabel={t("botProfile.tabsAria")}
+            data-bot-profile-tabs=""
+            label={(id) => t(`botProfile.tab.${id}` as LocaleKey)}
+            wrapTab={wrapTab}
+            tabAttributes={(id) => ({ "data-bot-profile-tab": id })}
+          />
+        ) : null}
+        <div className="mt-4 flex flex-col gap-3" data-bot-profile-panel="general">
+          {cards.map((id) => {
+            const node = (
+              <div data-settings-group={`bot-profile-group-${id.replace("card:", "")}`} className="rounded-xl border border-hairline px-3 py-2 text-[13px]">
+                {t(cardLabel[id] ?? "ui.customize.item.section")}
+              </div>
+            );
+            return customizing
+              ? (
+                  <UiMovable key={id} zoneId="botPage" id={id} label={t(cardLabel[id] ?? "ui.customize.item.section")} className="block w-full">
+                    {node}
+                  </UiMovable>
+                )
+              : <div key={id}>{node}</div>;
+          })}
+        </div>
+      </div>
+      <div data-bot-panel-tabs="" className="rounded-2xl border border-hairline bg-panel p-3">
+        <div className="mb-2 text-[12px] text-ink-secondary">{t("ui.customize.zone.botPage")}</div>
+        <div role="tablist" className="flex flex-wrap items-center gap-1">
+          {panelTabs.map((id) => {
+            const button = (
+              <button type="button" data-panel-tab={id} className="rounded-full bg-raised px-3 py-1 text-[13px]">
+                {t(`botPanel.tab.${id}` as LocaleKey)}
+              </button>
+            );
+            return customizing
+              ? (
+                  <UiMovable key={id} zoneId="botPage" id={panelTabComponentId(id)} label={t(`ui.customize.item.panel.${id}` as LocaleKey)}>
+                    {button}
+                  </UiMovable>
+                )
+              : <span key={id}>{button}</span>;
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Gallery() {
   const ui = useUiCustomize();
   useEffect(() => {
     if (customize && !ui.active) ui.begin();
   }, [customize, ui]);
+  const customizing = ui.active || customize;
   return (
     <div className="flex flex-col gap-6" data-gallery-ui-customize="" data-gallery-zone={zone}>
-      {zone === "composerBar" ? <ComposerZone customizing={ui.active || customize} /> : <SidebarZone customizing={ui.active || customize} />}
-      {showChrome && (ui.active || customize) ? <UiCustomizeChrome jiggleFrame={jiggleFrame} /> : null}
+      {zone === "composerBar" ? <ComposerZone customizing={customizing} />
+        : zone === "sidebar" ? <SidebarZone customizing={customizing} />
+          : zone === "conversationHeader" ? <HeaderZone customizing={customizing} />
+            : <BotPageZone customizing={customizing} />}
+      {showChrome && customizing ? <UiCustomizeChrome jiggleFrame={jiggleFrame} /> : null}
     </div>
   );
 }

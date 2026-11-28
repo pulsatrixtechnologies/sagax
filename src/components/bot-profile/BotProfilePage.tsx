@@ -86,6 +86,9 @@ import {
   botProfileTabPages,
   personaCategoryForSection,
 } from "@/lib/persona-sections";
+import { UiMovable, useUiCustomize } from "@/components/ui-customize";
+import { useUiLayout } from "@/lib/ui-layout/preference";
+import { botGeneralCardOrder, generalCardComponentId } from "@/lib/ui-layout/bot-page-order";
 import { MAUS_COLORS } from "@/lib/mascot";
 import { mascotColorGroup } from "../../../shared/mascot-colors";
 import { botAvatarProfile } from "../../../shared/bot-avatar";
@@ -138,6 +141,9 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   const { state, dispatch } = useStore();
   const bot = state.bots.find((candidate) => candidate.id === propBot.id) ?? propBot;
   const advanced = useAdvancedMode();
+  const uiCustomize = useUiCustomize();
+  const storedLayout = useUiLayout();
+  const botZone = uiCustomize.active ? uiCustomize.draft.zones.botPage : storedLayout.zones.botPage;
   const rootRef = useRef<HTMLElement>(null);
   // The page's scroller: opening the mascot picker brings the page back to its top.
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -573,6 +579,35 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     );
   };
 
+  const wrapGeneralCard = (groupId: string, node: ReactNode): ReactNode => {
+    if (!node) return null;
+    const componentId = generalCardComponentId(groupId);
+    if (!uiCustomize.active) return <div key={groupId}>{node}</div>;
+    return (
+      <UiMovable
+        key={groupId}
+        zoneId="botPage"
+        id={componentId}
+        label={t(`ui.customize.item.card.${groupId}` as LocaleKey)}
+        className="block w-full"
+      >
+        {node}
+      </UiMovable>
+    );
+  };
+
+  const generalGroups = (): ReactNode[] => {
+    const byId = new Map(BOT_PROFILE_TAB_GROUPS.general.map((group) => [group.id, group]));
+    const orderedIds = botGeneralCardOrder(botZone).map((id) => id.replace(/^card:/, ""));
+    const nodes: ReactNode[] = [];
+    for (const id of orderedIds) {
+      const group = byId.get(id);
+      if (!group) continue;
+      nodes.push(wrapGeneralCard(id, tabGroup(group)));
+    }
+    return nodes;
+  };
+
   // Search: collaborators stay on Settings; notify me and daily brief are
   // on Notifications (#5445). Brief is always offered (the card mounts it).
   const switchShown: Record<BotProfileSettingsSwitch, boolean> = {
@@ -580,6 +615,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     dailyBrief: true,
     collaboratorsCreateRoutines: collaboratorsSwitch !== null,
   };
+
   function settingsSwitchSelector(query: string): string | null {
     const id = settingsSwitchForQuery(query, pages.map(sectionLabel));
     if (!id || !switchShown[id]) return null;
@@ -787,6 +823,8 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
                     <BotUsageBreakdownSection bot={bot} />
                   </>
                 )
+              : tab === "general"
+              ? generalGroups()
               : BOT_PROFILE_TAB_GROUPS[tab].map(tabGroup)}
           </div>
         </div>

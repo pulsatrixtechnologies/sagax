@@ -26,6 +26,36 @@ export const SIDEBAR_KNOWN_COMPONENT_IDS = [
 ] as const;
 export type SidebarKnownComponentId = (typeof SIDEBAR_KNOWN_COMPONENT_IDS)[number];
 
+/** Conversation header: centre title/pill and right-side controls. */
+export const CONVERSATION_HEADER_COMPONENT_IDS = [
+  "title",
+  "botPanel",
+  "exportMenu",
+  "liveCall",
+  "tasks",
+] as const;
+export type ConversationHeaderComponentId = (typeof CONVERSATION_HEADER_COMPONENT_IDS)[number];
+
+/** Bot page (profile tabs + General cards) and bot panel tab pills. */
+export const BOT_PAGE_COMPONENT_IDS = [
+  "tab:general",
+  "tab:outcomes",
+  "tab:knowledge",
+  "tab:stats",
+  "card:settings",
+  "card:notifications",
+  "card:channels",
+  "card:accounts",
+  "card:more",
+  "panel:activity",
+  "panel:library",
+  "panel:coding",
+] as const;
+export type BotPageComponentId = (typeof BOT_PAGE_COMPONENT_IDS)[number];
+
+/** Fixed bot-page chrome: close (and panel gear/close) stay reachable. */
+export const BOT_PAGE_FIXED_IDS = ["close", "panelGear", "panelClose"] as const;
+
 export type ZoneLayout = {
   /** Visible components in left-to-right / top-to-bottom order. */
   order: string[];

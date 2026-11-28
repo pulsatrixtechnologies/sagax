@@ -1,5 +1,5 @@
 // Zone registry for customize mode (D-20261127-004, #5443).
-// PR1 wires composerBar + sidebar; conversationHeader and botPage are stubs.
+// PR1: composerBar + sidebar. PR2: conversationHeader + botPage.
 
 import {
   BOT_CHATS_SECTION_ID,
@@ -9,7 +9,12 @@ import {
   PEOPLE_SECTION_ID,
 } from "../sidebar-layout";
 import type { ComponentSpec, ZoneId, ZoneSpec } from "./types";
-import { COMPOSER_BAR_COMPONENT_IDS, SIDEBAR_KNOWN_COMPONENT_IDS } from "./types";
+import {
+  BOT_PAGE_COMPONENT_IDS,
+  COMPOSER_BAR_COMPONENT_IDS,
+  CONVERSATION_HEADER_COMPONENT_IDS,
+  SIDEBAR_KNOWN_COMPONENT_IDS,
+} from "./types";
 
 /** Matches Sidebar.tsx-parts/helpers GENERAL_SECTION_ID (kept here to avoid lib→components). */
 const GENERAL_SECTION_ID = "builtin:general";
@@ -45,6 +50,20 @@ const sidebarBuiltinSections: ComponentSpec[] = SIDEBAR_BUILTIN_SECTION_IDS.map(
   labelKey: `ui.customize.item.section`,
 }));
 
+const conversationHeaderComponents: ComponentSpec[] = CONVERSATION_HEADER_COMPONENT_IDS.map((id) => ({
+  id,
+  hideable: true,
+  fixed: false,
+  labelKey: `ui.customize.item.${id}`,
+}));
+
+const botPageComponents: ComponentSpec[] = BOT_PAGE_COMPONENT_IDS.map((id) => ({
+  id,
+  hideable: true,
+  fixed: false,
+  labelKey: `ui.customize.item.${id.replace(":", ".")}`,
+}));
+
 export const ZONE_REGISTRY: Record<ZoneId, ZoneSpec> = {
   composerBar: {
     id: "composerBar",
@@ -56,16 +75,15 @@ export const ZONE_REGISTRY: Record<ZoneId, ZoneSpec> = {
     labelKey: "ui.customize.zone.sidebar",
     components: Object.freeze([...sidebarKnown, ...sidebarBuiltinSections]),
   },
-  // PR2 stubs: preference shape ready, UI not wired.
   conversationHeader: {
     id: "conversationHeader",
     labelKey: "ui.customize.zone.conversationHeader",
-    components: Object.freeze([] as ComponentSpec[]),
+    components: Object.freeze(conversationHeaderComponents),
   },
   botPage: {
     id: "botPage",
     labelKey: "ui.customize.zone.botPage",
-    components: Object.freeze([] as ComponentSpec[]),
+    components: Object.freeze(botPageComponents),
   },
 };
 
@@ -100,5 +118,7 @@ export function defaultZoneOrder(zoneId: ZoneId): string[] {
       "accountUsage",
     ];
   }
+  if (zoneId === "conversationHeader") return [...CONVERSATION_HEADER_COMPONENT_IDS];
+  if (zoneId === "botPage") return [...BOT_PAGE_COMPONENT_IDS];
   return [];
 }

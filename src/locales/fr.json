@@ -16117,5 +16117,22 @@
   "pages.pinToBarHint": "Garder cette page à un clic dans la barre du haut du chat",
   "pages.unpinFromBarHint": "Retirer cette page de la barre du haut du chat",
   "pages.pinToBarFull": "Tu as déjà épinglé le maximum de {max} pages. Retire-en une pour en épingler une autre.",
-  "chat.pinnedPages.label": "Pages épinglées"
+  "chat.pinnedPages.label": "Pages épinglées",
+  "ui.customize.item.title": "Titre de la conversation",
+  "ui.customize.item.botPanel": "Panneau du bot",
+  "ui.customize.item.exportMenu": "Exporter et partager",
+  "ui.customize.item.liveCall": "Appel en cours",
+  "ui.customize.item.tasks": "Tâches",
+  "ui.customize.item.tab.general": "Onglet Général",
+  "ui.customize.item.tab.outcomes": "Onglet Objectifs",
+  "ui.customize.item.tab.knowledge": "Onglet Connaissances",
+  "ui.customize.item.tab.stats": "Onglet Analytique",
+  "ui.customize.item.card.settings": "Carte Réglages",
+  "ui.customize.item.card.notifications": "Carte Notifications",
+  "ui.customize.item.card.channels": "Carte Canaux",
+  "ui.customize.item.card.accounts": "Carte Comptes",
+  "ui.customize.item.card.more": "Carte Plus",
+  "ui.customize.item.panel.activity": "Onglet Activité",
+  "ui.customize.item.panel.library": "Onglet Bibliothèque",
+  "ui.customize.item.panel.coding": "Onglet Tâche"
 }

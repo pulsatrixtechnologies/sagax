@@ -16237,6 +16237,6 @@
   "ui.customize.item.panel.activity": "Onglet Activité",
   "ui.customize.item.panel.library": "Onglet Bibliothèque",
   "ui.customize.item.panel.coding": "Onglet Tâche",
-  "settings.share.bridgeIntro": "Les bots de ce serveur rejoignent cet ordinateur par le pont du bureau tant que l'app est connectée. L'exécution (Toujours autoriser, Demander à chaque fois, Ne jamais autoriser) est distincte des dossiers liés, qui restent un réglage de lecture.",
+  "settings.share.bridgeIntro": "Les bots de ce serveur rejoignent cet ordinateur par le pont du bureau tant que l'app est connectée. L'exécution (Toujours permettre, Demander à chaque fois, Ne jamais permettre) est distincte des dossiers liés, qui restent un réglage de lecture.",
   "settings.share.foldersReadHint": "Les dossiers liés sont un réglage de lecture seulement. Ils n'accordent pas l'exécution de commandes."
 }

@@ -95,7 +95,7 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
     <PillTabs tabs={found.places} tab={place} onTab={pick} ariaLabel={t("screenPanel.tabs")} idPrefix="screen-panel"
       label={(id) => {
         const Icon = PLACE_ICON[id];
-        return <span className="inline-flex h-[18px] items-center" title={t(PLACE_TAB[id])}><Icon size={16} strokeWidth={1.75} aria-hidden="true" className={FOLD_TAB_ICON} /><span className={FOLD_TAB_LABEL}>{t(PLACE_TAB[id])}</span></span>;
+        return <span className="inline-flex h-[18px] items-center align-top" title={t(PLACE_TAB[id])}><Icon size={16} strokeWidth={1.75} aria-hidden="true" className={FOLD_TAB_ICON} /><span className={FOLD_TAB_LABEL}>{t(PLACE_TAB[id])}</span></span>;
       }}
       tabAttributes={(id) => ({ "data-screen-tab": id })}
       data-screen-place-select="" className="shrink-0 flex-nowrap" />

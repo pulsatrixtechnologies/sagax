@@ -9,7 +9,7 @@ import { useEffect, useState, type RefObject } from "react";
 import { Hand } from "lucide-react";
 import { t, activeLocale } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
-import { CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
+import { CIRCLE_ICON, CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
 import { FOLD_CHIP, FOLD_CHIP_LABEL } from "./ScreenPanelChrome";
 import { frameTime, screenPlaces, type ScreenPlaces, type VmSource } from "@/lib/screen-places";
 import { loadServerEnvironment, type ServerEnvironmentStatus } from "@/lib/server-environment";
@@ -56,7 +56,7 @@ export function ControlSwitch({ control, onChange }: { control: boolean; onChang
       aria-label={label}
       title={control ? t("sandboxDesktop.controlHint") : label}
       className={cn(CIRCLE_LABEL_BUTTON, FOLD_CHIP, control ? "border-transparent bg-accent text-accent-ink hover:bg-accent hover:brightness-110" : "text-ink-secondary hover:text-ink")}>
-      <Hand size={16} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+      <Hand {...CIRCLE_ICON} className="shrink-0" aria-hidden="true" />
       <span className={cn("truncate", FOLD_CHIP_LABEL)}>{label}</span>
     </button>
   );

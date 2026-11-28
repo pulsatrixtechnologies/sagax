@@ -205,6 +205,10 @@ describe("compact LiveBrowserView sizes, the app's own (M-20261127-179)", () => 
       const list = classes(tab.getAttribute("class"));
       expect(list).toEqual(expect.arrayContaining(["h-9", "rounded-full", "text-[13px]", "leading-[18px]"]));
       expect(classes(tab.querySelector("button[aria-label]")!.getAttribute("class"))).toContain("ui-icon-button");
+      // the select button is the whole chip up to the close, globe included
+      const select = tab.querySelector("button[data-browser-tab-title]")!;
+      expect(classes(select.getAttribute("class"))).toContain("self-stretch");
+      expect(select.querySelector("svg")).not.toBeNull();
     }
     expect(classes(CIRCLE_LABEL)).toEqual(expect.arrayContaining(["h-9", "rounded-full", "border-circle-ring", "bg-circle", "text-[13px]", "leading-[18px]"]));
     expect(classes(host.querySelector("[data-browser-holder-pill]")!.getAttribute("class"))).toEqual(expect.arrayContaining(classes(CIRCLE_LABEL).filter((name) => name !== "border-circle-ring" && name !== "bg-circle" && name !== "text-ink")));

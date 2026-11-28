@@ -32,7 +32,9 @@ type ViewerFrame = BrowserFrame & { viewerId: string; generation: number };
 const button = "rounded-md p-1 text-ink-secondary hover:bg-inset hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed";
 const iconBtn = `${button} flex size-7 items-center justify-center`;
 /** A page tab of the docked panel: the labelled 36px chip, the page's title in regular weight. */
-const DOCKED_TAB = cn(CIRCLE_LABEL, "max-w-48 gap-1 pl-3 pr-1 font-normal");
+const DOCKED_TAB = cn(CIRCLE_LABEL, "max-w-48 gap-0 pl-0 pr-1 font-normal");
+/** Its select button fills the chip up to the close, globe included: the whole tab is the target. */
+const DOCKED_TAB_SELECT = "flex min-w-0 items-center gap-1 self-stretch pl-3 pr-0.5 text-left disabled:cursor-default";
 const DOCKED_TAB_IDLE = "border-transparent bg-transparent text-ink-secondary hover:bg-circle-hover hover:text-ink";
 /** Take control: the top bar's labelled button in the accent, the one action of the row. */
 const DOCKED_TAKE = cn(CIRCLE_LABEL_BUTTON, "border-transparent bg-accent text-accent-ink hover:bg-accent hover:brightness-110 disabled:opacity-50", FOLD_CHIP);
@@ -134,12 +136,21 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
       <div className={cn("flex min-w-0 flex-1 items-center overflow-x-auto", compact ? "gap-1" : "gap-0.5")}>
         {tabs.length ? tabs.map((tab) => (
           <div key={tab.tabId} data-browser-tab="" className={compact ? cn(DOCKED_TAB, !tab.active && DOCKED_TAB_IDLE) : cn("flex max-w-44 shrink-0 items-center gap-0.5 rounded-lg px-0.5 text-[12px]", tab.active ? "bg-inset text-ink" : "text-ink-secondary")}>
-            <Globe size={compact ? 16 : 12} strokeWidth={compact ? 1.75 : 2} className={cn("shrink-0 opacity-60", !compact && "ml-1")} aria-hidden="true" />
-            <button data-browser-tab-title="" className={cn("truncate text-left disabled:cursor-default", compact ? "min-w-0 px-0.5" : "px-1 py-1.5")} disabled={!commandsReady} onClick={() => command({ type: "tab-select", tabId: tab.tabId })} title={tab.title || tab.url}>{tab.title || t("browser.tab.new")}</button>
+            {compact ? (
+              <button data-browser-tab-title="" className={DOCKED_TAB_SELECT} disabled={!commandsReady} onClick={() => command({ type: "tab-select", tabId: tab.tabId })} title={tab.title || tab.url}>
+                <Globe size={16} strokeWidth={1.75} className="shrink-0 opacity-60" aria-hidden="true" />
+                <span className="truncate">{tab.title || t("browser.tab.new")}</span>
+              </button>
+            ) : (
+              <>
+                <Globe size={12} className="ml-1 shrink-0 opacity-60" aria-hidden="true" />
+                <button data-browser-tab-title="" className="truncate px-1 py-1.5 text-left disabled:cursor-default" disabled={!commandsReady} onClick={() => command({ type: "tab-select", tabId: tab.tabId })} title={tab.title || tab.url}>{tab.title || t("browser.tab.new")}</button>
+              </>
+            )}
             <button className={compact ? "ui-icon-button shrink-0 rounded-full" : button} aria-label={tab.title ? t("browser.tab.close", { title: tab.title }) : t("browser.tab.closeUntitled")} disabled={!commandsReady} onClick={() => command({ type: "tab-close", tabId: tab.tabId })}><X size={compact ? 14 : 12} strokeWidth={compact ? 1.75 : 2} /></button>
           </div>
         )) : (
-          <div data-browser-tab="" className={compact ? cn(DOCKED_TAB, "pr-3 text-ink-secondary") : "flex items-center gap-1.5 rounded-lg bg-inset px-2 py-1 text-[12px] text-ink-secondary"}><Globe size={compact ? 16 : 12} strokeWidth={compact ? 1.75 : 2} aria-hidden="true" /><span data-browser-tab-title="">{t("browser.tab.new")}</span></div>
+          <div data-browser-tab="" className={compact ? cn(DOCKED_TAB, "gap-1 px-3 text-ink-secondary") : "flex items-center gap-1.5 rounded-lg bg-inset px-2 py-1 text-[12px] text-ink-secondary"}><Globe size={compact ? 16 : 12} strokeWidth={compact ? 1.75 : 2} aria-hidden="true" /><span data-browser-tab-title="">{t("browser.tab.new")}</span></div>
         )}
         <button className={`${tool} shrink-0`} disabled={!commandsReady} aria-label={t("browser.tab.new")} title={t("browser.tab.new")} onClick={() => command({ type: "tab-new" })}><Plus {...glyph} /></button>
       </div>
@@ -186,7 +197,7 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
             className={cn(CIRCLE_LABEL, "max-w-[11rem]", FOLD_CHIP, mine && "border-accent-border bg-accent/15 text-accent-text")}
             title={pageTitle ? `${holder} · ${pageTitle}` : holder}
           >
-            {mine ? <Hand size={16} strokeWidth={1.75} className="shrink-0" aria-hidden="true" /> : <BotIcon size={16} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />}
+            {mine ? <Hand {...CIRCLE_ICON} className="shrink-0" aria-hidden="true" /> : <BotIcon {...CIRCLE_ICON} className="shrink-0" aria-hidden="true" />}
             <span className={cn("truncate", FOLD_CHIP_LABEL)}>{mine ? holder : bot.name}</span>
           </span>
           {mine ? (
@@ -201,7 +212,7 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
               className={DOCKED_TAKE}
               aria-label={t("sandboxDesktop.takeControl")}
               title={t("sandboxDesktop.takeControl")}>
-              <Hand size={16} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+              <Hand {...CIRCLE_ICON} className="shrink-0" aria-hidden="true" />
               <span className={cn("max-w-[9rem] truncate", FOLD_CHIP_LABEL)}>{t("sandboxDesktop.takeControl")}</span>
             </button>
           )}

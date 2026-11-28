@@ -3713,15 +3713,20 @@ control is the size of the app's own, never a smaller copy:
   are the app's tabs (`PillTabs`), each with its place's icon. A docked
   panel's title is 13.5px medium.
 - The address is the app's field (`PLAIN_FIELD`).
-- Every control stays on screen at every width. Where a row cannot hold
-  every label at these sizes (the default 480px panel cannot), it folds
+- No control is removed or shrunk. Where a row cannot hold every label at
+  these sizes (the default 480px panel cannot), it folds
   labels, never a size: `ScreenBar` measures the row and folds only while
   the address (or the place's title) would drop under its minimum, first the
   place tabs to their icons, then the holder chip and Take control to their
   36px circle, the holder keeping its glyph and accent; each label stays in
   the tooltip and the accessible name. This fold and its order are an
   implementation choice under #5478, not part of the owner's rule; the
-  owner may set another order.
+  owner may set another order. Under about 400px the folded address row
+  still runs past the panel's edge, as it did before #5478 (its last
+  buttons are clipped); which control would then move into the menu is the
+  owner's call.
+- The folded chips draw the round controls' glyph (`CIRCLE_ICON`); a page
+  tab's select button fills the whole chip, globe included.
 
 Captures: `node scripts/capture/browser-panel-sizes.mjs --out DIR` (the
 panel beside the real chat header, light and dark, fr and en). Tests:

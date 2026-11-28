@@ -8909,7 +8909,9 @@ const userComputers = createUserComputerRouter([{
  * session that changed hands or ended never relays for anyone. */
 function liveSessionPerson(sessionId: string): string | null {
   if (!sessions.isLive(sessionId)) return null;
-  return sessions.byId(sessionId)?.principalId?.trim().toLowerCase() || null;
+  const session = sessions.byId(sessionId);
+  // Principal id when present; else the paired-session person key (#4856 solo).
+  return session ? personKey(session) : null;
 }
 // Organization server: each person's own desktop app bridges their computer
 // (server/desktop/desktop-bridge.ts): bots in their conversations run shell, files,

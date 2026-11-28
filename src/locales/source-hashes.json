@@ -19831,7 +19831,9 @@
       "recordWindow.tickets.nextWho": "bacfb267f1f66398e8773011cd60d3a01026f0b15c00246e56c999bb54bee748",
       "recordWindow.tickets.closed": "c21ead0614e7e1b70edb3759e1d19ca1e12e6036980d10bfb73052fb1a018efa",
       "recordWindow.tickets.owner": "4b1b8aa3608a26da451ae0630d75b60ab1bc2dd229c41a80838fc7993e835c46",
-      "recordWindow.tickets.updated": "3a5ecca188c0579c00ee24cf3cab21bd02c15a06f7a70cc8e0a8ff2381dcbbfd"
+      "recordWindow.tickets.updated": "3a5ecca188c0579c00ee24cf3cab21bd02c15a06f7a70cc8e0a8ff2381dcbbfd",
+      "settings.share.bridgeIntro": "5cf4b80ac3cfa1947fc0b3270afab55103076328ca3384be4724b5d08989839b",
+      "settings.share.foldersReadHint": "705bb158164f1db9a1a770c39526aee122819ab315a0b46b397d9bafce71f652"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

@@ -2648,11 +2648,11 @@ function sharingController() {
   return computerSharing;
 }
 
-// ── desktop bridge (server mode) ────────────────────────────────────────
-// The organization server's bots, working for the person signed in here,
-// run their tools on this computer and their traffic leaves through it
-// (electron/desktop-bridge.mjs, server/desktop/desktop-bridge.ts). Only while this
-// app is locked to that server and signed in; the cookie and the bridge
+// ── desktop bridge (server mode + paired non-org workspaces, #4856) ─────
+// The server's bots, working for the person signed in here, run their tools
+// on this computer and their traffic leaves through it
+// (electron/desktop-bridge.mjs, server/desktop/desktop-bridge.ts). While this
+// app is on that remote server and signed in; the cookie and the bridge
 // secret never leave the main process.
 let desktopBridgeConnector = null;
 let bridgeBrowseSession = null;
@@ -2765,12 +2765,22 @@ function desktopBridgeLocalModelKeys() {
   return bridgeLocalModelKeys;
 }
 
+/** Remote environment the desktop bridge should serve: server-mode org, or
+ * the active paired non-organization workspace (#4856). Never Local. */
+function bridgeEnvironment() {
+  const locked = serverModeEnvironment(environmentsState);
+  if (locked) return locked;
+  const active = activeEnvironment(environmentsState);
+  if (active && active.kind !== "local" && !active.org && active.origin) return active;
+  return null;
+}
+
 function desktopBridge() {
   // The bridge's attachments folder: files the server stages for this Mac,
   // and attachments an Apple app read saves for the server to read back.
   const attachmentsDir = path.join(app.getPath("temp"), "Sagax", "attachments");
   desktopBridgeConnector ??= createDesktopBridge({
-    environment: () => serverModeEnvironment(environmentsState),
+    environment: () => bridgeEnvironment(),
     // main's own calls never go through the bundled-UI handler (bundled-ui.cjs)
     fetch: (url, init) => session.defaultSession.fetch(url, { ...init, bypassCustomProtocolHandlers: true }),
     cookieHeader: async (origin) => (await session.defaultSession.cookies.get({ url: origin })).map((cookie) => `${cookie.name}=${cookie.value}`).join("; "),
@@ -2832,20 +2842,22 @@ async function offerComputerSharing(win, contents = win.webContents) {
   const env = activeEnvironment(environmentsState);
   // Asked on the page on screen only, never by a hidden account's page.
   if (!env || env.org || sharingPrompts.has(env.id) || win.isDestroyed() || contents !== mainPage()) return;
-  // Never offer a grant this build's server will not honour.
-  if (!(await refreshSharedComputersAllowed()) || win.isDestroyed()) return;
   sharingPrompts.add(env.id);
   try {
-    const info = await sharingController().observe(env);
-    if (!info || win.isDestroyed() || contents.isDestroyed() || contents !== mainPage() || activeEnvironment(environmentsState)?.id !== env.id || new URL(contents.getURL()).origin !== env.origin) return;
+    // #4856: paired workspaces use the desktop bridge; prompt once per identity.
+    const authSession = await session.defaultSession.fetch(`${env.origin}/api/auth/session`, {
+      credentials: "include", bypassCustomProtocolHandlers: true, signal: AbortSignal.timeout(5_000),
+    }).then((res) => (res.ok ? res.json() : null)).catch(() => null);
+    if (!authSession || authSession.kind !== "session" || win.isDestroyed() || contents.isDestroyed() || contents !== mainPage() || activeEnvironment(environmentsState)?.id !== env.id) return;
+    const current = sharingController().state(env.id);
+    if (current.enabled || current.access === "always" || current.access === "ask") return;
     const choice = await dialog.showMessageBox(win, {
-      type: "question", message: `Share this computer with ${env.name}?`,
-      detail: "Let this server’s bots use folders and capabilities you choose while this desktop app is running, only when you are the person asking. Nothing is shared unless you enable it. You can change this later in Settings → Organization.",
+      type: "question", message: `Allow computer access for ${env.name}?`,
+      detail: "Let this server's bots use this computer through the desktop bridge while the app is signed in, only when you are the person asking. Choose Always allow, Ask every time, or Never allow. Linked folders stay a separate read setting. You can change this later in Settings → Servers.",
       buttons: ["Choose access", "Not now"], defaultId: 1, cancelId: 1,
     });
-    sharingController().decline(env, info);
     if (choice.response === 0) openWorkspaceSettings(env.id);
-  } catch { /* Not paired yet, an older server, or offline: no grant, no prompt. */ }
+  } catch { /* Not paired yet, or offline: no grant, no prompt. */ }
   finally { sharingPrompts.delete(env.id); }
 }
 
@@ -5389,46 +5401,49 @@ const savedWorkspace = id => {
   if (!env) throw new Error("This server is no longer connected");
   return env;
 };
-// Non-organization workspaces still use the local folder-sharing controls.
+// Paired non-organization workspaces: desktop-bridge execution access (#4856).
 const sharingUiOnly = (channel, handler) => localWorkspaceOnly(channel, (event, id, ...rest) => {
   if (id && savedWorkspace(id).org) throw new Error("Manage this device in Computer settings.");
   return handler(event, id, ...rest);
 });
 ipcMain.handle("sharing:state", sharingUiOnly("sharing:state", async (_event, id) => {
-  await requireSharedComputers();
   return sharingController().state(savedWorkspace(id).id);
 }));
 ipcMain.handle("sharing:folder", sharingUiOnly("sharing:folder", async () => {
-  await requireSharedComputers();
   const picked = await dialog.showOpenDialog(mainWindow, { title: "Choose a folder to share", properties: ["openDirectory"] });
   if (picked.canceled || !picked.filePaths[0]) return null;
   return (await validateSharedFolders([{ id: randomUUID(), path: picked.filePaths[0], write: false }]))[0];
 }));
 ipcMain.handle("sharing:revoke", sharingUiOnly("sharing:revoke", async (_event, id) => {
-  await requireSharedComputers();
   return sharingController().revoke(savedWorkspace(id));
 }));
 // What that server's bots did here: the local log, never a server's claim.
 ipcMain.handle("sharing:activity", sharingUiOnly("sharing:activity", async (_event, id) => {
-  await requireSharedComputers();
   return sharingController().activity(savedWorkspace(id).id, 50);
 }));
 ipcMain.handle("sharing:save", sharingUiOnly("sharing:save", async (_event, id, input) => {
-  await requireSharedComputers();
   const env = savedWorkspace(id);
-  const info = await sharingController().identity(env);
-  const folders = await validateSharedFolders(input?.folders);
+  const access = input?.access === "always" || input?.access === "ask" || input?.access === "never"
+    ? input.access
+    : (input?.terminal === true || input?.computer === true ? "always" : (Array.isArray(input?.folders) && input.folders.length ? "ask" : "never"));
+  // Desktop bridge path (#4856): no sharedComputers maintainer flag required.
+  let info = { sessionId: null, environmentId: null };
+  try { info = await sharingController().identity(env); } catch { /* bridge path pairs from the session cookie */ }
+  const folders = await validateSharedFolders(input?.folders ?? []);
+  const accessLabel = access === "always" ? "Always allow" : access === "ask" ? "Ask every time" : "Never allow";
   const detail = [
     `Server: ${env.origin}`,
+    `Execution: ${accessLabel}`,
     ...folders.map(folder => `${folder.write ? "Read and write" : "Read only"}: ${folder.path}`),
-    input?.terminal === true ? "Terminal: UNRESTRICTED commands as your user. Can access files outside the folders above, including credentials." : "Terminal: off",
-    input?.computer === true ? "Computer control: can view your screen and operate logged-in apps. Can access information outside the folders above." : "Computer control: off",
-    "Shared content is sent to this server and may reach its model provider. Bots on this server can use these permissions until you revoke them. Closing the desktop stops access.",
+    folders.length ? "Linked folders are a separate read setting from execution." : "No linked folders (bots use the desktop bridge when execution allows).",
+    "Access uses the desktop bridge while this app is signed in to that server. Closing the desktop or choosing Never allow stops it.",
   ].join("\n\n");
-  const confirmation = await dialog.showMessageBox(mainWindow, { type: "warning", message: `Allow computer access for ${env.name}?`, detail, buttons: ["Allow access", "Cancel"], defaultId: 1, cancelId: 1 });
-  if (confirmation.response !== 0) return null;
+  if (access !== "never") {
+    const confirmation = await dialog.showMessageBox(mainWindow, { type: "warning", message: `Allow computer access for ${env.name}?`, detail, buttons: ["Allow access", "Cancel"], defaultId: 1, cancelId: 1 });
+    if (confirmation.response !== 0) return null;
+  }
   savedWorkspace(id);
-  return sharingController().save(env, { folders, terminal: input?.terminal === true, computer: input?.computer === true }, info);
+  return sharingController().save(env, { folders, access, terminal: access === "always", computer: false }, info);
 }));
 
 // window.confirm() has no parent window, so window managers (notably tiling

@@ -632,8 +632,12 @@ it. Keep these rules, each covered by `server/desktop/desktop-bridge*.test.ts`,
   session. Network routing follows the person's synced preference. Turning it
   off sends new connections directly from the server. The session count comes
   from connections acknowledged by the desktop tunnel. Organization server
-  mode uses the desktop bridge. Separately paired workspaces can still use
-  their existing folder-sharing grants. Tests: `server/desktop/desktop-bridge-devices*.test.ts`,
+  mode uses the desktop bridge. Paired non-organization workspaces use the
+  same bridge and its always/ask/never execution access (#4856); linked
+  folders stay a distinct read setting, and a previous read-only folder grant
+  never becomes Always allow for commands. Tests:
+  `server/desktop/desktop-bridge-devices*.test.ts`,
+  `shared/paired-workspace-access.test.ts`,
   `src/components/remote-session/MyDevicesList.dom.test.ts`,
   `src/lib/desktop-bridge.test.ts`.
 

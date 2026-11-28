@@ -22,8 +22,12 @@ describe("where a turn's tools run (organization server)", () => {
     organization: true, sandboxConfigured: true, desktopTargeted: false, routine: false,
     principal: ADA, personAsked: true, desktopConnected: true,
   };
-  it("solo server: its own machine, unchanged", () => {
+  it("solo server: its own machine, unless a paired desktop is connected for This computer (#4856)", () => {
     expect(resolveBotWorkplace({ ...base, organization: false })).toMatchObject({ target: "host", reason: "solo" });
+    expect(resolveBotWorkplace({ ...base, organization: false, desktopTargeted: true, desktopConnected: false })).toMatchObject({ target: "host", reason: "solo" });
+    expect(resolveBotWorkplace({ ...base, organization: false, desktopTargeted: true, desktopConnected: true })).toEqual({
+      target: "user-desktop", principal: ADA, reason: "desktop", fallback: false,
+    });
   });
   it("Auto and Cloud: the speaker's server environment, even with their desktop connected", () => {
     expect(resolveBotWorkplace(base)).toEqual({ target: "user-sandbox", principal: ADA, reason: "server-default", fallback: false });

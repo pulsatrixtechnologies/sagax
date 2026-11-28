@@ -1,5 +1,6 @@
-// HTTP side of the desktop bridge (organization server). The desktop app,
-// signed in to this server as a person, connects out:
+// HTTP side of the desktop bridge (organization server, and paired desktops
+// on a solo hosted workspace, #4856). The desktop app, signed in to this
+// server as a person, connects out:
 //
 //   POST /api/desktop-bridge/connect                 register this desktop
 //   POST /api/desktop-bridge/<id>/poll|lease|progress|result|disconnect
@@ -20,7 +21,7 @@
 // Every call is the session's own person: the person is read from the
 // session, never from the body, and a private secret (x-sagax-bridge-secret,
 // held by the desktop's main process only) binds poll and results to the
-// exact desktop that registered. Answers 404 on a solo server.
+// exact desktop that registered.
 import { appendFileSync, existsSync, readFileSync, renameSync, statSync } from "node:fs";
 import type { IncomingMessage, Server } from "node:http";
 import { Socket } from "node:net";
@@ -30,6 +31,7 @@ import { localVmDesktopSpec } from "../computer/container-computer.ts";
 import { desktopBridgeRegistration, desktopSystemInfo, isDeviceAccess, type DesktopBridgeOperation, type DesktopBridges, type MyDevice } from "./desktop-bridge.ts";
 import type { DesktopTunnels } from "./desktop-egress.ts";
 import type { DesktopTerminals } from "./desktop-terminal.ts";
+import { personKey } from "../request-speaker.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
 
 const ID_ROUTE = /^\/api\/desktop-bridge\/([0-9a-f-]{36})\/(poll|lease|progress|result|disconnect|system|mac-apps)$/;
@@ -118,15 +120,18 @@ export function createDesktopBridgeRoutes(deps: {
     const publishMatch = LOCAL_MODELS_PUBLISH.exec(path);
     if (path !== "/api/me/desktop-bridge" && path !== "/api/desktop-bridge/connect" && path !== LOCAL_VM_ROUTE && !COMPUTER_ROUTE.test(path) && path !== LOCAL_MODELS_ROUTE && !publishMatch && !ID_ROUTE.test(path)) return PASS;
     res.setHeader("cache-control", "no-store");
-    if (!deps.organization()) {
-      // #3043 (QA 2026-11-08): the web app's load-time probe reads a quiet
-      // 200 on a solo server instead of a red 404 in the console. Without the
-      // probe header the answer stays 404 (the phone app reads that).
-      if (method === "GET" && path === "/api/me/desktop-bridge" && req.headers["x-sagax-org-probe"] === "1") return json(res, 200, { offered: false });
-      return json(res, 404, { error: `no route: ${method} ${path}` });
+    // Organization and solo hosted workspaces both offer the bridge (#4856).
+    // The org probe still gets a quiet 200 so the web app can tell solo from org.
+    if (!deps.organization() && method === "GET" && path === "/api/me/desktop-bridge" && req.headers["x-sagax-org-probe"] === "1") {
+      return json(res, 200, { offered: true });
     }
-    const person = auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() : undefined;
-    if (!person || auth.kind !== "session") return json(res, 403, { error: "Sign in with Pulsatrix to connect your computer.", code: "identity_perspicax" });
+    const person = auth.kind === "session" ? personKey(auth.session) : undefined;
+    if (!person || auth.kind !== "session") {
+      return json(res, 403, {
+        error: deps.organization() ? "Sign in with Pulsatrix to connect your computer." : "Pair this desktop first.",
+        code: deps.organization() ? "identity_perspicax" : "identity_session",
+      });
+    }
     if (path === "/api/me/desktop-bridge") {
       if (method !== "GET") return json(res, 405, { error: "method not allowed" });
       return json(res, 200, {

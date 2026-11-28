@@ -752,8 +752,15 @@ export function resolveBotWorkplace(input: {
   /** The principal's desktop app is connected and signed in right now. */
   desktopConnected: boolean;
 }): WorkplaceDecision {
-  if (!input.organization) return { target: "host", principal: null, reason: "solo", fallback: false };
   const principal = input.principal?.trim().toLowerCase() || null;
+  // Solo local stays on the host. A paired desktop on a solo hosted workspace
+  // uses the desktop bridge when This computer is chosen and the app is online (#4856).
+  if (!input.organization) {
+    if (principal && input.desktopTargeted && input.desktopConnected) {
+      return { target: "user-desktop", principal, reason: "desktop", fallback: false };
+    }
+    return { target: "host", principal: null, reason: "solo", fallback: false };
+  }
   const server = (reason: WorkplaceReason, fallback = false): WorkplaceDecision =>
     ({ target: input.sandboxConfigured && principal ? "user-sandbox" : "none", principal, reason, fallback });
   if (!principal) return { target: "none", principal: null, reason: "unknown", fallback: false };

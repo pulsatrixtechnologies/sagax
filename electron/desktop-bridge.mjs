@@ -628,7 +628,8 @@ const describe = operation => {
 };
 
 /** The connector: keeps this desktop registered with its organization
- * server while the app is in server mode and signed in. */
+ * server (server mode) or a paired non-organization workspace (#4856)
+ * while signed in. */
 export function createDesktopBridge({
   environment, fetch: fetchImpl, cookieHeader, home = os.homedir(), attachmentsDir, protectedPaths = [], activityFile,
   fetchUrl = globalThis.fetch, browse, cuaConnection, hostControl, resolveProxy, proxyCredentials, lookup, tunnelConnect, WebSocketImpl = globalThis.WebSocket,
@@ -690,7 +691,9 @@ export function createDesktopBridge({
         const live = AbortSignal.any([signal, connection.signal]);
         try {
           const session = await request(env, "/api/auth/session");
-          if (session?.kind !== "session" || session?.identity !== "perspicax") throw Object.assign(new Error("Sign in to this server first"), { quiet: true });
+          // Organization: Pulsatrix identity. Paired solo workspace: any live session (#4856).
+          if (session?.kind !== "session") throw Object.assign(new Error("Sign in to this server first"), { quiet: true });
+          if (env.org && session?.identity !== "perspicax") throw Object.assign(new Error("Sign in to this server first"), { quiet: true });
           const registration = {
             id, name: hostname.slice(0, 120) || "Computer", platform: ["darwin", "win32", "linux"].includes(platform) ? platform : "linux", attachmentsDir,
             capabilities: { shell: true, files: true, fetch: true, browser: Boolean(browse), computer: Boolean(cuaConnection), localVm: true },
@@ -943,7 +946,7 @@ export function createDesktopBridge({
   };
 
   return {
-    /** Keep the bridge running for the server-mode environment, or stop it. */
+    /** Keep the bridge running for the active remote environment, or stop it. */
     sync() {
       const env = environment();
       if (running && running.origin === env?.origin) return;

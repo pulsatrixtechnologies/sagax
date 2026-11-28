@@ -2,6 +2,8 @@ export interface SharedFolder { id: string; name: string; path: string; write: b
 export interface SharingState {
   enabled: boolean;
   folders: SharedFolder[];
+  /** Desktop-bridge execution access (#4856). */
+  access: "always" | "ask" | "never";
   terminal: boolean;
   computer: boolean;
   connected?: boolean;
@@ -69,7 +71,7 @@ export function createComputerSharing(options: {
   identity(env: Workspace): Promise<Identity>;
   observe(env: Workspace): Promise<Identity | null>;
   decline(env: Workspace, identity: Identity): void;
-  save(env: Workspace, input: Pick<SharingState, "folders" | "terminal" | "computer">, identity: Identity): Promise<SharingState>;
+  save(env: Workspace, input: Pick<SharingState, "folders" | "terminal" | "computer"> & { access?: SharingState["access"] }, identity: Identity): Promise<SharingState>;
   revoke(env: Workspace): SharingState;
   forget(env: Workspace): void;
   cloudState(env: Workspace | null | undefined): CloudLendingState;

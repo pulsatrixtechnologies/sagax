@@ -4,8 +4,6 @@ import { useConfirm } from "@/components/ConfirmProvider";
 import { Card, DANGER_PILL, DescribedRow, EditorBox, EditorField, FIELD, PILL, PRIMARY_PILL, SwitchRow } from "./SettingsPrimitives";
 import { t } from "@/lib/i18n";
 import { ComputerSharingSettings } from "./ComputerSharingSettings";
-import { useStore } from "@/state/store";
-import { sharedComputersEnabled } from "@/lib/feature-flags";
 
 type SavedWorkspaces = Awaited<ReturnType<NonNullable<NonNullable<Window["ogb"]>["environments"]>["state"]>>;
 
@@ -13,10 +11,9 @@ type SavedWorkspaces = Awaited<ReturnType<NonNullable<NonNullable<Window["ogb"]>
 export function ConnectedWorkspacesSettings() {
   const confirm = useConfirm();
   const bridge = window.ogb?.environments;
-  // Computer sharing is off unless this workspace's server turned it on. The
-  // desktop bridge alone is not enough: never offer access the server refuses.
-  const { state } = useStore();
-  const sharingOffered = sharedComputersEnabled(state.config) && Boolean(window.ogb?.computerSharing);
+  // Paired non-org workspaces use the desktop bridge for computer execution
+  // access (#4856). The old sharedComputers flag is no longer required.
+  const sharingOffered = Boolean(window.ogb?.computerSharing);
   const [saved, setSaved] = useState<SavedWorkspaces | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");

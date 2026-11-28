@@ -16251,5 +16251,7 @@
   "ui.customize.item.card.more": "More card",
   "ui.customize.item.panel.activity": "Activity tab",
   "ui.customize.item.panel.library": "Library tab",
-  "ui.customize.item.panel.coding": "Task tab"
+  "ui.customize.item.panel.coding": "Task tab",
+  "settings.share.bridgeIntro": "This server's bots reach this computer through the desktop bridge while the app is signed in. Execution (Always allow, Ask every time, Never allow) is separate from linked folders, which stay a read setting.",
+  "settings.share.foldersReadHint": "Linked folders are a read setting only. They do not grant command execution."
 }

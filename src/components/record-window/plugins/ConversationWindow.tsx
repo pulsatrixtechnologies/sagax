@@ -109,62 +109,68 @@ function Conversation({ ctx, composing, setComposing }: { ctx: PluginContext; co
   const messages = parseLines(state.data, parseMessage);
   const [chosen, setChosen] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
-  // the latest message in view, scrolling the conversation's own side only (never the page under the window)
+  // the latest message (and the SMS being written) in view, scrolling the conversation's own side only, never the page under the window
   useEffect(() => {
     const side = end.current?.closest<HTMLElement>("[data-record-side]");
     if (side) side.scrollTop = side.scrollHeight;
-  }, [messages.length]);
+  }, [messages.length, composing]);
   if (!state.data) return <div className="record-scroll min-h-0 flex-1 overflow-y-auto p-4">{state.refused ? <CardFacts card={card} now={ctx.now} /> : <SectionStatus state={state} />}</div>;
   const selected = messages.find((one) => one.id === chosen) ?? messages.find((one) => isRecord(one, card.id)) ?? messages.at(-1);
   let day = "";
+  // the month's numbers and + Message across both sides, out of what scrolls (the mockup's row)
+  const head = (stats || detail.can("message.send")) && (
+    <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2 border-b border-popover-hairline px-4 py-2.5" data-record-sms-head="">
+      {stats && (
+        <p className="min-w-0 text-[13px] leading-[18px] text-popover-ink-secondary" data-record-sms-stats="">
+          {stats.title && <span>{stats.title} </span>}
+          {stats.parts.map((part, index) => (
+            <span key={index}>{index > 0 && " · "}<span className={cn(part.strong && "font-medium text-popover-ink", part.tone && part.tone !== "open" && TONE_TEXT[part.tone])}>{part.text}</span></span>
+          ))}
+        </p>
+      )}
+      {detail.can("message.send") && <button type="button" className={cn(RECORD_ACTION, "ms-auto")} disabled={composing} onClick={() => setComposing(true)} data-record-sms-new=""><Plus size={14} aria-hidden="true" />{t("recordWindow.conversation.new")}</button>}
+    </div>
+  );
   return (
-    <RecordSplit
-      type={ctx.type}
-      fallback={740}
-      least={380}
-      rightLeast={340}
-      left={
-        <div className="flex min-w-0 flex-col gap-3 p-4">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            {stats && (
-              <p className="min-w-0 text-[13px] leading-[18px] text-popover-ink-secondary" data-record-sms-stats="">
-                {stats.title && <span>{stats.title} </span>}
-                {stats.parts.map((part, index) => (
-                  <span key={index}>{index > 0 && " · "}<span className={cn(part.strong && "font-medium text-popover-ink", part.tone && part.tone !== "open" && TONE_TEXT[part.tone])}>{part.text}</span></span>
-                ))}
-              </p>
-            )}
-            {detail.can("message.send") && !composing && <button type="button" className={cn(RECORD_ACTION, "ms-auto")} onClick={() => setComposing(true)} data-record-sms-new=""><Plus size={14} aria-hidden="true" />{t("recordWindow.conversation.new")}</button>}
+    <div className="flex min-h-0 flex-1 flex-col">
+      {head}
+      <RecordSplit
+        type={ctx.type}
+        fallback={740}
+        least={380}
+        rightLeast={340}
+        left={
+          <div className="flex min-w-0 flex-col gap-3 p-4">
+            <RecordPod bodyClassName="gap-2" data-record-sms-thread="">
+              {messages.map((message) => {
+                const heading = message.day && message.day !== day ? message.day : "";
+                if (message.day) day = message.day;
+                const failed = message.state === "undelivered" || message.state === "failed";
+                return (
+                  <div key={message.id} className="contents">
+                    {heading && <p className="py-1 text-center text-[13px] leading-[18px] text-popover-ink-secondary" data-record-sms-day="">{heading}</p>}
+                    <button type="button" aria-pressed={selected?.id === message.id} onClick={() => setChosen(message.id)} data-record-sms={message.direction} data-record-sms-state={message.state ?? ""}
+                      className={cn("flex max-w-[78%] flex-col gap-1 rounded-2xl px-3.5 py-2.5 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+                        message.direction === "out" ? "self-end bg-popover-accent/20" : "self-start bg-popover-hover",
+                        selected?.id === message.id && "ring-2 ring-popover-accent", failed && selected?.id !== message.id && "ring-1 ring-danger/60")}>
+                      <span dir="auto" className="whitespace-pre-wrap break-words">{message.body}</span>
+                      <span className="flex flex-wrap items-center gap-1 text-[12px] leading-4 text-popover-ink-secondary">
+                        <span>{message.when}</span>
+                        {message.direction === "out" && message.status && <span className={cn("inline-flex items-center gap-1", TONE_TEXT[message.tone])}>· <StateGlyph message={message} />{message.status}</span>}
+                      </span>
+                    </button>
+                  </div>
+                );
+              })}
+              <div ref={end} />
+              <div className="flex justify-end pt-1"><AskButton ask={ctx.ask} label={t("recordWindow.conversation.suggest")} prompt={t("recordWindow.conversation.suggestPrompt", { record: ctx.link })} /></div>
+            </RecordPod>
+            {composing && <Compose ctx={ctx} onDone={() => setComposing(false)} />}
           </div>
-          <RecordPod bodyClassName="gap-2" data-record-sms-thread="">
-            {messages.map((message) => {
-              const heading = message.day && message.day !== day ? message.day : "";
-              if (message.day) day = message.day;
-              const failed = message.state === "undelivered" || message.state === "failed";
-              return (
-                <div key={message.id} className="contents">
-                  {heading && <p className="py-1 text-center text-[13px] leading-[18px] text-popover-ink-secondary" data-record-sms-day="">{heading}</p>}
-                  <button type="button" aria-pressed={selected?.id === message.id} onClick={() => setChosen(message.id)} data-record-sms={message.direction} data-record-sms-state={message.state ?? ""}
-                    className={cn("flex max-w-[78%] flex-col gap-1 rounded-2xl px-3.5 py-2.5 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
-                      message.direction === "out" ? "self-end bg-popover-accent/20" : "self-start bg-popover-hover",
-                      selected?.id === message.id && "ring-2 ring-popover-accent", failed && selected?.id !== message.id && "ring-1 ring-danger/60")}>
-                    <span dir="auto" className="whitespace-pre-wrap break-words">{message.body}</span>
-                    <span className="flex flex-wrap items-center gap-1 text-[12px] leading-4 text-popover-ink-secondary">
-                      <span>{message.when}</span>
-                      {message.direction === "out" && message.status && <span className={cn("inline-flex items-center gap-1", TONE_TEXT[message.tone])}>· <StateGlyph message={message} />{message.status}</span>}
-                    </span>
-                  </button>
-                </div>
-              );
-            })}
-            <div ref={end} />
-            <div className="flex justify-end pt-1"><AskButton ask={ctx.ask} label={t("recordWindow.conversation.suggest")} prompt={t("recordWindow.conversation.suggestPrompt", { record: ctx.link })} /></div>
-          </RecordPod>
-          {composing && <Compose ctx={ctx} onDone={() => setComposing(false)} />}
-        </div>
-      }
-      right={selected ? <Chosen ctx={ctx} message={selected} /> : <p className="p-4 text-popover-ink-secondary">{t("recordWindow.conversation.none")}</p>}
-    />
+        }
+        right={selected ? <Chosen ctx={ctx} message={selected} /> : <p className="p-4 text-popover-ink-secondary">{t("recordWindow.conversation.none")}</p>}
+      />
+    </div>
   );
 }
 

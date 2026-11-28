@@ -55,7 +55,6 @@ const { ProductDetailView } = await import("@/components/plugins/ProductDetailVi
 const { AccountProfile } = await import("@/components/record-window/account/AccountProfile");
 const { cardTicketRows, profileView } = await import("@/components/record-window/account/account-model");
 const { TicketGrid } = await import("@/components/record-window/TicketGrid");
-const { parseRecordCard } = await import("../../shared/record-cards");
 
 const BOT_ID = "5752d21c-e77c-4a83-84f0-66048216a5df";
 const THREAD_ID = "d4eb1f10-ceef-428a-afdd-d53d1194c2e7";

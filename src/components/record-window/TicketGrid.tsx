@@ -174,6 +174,6 @@ export function TicketGrid({ type, grid = "tickets", rows, now, tz, company = fa
 }) {
   return (
     <RecordGrid type={type} grid={grid} label={label} columns={ticketColumns({ now, tz, company })} rows={rows} rowKey={(row) => row.id ?? row.ref?.id ?? `${row.number}-${row.summary}`} filter={filter} toolbar={toolbar} empty={empty}
-      rowAttributes={(row) => ({ "data-ticket-row": row.id ?? row.number || row.summary || "", ...(row.closed ? { "data-ticket-closed": "" } : {}) })} />
+      rowAttributes={(row) => ({ "data-ticket-row": row.id ?? (row.number || row.summary || ""), ...(row.closed ? { "data-ticket-closed": "" } : {}) })} />
   );
 }

@@ -104,10 +104,10 @@ describe("the sections the console sends", () => {
     const console_ = accountConsole("en", NOW);
     const tickets = parseDetailPage("tickets", { ...console_.section("company", "tickets"), next: 2 }, download);
     expect(tickets.next).toBe(2);
-    const row = tickets.page.lines.find((one) => "number" in one && one.number === "#300124") as { next?: { who: string[] }; level?: string };
-    expect(row.next!.who).toEqual(["Noor Haddad", "Bruno Tremblay"]);
+    const row = tickets.page.lines.find((one) => "number" in one && one.number === "#300124") as { next?: { people: Array<{ name: string }> }; level?: string };
+    expect(row.next!.people.map((person) => person.name)).toEqual(["Noor Haddad", "Bruno Tremblay"]);
     expect(row.level).toBe("normal");
-    const stats = parseDetailPage("stats", console_.section("company", "stats"), download).page.stats!;
+    const stats = parseDetailPage("stats", console_.section("company", "stats"), download).page.stats as import("@/lib/record-detail").RecordStats;
     expect(stats.hours).toHaveLength(6);
     expect(stats.billable.map((part) => part.billing)).toEqual(["B", "NC", "DNB"]);
     const finance = parseDetailPage("finance", console_.section("company", "finance"), download).page;

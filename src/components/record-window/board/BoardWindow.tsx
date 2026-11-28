@@ -182,7 +182,7 @@ function ColumnCard({ row, now, tz }: { row: TicketRow; now: number; tz?: string
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="text-[13px] tabular-nums text-popover-ink-secondary">{row.number}</span>
         <span className="min-w-0">{row.ref && open ? <RecordRefChip name={row.summary} refTo={row.ref} onOpen={open} /> : <span dir="auto" className="break-words">{row.summary}</span>}</span>
-        <QuietRecordName name={row.company} recordRef={row.companyRef} />
+        <QuietRecordName name={row.company ?? ""} recordRef={row.companyRef} />
         <span className="mt-1 flex min-w-0 items-center gap-2 text-[13px]">
           <span className="min-w-0 flex-1"><NextPlanCell next={row.next} now={now} tz={tz} /></span>
           <OwnerCell name={row.owner} ownerRef={row.ownerRef} />
@@ -219,7 +219,8 @@ function BoardBody({ card, detail, type, now, view, onView, idPrefix }: BoardWin
   const { want } = detail;
   useEffect(() => { want(["tickets", "stats"]); }, [want]);
   const tickets = detail.section("tickets");
-  const stats = detail.section("stats").page?.stats;
+  const statsPage = detail.section("stats").page;
+  const stats = statsPage?.stats && !("hours" in statsPage.stats) ? statsPage.stats : statsPage?.stats && "closedThisWeek" in statsPage.stats ? statsPage.stats : undefined;
   const rows = tickets.page?.lines ?? [];
   const tz = card.tz;
   const counts = boardCounts(rows, now, tz);

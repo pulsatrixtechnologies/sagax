@@ -24,15 +24,17 @@ class FakeSource {
   close() {}
 }
 
-const bot = { id: "marc", name: "Marc", browserProfile: "own" } as unknown as Bot;
+const bot = { id: "nimbus", name: "Nimbus", browserProfile: "own" } as unknown as Bot;
 const SEARCH = "https://duckduckgo.com/?q=test";
 const INVALID = "Enter a web address or something to search for.";
 let host: HTMLDivElement;
 let root: Root;
 let take: { resolve: () => void } | null;
 let holdTakes = false;
+let refuseTakes = 0;
 
 const settle = async () => { await act(async () => { for (let turn = 0; turn < 30; turn++) await Promise.resolve(); }); };
+const sentTypes = () => api.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).type);
 const navigations = () => api.mock.calls.map(([, init]) => JSON.parse(String(init?.body))).filter((body) => body.type === "navigate").map((body) => body.url);
 const field = () => host.querySelector("input[aria-label='Browser address']") as HTMLInputElement;
 const alertText = () => [...host.querySelectorAll("[role=alert]")].map((node) => node.textContent).join(" ");
@@ -51,9 +53,10 @@ const enter = async () => {
 
 beforeEach(async () => {
   FakeSource.all = [];
-  take = null; holdTakes = false;
+  take = null; holdTakes = false; refuseTakes = 0;
   api.mockReset().mockImplementation(async (_path: string, init?: { body?: string }) => {
     const body = JSON.parse(String(init?.body ?? "{}"));
+    if (body.type === "take" && refuseTakes > 0) { refuseTakes--; throw new Error("Another browser view or bot action is using this browser. Try again shortly."); }
     if (body.type === "take" && holdTakes) await new Promise<void>((resolve) => { take = { resolve }; });
     return {};
   });
@@ -61,7 +64,7 @@ beforeEach(async () => {
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
-  await act(async () => root.render(createElement(LiveBrowser, { bot, docked: { title: "Marc’s browser", chrome: null } })));
+  await act(async () => root.render(createElement(LiveBrowser, { bot, docked: { title: "Nimbus’s browser", chrome: null } })));
   await emit("ready", { viewerId: "v1" });
   await emit("tabs", { tabs: [{ tabId: "t1", title: "test at DuckDuckGo", url: SEARCH, active: true }] });
 });
@@ -112,9 +115,28 @@ describe("the address field (M-20261127-180)", () => {
     expect(field().getAttribute("aria-invalid")).toBe("true");
     expect(navigations()).toEqual([]);
   });
+
+  it("drops the message once the field cannot be used (another window holds the browser)", async () => {
+    act(() => field().focus());
+    type("mailto:someone@example.com");
+    await enter();
+    expect(alertText()).toContain(INVALID);
+    await emit("control", { held: true, owned: false, controlling: false });
+    expect(alertText()).not.toContain(INVALID);
+    expect(field().readOnly).toBe(true);
+  });
 });
 
 describe("the address and the tab follow the page on screen (M-20261127-180)", () => {
+  it("follows the page while the field only has focus, and keeps what the person typed", async () => {
+    act(() => field().focus());
+    await emit("url", { url: "https://www.google.ca/" });
+    expect(field().value).toBe("https://www.google.ca/");
+    type("example.com");
+    await emit("url", { url: "https://duckduckgo.com/?q=other" });
+    expect(field().value).toBe("example.com");
+  });
+
   it("after Enter, shows the page the stream reports, not the typed text", async () => {
     act(() => field().focus());
     type("google.ca");
@@ -159,5 +181,27 @@ describe("the ⋯ menu (M-20261127-180)", () => {
     open();
     act(() => { document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })); });
     expect(menu.open).toBe(false);
+  });
+});
+
+// M-20261127-180, the top bar's Take control: a refused take left the hold
+// "on purpose", so the next automatic take never went back after idle time.
+describe("Take control (M-20261127-180)", () => {
+  it("is not kept after a refused take: the next automatic take goes back after idle time", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      refuseTakes = 1;
+      await act(async () => { (host.querySelector("[data-browser-take]") as HTMLButtonElement).click(); });
+      await settle();
+      expect(alertText()).toContain("Try again shortly");
+      await act(async () => { (host.querySelector("[aria-label='Reload page']") as HTMLButtonElement).click(); });
+      await settle();
+      expect(sentTypes()).toEqual(["take", "take", "reload"]);
+      await act(async () => { await vi.advanceTimersByTimeAsync(9_000); });
+      await settle();
+      expect(sentTypes()).toContain("release");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

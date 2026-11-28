@@ -99,7 +99,7 @@ describe("screen marks", () => {
   });
 
   // M-20261127-180: Send with no picture on screen said nothing and sent nothing.
-  it("says the picture is missing instead of a silent Send when nothing is on screen", async () => {
+  it("sends a note alone with no picture on screen", async () => {
     const frame = createRef<HTMLDivElement>();
     function Empty() {
       state = useScreenMarks({ bot: { id: "ada", name: "Ada" } as unknown as Bot, host: frame, describer: { current: null }, dispatch, onSent: vi.fn() });
@@ -107,6 +107,16 @@ describe("screen marks", () => {
     }
     act(() => root.render(createElement(Empty)));
     act(() => { state.setNote("look here"); });
+    await act(async () => { await state.send(); });
+    expect(dispatch).toHaveBeenCalledOnce();
+    expect(dispatch.mock.calls[0]![0].text).toContain("Note: look here");
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("says the picture is gone instead of a silent Send when marks lost it", async () => {
+    mount({ id: "ada", name: "Ada" } as unknown as Bot);
+    drag([40, 40], [200, 120]);
+    act(() => { host.querySelector("img")!.remove(); });
     await act(async () => { await state.send(); });
     expect(dispatch).not.toHaveBeenCalled();
     expect(host.querySelector("[role=alert]")?.textContent).toBe("The screen picture could not be read.");

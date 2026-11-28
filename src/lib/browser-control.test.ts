@@ -35,6 +35,7 @@ function harness() {
     onTakeStatus: vi.fn(),
     onError: vi.fn(),
     onHalted: vi.fn(),
+    onRefused: vi.fn(),
   };
   const control = createBrowserControl(options);
   const interact = (...items: BrowserInteraction[]) => { for (const item of items) control.interact(item); };
@@ -116,6 +117,17 @@ describe("taking browser control implicitly", () => {
     h.interact({ input: press }); await settle();
     expect(h.options.take).toHaveBeenCalledTimes(2);
     expect(h.sent).toEqual([["input", press]]);
+  });
+
+  // M-20261127-180: the panel drops a hold asked for on purpose when its take is refused.
+  it("says when a take is refused, and only then", async () => {
+    const h = harness();
+    h.options.take.mockRejectedValueOnce(new Error(refused));
+    h.control.takeNow(); await settle();
+    expect(h.options.onRefused).toHaveBeenCalledOnce();
+    h.interact({ input: press }); await settle();
+    expect(h.options.take).toHaveBeenCalledTimes(2);
+    expect(h.options.onRefused).toHaveBeenCalledOnce();
   });
 
   it("shows the waiting status only when the take outlasts 300ms", async () => {

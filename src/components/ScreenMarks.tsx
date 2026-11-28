@@ -109,14 +109,15 @@ export function useScreenMarks({ bot, host, describer, dispatch, onSent, place =
   const send = async () => {
     if (!marks.length && !note.trim()) return;
     const found = frameImage(host.current);
-    // Nothing on screen to mark (an empty page, a picture still loading): say so, never a silent Send.
-    if (!found) { setError(t("screenMarks.error.image")); return; }
+    // Marks with no picture left on screen (the page went): say so, never a silent Send.
+    // A note alone needs no picture.
+    if (marks.length && !found) { setError(t("screenMarks.error.image")); return; }
     setSending(true); setError("");
     try {
-      const points = marks.map((mark) => pagePoint(mark, found.page.width, found.page.height));
+      const points = found ? marks.map((mark) => pagePoint(mark, found.page.width, found.page.height)) : [];
       let described: DescribedMark[] = [];
       try { if (marks.length && describer.current) described = await describer.current(points); } catch { /* the picture and the note still go */ }
-      const picture = marks.length ? await imageAttachmentFromFile(await renderImage(found.image, marks)) : null;
+      const picture = marks.length && found ? await imageAttachmentFromFile(await renderImage(found.image, marks)) : null;
       const text = composeMessage(feedbackText(marks, described, note, place), picture ? [picture] : []);
       dispatch({
         type: "send", botId: bot.id, text,

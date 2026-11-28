@@ -202,6 +202,8 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
         owned: () => controlNow.current.owned,
         onTakeStatus: setTakeStatus,
         onError: setError,
+        // A refused Take control is not kept: the next automatic take goes back after idle time.
+        onRefused: () => setKept(false),
         onHalted: () => setError(haltMessage.current),
       });
       setReconnecting(false);

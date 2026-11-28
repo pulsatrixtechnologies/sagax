@@ -24,7 +24,8 @@ export type AddressBar = {
 export function useAddressBar({ address, setAddress, editing, page, field, canEdit, ready, navigate }: {
   address: string;
   setAddress: Dispatch<SetStateAction<string>>;
-  /** The person is editing: the stream's page updates leave the field alone. */
+  /** The person changed the text since the field took focus: the stream's
+   * page updates leave it alone. A field only focused still follows the page. */
   editing: RefObject<boolean>;
   /** The page's address as the stream last said it, or null before it said. */
   page: RefObject<string | null>;
@@ -45,7 +46,7 @@ export function useAddressBar({ address, setAddress, editing, page, field, canEd
   const pageAddress = () => shownAddress(page.current);
   const go = (url: string) => { sent.current = url; navigate(url); };
   useEffect(() => {
-    if (!canEdit) { wanted.current = ""; sent.current = ""; return; }
+    if (!canEdit) { wanted.current = ""; sent.current = ""; setError(""); return; }
     if (!ready) return;
     const url = wanted.current;
     const repeat = url !== "" && url === sent.current;
@@ -55,12 +56,17 @@ export function useAddressBar({ address, setAddress, editing, page, field, canEd
     else if (!editing.current) setAddress(pageAddress());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canEdit, ready]);
+  // Focused but not edited: the page's new address arrives selected, as on focus.
+  useEffect(() => {
+    const input = field.current;
+    if (input && !editing.current && typeof document !== "undefined" && document.activeElement === input) input.select();
+  }, [address, editing, field]);
   return {
     value: address,
     error,
     readOnly: !canEdit,
-    change: (text) => { setAddress(text); setError(""); },
-    focus: (input) => { editing.current = true; if (canEdit) input.select(); },
+    change: (text) => { editing.current = true; setAddress(text); setError(""); },
+    focus: (input) => { if (canEdit) input.select(); },
     blur: () => {
       editing.current = false;
       if (leaving.current) return;
@@ -69,6 +75,7 @@ export function useAddressBar({ address, setAddress, editing, page, field, canEd
     revert: () => {
       const shown = pageAddress();
       if (address === shown && !error) return false;
+      editing.current = false;
       setError(""); setAddress(shown); field.current?.select();
       return true;
     },

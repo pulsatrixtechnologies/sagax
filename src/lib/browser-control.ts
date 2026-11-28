@@ -73,6 +73,9 @@ export function createBrowserControl(options: {
   owned: () => boolean;
   onTakeStatus: (status: BrowserTakeStatus) => void;
   onError: (message: string) => void;
+  /** A take was refused: a hold asked for on purpose (Take control) is not
+   * kept for the next automatic take (M-20261127-180). */
+  onRefused?: () => void;
   /** Page input arrived after the input queue halted; show why it is ignored. */
   onHalted: () => void;
 }) {
@@ -167,7 +170,7 @@ export function createBrowserControl(options: {
         state = "held";
         report(waitedForBot(grant.reply) && dropStale() ? "stale" : "");
         await flush();
-      } else { report(""); state = "bot"; buffer = []; held.clear(); takenOnPurpose = false; }
+      } else { report(""); state = "bot"; buffer = []; held.clear(); takenOnPurpose = false; options.onRefused?.(); }
       arm(); // a refused take can still leave this viewer holding the browser
     }).catch(() => {});
   };

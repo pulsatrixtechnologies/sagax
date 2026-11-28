@@ -60,6 +60,11 @@ describe("the provider catalog (#4329)", () => {
     expect(claude.recommended).toBe("claudeAgent");
     // #4410 lot 1 + #5523: pi and OpenCode also run on the person's own Claude sign-in; Claude Code stays the recommendation
     expect(claude.harnesses.filter((pair) => pair.mark === "works").map((pair) => pair.harness)).toEqual(["claudeAgent", "piAgent", "opencodeGo"]);
+    // #5524: same for an OpenAI/Codex account; Codex stays the recommendation
+    const openaiAccount = providers.find((provider) => provider.id === "openai")!.connections[0]!;
+    expect(openaiAccount.kind).toBe("account");
+    expect(openaiAccount.recommended).toBe("codex");
+    expect(openaiAccount.harnesses.filter((pair) => pair.mark === "works").map((pair) => pair.harness)).toEqual(["codex", "piAgent", "opencodeGo"]);
     const server = providers.find((provider) => provider.id === "server:lab")!;
     expect(server.connections[0]).toMatchObject({ kind: "address", recommended: "openai-compat" });
     const computer = providers.find((provider) => provider.id === "computer")!;

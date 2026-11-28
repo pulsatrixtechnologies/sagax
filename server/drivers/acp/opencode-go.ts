@@ -574,10 +574,11 @@ export function ensureOpenCodeInjectModel(
   return native;
 }
 
-/** #4410 / #5523: point one OpenCode turn at the payer's own home and write
- * a Claude subscription into auth.json when the plan carries one (never the
- * server's ambient login). OPENCODE_AUTH_CONTENT stays in the child env so
- * Sagax's own auth check sees it; the CLI reads the file under XDG_DATA_HOME. */
+/** #4410 / #5523 / #5524: point one OpenCode turn at the payer's own home and
+ * write a Claude and/or ChatGPT subscription into auth.json when the plan
+ * carries one (never the server's ambient login). OPENCODE_AUTH_CONTENT stays
+ * in the child env so Sagax's own auth check sees it; the CLI reads the file
+ * under XDG_DATA_HOME. */
 export function opencodeApplyAccess(
   env: Record<string, string | undefined>,
   access: TurnAccessInput,

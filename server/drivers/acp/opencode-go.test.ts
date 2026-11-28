@@ -26,7 +26,7 @@ import {
   resetOpenCodeModelCache,
   setOpenCodeProviderKeyPolicy,
 } from "./opencode-go.ts";
-import { openCodeClaudeAuthContent } from "../../engines/engine-credentials.ts";
+import { openCodeClaudeAuthContent, openCodeCodexAuthContent } from "../../engines/engine-credentials.ts";
 import { ATTACHMENTS_DIR } from "../../attachments/attachments.ts";
 import { OPENCODE_PROVIDER_ENV } from "../../config.ts";
 import { hostedWorkspaceConfigured } from "../../enterprise.ts";
@@ -264,6 +264,28 @@ describe("OpenCode catalog", () => {
       const authPath = join(home, "opencode-home", "opencode", "auth.json");
       expect(existsSync(authPath)).toBe(true);
       expect(JSON.parse(readFileSync(authPath, "utf8"))).toEqual({ anthropic: { type: "oauth", access: token } });
+    } finally {
+      await removeTempDir(home);
+    }
+  });
+
+  // #5524: Codex subscription under OpenCode for one turn
+  it("writes the payer's Codex sign-in into auth.json under the turn's OpenCode home", async () => {
+    const home = mkdtempSync(join(tmpdir(), "omb-opencode-codex-"));
+    const token = "sk-test-opencode-codex-apply-000000000001";
+    const env: Record<string, string | undefined> = { HOME: home, USERPROFILE: home };
+    try {
+      opencodeApplyAccess(env, {
+        via: "subscription",
+        identity: "subscription:pr_test:codex",
+        engineHome: join(home, "opencode-home"),
+        environment: { OPENCODE_AUTH_CONTENT: openCodeCodexAuthContent(token) },
+      });
+      expect(env.XDG_DATA_HOME).toBe(join(home, "opencode-home"));
+      expect(env.OPENCODE_AUTH_CONTENT).toBe(openCodeCodexAuthContent(token));
+      const authPath = join(home, "opencode-home", "opencode", "auth.json");
+      expect(existsSync(authPath)).toBe(true);
+      expect(JSON.parse(readFileSync(authPath, "utf8"))).toEqual({ openai: { type: "oauth", access: token } });
     } finally {
       await removeTempDir(home);
     }

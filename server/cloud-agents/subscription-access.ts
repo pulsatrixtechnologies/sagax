@@ -114,6 +114,21 @@ export function codexAccessFrom(text: string | null): SubscriptionAccess | null 
   return { provider: "openai", accessToken: access, expiresAt: jwtExpiry(access), ...(accountId ? { accountId } : {}) };
 }
 
+/** #5524: Codex oauth for pi's auth.json (needs refresh + expires). Never
+ * returned to Perspicax or logged; only for writing the turn's ephemeral
+ * PI_CODING_AGENT_DIR/auth.json. Null when access or refresh is missing. */
+export function codexOAuthFrom(text: string | null): { accessToken: string; refreshToken: string; expiresAt: number; accountId?: string } | null {
+  const root = parse(text);
+  const tokens = record(root?.tokens);
+  const access = token(tokens?.access_token);
+  const refresh = token(tokens?.refresh_token);
+  if (!access || !refresh) return null;
+  const expiresAt = jwtExpiry(access);
+  if (expiresAt == null) return null;
+  const accountId = typeof tokens?.account_id === "string" && /^[\x21-\x7e]{1,200}$/.test(tokens.account_id) ? tokens.account_id : undefined;
+  return { accessToken: access, refreshToken: refresh, expiresAt, ...(accountId ? { accountId } : {}) };
+}
+
 /** #4192: Grok's login file (`<grok home>/auth.json`, one record per
  * issuer::principal): the access value of the sign-in, with its expiry (the
  * record's, else the value's own `exp`), the record that lives longest when

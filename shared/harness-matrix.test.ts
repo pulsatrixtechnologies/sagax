@@ -15,10 +15,15 @@ describe("the harness matrix (#4329, design section 1)", () => {
     expect(recommendedHarness(source, "solo")).toBe("claudeAgent");
   });
 
-  it("marks the OpenAI subscription under pi as larger work, never offered", () => {
-    expect(works({ kind: "subscription", vendor: "openai", driver: "codex" })).toEqual(["codex"]);
-    expect(harnessPairs({ kind: "subscription", vendor: "openai", driver: "codex" }, "solo").map((pair) => [pair.harness, pair.mark]))
-      .toEqual([["codex", "works"], ["piAgent", "larger"], ["opencodeGo", "larger"], ["openai-compat", "no"]]);
+  it("#5524: offers an OpenAI/Codex account under its own tool, pi and OpenCode", () => {
+    const source: HarnessSource = { kind: "subscription", vendor: "openai", driver: "codex" };
+    for (const place of ["solo", "organization"] as const) {
+      expect(works(source, place)).toEqual(["codex", "piAgent", "opencodeGo"]);
+      expect(harnessPairs(source, place).find((pair) => pair.harness === "piAgent")).toEqual({ harness: "piAgent", role: "pi", mark: "works" });
+      expect(harnessPairs(source, place).find((pair) => pair.harness === "opencodeGo")).toEqual({ harness: "opencodeGo", role: "opencode", mark: "works" });
+    }
+    expect(recommendedHarness(source, "solo")).toBe("codex");
+    expect(harnessPairs(source, "solo").find((pair) => pair.harness === "openai-compat")).toEqual({ harness: "openai-compat", role: "builtin", mark: "no", reason: "A subscription is not an API key." });
   });
 
   it("#4410 / #5525: offers a Grok account under its own tool and pi; OpenCode has no sign-in", () => {

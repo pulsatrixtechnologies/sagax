@@ -1222,6 +1222,15 @@ export function piAccessEnvironment(
   for (const [name, value] of Object.entries(access.environment ?? {})) {
     if (value && isPiKeyVariable(name)) env[name] = value;
   }
+  // #5524: Codex subscription under pi: write openai-codex oauth into
+  // auth.json under the turn's home (no env equivalent). Never leave the
+  // JSON content in the child environment.
+  const authContent = access.environment?.PI_AUTH_CONTENT?.trim();
+  if (authContent && access.engineHome) {
+    const authPath = join(access.engineHome, "auth.json");
+    writeFileSync(authPath, `${authContent}\n`, { mode: 0o600 });
+    try { chmodSync(authPath, 0o600); } catch { /* Windows */ }
+  }
   // #2024: the Perspicax model servers, by name in models.json; their keys
   // ride this environment only ("apiKey": "$SAGAX_PI_KEY_...")
   if (access.piModelServers) writePiModelServers(piAgentDir(env), access.piModelServers);

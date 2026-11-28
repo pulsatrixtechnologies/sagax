@@ -343,6 +343,9 @@ public enum ShapeVolume {
             return .arc(cx: cx, cy: cy, y: cy + (y - cy) * k, hw: hw * k, hh: hh * k, ix: ix * k, iy: iy * k)
         case let .outline(outline):
             return .outline(outline)
+        case let .path(d):
+            // Baked still path eyes keep their raw d; shrink is for live capsules.
+            return .path(d)
         }
     }
 
@@ -363,6 +366,8 @@ public enum ShapeVolume {
             }
         case let .outline(outline):
             return outline.onCurve
+        case let .path(d):
+            return ShapeAvatarOutline.samplePathToOutline(d)
         }
     }
 

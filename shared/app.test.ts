@@ -55,8 +55,9 @@ describe("parseAppInput", () => {
     const bot = parseAppInput({ html: "<p>x</p>", uses: ["bot"] });
     expect(bot.ok && bot.html).toContain('"data":["bot"]');
     if (bot.ok) {
-      expect(pageCapabilitiesOf(bot.html)?.data).toEqual([]);
-      expect(pageCapabilitiesAny(pageCapabilitiesOf(bot.html))).toBe(false);
+      // `bot` is a declared PAGE_DATA_SOURCES entry (#5482); uses:["bot"] grants it.
+      expect(pageCapabilitiesOf(bot.html)?.data).toEqual(["bot"]);
+      expect(pageCapabilitiesAny(pageCapabilitiesOf(bot.html))).toBe(true);
     }
     expect(parseAppInput({ html: "<p>x</p>", uses: ["state"] })).toEqual({ ok: true, html: "<p>x</p>" });
     expect(parseAppInput({ html: "<p>x</p>", uses: undefined })).toEqual({ ok: true, html: "<p>x</p>" });

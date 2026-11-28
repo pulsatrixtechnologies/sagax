@@ -112,7 +112,9 @@ export function UsageAccountsDetail({ accounts, favorite, initialOpen, className
         {/* the header stays in sight while an opened fold scrolls */}
         <thead className="sticky top-0 z-[1] bg-[var(--menu-fill)]">
           <tr className="text-[12px] leading-4 text-ink-secondary">
-            <th scope="col" data-usage-free="" className="h-7 whitespace-nowrap px-1.5 text-left font-normal">{t("usageDetail.free", { free, total: accounts.length })}</th>
+            {/* the count says who can still serve, never a plan (#5433): the
+                title says what "available" means */}
+            <th scope="col" data-usage-free="" title={t("usageDetail.freeTip")} className="h-7 whitespace-nowrap px-1.5 text-left font-normal">{t("usageDetail.free", { free, total: accounts.length })}</th>
             <th scope="col" className="h-7 whitespace-nowrap px-1.5 text-left font-normal">{t("usageDetail.session", { hours })}</th>
             <th scope="col" className="h-7 whitespace-nowrap px-1.5 text-left font-normal">{t("usageDetail.week")}</th>
             <th scope="col" className="h-7 whitespace-nowrap px-1.5 text-left font-normal">{layout.limited.length > 0 && limitedOpen ? t("usageDetail.back") : null}</th>

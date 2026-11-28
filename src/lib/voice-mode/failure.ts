@@ -144,7 +144,9 @@ export type VoiceErrorNoteKey =
   | "voiceMode.noCall"
   | `voiceMode.provider.${Exclude<VoiceProviderFailure, "other">}`
   | `voiceMode.provider.${Exclude<VoiceProviderFailure, "other" | "down" | "voice">}.named`
-  | `voiceMode.provider.${Exclude<VoiceProviderFailure, "other" | "down" | "voice">}.namedOther`;
+  // every failure kind has a variant for another provider's key: the plain
+  // line of "down" and "voice" says xAI, so it cannot stand for OpenAI (#5416)
+  | `voiceMode.provider.${Exclude<VoiceProviderFailure, "other">}.namedOther`;
 
 /** The locale key naming a key by its source: "your voice key ···Wez8",
  * "your xAI key in Perspicax ···c0Je", "the organization's key". */
@@ -242,7 +244,15 @@ export function voiceErrorNote(
       clearsOnVoice: true,
     };
   }
-  if (kind && kind !== "other") return { key: `voiceMode.provider.${kind}` as const, retry: false, clearsOnVoice: true };
+  if (kind && kind !== "other") {
+    // "down" and "voice" say xAI in their plain line: a key of another
+    // provider takes the line that names that provider instead (#5416)
+    const provider = key ? otherProvider(key) : null;
+    if (provider && (kind === "down" || kind === "voice")) {
+      return { key: `voiceMode.provider.${kind}.namedOther` as const, params: { provider }, retry: false, clearsOnVoice: true };
+    }
+    return { key: `voiceMode.provider.${kind}` as const, retry: false, clearsOnVoice: true };
+  }
   if (reason === "speech-failed") return { key: "voiceMode.speechFailed", retry: false, clearsOnVoice: true };
   return { key: "voiceMode.transcribeFailed", retry: false, clearsOnVoice: true };
 }

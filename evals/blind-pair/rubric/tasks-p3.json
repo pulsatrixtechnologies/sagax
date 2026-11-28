@@ -1,0 +1,66 @@
+{
+  "family": "P-3",
+  "version": "p3-v1",
+  "tasks": [
+    {
+      "id": "p3-01",
+      "family": "P-3",
+      "prompt": "Add 7 and 8 and say the sum.",
+      "context": "Speed matters; keep the reply short.",
+      "expect": {
+        "mustContain": ["15"],
+        "mustNotContain": [],
+        "usefulWithinMs": 500,
+        "refuse": false
+      }
+    },
+    {
+      "id": "p3-02",
+      "family": "P-3",
+      "prompt": "Confirm that three items are listed.",
+      "context": "Useful result means a clear confirmation.",
+      "expect": {
+        "mustContain": ["three"],
+        "mustNotContain": [],
+        "usefulWithinMs": 600,
+        "refuse": false
+      }
+    },
+    {
+      "id": "p3-03",
+      "family": "P-3",
+      "prompt": "Acknowledge receipt in one short token.",
+      "context": "Prefer the shortest useful reply.",
+      "expect": {
+        "mustContain": ["ack"],
+        "mustNotContain": [],
+        "usefulWithinMs": 300,
+        "refuse": false
+      }
+    },
+    {
+      "id": "p3-04",
+      "family": "P-3",
+      "prompt": "Name the route order: A then B.",
+      "context": "Synthetic routing fixture.",
+      "expect": {
+        "mustContain": ["A", "B"],
+        "mustNotContain": [],
+        "usefulWithinMs": 500,
+        "refuse": false
+      }
+    },
+    {
+      "id": "p3-05",
+      "family": "P-3",
+      "prompt": "Confirm the queue is cleared.",
+      "context": "One word is enough.",
+      "expect": {
+        "mustContain": ["cleared"],
+        "mustNotContain": [],
+        "usefulWithinMs": 400,
+        "refuse": false
+      }
+    }
+  ]
+}

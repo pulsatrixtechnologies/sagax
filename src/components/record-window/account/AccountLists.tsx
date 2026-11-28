@@ -215,7 +215,7 @@ function ActivityLine({ row, detail, tz, onEdit }: { row: ActivityRow; detail: R
           onClick={() => { void detail.write({ action: "schedule.done", id: row.id!, set: { kind: "activity", done: !done } }); }}>
           {done ? <RotateCcw size={14} aria-hidden="true" /> : <Check size={14} aria-hidden="true" />}{t(done ? "recordWindow.schedule.reopen" : "recordWindow.account.done")}
         </button>
-      ) : done ? <span className="shrink-0 text-[13px] text-popover-ink-secondary">{t("recordWindow.account.isDone")}</span> : null}
+      ) : done ? <span className="shrink-0 text-[13px] text-popover-ink-secondary">{t("recordWindow.account.done")}</span> : null}
       <RecordRowActions name={row.subject} onEdit={row.id && detail.can("schedule.update") ? onEdit : undefined}
         onRemove={row.id && detail.can("schedule.remove") ? () => detail.write({ action: "schedule.remove", id: row.id!, set: { kind: "activity" } }) : undefined} />
     </>

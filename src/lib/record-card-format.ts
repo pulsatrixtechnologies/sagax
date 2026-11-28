@@ -79,11 +79,19 @@ export function formatRelative(iso: string, now: number, lang: string, tz?: stri
 }
 
 function clock(date: Date, tag: string, tz: string | undefined): string {
-  const p = parts(date, tag, tz, { hour: "numeric", minute: "2-digit" });
-  // the whole hour reads "17 h", not "17 h 00"
-  return p.minute === "00"
-    ? new Intl.DateTimeFormat(tag, { hour: "numeric", timeZone: safeZone(tz) }).format(date)
-    : new Intl.DateTimeFormat(tag, { hour: "numeric", minute: "2-digit", timeZone: safeZone(tz) }).format(date);
+  const format = new Intl.DateTimeFormat(tag, { hour: "numeric", minute: "2-digit", timeZone: safeZone(tz) });
+  const list = format.formatToParts(date);
+  const minute = list.findIndex((part) => part.type === "minute");
+  if (minute < 0 || list[minute]!.value !== "00") return format.format(date);
+  // the whole hour reads "17 h", not "17 h 00": the language's own hour, unless this ICU gives bare
+  // digits for it (fr-CA "17" in ICU 79), then the minutes and their separator left out, the hour's mark kept
+  const hour = new Intl.DateTimeFormat(tag, { hour: "numeric", timeZone: safeZone(tz) }).format(date);
+  if (/\D/u.test(hour.replace(/\s/gu, ""))) return hour;
+  return list.flatMap((part, index) => {
+    if (index === minute) return [];
+    if (index === minute - 1 && part.type === "literal") return /\p{L}/u.test(part.value) ? [part.value.trimEnd()] : [];
+    return [part.value];
+  }).join("").replace(/\s+/gu, " ").trim();
 }
 
 /** "aujourd'hui 14 h 03", "hier 16 h 20", "mer. 18 nov., 17 h": a note's time

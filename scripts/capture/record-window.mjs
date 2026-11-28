@@ -129,7 +129,7 @@ try {
         // a company's window, each tab; then a contact opened from it, each tab, and back
         const account = async (name) => {
           await page.locator(`[data-record-window-tabs] [data-record-tab="${name}"]`).click();
-          await page.waitForSelector(`[data-record-account-tab="${name}"] [data-record-tab-panel], [data-record-account-tab="${name}"] [data-record-profile]`, { timeout: 10_000 });
+          await page.waitForSelector(`[data-record-account-tab="${name}"] [data-record-tab-panel], [data-record-account-tab="${name}"] [data-record-profile]`, { timeout: 30_000 });
           await page.waitForFunction(() => !document.querySelector("[data-record-account-tab] [role=status]")?.textContent?.match(/Chargement|Loading/), null, { timeout: 10_000 }).catch(() => {});
         };
         await open("company");

@@ -25,6 +25,7 @@ import { t } from "@/lib/i18n";
 import { FOLDER_TAGS, parseFolderItem, parseFolderView, parseLines, type FolderItem, type FolderPlace, type FolderTag, type FolderView } from "@/lib/record-plugin-views";
 import { AskButton, SectionStatus, type PluginContext } from "./PluginParts";
 import type { PluginWindowSpec } from "./PluginWindow";
+import { recordMarkdown } from "../../../../shared/record-cards";
 
 type FinderView = "icons" | "list" | "columns";
 const VIEWS: ReadonlyArray<{ id: FinderView; icon: typeof LayoutGrid }> = [{ id: "icons", icon: LayoutGrid }, { id: "list", icon: List }, { id: "columns", icon: Columns3 }];
@@ -140,10 +141,11 @@ function SearchField({ text, tag, onText, onTag }: { text: string; tag?: FolderT
   );
 }
 
-/** A file's name as the person's request names it: one line, 120 characters at most (it reaches the bot as the person's words). */
-function nameInPrompt(name: string): string {
-  const line = [...name].map((char) => { const code = char.codePointAt(0) ?? 0; return code < 32 || code === 127 ? " " : char; }).join("").replace(/\s+/g, " ").trim();
-  return line.length > 120 ? `${line.slice(0, 119)}…` : line;
+/** An item as the person's request names it: its record's link when it has one (the bot reads it as data), else its name on one line, 60 characters at most. */
+function itemInPrompt(item: Pick<FolderItem, "name" | "ref">): string {
+  const line = [...item.name].map((char) => { const code = char.codePointAt(0) ?? 0; return code < 32 || code === 127 ? " " : char; }).join("").replace(/\s+/g, " ").trim();
+  const name = line.length > 60 ? `${line.slice(0, 59)}…` : line;
+  return item.ref ? recordMarkdown(name, item.ref) : `"${name}"`;
 }
 
 function fold(text: string): string {
@@ -196,7 +198,7 @@ function Preview({ ctx, item, onFile }: { ctx: PluginContext; item?: FolderItem;
       </dl>
       <span className="mt-1 flex flex-wrap justify-center gap-2">
         <button type="button" className={cn(RECORD_ACTION, "bg-popover-field")} onClick={onOpen}>{t("recordWindow.attachments.openShort")}</button>
-        {!item.folder && <AskButton ask={ctx.ask} label={t("recordWindow.folder.summarize")} prompt={t("recordWindow.folder.summarizePrompt", { name: nameInPrompt(item.name), record: ctx.link })} />}
+        {!item.folder && <AskButton ask={ctx.ask} label={t("recordWindow.folder.summarize")} prompt={t("recordWindow.folder.summarizePrompt", { name: itemInPrompt(item), record: ctx.link })} />}
       </span>
     </div>
   );
@@ -298,7 +300,7 @@ function Finder({ ctx }: { ctx: PluginContext }) {
               </button>
             ))}
           </span>
-          {ctx.ask && <button type="button" className={RECORD_ICON_BUTTON} aria-label={t("recordWindow.plugin.share")} title={t("recordWindow.plugin.share")} onClick={() => ctx.ask!(t("recordWindow.folder.sharePrompt", { name: nameInPrompt(selected?.name ?? card.title), record: ctx.link }))} data-finder-share=""><Share size={15} aria-hidden="true" /></button>}
+          {ctx.ask && <button type="button" className={RECORD_ICON_BUTTON} aria-label={t("recordWindow.plugin.share")} title={t("recordWindow.plugin.share")} onClick={() => ctx.ask!(selected ? t("recordWindow.folder.sharePrompt", { name: itemInPrompt(selected), record: ctx.link }) : t("recordWindow.folder.shareFolderPrompt", { record: ctx.link }))} data-finder-share=""><Share size={15} aria-hidden="true" /></button>}
           <TagMenu tag={tag} onTag={setTag} />
           <SearchField text={text} tag={tag} onText={setText} onTag={setTag} />
         </div>
@@ -326,5 +328,6 @@ export const FOLDER_WINDOW: PluginWindowSpec = {
   reads: { items: ["view", "items"] },
   tabs: () => [],
   sides: () => true,
-  body: (ctx) => <Finder ctx={ctx} />,
+  // another folder is a fresh Finder: its search, tag and selection are its own
+  body: (ctx) => <Finder key={ctx.card.id} ctx={ctx} />,
 };

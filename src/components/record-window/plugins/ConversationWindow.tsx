@@ -18,6 +18,7 @@ import { RecordGrid, type RecordColumn } from "@/components/record-window/Record
 import { RecordSplit } from "@/components/record-window/RecordSplit";
 import { cn } from "@/lib/cn";
 import { downloadBlob } from "@/lib/diagram-view";
+import { tableCsv } from "@/lib/table-data";
 import { t } from "@/lib/i18n";
 import { parseCall, parseConversationView, parseLines, parseMessage, parseNumberView, smsSegments, type CallRow, type SmsMessage } from "@/lib/record-plugin-views";
 import { RECORD_MESSAGE_MAX } from "../../../../shared/record-actions";
@@ -175,10 +176,6 @@ function Conversation({ ctx, composing, setComposing }: { ctx: PluginContext; co
   );
 }
 
-function csvCell(value: string): string {
-  return /[",\n;]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
-
 function Log({ ctx, onNew }: { ctx: PluginContext; onNew: () => void }) {
   const state = ctx.detail.section("log");
   if (!state.data) return <SectionStatus state={state} />;
@@ -193,16 +190,16 @@ function Log({ ctx, onNew }: { ctx: PluginContext; onNew: () => void }) {
     { id: "price", label: t("recordWindow.conversation.price"), width: 100, kind: "number", text: (row) => row.price ?? "" },
     { id: "sid", label: "SID", width: 170, text: (row) => row.id, cell: (row) => <code className="rounded-md bg-popover-hover px-1.5 py-0.5 font-mono text-[12px] leading-5 [overflow-wrap:anywhere]">{row.id}</code> },
   ];
-  const exportRows = () => {
-    const head = columns.map((column) => csvCell(column.label || column.id)).join(",");
-    const body = rows.map((row) => columns.map((column) => csvCell(column.text(row))).join(","));
-    downloadBlob(new Blob([[head, ...body].join("\n")], { type: "text/csv" }), "messages.csv");
+  // the rows the filter keeps, as the app's tables export them (formulas neutralized, the BOM for the spreadsheets)
+  const exportRows = (visible: readonly SmsMessage[]) => {
+    const csv = tableCsv(columns.map((column) => column.label || column.id), visible.map((row) => columns.map((column) => column.text(row))));
+    downloadBlob(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }), "messages.csv");
   };
   return (
     <RecordPod>
       <RecordGrid type={ctx.type} grid="log" label={t("recordWindow.conversation.log")} columns={columns} rows={rows} rowKey={(row) => row.id}
-        toolbar={<>
-          <button type="button" className={RECORD_ACTION} onClick={exportRows} data-record-export=""><Download size={14} aria-hidden="true" />{t("recordWindow.conversation.export")}</button>
+        toolbar={(visible) => <>
+          <button type="button" className={RECORD_ACTION} onClick={() => exportRows(visible)} data-record-export=""><Download size={14} aria-hidden="true" />{t("recordWindow.conversation.export")}</button>
           {ctx.detail.can("message.send") && <RecordAddButton label={t("recordWindow.conversation.new")} onAdd={onNew} />}
         </>} />
     </RecordPod>

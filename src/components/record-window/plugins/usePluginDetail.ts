@@ -51,6 +51,7 @@ const CHANGES: Record<string, readonly string[]> = {
 };
 
 const SECTION = /^[a-z][a-z_]{0,39}$/;
+const NO_COUNTS: Readonly<Record<string, number>> = {};
 const PAGES_MOST = 20;
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
@@ -87,9 +88,12 @@ export function usePluginDetail(ref: RecordRef, enabled: boolean, onChanged: () 
     // the language is part of the key: a language change reads again
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [enabled, product, kind, id, lang]);
-  const [served, setServed] = useState<boolean | undefined>(undefined);
-  const [counts, setCounts] = useState<Record<string, number>>({});
-  const [actions, setActions] = useState<ReadonlySet<RecordActionName> | null>(null);
+  // the console's answer for one record (its token): another record starts from no answer, never the last one's
+  const [answer, setAnswer] = useState<{ token?: object; served?: boolean; counts: Record<string, number>; actions: ReadonlySet<RecordActionName> | null }>({ counts: {}, actions: null });
+  const own = answer.token !== undefined && answer.token === source?.token;
+  const served = own ? answer.served : undefined;
+  const counts = own ? answer.counts : NO_COUNTS;
+  const actions = own ? answer.actions : null;
   const [revision, setRevision] = useState(0);
   const sections = useDetailSections<string, unknown>(source, readSection, (error) => refusedByConsole(error) ? "refused" : "failed", () => {});
   const { section: sectionOf, want: wantNow, refresh: refreshSections, loadWanted, reread, live } = sections;
@@ -98,12 +102,6 @@ export function usePluginDetail(ref: RecordRef, enabled: boolean, onChanged: () 
   const servedNow = useRef(served);
   servedNow.current = served;
 
-  useEffect(() => {
-    setServed(undefined);
-    setCounts({});
-    setActions(null);
-  }, [source]);
-
   // the counts first: they say whether the console serves this kind at all
   useEffect(() => {
     if (!source) return;
@@ -111,14 +109,17 @@ export function usePluginDetail(ref: RecordRef, enabled: boolean, onChanged: () 
     api<unknown>(recordDetailPath(source.record, { section: "counts", fresh: revision > 0 ? 1 : undefined })).then((raw) => {
       if (!current) return;
       const given = isObject(raw) && isObject(raw.counts) ? raw.counts : {};
-      setCounts(Object.fromEntries(Object.entries(given).filter(([key, value]) => SECTION.test(key) && typeof value === "number" && Number.isInteger(value) && value >= 0)) as Record<string, number>);
-      setActions(parseRecordActions(isObject(raw) ? raw.actions : undefined));
-      setServed(true);
+      servedNow.current = true;
+      setAnswer({
+        token: source.token, served: true,
+        counts: Object.fromEntries(Object.entries(given).filter(([key, value]) => SECTION.test(key) && typeof value === "number" && Number.isInteger(value) && value >= 0)) as Record<string, number>,
+        actions: parseRecordActions(isObject(raw) ? raw.actions : undefined),
+      });
       // the sections asked while the counts were read
       loadWanted();
     }, () => {
       // a console with no detail for this kind (or none reachable): the frame's own view of the card
-      if (current && servedNow.current === undefined) setServed(false);
+      if (current && servedNow.current === undefined) setAnswer({ token: source.token, served: false, counts: {}, actions: null });
     });
     return () => { current = false; };
   }, [source, revision, loadWanted]);

@@ -5561,6 +5561,12 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
   /* x.com's own stack (Chirp is theirs: the system faces it falls back to) */
   font-family: TwitterChirp, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
+/* X's blue and green, read by a post's own buttons (its record window) and the
+   bars of its statistics (`.x-blue`, outside a post) */
+:is(.x-post, .x-blue) {
+  --x-blue: #1d9bf0;
+  --x-green: #00ba7c;
+}
 /* #4640: the fan of published posts. The cards move only when motion is welcome. */
 .x-stack-card {
   transform-origin: 50% 50%;
@@ -5604,8 +5610,7 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
    default, light under the light skins (the list the X cards and the
    composer read); :is() so no line reads as a skin's own block to the tools
    that look one up. The components only read these. An X post's window reads
-   the X cards' own `.x-post` tokens above; `.x-blue` is X's blue of its
-   statistics' bars. */
+   the X cards' own `.x-post` tokens above. */
 :is(:root, [data-skin]) {
   --finder-sidebar: color-mix(in srgb, var(--color-popover-ink) 4%, transparent);
   --finder-sidebar-glyph: #0a84ff;
@@ -5641,7 +5646,4 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
   --finder-selection: #0063e1;
   --finder-page: #ffffff;
   --finder-page-fold: #d8d8d8;
-}
-.x-blue {
-  --x-blue: #1d9bf0;
 }

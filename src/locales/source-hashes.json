@@ -20054,7 +20054,8 @@
       "recordWindow.folder.empty": "bd88d713ecd33916fd3cc729c91257813f1306ea31e4ccc814b7722591ec63d1",
       "recordWindow.plugin.suggestReply": "44355e88ce833236ef57d5c886d12642a6a867478b279ef67c7b541aa1207991",
       "recordWindow.plugin.tags": "1331275bc537b4c2bf1e46f7275677967515342e30b572e6852fa6f51b831fe8",
-      "recordWindow.plugin.share": "29887a5ff9846ccc23327565a07e17fa6dcaea6211f1898ae825f84ae38f4223"
+      "recordWindow.plugin.share": "29887a5ff9846ccc23327565a07e17fa6dcaea6211f1898ae825f84ae38f4223",
+      "recordWindow.folder.shareFolderPrompt": "44d05834b47a7172fe24f010cd9e0fa568343f1ada832b38aa40e722cf858de7"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

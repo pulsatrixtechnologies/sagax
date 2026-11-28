@@ -101,8 +101,7 @@ function Reply({ ctx, reply, divider }: { ctx: PluginContext; reply: NonNullable
       <XPostItem post={reply} divider={divider} actions={ctx.detail.can("post.reply") ? { onReply: () => setReplying(true) } : undefined} />
       <div className="flex flex-col gap-2 pb-3 pe-4 ps-[68px]">
         <div className="flex flex-wrap items-start gap-2">
-          {ctx.detail.can("post.reply") && !replying && <button type="button" className={RECORD_ACTION} onClick={() => setReplying(true)} data-x-reply-open="">{t("recordWindow.post.reply")}</button>}
-          {/* the reply is named by its author, never by its words: a third party's text never becomes the person's request */}
+          {/* X's own reply button opens the form; the reply is named by its author, never by its words: a third party's text never becomes the person's request */}
           <AskButton ask={ctx.ask} label={t("recordWindow.plugin.suggestReply")} prompt={t("recordWindow.post.suggestPrompt", { handle: reply.handle, record: ctx.link })} />
         </div>
         {replying && <ReplyForm ctx={ctx} to={reply.id} onDone={() => setReplying(false)} />}

@@ -6,6 +6,7 @@
 // Painted from the popover tokens; no colour of its own.
 import { useState, type ReactNode } from "react";
 import { Download, FileText, Sparkles } from "lucide-react";
+import { FieldValue, TONE_DOT } from "@/components/RecordCard";
 import { RecordMarkdown } from "@/components/RecordMarkdown";
 import { RECORD_ACTION, RECORD_PRIMARY, RecordAddButton, RecordAvatar, RecordEntryForm, RecordPod, RecordRowActions, RecordSectionStatus } from "@/components/record-window/RecordBlocks";
 import { RecordList, type RecordColumn } from "@/components/record-window/RecordGrid";
@@ -39,22 +40,22 @@ export interface PluginContext {
   forward?: () => void;
 }
 
+/** A tone's words (a verdict, a fact), the frame's dot and chip being `TONE_DOT` and `FieldValue`'s state. */
 export const TONE_TEXT: Record<RecordTone, string> = { open: "text-popover-ink-secondary", waiting: "text-warning", done: "text-success", alert: "text-danger" };
-export const TONE_FILL: Record<RecordTone, string> = { open: "bg-popover-ink-secondary", waiting: "bg-warning", done: "bg-success", alert: "bg-danger" };
-const TONE_TINT: Record<RecordTone, string> = { open: "bg-popover-hover", waiting: "bg-warning/15", done: "bg-success/15", alert: "bg-danger/15" };
 
+/** A tone's dot: the frame's own fill (RecordCard.tsx `TONE_DOT`). */
 export function ToneDot({ tone, className }: { tone: RecordTone; className?: string }) {
-  return <span aria-hidden="true" className={cn("inline-block size-2 shrink-0 rounded-full", TONE_FILL[tone], className)} data-tone={tone} />;
+  return <span aria-hidden="true" className={cn("inline-block size-2 shrink-0 rounded-full", TONE_DOT[tone], className)} data-tone={tone} />;
 }
 
-/** A state in a pill: its dot and its words in the popover ink over the tone's tint. */
-export function StatePill({ label, tone, className }: { label: string; tone: RecordTone; className?: string }) {
-  return (
-    <span className={cn("inline-flex h-7 max-w-full shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-medium leading-[18px] text-popover-ink", TONE_TINT[tone], className)} data-record-pill={tone}>
-      <ToneDot tone={tone} className="size-1.5" />
-      <span className="min-w-0 truncate">{label}</span>
-    </span>
-  );
+/** A state as the frame draws one: `FieldValue`'s state chip. */
+export function StatePill({ label, tone }: { label: string; tone: RecordTone }) {
+  return <span className="inline-flex shrink-0" data-record-pill={tone}><FieldValue field={{ label, value: label, type: "state", tone }} label={label} now={0} lang={activeLocale()} tz={undefined} /></span>;
+}
+
+/** A share as the frame draws one (a volume's use): `FieldValue`'s percent, its words then its bar. */
+export function ShareValue({ label, value, share }: { label: string; value: string; share?: number }) {
+  return <span className="block min-w-0 flex-1" data-record-share=""><FieldValue field={{ label, value, type: "percent", ...(share !== undefined ? { share } : {}) }} label={label} now={0} lang={activeLocale()} tz={undefined} /></span>;
 }
 
 /** Tiles: a big value under its label, a quieter line under it, the tone on that line. */
@@ -112,16 +113,6 @@ export function Steps({ steps, now }: { steps: readonly ViewStep[]; now: number 
         </li>
       ))}
     </ol>
-  );
-}
-
-/** A share as a bar (a volume's use): the console's share, its words beside. */
-export function Meter({ share, label, className }: { share?: number; label: string; className?: string }) {
-  if (share === undefined) return null;
-  return (
-    <span role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(share)} className={cn("block h-1.5 min-w-8 flex-1 overflow-hidden rounded-full bg-popover-hover", className)}>
-      <span className="block h-full rounded-full bg-popover-accent" style={{ width: `${share}%` }} />
-    </span>
   );
 }
 

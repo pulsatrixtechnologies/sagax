@@ -274,7 +274,8 @@ export interface XPostActions {
   shared?: boolean;
 }
 
-const X_BUTTON = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d9bf0] disabled:opacity-50";
+const X_BUTTON = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--x-blue)] disabled:opacity-50";
+const X_BUTTON_HOVER = "hover:bg-[color-mix(in_srgb,var(--x-blue)_10%,transparent)] hover:text-[var(--x-blue)]";
 
 /** X's action row: reply, repost, like, views with their counts when known (muted icons otherwise), bookmark and share.
  * A post the person's bot just published carries the quiet Posted chip in place of bookmark and share. */
@@ -291,7 +292,7 @@ function XFooter({ post, actions }: { post: XPostView; actions?: XPostActions })
       {METRICS.map((metric) => {
         const inner = (
           <>
-            <span className="flex size-[30px] items-center justify-center rounded-full transition-colors group-hover/m:bg-[#1d9bf0]/10 sm:size-[34.75px]">
+            <span className="flex size-[30px] items-center justify-center rounded-full transition-colors group-hover/m:bg-[color-mix(in_srgb,var(--x-blue)_10%,transparent)] sm:size-[34.75px]">
               <XIcon name={metric.icon} className={metric.hover} />
             </span>
             <span className="-ms-1 min-w-4 whitespace-nowrap tabular-nums">{metrics[metric.key] === undefined ? "" : xCount(metrics[metric.key]!, language)}</span>
@@ -310,7 +311,7 @@ function XFooter({ post, actions }: { post: XPostView; actions?: XPostActions })
         <span className="ms-auto flex shrink-0 items-center">
           {actions?.onBookmark ? (
             <button type="button" data-x-metric="bookmark" aria-pressed={Boolean(actions.bookmarked)} title={t("rich.x.bookmark")} aria-label={t("rich.x.bookmark")} onClick={actions.onBookmark}
-              className={cn("flex size-[34.75px] items-center justify-center rounded-full hover:bg-[#1d9bf0]/10 hover:text-[#1d9bf0]", actions.bookmarked ? "text-[#1d9bf0]" : "text-[var(--x-sub)]", X_BUTTON)}>
+              className={cn("flex size-[34.75px] items-center justify-center rounded-full", X_BUTTON_HOVER, actions.bookmarked ? "text-[var(--x-blue)]" : "text-[var(--x-sub)]", X_BUTTON)}>
               <XIcon name="bookmark" />
             </button>
           ) : (
@@ -320,8 +321,8 @@ function XFooter({ post, actions }: { post: XPostView; actions?: XPostActions })
           )}
           {actions?.onShare ? (
             <button type="button" data-x-metric="share" title={actions.shared ? t("media.linkCopied") : t("rich.x.share")} aria-label={actions.shared ? t("media.linkCopied") : t("rich.x.share")} onClick={actions.onShare}
-              className={cn("flex size-[34.75px] items-center justify-center rounded-full text-[var(--x-sub)] hover:bg-[#1d9bf0]/10 hover:text-[#1d9bf0]", X_BUTTON)}>
-              {actions.shared ? <Check size={18} aria-hidden="true" className="text-[#00ba7c]" /> : <XIcon name="share" />}
+              className={cn("flex size-[34.75px] items-center justify-center rounded-full text-[var(--x-sub)]", X_BUTTON_HOVER, X_BUTTON)}>
+              {actions.shared ? <Check size={18} aria-hidden="true" className="text-[var(--x-green)]" /> : <XIcon name="share" />}
             </button>
           ) : (
             <span data-x-metric="share" title={t("rich.x.share")} aria-label={t("rich.x.share")} className="flex size-[34.75px] items-center justify-center rounded-full text-[var(--x-sub)]">

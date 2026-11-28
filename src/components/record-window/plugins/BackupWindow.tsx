@@ -11,10 +11,11 @@
 import { Check, Clock } from "lucide-react";
 import { RecordPod } from "@/components/record-window/RecordBlocks";
 import { RecordList, type RecordColumn } from "@/components/record-window/RecordGrid";
+import { TONE_DOT } from "@/components/RecordCard";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { parseBackupView, parseLines, parseRestorePoint, type BackupVolume, type RestorePoint } from "@/lib/record-plugin-views";
-import { AskButton, FactList, Meter, SectionStatus, TONE_FILL, Tiles, WriteButton, tabCount, type PluginContext } from "./PluginParts";
+import { AskButton, FactList, SectionStatus, ShareValue, Tiles, WriteButton, tabCount, type PluginContext } from "./PluginParts";
 import type { PluginWindowSpec } from "./PluginWindow";
 
 function Volume({ volume, big = false }: { volume: BackupVolume; big?: boolean }) {
@@ -25,16 +26,14 @@ function Volume({ volume, big = false }: { volume: BackupVolume; big?: boolean }
           <span className="text-[24px] font-semibold leading-8">{volume.name}</span>
           <span className="text-[13px] leading-[18px] text-popover-ink-secondary">{[volume.label, volume.fs].filter(Boolean).join(" · ")}</span>
         </div>
-        <Meter share={volume.share} label={volume.name} />
-        <span className="text-[13px] leading-[18px] text-popover-ink-secondary">{volume.used}</span>
+        <ShareValue label={volume.name} value={volume.used} share={volume.share} />
       </RecordPod>
     );
   }
   return (
     <div className="flex min-w-0 items-center gap-3" data-record-volume="">
       <span className="w-8 shrink-0 font-semibold">{volume.name}</span>
-      <Meter share={volume.share} label={volume.name} />
-      <span className="shrink-0 text-[13px] leading-[18px] text-popover-ink-secondary">{volume.used}</span>
+      <ShareValue label={volume.name} value={volume.used} share={volume.share} />
     </div>
   );
 }
@@ -52,7 +51,7 @@ function Overview({ ctx }: { ctx: PluginContext }) {
           <ol className="flex min-w-0 gap-1" aria-label={t("recordWindow.backup.days", { count: view.days.length })}>
             {view.days.map((day) => (
               <li key={day.day} title={[day.day, day.label].filter(Boolean).join(" · ")} aria-label={[day.day, day.label].filter(Boolean).join(" · ")}
-                className={cn("h-6 min-w-1 flex-1 rounded-[4px]", day.tone === "open" ? "bg-popover-hover" : cn(TONE_FILL[day.tone], "opacity-80"))} data-record-day={day.tone} />
+                className={cn("h-6 min-w-1 flex-1 rounded-[4px]", day.tone === "open" ? "bg-popover-hover" : cn(TONE_DOT[day.tone], "opacity-80"))} data-record-day={day.tone} />
             ))}
           </ol>
           {view.daysNote && <p dir="auto" className="mt-2 text-[13px] leading-[18px] text-popover-ink-secondary">{view.daysNote}</p>}

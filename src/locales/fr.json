@@ -16155,6 +16155,7 @@
   "recordWindow.folder.view.list": "Liste",
   "recordWindow.folder.view.columns": "Colonnes",
   "recordWindow.folder.sharePrompt": "Partage {name} de {record} : demande-moi avec qui et comment, puis propose-le en carte.",
+  "recordWindow.folder.shareFolderPrompt": "Partage le dossier {record} : demande-moi avec qui et comment, puis propose-le en carte.",
   "recordWindow.folder.folder": "Dossier",
   "recordWindow.folder.modified": "Date de modification",
   "recordWindow.folder.modifiedShort": "Modifié",

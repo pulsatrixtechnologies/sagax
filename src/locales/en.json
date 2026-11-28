@@ -16170,6 +16170,7 @@
   "recordWindow.folder.view.list": "List",
   "recordWindow.folder.view.columns": "Columns",
   "recordWindow.folder.sharePrompt": "Share {name} from {record}: ask me with whom and how, then propose it as a card.",
+  "recordWindow.folder.shareFolderPrompt": "Share the folder {record}: ask me with whom and how, then propose it as a card.",
   "recordWindow.folder.folder": "Folder",
   "recordWindow.folder.modified": "Date Modified",
   "recordWindow.folder.modifiedShort": "Modified",

@@ -231,6 +231,18 @@ describe("a Twilio conversation", () => {
     expect(document.querySelectorAll("[data-record-listen]")).toHaveLength(2);
   });
 
+  it("exports the log rows the filter keeps, as the app's tables do (formulas neutralized)", async () => {
+    const { downloadBlob } = await import("@/lib/diagram-view");
+    await open("conversation");
+    await tab("log");
+    await act(async () => document.querySelector<HTMLElement>("[data-record-export]")!.click());
+    const [blob, name] = vi.mocked(downloadBlob).mock.calls.at(-1)! as [Blob, string];
+    expect(name).toBe("messages.csv");
+    const text = await blob.text();
+    expect(text.startsWith("\uFEFF")).toBe(true);
+    expect(text.trim().split("\r\n")).toHaveLength(10);
+  });
+
   it("plays one recording at a time and lets none go on, or leak, once the tab closes", async () => {
     const players: Array<{ paused: boolean; src: string }> = [];
     class FakeAudio { paused = true; onended: (() => void) | null = null; constructor(public src: string) { players.push(this); } play() { this.paused = false; return Promise.resolve(); } pause() { this.paused = true; } }
@@ -280,7 +292,9 @@ describe("an X post", () => {
     await open("post");
     await tab("replies");
     expect(document.querySelectorAll("[data-x-reply]")).toHaveLength(2);
-    await act(async () => document.querySelector<HTMLElement>("[data-x-reply-open]")!.click());
+    // X's own reply button opens the form (one Reply per reply)
+    expect(document.querySelector("[data-x-reply-open]")).toBeNull();
+    await act(async () => document.querySelector<HTMLElement>('[data-x-reply] button[data-x-metric="replies"]')!.click());
     setValue(document.querySelector<HTMLTextAreaElement>("[data-x-reply-form] textarea")!, "Thanks!");
     await act(async () => document.querySelector<HTMLElement>("[data-x-reply-form] [data-record-form-submit]")!.click());
     await settle();

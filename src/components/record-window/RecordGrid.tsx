@@ -80,8 +80,8 @@ export function RecordGrid<R>({ type, grid, columns, rows, rowKey, rowAttributes
   rows: readonly R[];
   rowKey: (row: R) => string;
   rowAttributes?: (row: R) => Record<`data-${string}`, string | undefined> & { className?: string };
-  /** beside the filter, at the right */
-  toolbar?: ReactNode;
+  /** beside the filter, at the right; given the rows the filter keeps, for an action on them (an export) */
+  toolbar?: ReactNode | ((visible: readonly R[]) => ReactNode);
   empty?: ReactNode;
   filter?: boolean;
   label: string;
@@ -106,12 +106,13 @@ export function RecordGrid<R>({ type, grid, columns, rows, rowKey, rowAttributes
   };
   const setWidth = (id: string, width: number) => keepRecordGrid(type, grid, { ...currentGrid(), widths: { ...kept?.widths, [id]: Math.max(COLUMN_LEAST, Math.round(width)) } });
   const visible = filter ? filterRecordRows(rows, columns, value) : [...rows];
+  const tools = typeof toolbar === "function" ? toolbar(visible) : toolbar;
   return (
     <div className="flex min-w-0 flex-col gap-2" data-record-grid={grid}>
-      {(filter || toolbar) && (
+      {(filter || tools) && (
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {filter && <RecordFilter columns={columns} value={value} onChange={setValue} shown={visible.length} total={rows.length} />}
-          {toolbar && <span className="ms-auto flex flex-wrap items-center gap-1.5">{toolbar}</span>}
+          {tools && <span className="ms-auto flex flex-wrap items-center gap-1.5">{tools}</span>}
         </div>
       )}
       {visible.length ? (

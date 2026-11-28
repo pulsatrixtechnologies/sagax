@@ -245,6 +245,7 @@ describe("the record window's actions", () => {
     const h = harness({ answer: () => ({ ok: true, status: 200, body: { updated: true } }) });
     const bad = [
       { action: "ticket.close", set: {} },
+      { action: "note.add", set: { text: "x" } },
       { action: "note.add", set: { kind: "internal" } },
       { action: "note.add", set: { kind: "secret", text: "x" } },
       { action: "note.add", set: { kind: "internal", text: "x", hours: 1 } },
@@ -264,20 +265,31 @@ describe("the record window's actions", () => {
       { action: "schedule.update", id: "501", set: { kind: "meeting" } },
     ];
     for (const ask of bad) {
-      expect(recordWrite(ask), JSON.stringify(ask)).toBeNull();
+      expect(recordWrite(ask, "ticket"), JSON.stringify(ask)).toBeNull();
       expect((await h.request(PATH + "/detail", ADA, "POST", ask)).status).toBe(400);
     }
     expect(h.calls).toEqual([]);
   });
 
+  // M-20261127-191: ticket notes need their kind; company and contact notes do not
+  it("requires kind on a ticket's note.add and leaves it optional on a company or a contact", () => {
+    expect(recordWrite({ action: "note.add", set: { text: "Sans type" } }, "ticket")).toBeNull();
+    expect(recordWrite({ action: "note.add", set: { text: "Avec type", kind: "discussion" } }, "ticket"))
+      .toEqual({ action: "note.add", set: { text: "Avec type", kind: "discussion" } });
+    expect(recordWrite({ action: "note.add", set: { text: "  Relancer en janvier  " } }, "company"))
+      .toEqual({ action: "note.add", set: { text: "Relancer en janvier" } });
+    expect(recordWrite({ action: "note.add", set: { text: "Préférer le matin" } }, "contact"))
+      .toEqual({ action: "note.add", set: { text: "Préférer le matin" } });
+  });
+
   // M-20261127-140: a company's window adds a note with its words only, a contact and a site, each changed or removed
   it("takes a company's note, contact and site, and refuses one missing its name or carrying another's field", () => {
-    expect(recordWrite({ action: "note.add", set: { text: "  Relancer en janvier  " } })).toEqual({ action: "note.add", set: { text: "Relancer en janvier" } });
-    expect(recordWrite({ action: "contact.add", set: { first_name: "Mira", last_name: "Novak", email: "mira@acme.example", phone: "" } }))
+    expect(recordWrite({ action: "note.add", set: { text: "  Relancer en janvier  " } }, "company")).toEqual({ action: "note.add", set: { text: "Relancer en janvier" } });
+    expect(recordWrite({ action: "contact.add", set: { first_name: "Mira", last_name: "Novak", email: "mira@acme.example", phone: "" } }, "company"))
       .toEqual({ action: "contact.add", set: { first_name: "Mira", last_name: "Novak", email: "mira@acme.example" } });
-    expect(recordWrite({ action: "contact.update", id: "2204", set: { phone: "418 555-0199" } })).toEqual({ action: "contact.update", id: "2204", set: { phone: "418 555-0199" } });
-    expect(recordWrite({ action: "site.add", set: { name: "Chantier", city: "Québec, QC" } })).toEqual({ action: "site.add", set: { name: "Chantier", city: "Québec, QC" } });
-    expect(recordWrite({ action: "site.remove", id: "52" })).toEqual({ action: "site.remove", id: "52", set: {} });
+    expect(recordWrite({ action: "contact.update", id: "2204", set: { phone: "418 555-0199" } }, "company")).toEqual({ action: "contact.update", id: "2204", set: { phone: "418 555-0199" } });
+    expect(recordWrite({ action: "site.add", set: { name: "Chantier", city: "Québec, QC" } }, "company")).toEqual({ action: "site.add", set: { name: "Chantier", city: "Québec, QC" } });
+    expect(recordWrite({ action: "site.remove", id: "52" }, "company")).toEqual({ action: "site.remove", id: "52", set: {} });
     for (const ask of [
       { action: "contact.add", set: { last_name: "Novak" } },
       { action: "contact.add", set: { first_name: "Mira", hours: 1 } },
@@ -285,17 +297,17 @@ describe("the record window's actions", () => {
       { action: "contact.remove", set: {} },
       { action: "site.add", set: { name: "x".repeat(51) } },
       { action: "site.update", set: { name: "Bureau" } },
-    ]) expect(recordWrite(ask), JSON.stringify(ask)).toBeNull();
+    ]) expect(recordWrite(ask, "company"), JSON.stringify(ask)).toBeNull();
   });
 
   it("holds an action to the organization's Refuse rules on writing that product, a file by its size, never its bytes", async () => {
     const rule: CustomRule = { id: "o1", ownerId: "p-admin", botId: null, when: "modifier Nimbus Desk", behavior: "deny", riskScope: [], enabled: true, createdAt: 1, updatedAt: 1, org: true, products: ["nimbus_desk"] };
-    const note = recordWrite({ action: "note.add", set: { kind: "discussion", text: "Bonjour" } })!;
+    const note = recordWrite({ action: "note.add", set: { kind: "discussion", text: "Bonjour" } }, "ticket")!;
     expect(recordReadOrgRule([rule], REF, "Nimbus Desk", undefined, note).kind).toBe("deny");
     const reading = { ...rule, when: "lire Nimbus Desk" };
     expect(recordReadOrgRule([reading], REF, "Nimbus Desk", undefined, note).kind).toBe("none");
     // a file is read by its name and size, never its bytes
-    const file = recordWrite({ action: "attachment.add", set: { name: "test.txt", base64: "UHJpbnQ=" } })!;
+    const file = recordWrite({ action: "attachment.add", set: { name: "test.txt", base64: "UHJpbnQ=" } }, "ticket")!;
     expect(recordRuleInput(REF, file)).toEqual({ kind: "ticket", id: "481516", action: "create", entry: "attachment.add", set: { name: "test.txt", bytes: 6 } });
     expect(JSON.stringify(recordRuleInput(REF, file))).not.toContain("UHJpbnQ=");
     const denied = harness({ rule: { kind: "deny", rule: { id: "o1", text: "rule" } } });

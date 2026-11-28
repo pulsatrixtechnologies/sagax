@@ -85,7 +85,9 @@ const SITE_FIELDS: Record<string, Rule> = { name: TEXT(RECORD_NAME_MAX, 1), addr
 
 /** Each action: whether it names an entry, the fields it may set, the ones it must. */
 const SHAPES: Record<RecordActionName, { id: boolean; fields: Record<string, Rule>; required?: readonly string[]; some?: boolean }> = {
-  // a ticket's note says its kind; a company's or a contact's note has none (the console keeps its own default)
+  // a ticket's note must say its kind (discussion, internal, resolution); a company's or a
+  // contact's note has none (the console keeps its own default). parseRecordAction takes the
+  // record's kind from the route and requires `kind` only for a ticket (M-20261127-191).
   "note.add": { id: false, fields: { text: TEXT(RECORD_NOTE_MAX, 1), kind: NOTE_KIND }, required: ["text"] },
   "note.update": { id: true, fields: { text: TEXT(RECORD_NOTE_MAX, 1), kind: NOTE_KIND }, some: true },
   "note.remove": { id: true, fields: {} },
@@ -143,8 +145,13 @@ export function isRecordActionName(value: unknown): value is RecordActionName {
   return typeof value === "string" && (RECORD_ACTIONS as readonly string[]).includes(value);
 }
 
-/** One action as the route accepts it: a known action, its entry when it names one, only its own fields, each in its bounds. Anything else is null. */
-export function parseRecordAction(body: unknown): RecordAction | null {
+/**
+ * One action as the route accepts it: a known action, its entry when it names one, only its own
+ * fields, each in its bounds. `recordKind` is the fiche's kind from the detail route
+ * (`/api/me/records/:product/:kind/:id/detail`): a ticket's `note.add` must set `kind`
+ * (discussion, internal or resolution); a company's or a contact's may omit it. Anything else is null.
+ */
+export function parseRecordAction(body: unknown, recordKind?: string): RecordAction | null {
   if (!body || typeof body !== "object" || Array.isArray(body)) return null;
   const raw = body as { action?: unknown; id?: unknown; set?: unknown };
   if (!isRecordActionName(raw.action)) return null;
@@ -167,7 +174,10 @@ export function parseRecordAction(body: unknown): RecordAction | null {
     if (clean === undefined) return null;
     set[key] = clean;
   }
-  if ((shape.required ?? []).some((key) => set[key] === undefined)) return null;
+  const required = [...(shape.required ?? [])];
+  // a ticket note without a kind would reach ConnectWise with none of the note_flags set
+  if (raw.action === "note.add" && recordKind === "ticket") required.push("kind");
+  if (required.some((key) => set[key] === undefined)) return null;
   if (shape.some && !Object.keys(set).length) return null;
   // a planned entry changed says what changes beside its kind
   if (raw.action === "schedule.update" && Object.keys(set).every((key) => key === "kind")) return null;

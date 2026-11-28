@@ -19,7 +19,7 @@ describe("providers on this installation", () => {
       { ...instance("cerebras", "cerebras", "Cerebras (API)"), snapshot: { state: "unavailable" as const } },
     ]);
     expect(groups.map((group) => [group.id, group.name, group.accounts.length])).toEqual([
-      ["claude", "Claude", 2], ["openai", "ChatGPT / Codex", 1], ["xai", "Grok", 1], ["google", "Gemini", 1], ["hermesAgent", "Hermes Agent", 1],
+      ["claude", "Claude", 2], ["openai", "ChatGPT / Codex", 1], ["xai", "Grok", 1], ["google", "Gemini", 1], ["cerebras", "Cerebras (API)", 1], ["hermesAgent", "Hermes Agent", 1],
     ]);
     expect(groups.filter((group) => group.bringsConnectors).map((group) => group.id)).toEqual(["claude"]);
     expect(groups.find((group) => group.id === "openai")!.manageUrl).toBe("https://chatgpt.com/#settings/Connectors");

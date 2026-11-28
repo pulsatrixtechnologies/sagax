@@ -36,9 +36,9 @@ export function providerGroups<T extends InstanceLike>(instances: readonly T[]):
   const groups = new Map<string, ProviderGroup<T>>();
   for (const instance of instances) {
     const known = KNOWN.find((entry) => entry.kinds.includes(instance.driverKind));
-    // Every catalog engine is listed in Settings; here an engine counts once
-    // it is set up, except the providers that can bring connectors.
-    if (!known && instance.snapshot.state === "unavailable") continue;
+    // Every catalog engine is listed in Settings; the control "Runs with"
+    // lists each engine the data says can work, regardless of its current
+    // availability state.
     const id = known?.id ?? instance.driverKind;
     let group = groups.get(id);
     if (!group) {

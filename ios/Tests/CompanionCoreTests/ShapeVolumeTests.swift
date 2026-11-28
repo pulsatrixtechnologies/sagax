@@ -186,6 +186,87 @@ final class ShapeVolumeTests: XCTestCase {
         XCTAssertEqual(ShapeVolume.eyeStyle(.idle), .capsule)
     }
 
+    func testThePathCaseDrawsBakedStillEyesAsTheDesktopWritesThem() throws {
+        // One frozen eye that eyeMarkup writes as { shape: "path", d } (ShapeStillArt).
+        let both = try XCTUnwrap(ShapeStillArt.eyes[.circle]?[.idle])
+        let d = firstClosedSubpath(both)
+        XCTAssertFalse(d.isEmpty)
+        XCTAssertTrue(d.hasPrefix("M"))
+        XCTAssertTrue(d.hasSuffix("Z") || d.hasSuffix("z"))
+
+        let styled: [ShapeStyledEye] = [.path(d)]
+        XCTAssertEqual(ShapeVolume.d(styled), d)
+
+        let drawn = ShapeVolume.path(styled)
+        let expected = SVGPath.parse(d)
+        let drawnBox = drawn.boundingBoxOfPath
+        let expectedBox = expected.boundingBoxOfPath
+        XCTAssertEqual(drawnBox.minX, expectedBox.minX, accuracy: 1e-6)
+        XCTAssertEqual(drawnBox.minY, expectedBox.minY, accuracy: 1e-6)
+        XCTAssertEqual(drawnBox.width, expectedBox.width, accuracy: 1e-6)
+        XCTAssertEqual(drawnBox.height, expectedBox.height, accuracy: 1e-6)
+        XCTAssertGreaterThan(drawnBox.width, 0)
+        XCTAssertGreaterThan(drawnBox.height, 0)
+
+        let start = try XCTUnwrap(pathPoints(drawn).first)
+        let end = try XCTUnwrap(pathPoints(drawn).last)
+        let wantStart = try XCTUnwrap(pathPoints(expected).first)
+        let wantEnd = try XCTUnwrap(pathPoints(expected).last)
+        XCTAssertEqual(start.x, wantStart.x, accuracy: 1e-6, "path start matches eyeMarkup d")
+        XCTAssertEqual(start.y, wantStart.y, accuracy: 1e-6, "path start matches eyeMarkup d")
+        XCTAssertEqual(end.x, wantEnd.x, accuracy: 1e-6, "path end matches eyeMarkup d")
+        XCTAssertEqual(end.y, wantEnd.y, accuracy: 1e-6, "path end matches eyeMarkup d")
+
+        // Morph outline sampling for baked path eyes (M-20261127-178).
+        let outline = ShapeAvatarOutline.samplePathToOutline(d)
+        XCTAssertEqual(outline.count, 64)
+        XCTAssertFalse(outline.contains { $0.x.isNaN || $0.y.isNaN })
+
+        // Malformed path draws nothing and does not trap.
+        let bad = ShapeVolume.path([.path("not-a-path"), .path("M1 2C3")])
+        XCTAssertTrue(bad.isEmpty)
+
+        // styledEyes(.path) keeps the raw d string from a ShapeOutline.
+        let outlineEye = try XCTUnwrap(ShapeOutline(points: [
+            CGPoint(x: 40, y: 60), CGPoint(x: 42, y: 66), CGPoint(x: 40, y: 72), CGPoint(x: 38, y: 66),
+        ]))
+        let fromStyle = ShapeVolume.styledEyes([outlineEye], .path)
+        XCTAssertEqual(fromStyle.count, 1)
+        if case let .path(raw) = fromStyle[0] {
+            XCTAssertEqual(raw, outlineEye.d)
+        } else {
+            XCTFail("styledEyes(.path) must yield .path")
+        }
+    }
+
+    /// The first `M…Z` subpath of a still eyes string (one eyeMarkup path).
+    private func firstClosedSubpath(_ d: String) -> String {
+        guard let z = d.firstIndex(where: { $0 == "Z" || $0 == "z" }) else { return "" }
+        return String(d[...z])
+    }
+
+    private func pathPoints(_ path: CGPath) -> [CGPoint] {
+        var points: [CGPoint] = []
+        path.applyWithBlock { element in
+            let pointsPtr = element.pointee.points
+            switch element.pointee.type {
+            case .moveToPoint:
+                points.append(pointsPtr[0])
+            case .addLineToPoint:
+                points.append(pointsPtr[0])
+            case .addQuadCurveToPoint:
+                points.append(pointsPtr[1])
+            case .addCurveToPoint:
+                points.append(pointsPtr[2])
+            case .closeSubpath:
+                break
+            @unknown default:
+                break
+            }
+        }
+        return points
+    }
+
     /// The body's thickness (`bodyDepth`) still thins the slices of a
     /// naturally thin body (a tube, a teardrop's tip), measured on its own radii.
     func testAThinBodyThinsItsSlices() {

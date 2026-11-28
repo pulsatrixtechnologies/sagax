@@ -50,7 +50,7 @@ public enum ShapeVolumeDetail: String, CaseIterable, Sendable {
 
 /// How a mood draws the eyes (`EyeStyle`).
 public enum ShapeEyeStyle: String, CaseIterable, Sendable {
-    case capsule, oval, arc
+    case capsule, oval, arc, path
 }
 
 /// Every matrix of one pose: the slices behind the face (back to front) and the face (`PoseMatrices`).
@@ -120,6 +120,8 @@ public enum ShapeStyledEye: Sendable {
     /// `cy` is the eye's own middle, which a shrink is measured from.
     case arc(cx: Double, cy: Double, y: Double, hw: Double, hh: Double, ix: Double, iy: Double)
     case outline(ShapeOutline)
+    /// A raw baked still eye: the path string from the desktop's `eyeMarkup` as `{ shape: "path", d }`.
+    case path(String)
 }
 
 /// The paints of one body colour (`InkPaint`).
@@ -341,6 +343,9 @@ public enum ShapeVolume {
             return .arc(cx: cx, cy: cy, y: cy + (y - cy) * k, hw: hw * k, hh: hh * k, ix: ix * k, iy: iy * k)
         case let .outline(outline):
             return .outline(outline)
+        case let .path(d):
+            // Baked still path eyes keep their raw d; shrink is for live capsules.
+            return .path(d)
         }
     }
 
@@ -361,6 +366,8 @@ public enum ShapeVolume {
             }
         case let .outline(outline):
             return outline.onCurve
+        case let .path(d):
+            return ShapeAvatarOutline.samplePathToOutline(d)
         }
     }
 
@@ -432,7 +439,10 @@ public enum ShapeVolume {
     /// fixtures) (`styledEyes`): capsules are the path's own; ovals and
     /// arches are built on each eye's box.
     public static func styledEyes(_ eyes: [ShapeOutline], _ style: ShapeEyeStyle) -> [ShapeStyledEye] {
-        guard style != .capsule, !eyes.isEmpty else { return eyes.map { .outline($0) } }
+        guard style != .capsule, style != .path, !eyes.isEmpty else {
+            if style == .path { return eyes.map { .path($0.d) } }
+            return eyes.map { .outline($0) }
+        }
         let boxes = eyes.map { eye -> (cx: Double, cy: Double, w: Double, h: Double) in
             let points = eye.allPoints
             let xs = points.map { ShapeMath.round2(Double($0.x)) }, ys = points.map { ShapeMath.round2(Double($0.y)) }
@@ -465,6 +475,8 @@ public enum ShapeVolume {
                 ShapeMath.smoothClosedPath(ShapeGaze.eyeOutline(cx, cy, w, h, tilt), into: path)
             case let .outline(outline):
                 outline.add(to: path)
+            case let .path(d):
+                ShapeMath.smoothClosedPath(d, into: path)
             case let .oval(cx, cy, rx, ry):
                 path.addEllipse(in: CGRect(x: cx - rx, y: cy - ry, width: 2 * rx, height: 2 * ry))
             case let .arc(cx, _, y, hw, hh, ix, iy):
@@ -487,6 +499,8 @@ public enum ShapeVolume {
                 return ShapeMath.smoothClosed(ShapeGaze.eyeOutline(cx, cy, w, h, tilt))
             case let .outline(outline):
                 return outline.d
+            case let .path(d):
+                return d
             case let .oval(cx, cy, rx, ry):
                 return "M\(f(cx - rx)) \(f(cy))A\(f(rx)) \(f(ry)) 0 1 0 \(f(cx + rx)) \(f(cy))A\(f(rx)) \(f(ry)) 0 1 0 \(f(cx - rx)) \(f(cy))Z"
             case let .arc(cx, _, y, hw, hh, ix, iy):

@@ -137,6 +137,90 @@ public enum ShapeMath {
         path.closeSubpath()
     }
 
+    /// A closed cubic path from the desktop's `eyeMarkup` string (`M` / `C` / `Z`).
+    /// Reads each segment as written: `move` at `M`, one `addCurve` per `C`,
+    /// `closeSubpath` at `Z`. No re-smoothing. A malformed string draws nothing.
+    public static func smoothClosedPath(_ d: String, into path: CGMutablePath) {
+        guard !d.isEmpty else { return }
+        let scratch = CGMutablePath()
+        var numbers: [CGFloat] = []
+        var command: Character?
+        var started = false
+        var closed = false
+        var abandoned = false
+
+        func flush() {
+            guard let command else { return }
+            switch command {
+            case "M":
+                guard numbers.count >= 2 else { abandoned = true; return }
+                scratch.move(to: CGPoint(x: numbers[0], y: numbers[1]))
+                started = true
+            case "C":
+                guard started, numbers.count >= 6, numbers.count % 6 == 0 else { abandoned = true; return }
+                var i = 0
+                while i + 5 < numbers.count {
+                    scratch.addCurve(
+                        to: CGPoint(x: numbers[i + 4], y: numbers[i + 5]),
+                        control1: CGPoint(x: numbers[i], y: numbers[i + 1]),
+                        control2: CGPoint(x: numbers[i + 2], y: numbers[i + 3])
+                    )
+                    i += 6
+                }
+            default:
+                abandoned = true
+            }
+            numbers.removeAll(keepingCapacity: true)
+        }
+
+        var token = ""
+        func takeNumber() {
+            if token.isEmpty { return }
+            guard let value = Double(token) else { abandoned = true; token = ""; return }
+            numbers.append(CGFloat(value))
+            token = ""
+        }
+
+        for character in d {
+            if abandoned { break }
+            if character.isNumber || character == "." || character == "e" || character == "E" {
+                token.append(character)
+            } else if character == "-" {
+                if token.hasSuffix("e") || token.hasSuffix("E") {
+                    token.append(character)
+                } else {
+                    takeNumber()
+                    token = "-"
+                }
+            } else if character == " " || character == "," || character == "\n" || character == "\t" {
+                takeNumber()
+            } else if character == "Z" || character == "z" {
+                takeNumber()
+                flush()
+                if abandoned { break }
+                guard started else { abandoned = true; break }
+                scratch.closeSubpath()
+                closed = true
+                command = nil
+                started = false
+            } else if character == "M" || character == "C" {
+                takeNumber()
+                flush()
+                if abandoned { break }
+                command = character
+            } else {
+                abandoned = true
+                break
+            }
+        }
+        if !abandoned {
+            takeNumber()
+            if command != nil { flush() }
+        }
+        guard !abandoned, closed, !scratch.isEmpty else { return }
+        path.addPath(scratch)
+    }
+
     // MARK: Colours
 
     static func rgb(_ hex: String) -> (Double, Double, Double) {

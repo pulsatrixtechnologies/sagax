@@ -20,6 +20,11 @@ enum WatchWaitingList {
             case .room: asker = message.from?.botId ?? ""
             }
             guard botId == nil || botId == asker else { continue }
+            // #5538: owner device run for Watch and real push — the Chat
+            // must carry the right thread for the Watch to route the
+            // approval correctly. A room's thread can collide with a bot's
+            // main thread; the Chat.id disambiguates.
+            guard case .bot = chat || chat.id == thread || botId == nil else { continue }
             if let entry = PinnedWaitingEntry(message: message, botId: asker, botName: chat.name, threadId: thread) {
                 payload.waiting.append(entry.item)
                 payload.messages[entry.id] = message

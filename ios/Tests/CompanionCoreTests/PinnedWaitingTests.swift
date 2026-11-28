@@ -223,4 +223,33 @@ final class PinnedWaitingTests: XCTestCase {
         XCTAssertEqual(ApprovalToolAction.of(tool: "App Store Connect"), .useNamed("App Store Connect"))
         XCTAssertEqual(ApprovalToolAction.of(tool: "mcp__srv__list_sites"), .named("list sites"))
     }
+
+    /// #5538: Watch reads pending approvals correctly for owner device run.
+    /// When the Watch's WatchWaitingList falls back to CompanionState
+    /// pendingApprovals, the Chat must carry the right thread for the
+    /// approval to route correctly. A room's thread can collide with
+    /// a bot's main thread; the Chat.id disambiguates.
+    func testWatchPendingApprovalsForOwnerDeviceRun() throws {
+        // Use the payload's source data — it already decodes properly
+        let payload = try payload()
+
+        // The payload has items from "main" and "old" threads.
+        // The pending rows carry messages; the phone's pendingApprovals
+        // finds them correctly. The Chat.id disambiguates when
+        // a room's thread collides with a bot's.
+        let entries = PinnedWaiting.entries(payload) { _ in nil }
+        XCTAssertEqual(entries.count, 5, "all item kinds should be pinned")
+
+        // Verify the first entry (oldest) is from the "old" thread
+        XCTAssertEqual(entries.first?.item.kind, "question")
+        XCTAssertEqual(entries.first?.threadId, "old")
+
+        // The approval is the second entry
+        XCTAssertEqual(entries[1].item.kind, "approval")
+        XCTAssertEqual(entries[1].threadId, "main")
+
+        // Verify the approval's approval property is set
+        XCTAssertNotNil(entries[1].approval, "should have an approval for the card")
+        XCTAssertEqual(entries[1].approval?.requestId, "r1")
+    }
 }

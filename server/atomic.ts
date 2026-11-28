@@ -40,13 +40,15 @@ export type AtomicWriteOptions = {
  * so it is retried rather than reported. Everything else throws immediately;
  * a real permission problem must not be papered over by a busy-wait.
  *
- * Total worst case is ~155 ms across 6 attempts. Kept synchronous because
+ * Total worst case is ~635 ms across 8 attempts. Kept synchronous because
  * every caller is a synchronous save path, and making one of them async is a
- * much larger change than this bug warrants.
+ * much larger change than this bug warrants. The longer tail covers a
+ * concurrent reader that keeps reopening the target (evals local-vm-state on
+ * Windows, #5455): 155 ms was not enough under that pressure.
  *
  * ponytail: fixed backoff, no jitter. If contention turns out to be heavy
  * enough that these collide, jitter it then. */
-const RENAME_RETRY_DELAYS_MS = [5, 10, 20, 40, 80];
+const RENAME_RETRY_DELAYS_MS = [5, 10, 20, 40, 80, 160, 320];
 const RETRYABLE_RENAME_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
 
 function sleepSync(ms: number): void {

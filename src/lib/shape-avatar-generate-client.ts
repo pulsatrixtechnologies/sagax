@@ -1,6 +1,7 @@
-// Ask the bot's model for a shape definition (POST /api/bots/:id/shape-avatar/generate),
-// for the mascot picker's Generate panel (#5369). Returns the definition as JSON text
-// the picker's Import path already accepts.
+// Ask the bot's Auto / model selection for an open-bot-avatar definition
+// (POST /api/bots/:id/shape-avatar/generate), for the mascot picker's
+// Generate panel (#5369, #5450). Returns the definition as JSON text the
+// picker's Import path already accepts (parseEngineAvatar).
 import { api } from "@/state/store";
 
 export async function generateBotShapeAvatar(botId: string, direction: string): Promise<string> {

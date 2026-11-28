@@ -360,6 +360,47 @@ describe("picking in the grid", () => {
     expect(host.querySelector('[data-character-shape="star"]')?.getAttribute("aria-pressed")).toBe("false");
   });
 
+  it("Generate shows a preview: Keep adds after the same check as Import, Retry asks again, Cancel drops the draft (#5450)", async () => {
+    const kite = { version: 1, id: "kite", name: "Kite", body: { path: "M50 10L86 50L50 90L14 50Z" }, eyes: { x: 50, y: 48, spacing: 14, scale: 1 } };
+    const onGenerate = vi.fn(async () => JSON.stringify(kite));
+    await mount(makeBot({ mascotLook: botMascotLook({ character: "shape", shape: "star" }) }), { onGenerate });
+    await act(async () => host.querySelector<HTMLButtonElement>("[data-mascot-add-open]")!.click());
+    expect(document.querySelector("[data-mascot-add-generate]")).not.toBeNull();
+    const field = document.querySelector<HTMLTextAreaElement>("[data-mascot-add-generate] textarea")!;
+    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!.call(field, "a paper kite");
+    await act(async () => field.dispatchEvent(new window.Event("input", { bubbles: true }) as unknown as Event));
+    await act(async () => document.querySelector<HTMLButtonElement>("[data-mascot-generate]")!.click());
+    await act(async () => { await Promise.resolve(); });
+    expect(onGenerate).toHaveBeenCalledWith("a paper kite");
+    expect(patches).toEqual([]);
+    expect(document.querySelector("[data-mascot-generate-preview]")).not.toBeNull();
+    expect(document.querySelector("[data-mascot-generate-name]")?.textContent).toBe("Kite");
+    expect(document.querySelector("[data-mascot-generate-keep]")).not.toBeNull();
+    expect(document.querySelector("[data-mascot-generate-retry]")).not.toBeNull();
+    expect(document.querySelector("[data-mascot-generate-cancel]")).not.toBeNull();
+    // preview replaces Generate + Import in the add panel [M-20261127-191]
+    expect(document.querySelector("[data-mascot-add-import]")).toBeNull();
+    expect(document.querySelector("[data-mascot-add-generate]")).toBeNull();
+    await act(async () => document.querySelector<HTMLButtonElement>("[data-mascot-generate-cancel]")!.click());
+    expect(document.querySelector("[data-mascot-generate-preview]")).toBeNull();
+    expect(document.querySelector("[data-mascot-add-import]")).not.toBeNull();
+    expect(document.querySelector("[data-mascot-add-generate]")).not.toBeNull();
+    expect(patches).toEqual([]);
+    await act(async () => document.querySelector<HTMLButtonElement>("[data-mascot-generate]")!.click());
+    await act(async () => { await Promise.resolve(); });
+    expect(document.querySelector("[data-mascot-add-import]")).toBeNull();
+    await act(async () => document.querySelector<HTMLButtonElement>("[data-mascot-generate-retry]")!.click());
+    await act(async () => { await Promise.resolve(); });
+    expect(onGenerate).toHaveBeenCalledTimes(3);
+    expect(patches).toEqual([]);
+    expect(document.querySelector("[data-mascot-generate-preview]")).not.toBeNull();
+    expect(document.querySelector("[data-mascot-add-import]")).toBeNull();
+    await act(async () => document.querySelector<HTMLButtonElement>("[data-mascot-generate-keep]")!.click());
+    expect(patches).toHaveLength(1);
+    expect(patches[0]!.mascotLook).toMatchObject({ character: "shape", avatarDef: { id: "kite", name: "Kite" } });
+    expect(document.querySelector('[data-mascot-picker-layer="add"]')).toBeNull();
+  });
+
   it("lists every skin, a locked one with its padlock and how to unlock it, never selectable", async () => {
     enforce([]);
     await mount(makeBot());

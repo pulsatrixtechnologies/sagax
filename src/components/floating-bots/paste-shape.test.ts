@@ -82,6 +82,23 @@ describe("the Shapes tab", () => {
     expect(open).not.toContain("data-mascot-add-generate");
   });
 
+  it("with onGenerate, the plus panel offers Generate; Keep / Retry / Cancel appear only after a valid reply (#5450)", () => {
+    const html = renderToStaticMarkup(
+      createElement(MascotPicker, {
+        bot: { color: "blue" as never, mascotSkin: "none" as never, mascotLook: botMascotLook({ character: "shape", shape: "star" }) },
+        onPatch: () => undefined,
+        initialTab: "shapes",
+        initialLayer: "add",
+        onGenerate: async () => "",
+      }),
+    );
+    expect(html).toContain("data-mascot-add-generate");
+    expect(html).toContain("data-mascot-generate");
+    expect(html).toContain(t("mascotPicker.add.generate"));
+    expect(html).not.toContain("data-mascot-generate-preview");
+    expect(html).not.toContain("data-mascot-generate-keep");
+  });
+
   it("shows the pasted shape as the chosen one, by its name, and no catalog shape as chosen", () => {
     const html = shapeTab({ character: "shape", shape: "star", avatarDef: kite });
     expect(html).toContain("data-own-shape=\"\"");

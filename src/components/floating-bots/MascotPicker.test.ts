@@ -101,6 +101,9 @@ describe("the mascot picker", () => {
     const html = render({ character: "shape", shape: "cup" });
     for (const text of ["Formes", "Personnages", 'aria-label="Peluche"', 'aria-label="Verre"', 'aria-label="Joyeuse"', 'aria-label="Sarcelle"', 'aria-label="Couleur libre"', 'aria-label="Nouvelle forme"', 'aria-label="Réglages"']) expect(html).toContain(text);
     expect(html).not.toMatch(/[–—]/);
+    const generate = render({ character: "shape", shape: "cup" }, { initialLayer: "add", onGenerate: async () => "" });
+    expect(generate).toContain("Générer");
+    expect(generate).not.toContain("Garder");
   });
 
   it("the gear's panel and the plus panel open on what the upstream picker offers", () => {

@@ -29,7 +29,7 @@ import { MAUS_COLORS, type MausColor } from "@/lib/mascot";
 import { relativeLuminance } from "../../../shared/mascot-colors";
 import { MASCOT_SKIN_IDS, OWL_SKIN_TIER, botMascotSkin, type MascotSkinId } from "../../../shared/mascot-skins";
 import { completeMascotLook, engineLookOf, SHAPE_MOTIONS, withEngineLook, type MascotCharacter, type MascotLook, type MascotShape, type ShapeMaterial, type ShapeMoodSetting, type ShapeMotion, type SkinTier } from "../../../shared/mascot-look";
-import type { EngineAvatarReason } from "../../../shared/engine-avatar-def";
+import { parseEngineAvatar, type EngineAvatarDef, type EngineAvatarReason } from "../../../shared/engine-avatar-def";
 import { ShapeMascot } from "@/components/ShapeMascot";
 import { materialsSupported } from "@/components/shape-material";
 import { bakedShapeFor } from "@/components/shape-avatar";
@@ -43,7 +43,7 @@ import "@/components/skin-fx/skin-fx.css";
 import { skinTierTabs } from "./editor-tabs";
 import { CHARACTER_LABEL, OWL_SKIN_LABEL, SHAPE_LABEL, SKIN_TIER_LABEL } from "./mascot-look-labels";
 import { MASCOTS, SHAPE_CHOICES, type CompleteLook } from "./mascots";
-import { bodyColorOf, characterPatch, colorPatch, materialPatch, pastedShapeLook, pickerColor, pickerControls, PICKER_TABS, QUICK_COLORS, shapePatch, skinPatch, tabOf, type PickerPatch, type PickerTab } from "./mascot-picker";
+import { bodyColorOf, characterPatch, colorPatch, definitionJson, materialPatch, pastedShapeLook, pickerColor, pickerControls, PICKER_TABS, QUICK_COLORS, shapePatch, skinPatch, tabOf, type PickerPatch, type PickerTab } from "./mascot-picker";
 import { CHARACTER_SKINS, skinPreview } from "./skin-catalog";
 import { wardrobeStep } from "./wardrobe";
 import "./mascot-picker.css";
@@ -308,23 +308,41 @@ const primary = "inline-flex h-8 items-center justify-center gap-1.5 rounded-ful
 
 /**
  * The "+" panel: the two ways to add a shape of one's own, after the
- * upstream picker's Generate and Import screens, without their tabs. Generate
- * asks a model of the app (through `onGenerate`) and adds what it draws;
- * Import takes a definition's JSON, pasted, typed or dropped as a file. Either
- * way the engine checks the definition before it becomes the bot's shape.
+ * upstream picker's Generate and Import screens, without their tabs.
+ * Generate asks a model of the app (through `onGenerate`, the bot's Auto
+ * model) and shows an in-panel preview: Keep, Retry or Cancel
+ * [D-20261127-005]. During a preview the add panel shows only that card;
+ * Cancel or Keep brings Generate and Import back [M-20261127-191]. Import
+ * takes a definition's JSON, pasted, typed or dropped as a file. Either way
+ * the engine checks the definition (the same parseEngineAvatar path) before
+ * it becomes the bot's shape.
  */
-function AddShapePanel({ onAdd, onGenerate, disabled }: { onAdd: (text: string) => EngineAvatarReason[] | null; onGenerate?: (description: string) => Promise<string>; disabled?: boolean }) {
+function AddShapePanel({
+  onAdd,
+  onGenerate,
+  disabled,
+  preview,
+}: {
+  onAdd: (text: string) => EngineAvatarReason[] | null;
+  onGenerate?: (description: string) => Promise<string>;
+  disabled?: boolean;
+  preview: { color: string; shape: MascotShape; skin: string; material: ShapeMaterial; mood: ShapeMoodSetting; eyeColor?: string; depth?: number; motion: ShapeMotion };
+}) {
   const [description, setDescription] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generateFailed, setGenerateFailed] = useState(false);
+  const [generateReasons, setGenerateReasons] = useState<EngineAvatarReason[] | null>(null);
+  const [draft, setDraft] = useState<{ text: string; def: EngineAvatarDef } | null>(null);
   const [text, setText] = useState("");
   const [reasons, setReasons] = useState<EngineAvatarReason[] | null>(null);
   const [fileProblem, setFileProblem] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const ids = useId();
-  const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
+  // a click while a previous ask is in flight is a new generation: the older
+  // reply is dropped (the panel can remount under StrictMode or a parent
+  // refresh, so a one-shot "alive" flag would swallow the result)
+  const generateSeq = useRef(0);
 
   const add = (source: string) => {
     setFileProblem(null);
@@ -341,19 +359,46 @@ function AddShapePanel({ onAdd, onGenerate, disabled }: { onAdd: (text: string) 
     setText(content);
     add(content);
   };
+  const clearDraft = () => {
+    setDraft(null);
+    setGenerateFailed(false);
+    setGenerateReasons(null);
+  };
   const generate = async () => {
     if (!onGenerate || generating || !description.trim()) return;
+    const seq = ++generateSeq.current;
     setGenerating(true);
     setGenerateFailed(false);
+    setGenerateReasons(null);
+    // keep an existing preview up while Retry runs so Import does not flash back
     try {
       const reply = await onGenerate(description.trim());
-      if (!alive.current) return;
-      // a reply the engine cannot draw is never added: the person is told, and may try other words
-      if (onAdd(reply)) setGenerateFailed(true);
+      if (seq !== generateSeq.current) return;
+      // same check as Import: a reply the engine cannot draw is never offered to Keep
+      const parsed = parseEngineAvatar(definitionJson(reply));
+      if (!parsed.ok) {
+        setDraft(null);
+        setGenerateFailed(true);
+        setGenerateReasons(parsed.reasons);
+        return;
+      }
+      setDraft({ text: JSON.stringify(parsed.def), def: parsed.def });
     } catch {
-      if (alive.current) setGenerateFailed(true);
+      if (seq === generateSeq.current) {
+        setDraft(null);
+        setGenerateFailed(true);
+      }
     } finally {
-      if (alive.current) setGenerating(false);
+      if (seq === generateSeq.current) setGenerating(false);
+    }
+  };
+  const keep = () => {
+    if (!draft) return;
+    const refused = onAdd(draft.text);
+    if (refused) {
+      setGenerateFailed(true);
+      setGenerateReasons(refused);
+      setDraft(null);
     }
   };
   const onDrop = (event: DragEvent) => {
@@ -361,6 +406,35 @@ function AddShapePanel({ onAdd, onGenerate, disabled }: { onAdd: (text: string) 
     setDragging(false);
     void readFile(event.dataTransfer.files[0]);
   };
+
+  // During a preview the add panel shows only Keep / Retry / Cancel: Import
+  // and Generate stay out of the way until Cancel or Keep [M-20261127-191].
+  if (draft) {
+    return (
+      <div className="flex w-[340px] max-w-[calc(100vw-32px)] flex-col gap-3 p-3" data-mascot-add="">
+        <div className="flex flex-col items-center gap-2" data-mascot-generate-preview="">
+          <ShapeMascot
+            shape={preview.shape}
+            skin={preview.skin as never}
+            color={preview.color}
+            size={96}
+            animated
+            detail="full"
+            engineLook={{ material: preview.material, mood: preview.mood, eyeColor: preview.eyeColor, depth: preview.depth, motion: preview.motion }}
+            trackPointer={false}
+            avatarDef={draft.def}
+            label={draft.def.name}
+          />
+          <p className="m-0 text-center text-[13px] font-medium leading-4 text-ink" data-mascot-generate-name="">{draft.def.name}</p>
+          <div className="flex w-full flex-wrap gap-2">
+            <button type="button" className={cn(primary, "flex-1")} disabled={disabled} data-mascot-generate-keep="" onClick={keep}>{t("mascotPicker.add.keep")}</button>
+            <button type="button" className={cn(button, "flex-1")} disabled={disabled || generating} data-mascot-generate-retry="" onClick={() => void generate()}>{t("mascotPicker.add.retry")}</button>
+            <button type="button" className={cn(button, "flex-1 bg-transparent text-ink-secondary")} disabled={disabled} data-mascot-generate-cancel="" onClick={clearDraft}>{t("mascotPicker.add.cancel")}</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex w-[340px] max-w-[calc(100vw-32px)] flex-col gap-3 p-3" data-mascot-add="">
@@ -374,7 +448,7 @@ function AddShapePanel({ onAdd, onGenerate, disabled }: { onAdd: (text: string) 
             disabled={disabled || generating}
             aria-label={t("mascotPicker.add.describe")}
             placeholder={t("mascotPicker.add.describe")}
-            onChange={(event) => { setDescription(event.target.value); setGenerateFailed(false); }}
+            onChange={(event) => { setDescription(event.target.value); setGenerateFailed(false); setGenerateReasons(null); }}
             onKeyDown={(event) => {
               if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void generate(); }
             }}
@@ -383,6 +457,11 @@ function AddShapePanel({ onAdd, onGenerate, disabled }: { onAdd: (text: string) 
             {generating ? t("mascotPicker.add.generating") : t("mascotPicker.add.generate")}
           </button>
           {generateFailed && <p role="alert" className="m-0 text-[12px] leading-4 text-danger" data-mascot-generate-failed="">{t("mascotPicker.add.generateFailed")}</p>}
+          {generateReasons && generateReasons.length > 0 && (
+            <ul role="alert" className="m-0 flex list-disc flex-col gap-1 pl-4 text-[12px] leading-4 text-danger" data-mascot-generate-reasons="">
+              {generateReasons.map((reason) => <li key={reason} data-reason={reason}>{t(PASTE_REASON_LABEL[reason])}</li>)}
+            </ul>
+          )}
           <div className="menu-divider mt-1 h-px w-full" aria-hidden="true" />
         </section>
       )}
@@ -800,7 +879,21 @@ export default function MascotPicker({ bot, disabled, onPatch: savePatch, onGene
       )}
       {layer === "add" && tab === "shapes" && !shapesLock.locked && (
         <Layer anchorRef={addRef} popoverRef={layerRef} name="add" label={t("mascotPicker.add.title")}>
-          <AddShapePanel onAdd={addDefinition} onGenerate={onGenerate} disabled={disabled} />
+          <AddShapePanel
+            onAdd={addDefinition}
+            onGenerate={onGenerate}
+            disabled={disabled}
+            preview={{
+              color: body,
+              shape: look.shape,
+              skin: look.skins.shape,
+              material: settings.material,
+              mood: settings.mood,
+              eyeColor: settings.eyeColor ?? undefined,
+              depth: settings.depth ?? undefined,
+              motion: settings.motion,
+            }}
+          />
         </Layer>
       )}
     </div>

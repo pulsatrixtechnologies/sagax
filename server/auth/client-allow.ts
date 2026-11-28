@@ -496,6 +496,12 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   // bot's owner on a personal server or this computer's own person
   // (clientSessionIsComputerOwner), never on an organization server.
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/connector-cards\/[\w-]+\/authorize$/ },
+  // Chat app connector calls from show_html (#5485 / D-20261127-013): the
+  // viewer's own session on a bot thread they can read; same class as page
+  // connectors. Omitted from CLIENT_ALLOW when #5485 landed; route-scopes
+  // fails without these two.
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/apps\/[\w-]+\/connector$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/apps\/[\w-]+\/approvals\/[\w-]+$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/always-allow$/ }, // must match a pending card
   // 2026-10-14: a person's own approval rules; the handlers keep them to
   // the person (and the bot's owner).

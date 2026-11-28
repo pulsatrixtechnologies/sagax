@@ -670,7 +670,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"DELETE","kind":"pattern","route":"^\\/api\\/custom-rules\\/([\\w-]+)$","tier":"write","readOnly":false,"scope":"custom-rules:write","defaultEnabled":true,"destructive":true},
   {"method":"PATCH","kind":"pattern","route":"^\\/api\\/custom-rules\\/([\\w-]+)$","tier":"write","readOnly":false,"scope":"custom-rules:write","defaultEnabled":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/desktop-bridge\\/([0-9a-f-]{36})\\/(poll|lease|progress|result|disconnect|system|mac-apps)$","tier":"write","readOnly":false,"scope":"desktop-bridge:write","defaultEnabled":true},
-  {"method":"ANY","kind":"pattern","route":"^\\/api\\/desktop-bridge\\/([0-9a-f-]{36})\\/local-models$","tier":"write","readOnly":false,"scope":"desktop-bridge:write","defaultEnabled":true},
+  {"method":"GET","kind":"pattern","route":"^\\/api\\/desktop-bridge\\/([0-9a-f-]{36})\\/local-models$","tier":"read","readOnly":true,"scope":"desktop-bridge:read","defaultEnabled":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/desktop-bridge\\/([0-9a-f-]{36})\\/terminal\\/([a-f0-9]{48})$","tier":"write","readOnly":false,"scope":"desktop-bridge:write","defaultEnabled":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/desktop-bridge\\/([0-9a-f-]{36})\\/tunnel$","tier":"write","readOnly":false,"scope":"desktop-bridge:write","defaultEnabled":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/desktop-viewer\\/(local\\/(?:shared|bot-[a-f0-9]{64}|pool-\\d+)|vps\\/[\\w-]+|sandbox\\/me)(\\/websockify)?$","tier":"write","readOnly":false,"scope":"desktop-viewer:write","defaultEnabled":true},

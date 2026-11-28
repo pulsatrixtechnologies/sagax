@@ -8,6 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { createSharedCua, executeSharedOperation, personalSecretPaths, sharedComputerError } from "./shared-computer-access.mjs";
 import { createLendingActivity, describeSharedOperation } from "./lending-activity.mjs";
 import { ENVIRONMENT_PATH, LEGACY_ENVIRONMENT_PATH } from "./legacy-names.mjs";
+import { migrateFolderGrantToExecutionAccess } from "../shared/paired-workspace-access.ts";
 
 const uuid = value => typeof value === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(value);
 export async function validateSharedFolders(folders) {
@@ -287,7 +288,18 @@ export function createComputerSharing({ file, fetch: fetchImpl, environments, cu
   };
   const state = id => {
     const grant = records[id];
-    return { enabled: grant?.enabled === true, folders: Array.isArray(grant?.folders) ? grant.folders : [], terminal: grant?.terminal === true, computer: grant?.computer === true, ...status.get(id) };
+    const migrated = migrateFolderGrantToExecutionAccess(grant);
+    const access = grant?.access === "always" || grant?.access === "ask" || grant?.access === "never"
+      ? grant.access
+      : migrated.access;
+    return {
+      enabled: grant?.enabled === true && access !== "never",
+      folders: Array.isArray(grant?.folders) ? grant.folders : migrated.folders,
+      access,
+      terminal: grant?.terminal === true,
+      computer: grant?.computer === true,
+      ...status.get(id),
+    };
   };
   const disconnect = (env, grant) => {
     stop(env.id);
@@ -324,6 +336,40 @@ export function createComputerSharing({ file, fetch: fetchImpl, environments, cu
     },
     decline(env, info) { disconnect(env, records[env.id]); store({ ...records, [env.id]: { ...info, enabled: false, folders: [], terminal: false, computer: false } }); },
     async save(env, input, info) {
+      const bridgeAccess = input?.access === "always" || input?.access === "ask" || input?.access === "never" ? input.access : null;
+      // #4856: desktop bridge execution access (no sharedComputers maintainer flag).
+      if (bridgeAccess) {
+        const session = await request(env, "/api/auth/session").catch(() => null);
+        if (session?.kind !== "session" || !uuid(session.id)) throw new Error("Complete server pairing or sign-in first");
+        if (info?.sessionId && info.sessionId !== session.id) throw new Error("Server sign-in changed. Review computer access again.");
+        const folders = await validateSharedFolders(input.folders ?? []);
+        const enabled = bridgeAccess !== "never";
+        const grant = {
+          sessionId: session.id,
+          environmentId: info?.environmentId ?? records[env.id]?.environmentId ?? null,
+          id: records[env.id]?.id ?? randomUUID(),
+          secret: records[env.id]?.secret ?? randomBytes(32).toString("hex"),
+          enabled,
+          folders,
+          access: bridgeAccess,
+          terminal: bridgeAccess === "always",
+          computer: false,
+        };
+        disconnect(env, records[env.id]);
+        store({ ...records, [env.id]: grant });
+        if (enabled) {
+          try {
+            await request(env, "/api/me/desktop-bridge/computers/access", { computer: os.hostname().slice(0, 120) || "Computer", access: bridgeAccess });
+            status.set(env.id, { connected: true });
+          } catch {
+            status.set(env.id, { connected: false });
+          }
+        } else {
+          status.set(env.id, { connected: false });
+        }
+        changed();
+        return state(env.id);
+      }
       const fresh = await identity(env);
       if (!matches(info, fresh)) throw new Error("Server sign-in changed. Review computer access again.");
       const folders = await validateSharedFolders(input.folders);
@@ -356,18 +402,23 @@ export function createComputerSharing({ file, fetch: fetchImpl, environments, cu
     },
     revoke(env) {
       disconnect(env, records[env.id]);
-      if (records[env.id]) store({ ...records, [env.id]: { ...records[env.id], enabled: false } });
+      if (records[env.id]) store({ ...records, [env.id]: { ...records[env.id], enabled: false, access: "never", terminal: false, computer: false } });
+      status.set(env.id, { connected: false });
       changed();
       return state(env.id);
     },
     forget(env) { disconnect(env, records[env.id]); const next = { ...records }; delete next[env.id]; store(next); changed(); },
-    /** Resume saved grants. Maintainer grants only when the local flag is on
-     * (the caller checked it); Cloud grants whenever the Cloud sign-in allows. */
+    /** Resume saved grants. Cloud and legacy folder-sharing grants keep the
+     * shared-computers connector. Grants saved with always/ask/never use the
+     * desktop bridge (#4856) and are not reconnected here. */
     start({ maintainer = true } = {}) {
       for (const env of environments()) {
         const grant = records[env.id];
         if (!validRecord(grant)) continue;
         if (grant.cloud) { if (cloudLendingVerdict(grant.cloud, cloud(), env).allow) run(env, grant); }
+        else if (grant.access === "always" || grant.access === "ask" || grant.access === "never") {
+          if (grant.access !== "never") status.set(env.id, { ...status.get(env.id), connected: false });
+        }
         else if (maintainer && !maintainerOff) run(env, grant);
       }
       changed();

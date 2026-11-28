@@ -259,7 +259,7 @@ const __BUILD_DATE__: string;
       computerSharing?: {
         state(id: string): Promise<DesktopComputerSharing>;
         chooseFolder(): Promise<DesktopSharedFolder | null>;
-        save(id: string, grant: Pick<DesktopComputerSharing, "folders" | "terminal" | "computer">): Promise<DesktopComputerSharing | null>;
+        save(id: string, grant: Pick<DesktopComputerSharing, "folders" | "terminal" | "computer"> & { access?: "always" | "ask" | "never" }): Promise<DesktopComputerSharing | null>;
         revoke(id: string): Promise<DesktopComputerSharing>;
         /** This computer's own record of what that server's bots did here, newest first. */
         activity(id: string): Promise<DesktopLendingActivity[]>;

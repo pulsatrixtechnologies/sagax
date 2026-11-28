@@ -135,12 +135,13 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   // with the feature off these paths are as unlisted as any other, so a
   // client session is refused exactly the way an unknown route refuses it.
   { methods: ["POST"], path: /^\/api\/shared-computers\/(?:connect|[\w-]+\/(?:poll|lease|result|disconnect))$/, feature: "sharedComputers" },
-  // Organization server: the person's own desktop app bridges their computer
-  // (server/desktop/desktop-bridge-routes.ts). The handler answers the session's own
-  // person only, binds poll/results to a private desktop secret, and 404s on
-  // a solo server.
+  // Organization and solo paired workspace: the person's own desktop app bridges
+  // their computer (server/desktop/desktop-bridge-routes.ts, #4856). The handler
+  // answers the session's own person only and binds poll/results to a private
+  // desktop secret. Never admin by default (#4471, #5585).
   // #4471: progress and mac-apps are the same desktop's reports, bound to
   // the same session and desktop secret as poll, lease and result.
+  // #5585: local-models (POST) is that desktop publishing its catalog, same person.
   { methods: ["POST"], path: /^\/api\/desktop-bridge\/(?:connect|[0-9a-f-]{36}\/(?:poll|lease|progress|result|disconnect|system|mac-apps|local-models))$/ },
   { methods: ["GET"], path: /^\/api\/me\/desktop-bridge$/ },
   { methods: ["POST"], path: /^\/api\/me\/desktop-bridge\/local-vm$/ },
@@ -319,6 +320,8 @@ export const CLIENT_ALLOW: ReadonlyArray<ClientRoute> = [
   // generation, and the bot profile's Links, Media and Files tabs. The
   // handlers check the owner and narrow the threads to the viewer's own.
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/avatar\/generate$/ },
+  // Bot banner generation (same owner gate as avatar; #5585 rebase onto main).
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/banner\/generate$/ },
   // Shape avatar geometry JSON via the bot's text model (fallback presets).
   // Handler checks the owner; never an admin-only gate on the person's own bot.
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/shape-avatar\/generate$/ },

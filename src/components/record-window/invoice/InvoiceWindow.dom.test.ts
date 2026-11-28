@@ -101,6 +101,8 @@ describe("the invoice window", () => {
     const balance = q("[data-invoice-balance]")!;
     expect(balance.textContent).toContain("Balance due$1,421.67");
     expect(balance.textContent).toContain("27 days late");
+    // the lateness is also a pill of the head, after the card's own (the mockup's)
+    expect(q("[data-record-window-head]")!.textContent).toContain("27 days late");
     expect(q("[data-invoice-pdf]")).not.toBeNull();
     expect(all("[data-invoice-step]").map((step) => [step.dataset.invoiceStep, step.dataset.tone])).toEqual([["issued", "done"], ["sent", "done"], ["due", "alert"], ["reminder", "done"], ["next_reminder", "next"]]);
     expect(q('[data-invoice-step="sent"]')!.textContent).toContain("Sent to Ada Lindqvist");
@@ -168,7 +170,7 @@ describe("the invoice window", () => {
     expect(all("[data-record-tab]").map((tab) => tab.dataset.recordTab)).toEqual(["invoice"]);
     const doc = q("[data-invoice-document]")!;
     expect(doc.querySelector("[data-invoice-billed-to]")!.textContent).toBe("Billed toAcme Fabrication inc.");
-    expect([...doc.querySelectorAll("[data-invoice-links] [data-record-ref-link]")].map((one) => one.textContent)).toEqual(["2026 block of hours", "#300124"]);
+    expect([...doc.querySelectorAll("[data-invoice-links] [data-record-ref-link]")].map((one) => one.textContent)).toEqual(["#300124", "2026 block of hours"]);
     expect(doc.querySelector("[data-invoice-facts]")!.textContent).toContain("TermsNet 30");
     expect(all("[data-invoice-total]").map((row) => row.textContent)).toEqual(["Total$1,421.67", "Balance$1,421.67", "Tax$185.17"]);
     expect(all("[data-invoice-line]")).toHaveLength(3);

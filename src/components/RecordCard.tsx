@@ -96,6 +96,8 @@ export interface RecordTitleEdit {
 export interface RecordWindowLayout {
   tabs?: ReactNode;
   body: ReactNode;
+  /** pills a kind adds to the head after the card's own (an invoice's lateness) */
+  chips?: NonNullable<Card["chips"]>;
 }
 
 export interface RecordCardProps {
@@ -998,7 +1000,7 @@ export function RecordCard({ record, label, kindName, product, read, window: lay
 
   if (roomy) {
     const type = recordWindowType(record);
-    const chips = card?.chips ?? [];
+    const chips = [...(card?.chips ?? []), ...(card ? layout?.chips ?? [] : [])];
     const title = card && (titleEdit
       ? <RecordTitle key={`${record.product}/${record.kind}/${record.id}`} title={card.title} edit={titleEdit} />
       : <p dir="auto" className="shrink-0 break-words px-6 pb-4 pt-2 text-[20px] font-semibold leading-7" title={card.title}>{card.title}</p>);

@@ -16,6 +16,8 @@ import { boardInvoiceConsole } from "@/lib/record-board-invoice-fixtures";
 import { resetPersonProducts, seedPersonProducts } from "@/lib/person-products";
 import { resetRecordCards } from "@/lib/record-cards";
 import { ChatMarkdown } from "../../ChatMarkdown";
+import { BOARD_VIEW, shownView } from "./BoardWindow";
+import { parseDetailPage, type TicketRow } from "@/lib/record-detail";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -113,6 +115,8 @@ describe("the board window", () => {
     await click(all("[data-board-owner]").find((one) => one.textContent?.startsWith("Bruno Tremblay"))!);
     expect(rows()).toEqual(["299702"]);
     expect(q("[data-board-owner-menu]")!.textContent).toContain("Owner: Bruno Tremblay");
+    // a choice gives the focus back to the menu's button
+    expect(document.activeElement).toBe(q("[data-board-owner-menu]"));
     await click(q('[data-board-quick="all"]'));
     expect(rows()).toEqual(["300187", "300110", "299702"]);
     await click(q("[data-board-owner-menu]"));
@@ -175,5 +179,22 @@ describe("the board window", () => {
     expect(q("[data-record-window]")!.dataset.recordWindow).toBe("nimbus_desk/board");
     expect(q("[data-record-tiles]")).toBeNull();
     expect(q("[data-record-tabs]")).toBeNull();
+  });
+});
+
+describe("the board's view", () => {
+  const rows = parseDetailPage("tickets", { lines: [
+    { id: "1", number: "#1", summary: "One", owner: "Ada", status: "New", status_tone: "open", priority_level: "urgent", next: { state: "none" } },
+    { id: "2", number: "#2", summary: "Two", owner: "", status: "New" },
+  ] }, () => () => {}).page.lines as TicketRow[];
+  it("reads an owner with no ticket left as everyone, never an empty list under a menu that says everyone", () => {
+    expect(shownView(rows, { ...BOARD_VIEW, owner: "name:Bruno" }).owner).toBe("");
+    expect(shownView(rows, { ...BOARD_VIEW, owner: "name:Ada" }).owner).toBe("name:Ada");
+    expect(shownView(rows, { ...BOARD_VIEW, owner: "none" }).owner).toBe("none");
+    expect(shownView(rows.slice(0, 1), { ...BOARD_VIEW, owner: "none" }).owner).toBe("");
+  });
+  it("reads a quick filter the rows carry no field for as All", () => {
+    expect(shownView(rows, { ...BOARD_VIEW, quick: "mine" }).quick).toBe("all");
+    expect(shownView(rows, { ...BOARD_VIEW, quick: "urgent" }).quick).toBe("urgent");
   });
 });

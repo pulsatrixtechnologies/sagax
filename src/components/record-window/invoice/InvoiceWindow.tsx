@@ -58,7 +58,12 @@ function dateText(at: string, now: number, tz?: string): ReactNode {
   return <time dateTime={at} title={formatFull(at, lang, tz)}>{formatAbsolute(at, now, lang, tz, { time: false, year: true })}</time>;
 }
 
-/** The invoice's tabs across the window and its body (RecordCard's `window`). */
+/** How late the invoice is: the card's own rule (recordLateness) on the document's due day, never once the product says nothing is owed. */
+export function invoiceLateness(card: Card, doc: InvoiceDocument | undefined, now: number): string | null {
+  return doc?.owed === false ? null : recordLateness(card, now, activeLocale(), card.tz, doc?.due ?? card.dates?.due);
+}
+
+/** The invoice's tabs across the window, its body, and its lateness as a pill of the head (the mockup's). */
 export function invoiceWindow(props: InvoiceWindowProps): RecordWindowLayout {
   const view = props.view ?? INVOICE_VIEW;
   const { detail } = props;
@@ -74,7 +79,9 @@ export function invoiceWindow(props: InvoiceWindowProps): RecordWindowLayout {
     ] : []),
   ];
   const tab = tabs.some((one) => one.id === view.tab) ? view.tab : "invoice";
+  const late = invoiceLateness(props.card, detail?.section("document").page?.document, props.now);
   return {
+    ...(late ? { chips: [{ label: t("recordWindow.invoice.lateBy", { duration: late }), tone: "alert" as const }] } : {}),
     tabs: <RecordWindowTabs tabs={tabs} tab={tab} onTab={(next) => props.onView({ tab: next })} label={t("recordWindow.invoice.tabs.label")} idPrefix={idPrefix} />,
     body: <InvoiceBody {...props} tab={tab} idPrefix={idPrefix} />,
   };
@@ -139,17 +146,23 @@ function InvoiceDocumentPod({ card, doc, lines, now }: { card: Card; doc?: Invoi
           {links.length > 0 && (
             <div className="flex min-w-0 flex-col gap-0.5" data-invoice-links="">
               <Label>{t("recordWindow.invoice.linkedTo")}</Label>
-              {/* inline: a record's chip wraps whole to the next line, never cut inside */}
-              <p className="min-w-0 leading-7">
-                {links.map((link, index) => (
-                  // the separator goes to the next line with its record, never left at a line's end
-                  <span key={`${link.label}-${index}`} className="whitespace-nowrap">
-                    {index > 0 && <span aria-hidden="true" className="px-1 text-popover-ink-secondary">·</span>}
-                    <RecordName name={link.label} recordRef={link.ref} />
-                    {link.detail && <span className="ps-1.5 text-[13px] text-popover-ink-secondary">{link.detail}</span>}
-                  </span>
-                ))}
-              </p>
+              {/* the tickets on one line, a chip never cut inside; the agreement and the project each on its own line under them (the mockup's) */}
+              {links.some((link) => link.ref?.kind === "ticket") && (
+                <p className="min-w-0 leading-7">
+                  {links.filter((link) => link.ref?.kind === "ticket").map((link, index) => (
+                    <span key={`${link.label}-${index}`} className="whitespace-nowrap">
+                      {index > 0 && <span aria-hidden="true" className="px-1.5 text-popover-ink">·</span>}
+                      <RecordName name={link.label} recordRef={link.ref} />
+                    </span>
+                  ))}
+                </p>
+              )}
+              {links.filter((link) => link.ref?.kind !== "ticket").map((link, index) => (
+                <span key={`${link.label}-${index}`} className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 leading-7">
+                  <RecordName name={link.label} recordRef={link.ref} />
+                  {link.detail && <Label>{link.detail}</Label>}
+                </span>
+              ))}
             </div>
           )}
         </div>
@@ -270,8 +283,7 @@ function InvoiceBody({ card, record, detail, type, now, tab, idPrefix, onRemind 
   const documentPage = detail?.section("document").page;
   const doc = documentPage?.document;
   const due = doc?.due ?? card.dates?.due;
-  // late as the card says it, never once the product says nothing is owed
-  const lateBy = doc?.owed === false ? null : recordLateness(card, now, activeLocale(), tz, due);
+  const lateBy = invoiceLateness(card, doc, now);
   // offered once the counts answered: a console that serves no detail for invoices never shows it, not even for a moment
   const canPay = ready && Boolean(detail?.can("payment.add"));
   const form = paying && detail ? <PaymentForm detail={detail} now={now} tz={tz} onDone={() => setPaying(false)} /> : null;

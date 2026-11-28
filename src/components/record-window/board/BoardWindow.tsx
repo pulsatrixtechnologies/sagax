@@ -21,7 +21,7 @@ import { PillTabs } from "@/components/PillTabs";
 import { RECORD_ACTION, RecordPod, RecordWindowTabs, type RecordTab } from "@/components/record-window/RecordBlocks";
 import { filterRecordRows, RecordFilter } from "@/components/record-window/RecordGrid";
 import { RecordTiles, type RecordTile } from "@/components/record-window/RecordTiles";
-import { CompanyLine, NextPlanCell, OwnerCell, PriorityBar, TicketGrid, ticketColumns } from "@/components/record-window/TicketGrid";
+import { NextPlanCell, QuietRecordName, OwnerCell, PriorityBar, TicketGrid, ticketColumns } from "@/components/record-window/TicketGrid";
 import { dayOf } from "@/components/record-window/ticket/parts";
 import type { RecordDetail } from "@/components/useRecordDetail";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
@@ -63,6 +63,13 @@ export function quickPass(row: TicketRow, quick: BoardQuick): boolean {
     case "unscheduled": return row.next?.state === "none";
     case "waiting": return row.statusTone === "waiting";
   }
+}
+
+/** The view the rows can answer: a quick filter they carry no field for is All, an owner who has no ticket left is everyone (the menu says so, never an empty list under it). */
+export function shownView(rows: readonly TicketRow[], view: BoardView): BoardView {
+  const known = boardKnown(rows);
+  const owner = view.owner === OWNER_ALL || rows.some((row) => ownerKey(row) === view.owner) ? view.owner : OWNER_ALL;
+  return { ...view, quick: known.has(view.quick) ? view.quick : "all", owner };
 }
 
 /** The rows the view keeps: its quick filter, its owner, then the words of the one filter. */
@@ -134,6 +141,9 @@ function OwnerMenu({ owners, value, onChange }: { owners: ReturnType<typeof boar
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLSpanElement>(null);
   const menu = useRef<HTMLSpanElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  /** a choice or Escape gives the focus back to the button */
+  const close = () => { setOpen(false); trigger.current?.focus(); };
   const id = useId();
   usePopoverDismiss(open, root, () => setOpen(false));
   // opened, the chosen owner has the focus; the arrows move between the owners (the app's menu keys)
@@ -143,8 +153,8 @@ function OwnerMenu({ owners, value, onChange }: { owners: ReturnType<typeof boar
   const chosen = owners.find((one) => one.key === value);
   const choices = [{ key: OWNER_ALL, name: t("recordWindow.board.quick.all") }, ...owners];
   return (
-    <span ref={root} className="relative inline-flex" onKeyDown={(event) => { if (open && event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); } }}>
-      <button type="button" className={RECORD_ACTION} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(!open)} data-board-owner-menu="">
+    <span ref={root} className="relative inline-flex" onKeyDown={(event) => { if (open && event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } }}>
+      <button ref={trigger} type="button" className={RECORD_ACTION} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(!open)} data-board-owner-menu="">
         {t("recordWindow.board.owner", { owner: chosen?.name ?? t("recordWindow.board.ownerAll") })}<ChevronDown size={14} aria-hidden="true" />
       </button>
       {open && (
@@ -152,7 +162,7 @@ function OwnerMenu({ owners, value, onChange }: { owners: ReturnType<typeof boar
           onKeyDown={(event) => { if (menu.current && moveMenuFocus(menu.current, event.key, document.activeElement)) event.preventDefault(); }}>
           {choices.map((choice) => (
             <button key={choice.key} type="button" role="menuitemradio" aria-checked={choice.key === value} className={choice.key === value ? MENU_ROW_ACTIVE : MENU_ROW} data-board-owner={choice.key}
-              onClick={() => { setOpen(false); onChange(choice.key); }}>
+              onClick={() => { close(); onChange(choice.key); }}>
               <span className="min-w-0 flex-1 truncate">{choice.name}</span>
               {"count" in choice && <span className="tabular-nums text-popover-ink-secondary">{formatNumber(choice.count)}</span>}
             </button>
@@ -172,7 +182,7 @@ function ColumnCard({ row, now, tz }: { row: TicketRow; now: number; tz?: string
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="text-[13px] tabular-nums text-popover-ink-secondary">{row.number}</span>
         <span className="min-w-0">{row.ref && open ? <RecordRefChip name={row.summary} refTo={row.ref} onOpen={open} /> : <span dir="auto" className="break-words">{row.summary}</span>}</span>
-        <CompanyLine name={row.company} companyRef={row.companyRef} />
+        <QuietRecordName name={row.company} recordRef={row.companyRef} />
         <span className="mt-1 flex min-w-0 items-center gap-2 text-[13px]">
           <span className="min-w-0 flex-1"><NextPlanCell next={row.next} now={now} tz={tz} /></span>
           <OwnerCell name={row.owner} ownerRef={row.ownerRef} />
@@ -227,8 +237,9 @@ function BoardBody({ card, detail, type, now, view, onView, idPrefix }: BoardWin
   const tiles = all.filter((tile) => known.has(tile.id));
   const quick = BOARD_QUICK.filter((one) => known.has(one));
   // the quick filters' panel is the list or the columns under them
-  const shownQuick = quick.includes(view.quick) ? view.quick : "all";
-  const shown = boardRows(rows, { ...view, quick: shownQuick }, now, tz);
+  const effective = shownView(rows, view);
+  const shownQuick = effective.quick;
+  const shown = boardRows(rows, effective, now, tz);
   const columns = ticketColumns({ now, tz, company: true });
   return (
     <div className="record-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain" role="tabpanel" id={`${idPrefix}-panel-${view.tab}`} aria-labelledby={`${idPrefix}-tab-${view.tab}`} data-board-tab={view.tab}>
@@ -240,7 +251,7 @@ function BoardBody({ card, detail, type, now, view, onView, idPrefix }: BoardWin
           <div className="flex min-w-0 flex-wrap items-center gap-2" data-board-filters="">
             <PillTabs tabs={quick} tab={shownQuick} onTab={(next) => set({ quick: next })} ariaLabel={t("recordWindow.board.quick")} idPrefix={`${idPrefix}-quick`}
               label={(id) => t(`recordWindow.board.quick.${id}` as "recordWindow.board.quick.all")} tabAttributes={(id) => ({ "data-board-quick": id })} className="gap-y-1" />
-            <OwnerMenu owners={owners} value={view.owner} onChange={(owner) => set({ owner })} />
+            <OwnerMenu owners={owners} value={effective.owner} onChange={(owner) => set({ owner })} />
             <span className="ms-auto flex items-center"><RecordFilter columns={columns} value={view.filter} onChange={(filter) => set({ filter })} shown={shown.length} total={rows.length} /></span>
           </div>
         )}

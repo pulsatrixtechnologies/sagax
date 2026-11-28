@@ -118,14 +118,14 @@ export function OwnerCell({ name, ownerRef }: { name: string; ownerRef?: RecordR
   return <span title={name} className="inline-flex" data-ticket-owner={name}>{avatar}<span className="sr-only">{name}</span></span>;
 }
 
-/** The company under a subject, in the quiet ink; a click opens its record in the window (M-20261127-101). */
-export function CompanyLine({ name, companyRef }: { name: string; companyRef?: RecordRef }) {
-  const open = useOpenRef(companyRef);
+/** A record named in the quiet ink (the company under a subject, an invoice's agreement); a click opens it in the window (M-20261127-101). */
+export function QuietRecordName({ name, recordRef }: { name: string; recordRef?: RecordRef }) {
+  const open = useOpenRef(recordRef);
   const look = "min-w-0 max-w-full break-words text-start text-[13px] leading-[18px] text-popover-ink-secondary";
   if (!name) return null;
-  return companyRef && open
-    ? <button type="button" dir="auto" className={cn(look, "rounded hover:text-popover-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus")} onClick={() => open(companyRef, name)} data-ticket-company="">{name}</button>
-    : <span dir="auto" className={look} data-ticket-company="">{name}</span>;
+  return recordRef && open
+    ? <button type="button" dir="auto" className={cn(look, "rounded hover:text-popover-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus")} onClick={() => open(recordRef, name)} data-record-quiet-link="">{name}</button>
+    : <span dir="auto" className={look}>{name}</span>;
 }
 
 /** The subject (a click opens the ticket in the window) and the company under it. */
@@ -135,7 +135,7 @@ function SubjectCell({ row, company }: { row: TicketRow; company: boolean }) {
   return (
     <span className="flex min-w-0 flex-col items-start" data-ticket-subject="">
       {subject}
-      {company && <CompanyLine name={row.company ?? ""} companyRef={row.companyRef} />}
+      {company && <QuietRecordName name={row.company ?? ""} recordRef={row.companyRef} />}
     </span>
   );
 }

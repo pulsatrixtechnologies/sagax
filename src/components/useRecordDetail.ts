@@ -82,7 +82,8 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
   const [counts, setCounts] = useState<Partial<Record<DetailSection, number>>>({});
   const [countsKnown, setCountsKnown] = useState(false);
   const [countError, setCountError] = useState("");
-  const [ready, setReady] = useState(false);
+  // the record the counts answered for: another record is not ready until its own counts answer
+  const [readyFor, setReadyFor] = useState<object | undefined>(undefined);
   const [missing, setMissing] = useState(false);
   // the sections read, for one record: a page of another record (the one before) is never shown
   const [pages, setPages] = useState<{ token?: object; map: Partial<Record<DetailSection, DetailSectionState<DetailSection>>> }>({ map: {} });
@@ -121,7 +122,6 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
     setCounts({});
     setCountsKnown(false);
     setCountError("");
-    setReady(false);
     setMissing(false);
     setSaved({});
     setStamps({});
@@ -178,7 +178,7 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
       setFields(read.fields);
       setTitleEditable(read.title);
       setActions(read.actions);
-      setReady(true);
+      setReadyFor(source.token);
     }, (failure: unknown) => {
       if (!current) return;
       if (failure instanceof RecordDetailMissing) setMissing(true);
@@ -260,7 +260,7 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
       counts,
       known: countsKnown,
       countError,
-      ready,
+      ready: readyFor === source.token,
       can: (action) => actions === null || actions.has(action),
       section: <K extends DetailSection>(tab: K) => ((pages.token === source.token ? pages.map[tab] : undefined) ?? { loading: true, error: "" }) as unknown as DetailSectionState<K>,
       want,
@@ -286,7 +286,7 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
       readImage: (src) => readNoteImage(source.record, src),
       notice: downloadError ? t("recordCard.related.downloadFailed") : undefined,
     };
-  }, [source, missing, counts, countsKnown, countError, ready, actions, pages, want, load, downloadError]);
+  }, [source, missing, counts, countsKnown, countError, readyFor, actions, pages, want, load, downloadError]);
 
   return { detail, edits, title, refresh, missing };
 }

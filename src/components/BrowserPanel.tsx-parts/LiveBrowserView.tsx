@@ -14,7 +14,7 @@ import type { Bot } from "@/state/store";
 import { BrowserProfilesManager } from "../BrowserProfilesManager";
 import { BrowserViewport, type BrowserFrame } from "../BrowserViewport";
 import type { BrowserTakeStatus } from "@/lib/browser-control";
-import { resolveAddressBarInput } from "@/lib/browser-address";
+import { tabLabel } from "@/lib/browser-page";
 import { cn } from "@/lib/cn";
 import { NetworkDebuggerDialog } from "../NetworkDebuggerDialog";
 import { TeachStepsDialog } from "../TeachStepsDialog";
@@ -26,6 +26,7 @@ import { PILL, PLAIN_FIELD, PRIMARY_PILL } from "../SettingsPrimitives";
 import { panelStageRef } from "@/lib/browser-panel-viewport";
 import { CIRCLE_ICON, CIRCLE_LABEL, CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
 import { FOLD_CHIP, FOLD_CHIP_LABEL, SCREEN_PANEL_TOOL, SCREEN_PANEL_TOP_ROW, ScreenBar } from "../ScreenPanelChrome";
+import type { AddressBar } from "./useAddressBar";
 
 interface BrowserTab { tabId: string; title: string; url: string; active: boolean }
 type ViewerFrame = BrowserFrame & { viewerId: string; generation: number };
@@ -44,6 +45,8 @@ export type LiveBrowserDocked = {
   title: string;
   chrome: ReactNode;
   placeSelector?: ReactNode;
+  /** Drawn over the page only (the marks overlay), never over the two rows. */
+  stageOverlay?: ReactNode;
 };
 
 export interface LiveBrowserViewProps {
@@ -52,8 +55,7 @@ export interface LiveBrowserViewProps {
   placeholder?: string;
   frame: ViewerFrame | null;
   tabs: BrowserTab[];
-  address: string;
-  setAddress: Dispatch<SetStateAction<string>>;
+  addressBar: AddressBar;
   connected: boolean;
   control: { held: boolean; controlling: boolean; owned: boolean };
   pending: boolean;
@@ -84,6 +86,8 @@ export interface LiveBrowserViewProps {
   typingPopover: RefObject<HTMLDivElement | null>;
   typingField: RefObject<HTMLInputElement | null>;
   menuSummary: RefObject<HTMLElement | null>;
+  /** The ⋯ menu: Escape or a press outside closes it (useLiveBrowserMenu). */
+  menu: { root: RefObject<HTMLDetailsElement | null>; toggled: (open: boolean) => void };
   profileName: string;
   interactive: boolean;
   typingReady: boolean;
@@ -97,7 +101,6 @@ export interface LiveBrowserViewProps {
   generation: RefObject<number>;
   viewer: RefObject<string>;
   browserControl: RefObject<{ handBack: () => void; takeNow: () => void } | null>;
-  urlEditing: RefObject<boolean>;
   command: (body: Record<string, unknown>) => void;
   input: (body: Record<string, unknown>) => void;
   reconnect: () => void;
@@ -114,13 +117,13 @@ export interface LiveBrowserViewProps {
 
 export function LiveBrowserView(p: LiveBrowserViewProps) {
   const {
-    bot, allowed, placeholder, frame, tabs, address, setAddress, connected, control, pending, error,
+    bot, allowed, placeholder, frame, tabs, addressBar, connected, control, pending, error,
     showProfiles, setShowProfiles, showTyping, setShowTyping, masked, setMasked, takeControl, handBack,
     viewport, takeStatus, busy, reconnecting,
     showNetwork, setShowNetwork, recording, recordingStartedAt, taught, setTaught, teachNote, addressInput, profilesButton,
-    profilesPopover, typingPopover, typingField, menuSummary, profileName, interactive, typingReady,
+    profilesPopover, typingPopover, typingField, menuSummary, menu, profileName, interactive, typingReady,
     commandsReady, heldElsewhere, taking, mine, pageTitle, holder, pill, generation, viewer,
-    urlEditing, command, input, reconnect, execute, startRecording, stopRecording, discardRecording, action, confirm, setError,
+    command, input, reconnect, execute, startRecording, stopRecording, discardRecording, action, confirm, setError,
     docked,
   } = p;
   const compact = Boolean(docked);
@@ -134,20 +137,21 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
   const tabsRow = (
     <div data-browser-tabs="" className={compact ? SCREEN_PANEL_TOP_ROW : "flex min-h-12 items-center gap-0.5 px-2 pt-1.5"}>
       <div className={cn("flex min-w-0 flex-1 items-center overflow-x-auto", compact ? "gap-1" : "gap-0.5")}>
+        {/* A page with no title yet reads as its site, never as a new tab (tabLabel). */}
         {tabs.length ? tabs.map((tab) => (
           <div key={tab.tabId} data-browser-tab="" className={compact ? cn(DOCKED_TAB, !tab.active && DOCKED_TAB_IDLE) : cn("flex max-w-44 shrink-0 items-center gap-0.5 rounded-lg px-0.5 text-[12px]", tab.active ? "bg-inset text-ink" : "text-ink-secondary")}>
             {compact ? (
               <button data-browser-tab-title="" className={DOCKED_TAB_SELECT} disabled={!commandsReady} onClick={() => command({ type: "tab-select", tabId: tab.tabId })} title={tab.title || tab.url}>
                 <Globe size={16} strokeWidth={1.75} className="shrink-0 opacity-60" aria-hidden="true" />
-                <span className="truncate">{tab.title || t("browser.tab.new")}</span>
+                <span className="truncate">{tabLabel(tab) || t("browser.tab.new")}</span>
               </button>
             ) : (
               <>
                 <Globe size={12} className="ml-1 shrink-0 opacity-60" aria-hidden="true" />
-                <button data-browser-tab-title="" className="truncate px-1 py-1.5 text-left disabled:cursor-default" disabled={!commandsReady} onClick={() => command({ type: "tab-select", tabId: tab.tabId })} title={tab.title || tab.url}>{tab.title || t("browser.tab.new")}</button>
+                <button data-browser-tab-title="" className="truncate px-1 py-1.5 text-left disabled:cursor-default" disabled={!commandsReady} onClick={() => command({ type: "tab-select", tabId: tab.tabId })} title={tab.title || tab.url}>{tabLabel(tab) || t("browser.tab.new")}</button>
               </>
             )}
-            <button className={compact ? "ui-icon-button shrink-0 rounded-full" : button} aria-label={tab.title ? t("browser.tab.close", { title: tab.title }) : t("browser.tab.closeUntitled")} disabled={!commandsReady} onClick={() => command({ type: "tab-close", tabId: tab.tabId })}><X size={compact ? 14 : 12} strokeWidth={compact ? 1.75 : 2} /></button>
+            <button className={compact ? "ui-icon-button shrink-0 rounded-full" : button} aria-label={tabLabel(tab) ? t("browser.tab.close", { title: tabLabel(tab) }) : t("browser.tab.closeUntitled")} disabled={!commandsReady} onClick={() => command({ type: "tab-close", tabId: tab.tabId })}><X size={compact ? 14 : 12} strokeWidth={compact ? 1.75 : 2} /></button>
           </div>
         )) : (
           <div data-browser-tab="" className={compact ? cn(DOCKED_TAB, "gap-1 px-3 text-ink-secondary") : "flex items-center gap-1.5 rounded-lg bg-inset px-2 py-1 text-[12px] text-ink-secondary"}><Globe size={compact ? 16 : 12} strokeWidth={compact ? 1.75 : 2} aria-hidden="true" /><span data-browser-tab-title="">{t("browser.tab.new")}</span></div>
@@ -163,9 +167,7 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
 
   const submitAddress = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const url = resolveAddressBarInput(address);
-    if (commandsReady && url) command({ type: "navigate", url });
-    else if (address.trim()) setError(t("browser.address.invalid"));
+    addressBar.submit();
   };
   const addressContent = (
     <>
@@ -178,11 +180,13 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
         ref={addressInput}
         data-screen-bar-flex=""
         aria-label={t("browser.address.label")}
-        readOnly={!commandsReady}
-        value={address}
-        onChange={(e) => setAddress(e.target.value)}
-        onFocus={(e) => { urlEditing.current = true; if (commandsReady) e.target.select(); }}
-        onBlur={() => { urlEditing.current = false; }}
+        aria-invalid={addressBar.error ? true : undefined}
+        readOnly={addressBar.readOnly}
+        value={addressBar.value}
+        onChange={(e) => addressBar.change(e.target.value)}
+        onFocus={(e) => addressBar.focus(e.target)}
+        onBlur={addressBar.blur}
+        onKeyDown={(e) => { if (e.key === "Escape" && addressBar.revert()) e.preventDefault(); }}
         placeholder={connected ? "about:blank" : t("browser.live.connecting")}
         spellCheck={false}
         className={compact
@@ -221,7 +225,7 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
       {compact && (
         <button ref={profilesButton} type="button" className={tool} title={docked?.title ? `${t("browser.profile.current", { name: profileName })} · ${docked.title}` : t("browser.profile.current", { name: profileName })} aria-label={t("browser.profiles.open")} aria-expanded={showProfiles} aria-haspopup="dialog" onClick={() => { handBack(); setShowProfiles((open) => !open); }}><UserRound {...glyph} /></button>
       )}
-      <details className="relative shrink-0">
+      <details ref={menu.root} onToggle={(e) => menu.toggled(e.currentTarget.open)} className="relative shrink-0">
         <summary ref={menuSummary} className={`${tool} list-none cursor-pointer [&::-webkit-details-marker]:hidden`} aria-label={t("browser.menu.label")} title={t("browser.menu.label")}><EllipsisVertical {...glyph} /></summary>
         <div role="menu" aria-label={t("browser.menu.label")} className={cn(MENU_SURFACE, MENU_FIT_ROW, "absolute right-0 top-full z-20 mt-1")}>
           {compact && (
@@ -277,6 +281,7 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
 <div className={shell} data-browser-compact={compact ? "" : undefined}>
     {tabsRow}
     {addressRow}
+    {addressBar.error && <div role="alert" data-browser-address-error="" className="border-b border-hairline/30 px-3 py-2 text-[12px] text-danger">{addressBar.error}</div>}
     {recording && <TeachRecordingBar startedAt={recordingStartedAt ?? Date.now()} onStop={() => void stopRecording()} onDiscard={() => void discardRecording()} />}
     {teachNote && !recording && <div role="status" className="border-b border-hairline/30 px-3 py-2 text-[12px] text-ink-secondary">{teachNote}</div>}
     {legacyHolder}
@@ -311,6 +316,7 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
           <Hand size={13} className="shrink-0" aria-hidden="true" /><span className="truncate">{t("browser.control.stale", { name: bot.name })}</span>
         </span> : null}
       </div>
+      {docked?.stageOverlay}
     </div>
     {showProfiles && (
       <AnchoredPopover

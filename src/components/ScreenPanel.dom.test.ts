@@ -17,23 +17,26 @@ import { chooseFold, SCREEN_PANEL_TOP_ROW, ScreenBar, type ScreenBarFold } from 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const seen = vi.hoisted(() => ({ live: undefined as boolean | undefined, botId: "", docked: false }));
 vi.mock("./BrowserPanel", () => ({
-  BrowserPanel: ({ bot, live, docked }: { bot: { id: string }; live?: boolean; docked?: { chrome?: ReactNode; placeSelector?: ReactNode } }) => {
+  // The live browser's two rows hold the chrome; its stage (the page) holds the overlay.
+  BrowserPanel: ({ bot, live, docked }: { bot: { id: string }; live?: boolean; docked?: { chrome?: ReactNode; placeSelector?: ReactNode; stageOverlay?: ReactNode } }) => {
     seen.live = live; seen.botId = bot.id; seen.docked = Boolean(docked);
     return createElement("div", { "data-mock-browser": "", "data-docked": seen.docked ? "1" : "0" },
-      docked?.placeSelector ?? null,
-      docked?.chrome ?? null,
+      createElement("div", { "data-browser-tabs": "" }, docked?.chrome ?? null),
+      createElement("form", { "data-browser-address-row": "" }, createElement("input", { "aria-label": "Browser address" }), docked?.placeSelector ?? null),
+      createElement("div", { "data-browser-stage": "" }, createElement("img", { "data-browser-frame": "" }), docked?.stageOverlay ?? null),
     );
   },
 }));
+const opened = vi.hoisted(() => ({ current: null as unknown }));
 vi.mock("@/lib/screen-panel-window", () => ({
   openScreenPanelWindow: vi.fn(),
   closeScreenPanelWindow: vi.fn(),
-  useScreenPanelWindow: () => null,
+  useScreenPanelWindow: () => opened.current,
 }));
 const found = vi.hoisted(() => ({ places: ["browser"] as string[], vm: null as string | null, remote: null as unknown }));
 vi.mock("./ScreenPlaces", () => ({
   useScreenPlaces: () => found,
-  placeControllable: (place: string, vm: string | null) => place === "vm" && vm === "server",
+  placeControllable: (place: string, vm: string | null, remote: { controllable?: boolean } | null) => place === "vm" ? vm === "server" : remote?.controllable === true,
   ControlSwitch: ({ control, onChange }: { control: boolean; onChange: (next: boolean) => void }) => createElement("button", { "data-screen-control": control ? "driving" : "watching", onClick: () => onChange(!control) }),
   VmPane: ({ source, control }: { source: string; control: boolean }) => createElement("div", { "data-pane": "vm", "data-source": source, "data-control": String(control) }),
   RemotePane: () => createElement("div", { "data-pane": "remote" }),
@@ -46,7 +49,7 @@ let host: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
-  found.places = ["browser"]; found.vm = null; found.remote = null;
+  found.places = ["browser"]; found.vm = null; found.remote = null; opened.current = null;
   seen.live = undefined; seen.botId = ""; seen.docked = false;
   vi.mocked(openScreenPanelWindow).mockClear();
   host = document.createElement("div");
@@ -240,5 +243,109 @@ describe("ScreenPanel", () => {
     expect(host.querySelector("[data-screen-panel-expand]")).toBeNull();
     expect(host.querySelector("[data-screen-panel-close]")).not.toBeNull();
     expect(host.querySelector("[data-screen-panel-marks]")).toBeNull();
+  });
+});
+
+// M-20261127-180: the compact chrome (#5453) moved the pen, Detach, Expand and
+// Close into the body, under the marks overlay: marking up could not be left.
+describe("ScreenPanel marking up", () => {
+  const pen = () => host.querySelector("[data-screen-panel-marks]") as HTMLButtonElement;
+  const overlay = () => host.querySelector("[data-screen-marks-overlay]");
+  const escape = (target: EventTarget) => act(() => { target.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+
+  it("draws over the page only: the pen, Detach, Expand, Close and the address stay out from under it", () => {
+    act(() => { pen().click(); });
+    const stage = overlay()!.closest("[data-browser-stage]");
+    expect(stage).not.toBeNull();
+    for (const selector of ["[data-screen-panel-marks]", "[data-screen-panel-detach]", "[data-screen-panel-expand]", "[data-screen-panel-close]", "[aria-label='Browser address']"]) {
+      expect(stage!.contains(host.querySelector(selector))).toBe(false);
+    }
+  });
+
+  it("draws over the VM's picture only, not over its row", () => {
+    found.places = ["browser", "vm"]; found.vm = "server";
+    act(() => root.render(createElement(ScreenPanel, { bot })));
+    act(() => { (host.querySelector("[data-screen-tab=vm]") as HTMLElement).click(); });
+    act(() => { pen().click(); });
+    const stage = overlay()!.closest("[data-screen-stage]");
+    expect(stage?.querySelector("[data-pane=vm]")).not.toBeNull();
+    expect(stage!.contains(pen())).toBe(false);
+  });
+
+  it("ends from the pen and from Done", () => {
+    act(() => { pen().click(); });
+    act(() => { pen().click(); });
+    expect(overlay()).toBeNull();
+    act(() => { pen().click(); });
+    act(() => { (host.querySelector("[data-mark-done]") as HTMLButtonElement).click(); });
+    expect(overlay()).toBeNull();
+    expect(pen().getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("ends on Escape, from the panel, the note or nowhere, and leaves the panel open", () => {
+    act(() => { pen().click(); });
+    escape(host.querySelector("aside")!);
+    expect(overlay()).toBeNull();
+    expect(isScreenPanelOpen()).toBe(true);
+    act(() => { pen().click(); });
+    escape(host.querySelector("[data-mark-note]")!);
+    expect(overlay()).toBeNull();
+    act(() => { pen().click(); });
+    escape(document.body);
+    expect(overlay()).toBeNull();
+    expect(isScreenPanelOpen()).toBe(true);
+    // Marking off, Escape closes the panel as before.
+    escape(host.querySelector("aside")!);
+    expect(isScreenPanelOpen()).toBe(false);
+  });
+
+  it("leaves an open menu's Escape to the menu", () => {
+    const menu = document.createElement("details");
+    menu.open = true;
+    const summary = document.createElement("summary");
+    menu.append(summary);
+    host.querySelector("aside")!.append(menu);
+    escape(summary);
+    expect(isScreenPanelOpen()).toBe(true);
+  });
+});
+
+// M-20261127-180: Detach and Expand opened the browser's window whatever place was on screen.
+describe("ScreenPanel windows", () => {
+  it("opens the VM's window from the VM, and none for a Local VM or a remote computer it cannot drive", () => {
+    found.places = ["browser", "vm"]; found.vm = "server";
+    act(() => root.render(createElement(ScreenPanel, { bot })));
+    act(() => { (host.querySelector("[data-screen-tab=vm]") as HTMLElement).click(); });
+    act(() => { (host.querySelector("[data-screen-panel-expand]") as HTMLButtonElement).click(); });
+    expect(openScreenPanelWindow).toHaveBeenLastCalledWith({ botId: "ada", mode: "expand", kind: "vm" });
+    act(() => { (host.querySelector("[data-screen-panel-detach]") as HTMLButtonElement).click(); });
+    expect(openScreenPanelWindow).toHaveBeenLastCalledWith({ botId: "ada", mode: "detach", kind: "vm" });
+    found.vm = "local";
+    setScreenPanelOpen(true);
+    act(() => root.render(createElement(ScreenPanel, { bot })));
+    expect(host.querySelector("[data-screen-panel-detach]")).toBeNull();
+    expect(host.querySelector("[data-screen-panel-expand]")).toBeNull();
+    expect(host.querySelector("[data-screen-panel-close]")).not.toBeNull();
+  });
+
+  it("opens the remote computer's own window for a session it can drive", () => {
+    const remote = { id: "r2", controllable: true };
+    found.places = ["browser", "remote"]; found.remote = remote;
+    act(() => root.render(createElement(ScreenPanel, { bot })));
+    act(() => { (host.querySelector("[data-screen-tab=remote]") as HTMLElement).click(); });
+    act(() => { (host.querySelector("[data-screen-panel-expand]") as HTMLButtonElement).click(); });
+    expect(openScreenPanelWindow).toHaveBeenLastCalledWith({ botId: "ada", mode: "expand", kind: "remote", remote });
+  });
+
+  it("draws no second live view while the place's own window is open", () => {
+    opened.current = { botId: "ada", mode: "expand", kind: "browser" };
+    act(() => root.render(createElement(ScreenPanel, { bot })));
+    expect(host.querySelector("[data-mock-browser]")).toBeNull();
+    expect(host.querySelector("[data-screen-in-window]")).not.toBeNull();
+    expect(host.querySelector("[data-screen-panel-marks]")).toBeNull();
+    expect(host.querySelector("[data-screen-panel-close]")).not.toBeNull();
+    opened.current = { botId: "someone-else", mode: "expand", kind: "browser" };
+    act(() => root.render(createElement(ScreenPanel, { bot })));
+    expect(host.querySelector("[data-mock-browser]")).not.toBeNull();
   });
 });

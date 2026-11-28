@@ -19,6 +19,9 @@ import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { useAnchoredDismissRoot } from "./AnchoredPopover";
 import { LiveBrowserView, type LiveBrowserDocked } from "./BrowserPanel.tsx-parts/LiveBrowserView";
 import { useLiveBrowserFlags } from "./BrowserPanel.tsx-parts/useLiveBrowserFlags";
+import { useAddressBar } from "./BrowserPanel.tsx-parts/useAddressBar";
+import { useLiveBrowserMenu } from "./BrowserPanel.tsx-parts/useLiveBrowserMenu";
+import { followActiveUrl, shownAddress } from "@/lib/browser-page";
 
 interface BrowserTab { tabId: string; title: string; url: string; active: boolean }
 const RECONNECT_DELAYS = [1_000, 2_000, 4_000, 8_000, 15_000];
@@ -199,6 +202,8 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
         owned: () => controlNow.current.owned,
         onTakeStatus: setTakeStatus,
         onError: setError,
+        // A refused Take control is not kept: the next automatic take goes back after idle time.
+        onRefused: () => setKept(false),
         onHalted: () => setError(haltMessage.current),
       });
       setReconnecting(false);
@@ -214,7 +219,7 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
       if (!Array.isArray(data.tabs)) return;
       setTabs(data.tabs);
       const active = data.tabs.find((tab: BrowserTab) => tab.active);
-      if (active && !urlEditing.current) setAddress(active.url === "about:blank" ? "" : active.url);
+      if (active && !urlEditing.current) setAddress(shownAddress(active.url));
       if (active) { pageNow.current = active.url; openSignInPage(); }
       // The person opened the window on a browser with nothing in it: start
       // where a browser starts, not on a white page. Never moves a real page.
@@ -227,7 +232,9 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
     });
     listen("url", (data) => {
       if (typeof data.url !== "string") return;
-      if (!urlEditing.current) setAddress(data.url === "about:blank" ? "" : data.url);
+      if (!urlEditing.current) setAddress(shownAddress(data.url));
+      // The tab follows too: its title named the page before (M-20261127-180).
+      setTabs((current) => followActiveUrl(current, data.url));
       pageNow.current = data.url; openSignInPage();
     });
     listen("status", (data) => {
@@ -416,14 +423,20 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
     void action({ type: "viewport", width: next.width, height: next.height }).catch(() => {});
   }, [action]);
   setPanelStageReport(requestViewport);
+  // Last hooks of LiveBrowser: the test fixture (BrowserPanel.test.ts) indexes the earlier ones by call order.
+  const addressBar = useAddressBar({
+    address, setAddress, editing: urlEditing, page: pageNow, field: addressInput,
+    canEdit: allowed && connected && !heldElsewhere, ready: commandsReady,
+    navigate: (url) => command({ type: "navigate", url }),
+  });
+  const menu = useLiveBrowserMenu();
   return <LiveBrowserView
     bot={bot}
     allowed={allowed}
     placeholder={placeholder}
     frame={frame}
     tabs={tabs}
-    address={address}
-    setAddress={setAddress}
+    addressBar={addressBar}
     connected={connected}
     control={control}
     pending={pending}
@@ -453,6 +466,7 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
     typingPopover={typingPopover}
     typingField={typingField}
     menuSummary={menuSummary}
+    menu={menu}
     profileName={profileName}
     interactive={interactive}
     typingReady={typingReady}
@@ -466,7 +480,6 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
     generation={generation}
     viewer={viewer}
     browserControl={browserControl}
-    urlEditing={urlEditing}
     command={command}
     input={input}
     reconnect={reconnect}

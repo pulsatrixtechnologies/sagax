@@ -9532,6 +9532,8 @@
   "screenMarks.tool.pen": "Dessiner",
   "screenMarks.undo": "Annuler la dernière marque",
   "screenMarks.clear": "Effacer les marques",
+  "screenMarks.done": "Terminer",
+  "screenMarks.doneHint": "Arrêter d’annoter (Échap)",
   "screenMarks.note": "Ajoute une note pour le bot",
   "screenMarks.send": "Envoyer",
   "screenMarks.sending": "Envoi en cours",

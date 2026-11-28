@@ -53,8 +53,7 @@ function base(over: Partial<LiveBrowserViewProps> = {}): LiveBrowserViewProps {
     allowed: true,
     frame: null,
     tabs: [],
-    address: "",
-    setAddress: vi.fn(),
+    addressBar: { value: "", error: "", readOnly: false, change: vi.fn(), focus: vi.fn(), blur: vi.fn(), revert: vi.fn(() => false), submit: vi.fn() },
     connected: true,
     control: { held: false, controlling: false, owned: false },
     pending: false,
@@ -84,6 +83,7 @@ function base(over: Partial<LiveBrowserViewProps> = {}): LiveBrowserViewProps {
     typingPopover: ref(null),
     typingField: ref(null),
     menuSummary: ref(null),
+    menu: { root: ref(null), toggled: vi.fn() },
     profileName: "own",
     interactive: true,
     typingReady: false,
@@ -97,7 +97,6 @@ function base(over: Partial<LiveBrowserViewProps> = {}): LiveBrowserViewProps {
     generation: ref(1),
     viewer: ref("v1"),
     browserControl: ref(null),
-    urlEditing: ref(false),
     command: vi.fn(),
     input: vi.fn(),
     reconnect: vi.fn(),
@@ -148,7 +147,7 @@ describe("compact LiveBrowserView", () => {
 
   it("keeps a full-width left-aligned address field", () => {
     const html = renderToStaticMarkup(createElement(LiveBrowserView, base({
-      address: "https://example.com",
+      addressBar: { ...base().addressBar, value: "https://example.com" },
       frame: { seq: 1, data: "x", viewerId: "v1", generation: 1 },
     })));
     expect(html).toMatch(/value="https:\/\/example.com"/);
@@ -164,7 +163,7 @@ describe("compact LiveBrowserView sizes, the app's own (M-20261127-179)", () => 
     host.innerHTML = renderToStaticMarkup(createElement(LiveBrowserView, base({
       frame: { seq: 1, data: "x", viewerId: "v1", generation: 1 },
       tabs: [{ tabId: "t1", title: "Google", url: "https://www.google.com/", active: true }, { tabId: "t2", title: "Docs", url: "https://example.com/", active: false }],
-      address: "https://www.google.com/",
+      addressBar: { ...base().addressBar, value: "https://www.google.com/" },
       ...over,
     })));
     return host;

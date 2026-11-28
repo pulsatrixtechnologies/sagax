@@ -5,7 +5,10 @@
 // supply the body; artifacts reuse the same chrome via ScreenPanelChrome.
 // Every control is the app's own size (M-20261127-179): the chat header's
 // round buttons and glyphs, the app's tabs (PillTabs) for the places.
-import { useRef, useState, type ReactNode } from "react";
+// Mark up draws over the picture only, so its pen, Detach, Expand, Close and
+// the bars stay usable while it is on; the pen, Done and Escape end it
+// (M-20261127-180).
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Globe, Laptop, Monitor, PenLine, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -19,7 +22,7 @@ import { ControlSwitch, placeControllable, RemotePane, useScreenPlaces, VmPane }
 import { DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
 import { FOLD_TAB_ICON, FOLD_TAB_LABEL, SCREEN_PANEL_TITLE, SCREEN_PANEL_TOOL, SCREEN_PANEL_TOP_ROW, ScreenBar, ScreenPanelChrome } from "./ScreenPanelChrome";
 import { PillTabs } from "./PillTabs";
-import { openScreenPanelWindow } from "@/lib/screen-panel-window";
+import { openScreenPanelWindow, useScreenPanelWindow, type ScreenPanelWindow } from "@/lib/screen-panel-window";
 
 const SCREEN_BOUNDS = {
   key: SCREEN_PANEL_WIDTH_KEY,
@@ -41,6 +44,9 @@ export type ScreenPanelArtifactSlot = {
   onExpand?: () => void;
 };
 
+/** Escape with focus nowhere (after drawing on the picture, which takes no focus). */
+const loose = (target: EventTarget | null) => !(target instanceof Element) || target === document.body || target === document.documentElement;
+
 export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPanelArtifactSlot | null }) {
   const panel = useDockedPanelWidth(SCREEN_BOUNDS);
   const found = useScreenPlaces(bot);
@@ -55,19 +61,41 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
   const describer = useRef<BrowserDescriber | null>(null);
   const marks = useScreenMarks({ bot, host: body, describer, dispatch, place, onSent: () => setMarking(false) });
   const pick = (next: ScreenPlace) => { setPicked(next); setControl(false); setMarking(false); marks.clear(); };
+  // Expand opened this place's own window: the column draws no second live view.
+  const opened = useScreenPanelWindow();
+  const inWindow = !artifact && opened?.botId === bot.id && opened.kind === place;
+
+  useEffect(() => {
+    if (!marking) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || !loose(event.target)) return;
+      event.preventDefault();
+      setMarking(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [marking]);
 
   const close = () => setScreenPanelOpen(false);
+  // Detach and Expand open the window of the place on screen, never the
+  // browser's for the VM; a place with no window of its own offers neither.
+  const placeWindow = (mode: ScreenPanelWindow["mode"]): ScreenPanelWindow =>
+    place === "remote" && found.remote ? { botId: bot.id, mode, kind: "remote", remote: found.remote }
+    : place === "vm" ? { botId: bot.id, mode, kind: "vm" }
+    : { botId: bot.id, mode, kind: "browser" };
+  const windowed = place === "browser" || placeControllable(place, found.vm, found.remote);
   const expand = () => {
     if (artifact?.onExpand) { artifact.onExpand(); return; }
-    openScreenPanelWindow({ botId: bot.id, mode: "expand", kind: "browser" });
+    setMarking(false);
+    openScreenPanelWindow(placeWindow("expand"));
   };
   const detach = () => {
     if (artifact?.onDetach) { artifact.onDetach(); return; }
-    openScreenPanelWindow({ botId: bot.id, mode: "detach", kind: "browser" });
+    openScreenPanelWindow(placeWindow("detach"));
     setScreenPanelOpen(false);
   };
 
-  const marksToggle = !artifact ? (
+  const marksToggle = !artifact && !inWindow ? (
     <button type="button" data-screen-panel-marks="" aria-pressed={marking} onClick={() => setMarking((on) => !on)}
       aria-label={t("screenMarks.toggle")} title={t("screenMarks.toggle")}
       className={cn(SCREEN_PANEL_TOOL, marking && "ring-2 ring-accent/60")}>
@@ -79,10 +107,10 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
     <ScreenPanelChrome
       title={title}
       onClose={close}
-      onDetach={artifact ? artifact.onDetach : detach}
-      onExpand={artifact ? artifact.onExpand : expand}
+      onDetach={artifact ? artifact.onDetach : windowed ? detach : undefined}
+      onExpand={artifact ? artifact.onExpand : windowed ? expand : undefined}
       leading={marksToggle}
-      trailing={place !== "browser" && !artifact && placeControllable(place, found.vm, found.remote)
+      trailing={place !== "browser" && !artifact && !inWindow && placeControllable(place, found.vm, found.remote)
         ? <ControlSwitch control={control} onChange={setControl} />
         : undefined}
     />
@@ -101,6 +129,8 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
       data-screen-place-select="" className="shrink-0 flex-nowrap" />
   ) : null;
 
+  const overlay = marking && !artifact ? <ScreenMarksOverlay marks={marks} /> : null;
+
   return (
     <aside
       data-screen-panel=""
@@ -112,7 +142,11 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
       onKeyDown={(event) => {
         if (event.key !== "Escape" || event.defaultPrevented) return;
         const target = event.target as HTMLElement;
-        if (target.closest("textarea, input, [role=menu], [role=dialog], select")) return;
+        // An open menu or dialog closes itself first.
+        if (target.closest("[role=menu], [role=dialog], details[open]")) return;
+        // Escape ends marking up before it closes anything, from the note too.
+        if (marking) { event.preventDefault(); setMarking(false); return; }
+        if (target.closest("textarea, input, select")) return;
         setScreenPanelOpen(false);
       }}
     >
@@ -126,7 +160,7 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
             </div>
             <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">{artifact.body}</div>
           </>
-        ) : place === "browser" ? (
+        ) : place === "browser" && !inWindow ? (
           <BrowserPanel
             key={bot.id}
             bot={bot}
@@ -136,6 +170,7 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
               title,
               chrome,
               placeSelector: placeTabs,
+              stageOverlay: overlay,
             }}
           />
         ) : (
@@ -146,13 +181,19 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
               {placeTabs}
               {chrome}
             </ScreenBar>
-            {place === "vm" && found.vm && <VmPane source={found.vm} control={control} host={body} />}
-            {place === "remote" && found.remote && <RemotePane botId={bot.id} view={found.remote} control={control} host={body} />}
+            {inWindow ? (
+              <div role="status" data-screen-in-window="" className="flex min-h-0 flex-1 items-center justify-center p-4 text-center text-[12px] text-ink-secondary">{t("sandboxDesktop.inWindow")}</div>
+            ) : (
+              <div data-screen-stage="" className="relative flex min-h-0 flex-1 flex-col">
+                {place === "vm" && found.vm && <VmPane source={found.vm} control={control} host={body} />}
+                {place === "remote" && found.remote && <RemotePane botId={bot.id} view={found.remote} control={control} host={body} />}
+                {overlay}
+              </div>
+            )}
           </>
         )}
-        {marking && !artifact && <ScreenMarksOverlay marks={marks} />}
       </div>
-      {marking && !artifact && <ScreenMarksBar marks={marks} />}
+      {marking && !artifact && !inWindow && <ScreenMarksBar marks={marks} onDone={() => setMarking(false)} />}
     </aside>
   );
 }

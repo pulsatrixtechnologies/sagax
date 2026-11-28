@@ -17,13 +17,14 @@ let root: Root;
 let state: ScreenMarksState;
 const dispatch = vi.fn();
 const describe_ = vi.fn(async () => [{ url: "https://example.com/p", role: "button", name: "Pay" }]);
+const done = vi.fn();
 
 function Harness({ bot, frame }: { bot: Bot; frame: RefObject<HTMLDivElement | null> }) {
   const describer = { current: describe_ };
   state = useScreenMarks({ bot, host: frame, describer, dispatch, onSent: vi.fn(), renderImage: async () => new File(["x"], "m.png", { type: "image/png" }) });
   return createElement("div", { ref: frame, style: { position: "relative" } },
     createElement("img", { "data-browser-frame": "", "data-frame-width": 1000, "data-frame-height": 500 }),
-    createElement(ScreenMarksOverlay, { marks: state }), createElement(ScreenMarksBar, { marks: state }));
+    createElement(ScreenMarksOverlay, { marks: state }), createElement(ScreenMarksBar, { marks: state, onDone: done }));
 }
 
 function mount(bot: Bot) {
@@ -47,7 +48,7 @@ const drag = (from: [number, number], to: [number, number]) => {
 };
 
 beforeEach(() => {
-  dispatch.mockReset(); upload.mockClear(); describe_.mockClear();
+  dispatch.mockReset(); upload.mockClear(); describe_.mockClear(); done.mockClear();
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
@@ -86,6 +87,39 @@ describe("screen marks", () => {
     expect(sent.busyMode).toBeUndefined();
     expect(upload).not.toHaveBeenCalled();
     expect(sent.text).toContain("Note: check this page");
+  });
+
+  // M-20261127-180: a visible way out of marking up, beside the tools.
+  it("ends marking up from its Done button", () => {
+    mount({ id: "ada", name: "Ada" } as unknown as Bot);
+    const button = host.querySelector("[data-mark-done]") as HTMLButtonElement | null;
+    expect(button?.textContent).toBe("Done");
+    act(() => { button!.click(); });
+    expect(done).toHaveBeenCalledOnce();
+  });
+
+  // M-20261127-180: Send with no picture on screen said nothing and sent nothing.
+  it("sends a note alone with no picture on screen", async () => {
+    const frame = createRef<HTMLDivElement>();
+    function Empty() {
+      state = useScreenMarks({ bot: { id: "ada", name: "Ada" } as unknown as Bot, host: frame, describer: { current: null }, dispatch, onSent: vi.fn() });
+      return createElement("div", { ref: frame }, createElement(ScreenMarksBar, { marks: state, onDone: done }));
+    }
+    act(() => root.render(createElement(Empty)));
+    act(() => { state.setNote("look here"); });
+    await act(async () => { await state.send(); });
+    expect(dispatch).toHaveBeenCalledOnce();
+    expect(dispatch.mock.calls[0]![0].text).toContain("Note: look here");
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("says the picture is gone instead of a silent Send when marks lost it", async () => {
+    mount({ id: "ada", name: "Ada" } as unknown as Bot);
+    drag([40, 40], [200, 120]);
+    act(() => { host.querySelector("img")!.remove(); });
+    await act(async () => { await state.send(); });
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(host.querySelector("[role=alert]")?.textContent).toBe("The screen picture could not be read.");
   });
 
   it("still sends when the page cannot be asked", async () => {

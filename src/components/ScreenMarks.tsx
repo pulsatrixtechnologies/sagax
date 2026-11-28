@@ -17,7 +17,7 @@ import {
 } from "@/lib/screen-marks";
 import { browserFrameSize } from "./BrowserViewport";
 import type { BrowserDescriber } from "./BrowserPanel";
-import { PRIMARY_PILL } from "./SettingsPrimitives";
+import { PILL, PRIMARY_PILL } from "./SettingsPrimitives";
 import type { ScreenPlace } from "@/lib/screen-places";
 import type { Action, Bot } from "@/state/store";
 
@@ -107,14 +107,17 @@ export function useScreenMarks({ bot, host, describer, dispatch, onSent, place =
   };
 
   const send = async () => {
+    if (!marks.length && !note.trim()) return;
     const found = frameImage(host.current);
-    if (!found || (!marks.length && !note.trim())) return;
+    // Marks with no picture left on screen (the page went): say so, never a silent Send.
+    // A note alone needs no picture.
+    if (marks.length && !found) { setError(t("screenMarks.error.image")); return; }
     setSending(true); setError("");
     try {
-      const points = marks.map((mark) => pagePoint(mark, found.page.width, found.page.height));
+      const points = found ? marks.map((mark) => pagePoint(mark, found.page.width, found.page.height)) : [];
       let described: DescribedMark[] = [];
       try { if (marks.length && describer.current) described = await describer.current(points); } catch { /* the picture and the note still go */ }
-      const picture = marks.length ? await imageAttachmentFromFile(await renderImage(found.image, marks)) : null;
+      const picture = marks.length && found ? await imageAttachmentFromFile(await renderImage(found.image, marks)) : null;
       const text = composeMessage(feedbackText(marks, described, note, place), picture ? [picture] : []);
       dispatch({
         type: "send", botId: bot.id, text,
@@ -138,8 +141,9 @@ export function useScreenMarks({ bot, host, describer, dispatch, onSent, place =
   };
 }
 
-/** The tools strip under the header: tool, undo, clear, the note, Send. */
-export function ScreenMarksBar({ marks }: { marks: ScreenMarksState }) {
+/** The tools strip under the header: tool, undo, clear, Done, the note, Send.
+ * Done ends marking up, as the pen and Escape do (M-20261127-180). */
+export function ScreenMarksBar({ marks, onDone }: { marks: ScreenMarksState; onDone: () => void }) {
   return (
     <div data-screen-marks-bar="" className="flex shrink-0 flex-col gap-1.5 border-t border-hairline/40 px-3 py-2">
       <div className="flex items-center gap-1">
@@ -161,6 +165,7 @@ export function ScreenMarksBar({ marks }: { marks: ScreenMarksState }) {
         <button type="button" data-mark-clear="" className={button} disabled={(!marks.marks.length && !marks.note) || marks.sending} title={t("screenMarks.clear")} aria-label={t("screenMarks.clear")} onClick={marks.clear}>
           <Trash2 size={16} strokeWidth={1.75} aria-hidden="true" />
         </button>
+        <button type="button" data-mark-done="" className={cn(PILL, "ml-auto")} title={t("screenMarks.doneHint")} onClick={onDone}>{t("screenMarks.done")}</button>
       </div>
       <form className="flex items-center gap-2" onSubmit={(event) => { event.preventDefault(); void marks.send(); }}>
         <input data-mark-note="" value={marks.note} maxLength={600} onChange={(event) => marks.setNote(event.target.value)} aria-label={t("screenMarks.note")} placeholder={t("screenMarks.note")}

@@ -9578,6 +9578,8 @@
   "screenMarks.tool.pen": "Draw",
   "screenMarks.undo": "Undo the last mark",
   "screenMarks.clear": "Clear the marks",
+  "screenMarks.done": "Done",
+  "screenMarks.doneHint": "Stop marking up (Esc)",
   "screenMarks.note": "Add a note for the bot",
   "screenMarks.send": "Send",
   "screenMarks.sending": "Sending",

@@ -448,6 +448,26 @@ describe("authenticated browser viewer relay", () => {
     await a.action({ type: "release" });
     expect(b.res.events("frame")).toHaveLength(1);
   });
+  // M-20261127-180: the other view got the frame back on release, but no tabs
+  // and no url, so its bar stayed empty while it showed the page again.
+  it("sends the newest withheld tabs and url, in their order, with the frame on release", async () => {
+    const a = await open(); const b = await open({ botId: "bot-b" });
+    await a.action({ type: "take" });
+    b.socket.receive(frame);
+    b.socket.receive({ type: "tabs", tabs: [{ tabId: "t1", title: "Old", url: "https://example.com/old", active: true }] });
+    b.socket.receive({ type: "url", url: "https://example.com/one" });
+    b.socket.receive({ type: "url", url: "https://example.com/two" });
+    expect(b.res.events("tabs")).toHaveLength(0);
+    expect(b.res.events("url")).toHaveLength(0);
+    await a.action({ type: "release" });
+    expect(b.res.events("frame")).toHaveLength(1);
+    expect(b.res.events("tabs")).toEqual([{ tabs: [{ tabId: "t1", title: "Old", url: "https://example.com/old", active: true }] }]);
+    expect(b.res.events("url")).toEqual([{ url: "https://example.com/two" }]);
+    const order = b.res.chunks.filter((chunk) => /^event: (tabs|url)\n/.test(chunk)).map((chunk) => chunk.split("\n", 1)[0]);
+    expect(order).toEqual(["event: tabs", "event: url"]);
+    await a.action({ type: "take" }); await a.action({ type: "release" });
+    expect(b.res.events("url")).toHaveLength(1);
+  });
   it("closes stale authenticated viewers, slow readers and viewers that never acknowledge frames", async () => {
     vi.useFakeTimers();
     let current = true;

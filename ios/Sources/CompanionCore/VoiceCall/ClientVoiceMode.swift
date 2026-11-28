@@ -134,7 +134,15 @@ public struct VoiceFailure: Error, Equatable, Sendable {
     /// not one of the voice route's (an older server, a proxy's page).
     public static func parse(status: Int, data: Data) -> VoiceFailure? {
         guard let body = try? JSONDecoder().decode(Body.self, from: data) else { return nil }
-        let voice = body.code == "voice_no_access" || body.code == "voice_provider" || body.code == "spend_cap" || status == 429
+        // `out_of_credits` and the realtime refusal codes carry the chain
+        // sentence the web already shows (#5428).
+        let voice = body.code == "voice_no_access"
+            || body.code == "voice_provider"
+            || body.code == "out_of_credits"
+            || body.code == "realtime_key_refused"
+            || body.code == "realtime_unreachable"
+            || body.code == "spend_cap"
+            || status == 429
         guard voice else { return nil }
         return VoiceFailure(status: status, message: body.error, code: body.code, cause: body.cause, failure: body.failure, key: body.key, tried: body.tried, keysUrl: body.card?.keysUrl, admin: body.card?.admin)
     }
@@ -145,7 +153,10 @@ public struct VoiceFailure: Error, Equatable, Sendable {
     /// xAI's kind, with this server's own limits sorted like the desktop
     /// does (429: `busy`, spend limit: `quota`).
     public var kind: String? {
-        if code == "voice_provider" { return failure ?? "other" }
+        if code == "voice_provider" || code == "realtime_key_refused" || code == "realtime_unreachable" {
+            return failure ?? "other"
+        }
+        if code == "out_of_credits" { return failure ?? "quota" }
         if status == 429 { return "busy" }
         if code == "spend_cap" { return "quota" }
         return nil
@@ -160,26 +171,32 @@ public struct VoiceFailure: Error, Equatable, Sendable {
 
 /// What the phone says about a voice failure or a key, in the app's
 /// language: the desktop's `voiceErrorNote`, `voiceKeyLabel` and
-/// `voiceKeyFallbackNote` (src/lib/voice-mode/failure.ts). Never a raw
-/// server line when the server sorted the failure.
+/// `voiceKeyFallbackNote` (src/lib/voice-mode/failure.ts). A server chain
+/// sentence ("No call was placed:" / "Aucun appel :") passes through as
+/// written (#5428); other failures stay in the phone's own words.
 public enum VoiceWords {
-    /// "your voice key ···Wez8", "the organization's xAI key".
+    /// "your voice key ···Wez8", "the organization's xAI key", "your
+    /// connected Grok account" (web `voiceMode.key.*`, #5428).
     public static func keyLabel(_ key: VoiceKeyInfo) -> String {
         let tail = key.last4.map { " ···\($0)" } ?? ""
         switch key.source {
         case "voice-key": return String(localized: "your voice key\(tail)")
         case "perspicax-key": return String(localized: "your xAI key in Perspicax\(tail)")
         case "org-key": return String(localized: "the organization's xAI key\(tail)")
+        case "grok-account": return String(localized: "your connected Grok account\(tail)")
+        case "org-account": return String(localized: "the organization's Grok account\(tail)")
         default: return String(localized: "this server's xAI key\(tail)")
         }
     }
 
-    /// What to do about a key of that source.
+    /// What to do about a key of that source (web `voiceMode.keyAction.*`).
     public static func keyAction(_ key: VoiceKeyInfo) -> String {
         switch key.source {
         case "voice-key": return String(localized: "Add credits to that xAI account, or change the key in Settings > Models and voice > My voice keys on the computer.")
         case "perspicax-key": return String(localized: "Add credits to that xAI account, or change the key in Perspicax (Providers > Grok).")
         case "org-key": return String(localized: "Ask an admin, or add your own xAI key in Settings > Models and voice > My voice keys on the computer.")
+        case "grok-account": return String(localized: "Add credits on the connected Grok account.")
+        case "org-account": return String(localized: "Ask an admin to check the organization's Grok account, or connect your own Grok account in Settings > Providers.")
         default: return String(localized: "Add credits to that xAI account, or change the key in Settings > Models and voice on the computer.")
         }
     }
@@ -200,8 +217,14 @@ public enum VoiceWords {
     }
 
     /// One sentence for a failure: the reason, the key it is about and
-    /// what to do, or the plain line when the server named no key.
+    /// what to do, or the plain line when the server named no key. A
+    /// server chain sentence ("No call was placed:" / "Aucun appel :")
+    /// passes through as written, like the web bar (#5428).
     public static func line(_ failure: VoiceFailure) -> String {
+        if let message = failure.message,
+           message.hasPrefix("No call was placed:") || message.hasPrefix("Aucun appel :") {
+            return message
+        }
         if failure.refused { return refusalLines(cause: failure.cause, admin: failure.admin == true).joined(separator: " ") }
         switch failure.kind {
         case "quota":

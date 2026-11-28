@@ -1,19 +1,14 @@
 // Sidebar zone order helpers (D-20261127-004, #5443).
 
+import { orderedOf } from "./ordered-of";
 import type { ZoneLayout } from "./types";
 import { SIDEBAR_KNOWN_COMPONENT_IDS } from "./types";
 
-const HEAD_IDS = new Set(["collapse", "search", "new"]);
+const HEAD_IDS = ["collapse", "search", "new"] as const;
 
 /** Head button ids in zone order, skipping hidden. */
 export function sidebarHeadOrder(zone: ZoneLayout): string[] {
-  const hidden = new Set(zone.hidden);
-  const ordered = zone.order.filter((id) => HEAD_IDS.has(id) && !hidden.has(id));
-  // Fill any missing visible head ids in default order.
-  for (const id of ["collapse", "search", "new"]) {
-    if (!hidden.has(id) && !ordered.includes(id)) ordered.push(id);
-  }
-  return ordered;
+  return orderedOf(zone, HEAD_IDS);
 }
 
 export function sidebarComponentHidden(zone: ZoneLayout, id: string): boolean {

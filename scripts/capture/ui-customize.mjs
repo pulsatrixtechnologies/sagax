@@ -16,7 +16,7 @@ const arg = (name, fallback) => {
   const index = process.argv.indexOf(name);
   return index >= 0 ? process.argv[index + 1] : fallback;
 };
-const outDir = resolve(arg("--out", "/Users/Workspace/artifacts/sagax-ui-customize-2026-11-27/captures"));
+const outDir = resolve(arg("--out", "/Users/Workspace/artifacts/issues-zero-2026-11-27/sagax/r4/captures"));
 const port = Number(arg("--port", "5372"));
 
 async function waitForServer(url, ms = 120_000) {
@@ -56,6 +56,7 @@ try {
       shots.push({ lang, scheme, skin, zone: "composerBar", customize: true, hidden: "usage", name: "composer-hidden" });
       shots.push({ lang, scheme, skin, zone: "sidebar", customize: true, hidden: "", name: "sidebar-customize" });
       shots.push({ lang, scheme, skin, zone: "sidebar", customize: true, hidden: "search", name: "sidebar-hidden" });
+      shots.push({ lang, scheme, skin, zone: "sidebar", customize: false, hidden: "", name: "sidebar-saved" });
       shots.push({ lang, scheme, skin, zone: "composerBar", customize: false, hidden: "", name: "composer-saved" });
       shots.push({ lang, scheme, skin, zone: "conversationHeader", customize: true, hidden: "", name: "header-customize" });
       shots.push({ lang, scheme, skin, zone: "conversationHeader", customize: true, hidden: "title", name: "header-hidden" });

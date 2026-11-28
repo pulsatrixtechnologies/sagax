@@ -1,9 +1,10 @@
 // Conversation header zone order helpers (D-20261127-004, #5443 PR2).
 
+import { orderedOf } from "./ordered-of";
 import type { ZoneLayout } from "./types";
 import { CONVERSATION_HEADER_COMPONENT_IDS } from "./types";
 
-const CONTROL_IDS = new Set(["botPanel", "exportMenu", "liveCall", "tasks"]);
+const CONTROL_IDS = ["botPanel", "exportMenu", "liveCall", "tasks"] as const;
 
 export function conversationHeaderHidden(zone: ZoneLayout, id: string): boolean {
   return zone.hidden.includes(id);
@@ -11,12 +12,7 @@ export function conversationHeaderHidden(zone: ZoneLayout, id: string): boolean 
 
 /** Right-side control ids in zone order, skipping hidden and unknown. */
 export function conversationHeaderControlOrder(zone: ZoneLayout): string[] {
-  const hidden = new Set(zone.hidden);
-  const ordered = zone.order.filter((id) => CONTROL_IDS.has(id) && !hidden.has(id));
-  for (const id of ["botPanel", "exportMenu", "liveCall", "tasks"]) {
-    if (!hidden.has(id) && !ordered.includes(id)) ordered.push(id);
-  }
-  return ordered;
+  return orderedOf(zone, CONTROL_IDS);
 }
 
 export function conversationHeaderTitleVisible(zone: ZoneLayout): boolean {

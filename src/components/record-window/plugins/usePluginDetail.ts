@@ -99,6 +99,8 @@ export function usePluginDetail(ref: RecordRef, enabled: boolean, onChanged: () 
   const { section: sectionOf, want: wantNow, refresh: refreshSections, loadWanted, reread, live } = sections;
   const changed = useRef(onChanged);
   changed.current = onChanged;
+  // one write of the same action at a time (the two Isolate buttons of a threat ask once)
+  const inflight = useRef(new Map<string, Promise<void>>());
   const servedNow = useRef(served);
   servedNow.current = served;
 
@@ -144,12 +146,19 @@ export function usePluginDetail(ref: RecordRef, enabled: boolean, onChanged: () 
         return served === false ? { loading: false, error: "", refused: true } : { loading: served === undefined || SECTION.test(name), error: "" };
       },
       want,
-      write: async (action) => {
-        await writeAction(source.record, action);
-        if (live.current !== source.token) return;
-        reread(CHANGES[action.action.split(".")[0]!] ?? []);
-        setRevision((value) => value + 1);
-        changed.current();
+      write: (action) => {
+        const key = JSON.stringify(action);
+        const running = inflight.current.get(key);
+        if (running) return running;
+        const run = (async () => {
+          await writeAction(source.record, action);
+          if (live.current !== source.token) return;
+          reread(CHANGES[action.action.split(".")[0]!] ?? []);
+          setRevision((value) => value + 1);
+          changed.current();
+        })().finally(() => { inflight.current.delete(key); });
+        inflight.current.set(key, run);
+        return run;
       },
       bytes,
       refresh,

@@ -55,11 +55,17 @@ export function recordWrite(body: unknown, recordKind?: string): RecordWrite | n
   return fieldChange(body) ?? parseRecordAction(body, recordKind);
 }
 
-/** The verb a rule reads for an action: an SMS or a reply leaves the person's
- * product for someone else, a send. */
+/** The actions that leave the person's product for someone else: an SMS, a reply on X. */
+const SENDS: ReadonlySet<string> = new Set(["message.send", "post.reply"]);
+
+/** Whether an action reaches a third party: the rules read it as a send (and its external-send risk) besides a write. */
+export function actionSends(action: RecordAction): boolean {
+  return SENDS.has(action.action);
+}
+
+/** The verb a rule reads for an action: a send writes something new (`create`), its send told apart by `actionSends`. */
 export function actionVerb(action: RecordAction): string {
-  if (action.action === "message.send" || action.action === "post.reply") return "send";
-  return action.action.endsWith(".add") ? "create" : action.action.endsWith(".remove") ? "delete" : "update";
+  return action.action.endsWith(".add") || actionSends(action) ? "create" : action.action.endsWith(".remove") ? "delete" : "update";
 }
 
 /** The console's code of a refused detail call, kept so the app tells a
@@ -109,6 +115,11 @@ export function recordReadOrgRule(rules: readonly CustomRule[], ref: RecordRef, 
   })();
   const facts = factsForCall({ tool, mcpTool: `mcp__perspicax__${tool}`, input: JSON.stringify(input), hints: { readOnly: !change } }, home);
   if (!facts.products.includes(ref.product)) facts.products.push(ref.product);
+  // an SMS or a reply reaches someone else: a rule on sending (or on its external-send risk) holds it, as it holds a bot's send
+  if (change && "action" in change && actionSends(change)) {
+    if (!facts.actions.includes("send")) facts.actions.push("send");
+    if (!facts.risks.includes("external-send")) facts.risks.push("external-send");
+  }
   const decision = evaluateCustomRules(org, facts, {
     products: [{ id: ref.product, ...(productName ? { name: productName } : {}) }],
     startedBy: "person",

@@ -17,7 +17,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { parseExclusion, parseLines, parseSteps, parseThreatView, type ThreatExclusion, type ViewStep } from "@/lib/record-plugin-views";
 import type { RecordCard as Card } from "../../../../shared/record-cards";
-import { AskButton, FactList, PluginNotes, SectionStatus, StatePill, Steps, TONE_TEXT, Tiles, WriteButton, tabCount, type PluginContext } from "./PluginParts";
+import { AskButton, FactList, PluginNotes, SectionStatus, StatePill, Steps, TONE_TEXT, ToneDot, Tiles, WriteButton, tabCount, type PluginContext } from "./PluginParts";
 import type { PluginWindowSpec } from "./PluginWindow";
 
 /** The card's own list as a timeline (a console that serves no `timeline` section). */
@@ -64,7 +64,7 @@ function Overview({ ctx }: { ctx: PluginContext }) {
               <ul className="flex min-w-0 flex-col gap-3">
                 {view.tree.map((node, index) => (
                   <li key={`${index}-${node.name}`} className="flex min-w-0 items-start gap-2.5" style={{ paddingInlineStart: node.depth * 18 }}>
-                    <span aria-hidden="true" className={cn("mt-[7px] size-2.5 shrink-0 rounded-full", node.tone === "alert" ? "bg-danger" : node.tone === "waiting" ? "bg-warning" : "bg-success")} />
+                    <ToneDot tone={node.tone ?? "done"} className="mt-[7px] size-2.5" />
                     <span className="flex min-w-0 flex-col">
                       <code className="w-fit max-w-full rounded-md bg-popover-hover px-1.5 py-0.5 font-mono text-[13px] leading-5 [overflow-wrap:anywhere]">{node.name}</code>
                       {node.detail && <span className="text-[13px] leading-[18px] text-popover-ink-secondary">{node.detail}</span>}

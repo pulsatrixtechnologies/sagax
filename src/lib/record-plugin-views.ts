@@ -57,7 +57,7 @@ const httpsOf = (value: unknown): string | undefined => {
 };
 const listOf = (value: unknown, most = 200): Raw[] => Array.isArray(value) ? value.filter(isObject).slice(0, most) : [];
 const textsOf = (value: unknown, most = 24): string[] => Array.isArray(value) ? value.map((one) => textOf(one, 120)).filter(Boolean).slice(0, most) : [];
-/** An object without its absent parts. */
+/** An object without its absent parts (its optional ones: a required word is set after, kept even when empty). */
 const clean = <T extends object>(value: T): T => Object.fromEntries(Object.entries(value).filter(([, one]) => one !== undefined && one !== "")) as T;
 
 // ── shared parts ─────────────────────────────────────────────────────────
@@ -101,13 +101,13 @@ export function viewOf(raw: unknown): Raw | undefined {
 export interface PluginNote { id?: string; author: string; authorRef?: RecordRef; at?: string; when?: string; text: string }
 export function parseNote(line: Raw): PluginNote | null {
   const text = textOf(line.text, 20_000);
-  return text ? clean({ id: idOf(line.id), author: textOf(line.author, 80), authorRef: refOf(line.author_ref), at: instantOf(line.timestamp ?? line.at), when: optionalText(line.date ?? line.when, 80), text }) : null;
+  return text ? { ...clean({ id: idOf(line.id), authorRef: refOf(line.author_ref), at: instantOf(line.timestamp ?? line.at), when: optionalText(line.date ?? line.when, 80) }), author: textOf(line.author, 80), text } : null;
 }
 /** A file of a record (an attachment, a page's file). */
 export interface PluginFile { id: string; name: string; size?: string; date?: string; author?: string; type?: string }
 export function parseFile(line: Raw): PluginFile | null {
   const id = idOf(line.id), name = textOf(line.name, 255);
-  return id && name ? clean({ id, name, size: optionalText(line.size, 40), date: optionalText(line.date, 80), author: optionalText(line.author, 80), type: optionalText(line.type, 40) }) : null;
+  return id && name ? { ...clean({ size: optionalText(line.size, 40), date: optionalText(line.date, 80), author: optionalText(line.author, 80), type: optionalText(line.type, 40) }), id, name } : null;
 }
 
 // ── SentinelOne: a threat ────────────────────────────────────────────────
@@ -143,7 +143,7 @@ export function parseThreatView(raw: unknown): ThreatView | undefined {
 export interface ThreatExclusion { id?: string; value: string; type?: string; scope?: string }
 export function parseExclusion(line: Raw): ThreatExclusion | null {
   const value = textOf(line.value, 400);
-  return value ? clean({ id: idOf(line.id), value, type: optionalText(line.type, 80), scope: optionalText(line.scope, 120) }) : null;
+  return value ? { ...clean({ id: idOf(line.id), type: optionalText(line.type, 80), scope: optionalText(line.scope, 120) }), value } : null;
 }
 
 // ── Axcient x360Recover: a protected system ──────────────────────────────
@@ -179,7 +179,7 @@ export function parseVolumes(raw: unknown): BackupVolume[] {
 export interface RestorePoint { id?: string; at?: string; when: string; kind: string; size?: string; verified?: boolean }
 export function parseRestorePoint(line: Raw): RestorePoint | null {
   const when = textOf(line.when, 80), kind = textOf(line.kind, 80);
-  return when ? clean({ id: idOf(line.id), at: instantOf(line.at), when, kind, size: optionalText(line.size, 40), verified: typeof line.verified === "boolean" ? line.verified : undefined }) : null;
+  return when ? { ...clean({ id: idOf(line.id), at: instantOf(line.at), size: optionalText(line.size, 40), verified: typeof line.verified === "boolean" ? line.verified : undefined }), when, kind } : null;
 }
 
 // ── BookStack: a page ────────────────────────────────────────────────────
@@ -215,7 +215,7 @@ export function parsePageView(raw: unknown): PageView | undefined {
 export interface PageRevision { id?: string; at?: string; when: string; author: string; summary: string }
 export function parseRevision(line: Raw): PageRevision | null {
   const when = textOf(line.when, 80);
-  return when ? clean({ id: idOf(line.id), at: instantOf(line.at), when, author: textOf(line.author, 80), summary: textOf(line.summary, 400) }) : null;
+  return when ? { ...clean({ id: idOf(line.id), at: instantOf(line.at) }), when, author: textOf(line.author, 80), summary: textOf(line.summary, 400) } : null;
 }
 
 // ── Twilio: a conversation ───────────────────────────────────────────────
@@ -248,12 +248,14 @@ export function parseMessage(line: Raw): SmsMessage | null {
   const error = isObject(line.error) && textOf(line.error.code, 12)
     ? clean({ code: textOf(line.error.code, 12), title: textOf(line.error.title, 160), cause: optionalText(line.error.cause, 400), fix: optionalText(line.error.fix, 400) })
     : undefined;
-  return clean({
-    id, direction: line.direction === "in" ? "in" as const : "out" as const, body: textOf(line.body, 1_600), at: instantOf(line.at), when: textOf(line.when, 80),
-    status: textOf(line.status, 60), tone: toneOf(line.tone) ?? "open", state: optionalText(line.state, 30), by: optionalText(line.by, 120), from, to,
-    service: optionalText(line.service, 120), segments: optionalText(line.segments, 120), price: optionalText(line.price, 40), error, life: parseSteps(line.life),
-    day: optionalText(line.day, 80),
-  });
+  return {
+    ...clean({
+      at: instantOf(line.at), state: optionalText(line.state, 30), by: optionalText(line.by, 120),
+      service: optionalText(line.service, 120), segments: optionalText(line.segments, 120), price: optionalText(line.price, 40), error, day: optionalText(line.day, 80),
+    }),
+    id, direction: line.direction === "in" ? "in" as const : "out" as const, body: textOf(line.body, 1_600), when: textOf(line.when, 80),
+    status: textOf(line.status, 60), tone: toneOf(line.tone) ?? "open", from, to, life: parseSteps(line.life),
+  };
 }
 export interface ConversationView { stats?: { title?: string; parts: Array<{ text: string; tone?: RecordTone; strong?: boolean }> } }
 export function parseConversationView(raw: unknown): ConversationView | undefined {
@@ -265,7 +267,7 @@ export function parseConversationView(raw: unknown): ConversationView | undefine
 export interface CallRow { id: string; direction: "in" | "out"; when: string; duration?: string; transcript?: string; recording?: boolean }
 export function parseCall(line: Raw): CallRow | null {
   const id = idOf(line.id), when = textOf(line.when, 80);
-  return id && when ? clean({ id, direction: line.direction === "in" ? "in" as const : "out" as const, when, duration: optionalText(line.duration, 40), transcript: optionalText(line.transcript, 2_000), recording: line.recording === true ? true : undefined }) : null;
+  return id && when ? { ...clean({ duration: optionalText(line.duration, 40), transcript: optionalText(line.transcript, 2_000), recording: line.recording === true ? true : undefined }), id, direction: line.direction === "in" ? "in" as const : "out" as const, when } : null;
 }
 export interface NumberView { number: string; facts: ViewFact[]; capabilities: string[]; routingTitle?: string; routing: ViewFact[] }
 export function parseNumberView(raw: unknown): NumberView | undefined {

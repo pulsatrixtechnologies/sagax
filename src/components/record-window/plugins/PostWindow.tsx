@@ -11,7 +11,7 @@
 // cards give it, read by `readXPost`; tiles, pinned, bookmarked), `replies`
 // (X posts), `stats` (a view: hourly, sources). No plugin serves X posts yet:
 // the window waits for one.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RECORD_ACTION, RECORD_LINK_ACTION, RecordEntryForm, RecordPod } from "@/components/record-window/RecordBlocks";
 import { RecordSplit } from "@/components/record-window/RecordSplit";
 import { XPostItem } from "@/components/XPostCards";
@@ -36,17 +36,29 @@ function ReplyForm({ ctx, to, onDone }: { ctx: PluginContext; to?: string; onDon
 function Post({ ctx, view, onReply }: { ctx: PluginContext; view: PostView; onReply?: () => void }) {
   const [shared, setShared] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   const { detail, card } = ctx;
   const mark = view.bookmarked ? "post.unbookmark" as const : "post.bookmark" as const;
   const link = view.post.url ?? card.openUrl;
   return (
-    <XPostItem post={view.post} card actions={{
-      onReply,
-      bookmarked: view.bookmarked,
-      onBookmark: detail.can(mark) && !busy ? () => { setBusy(true); detail.write({ action: mark }).catch(() => {}).finally(() => setBusy(false)); } : undefined,
-      onShare: link ? () => { void copyText(link).then(() => { setShared(true); setTimeout(() => setShared(false), 1_500); }); } : undefined,
-      shared,
-    }} />
+    <div className="flex min-w-0 flex-col gap-1">
+      <XPostItem post={view.post} card actions={{
+        onReply,
+        bookmarked: view.bookmarked,
+        onBookmark: detail.can(mark) && !busy ? () => { setBusy(true); setFailed(false); detail.write({ action: mark }).catch(() => setFailed(true)).finally(() => setBusy(false)); } : undefined,
+        onShare: link ? () => {
+          void copyText(link).then(() => {
+            setShared(true);
+            if (timer.current) clearTimeout(timer.current);
+            timer.current = setTimeout(() => setShared(false), 1_500);
+          });
+        } : undefined,
+        shared,
+      }} />
+      {failed && <p role="alert" className="text-[13px] leading-[18px] text-danger">{t("recordWindow.saveFailed")}</p>}
+    </div>
   );
 }
 
@@ -170,7 +182,8 @@ export const POST_WINDOW: PluginWindowSpec = {
     return [
       { id: "post", label: t("recordWindow.post.post") },
       { id: "replies", label: t("recordWindow.post.repliesTab"), count: tabCount(detail, "replies", replies.data ? parseLines(replies.data, parseReply).length : undefined) },
-      { id: "stats", label: t("recordWindow.post.stats"), count: stats.refused ? 0 : undefined },
+      // read and empty, or refused: nothing to show and nothing to add, hidden
+      { id: "stats", label: t("recordWindow.post.stats"), count: stats.refused || (stats.data && !parsePostStats(stats.data)) ? 0 : undefined },
     ];
   },
   sides: (tab) => tab === "post",

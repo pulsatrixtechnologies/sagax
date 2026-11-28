@@ -231,6 +231,18 @@ describe("a Twilio conversation", () => {
     expect(document.querySelectorAll("[data-record-listen]")).toHaveLength(2);
   });
 
+  it("filters a log whose messages leave words out without breaking", async () => {
+    override = (section) => section === "log" ? { lines: [{ id: "SM1", to: "+1 418 555-0142", body: "Hi" }, { id: "SM2", from: "+1 819 555-0100", to: "+1 418 555-0142", body: "Yo", status: "Delivered", when: "9:02 AM" }], next: null } : undefined;
+    await open("conversation");
+    await tab("log");
+    // the one filter: open it, every column, then the words
+    await act(async () => document.querySelector<HTMLElement>("[data-record-filter] button")!.click());
+    await act(async () => document.querySelector<HTMLElement>("[data-filter-option]")!.click());
+    const input = document.querySelector<HTMLInputElement>('[data-testid="data-filter-popover"] input')!;
+    await act(async () => setValue(input, "Delivered"));
+    expect(document.querySelectorAll("[data-record-grid] tbody tr")).toHaveLength(1);
+  });
+
   it("exports the log rows the filter keeps, as the app's tables do (formulas neutralized)", async () => {
     const { downloadBlob } = await import("@/lib/diagram-view");
     await open("conversation");

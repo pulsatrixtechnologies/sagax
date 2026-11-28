@@ -110,6 +110,13 @@ describe("a conversation", () => {
     expect(parseCall({ id: "CA1", when: "Nov 26", direction: "in", recording: "yes" })).toEqual({ id: "CA1", when: "Nov 26", direction: "in" });
   });
 
+  it("keeps a required word as an empty text when the console leaves it out, never undefined (a filter reads it)", () => {
+    const message = parseMessage({ id: "SM1", to: "+1 418 555-0142", body: "Hi" })!;
+    expect([message.from, message.status, message.when]).toEqual(["", "", ""]);
+    expect(parseRestorePoint({ when: "Nov 27" })!.kind).toBe("");
+    expect(parseNote({ text: "No author" })!.author).toBe("");
+  });
+
   it("counts an SMS's segments as Twilio does", () => {
     expect(smsSegments("")).toMatchObject({ chars: 0, segments: 0, encoding: "GSM-7" });
     expect(smsSegments("a".repeat(160))).toMatchObject({ segments: 1, per: 160, encoding: "GSM-7" });

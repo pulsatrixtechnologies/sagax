@@ -378,15 +378,23 @@ describe("picking in the grid", () => {
     expect(document.querySelector("[data-mascot-generate-keep]")).not.toBeNull();
     expect(document.querySelector("[data-mascot-generate-retry]")).not.toBeNull();
     expect(document.querySelector("[data-mascot-generate-cancel]")).not.toBeNull();
+    // preview replaces Generate + Import in the add panel [M-20261127-191]
+    expect(document.querySelector("[data-mascot-add-import]")).toBeNull();
+    expect(document.querySelector("[data-mascot-add-generate]")).toBeNull();
     await act(async () => document.querySelector<HTMLButtonElement>("[data-mascot-generate-cancel]")!.click());
     expect(document.querySelector("[data-mascot-generate-preview]")).toBeNull();
+    expect(document.querySelector("[data-mascot-add-import]")).not.toBeNull();
+    expect(document.querySelector("[data-mascot-add-generate]")).not.toBeNull();
     expect(patches).toEqual([]);
     await act(async () => document.querySelector<HTMLButtonElement>("[data-mascot-generate]")!.click());
     await act(async () => { await Promise.resolve(); });
+    expect(document.querySelector("[data-mascot-add-import]")).toBeNull();
     await act(async () => document.querySelector<HTMLButtonElement>("[data-mascot-generate-retry]")!.click());
     await act(async () => { await Promise.resolve(); });
     expect(onGenerate).toHaveBeenCalledTimes(3);
     expect(patches).toEqual([]);
+    expect(document.querySelector("[data-mascot-generate-preview]")).not.toBeNull();
+    expect(document.querySelector("[data-mascot-add-import]")).toBeNull();
     await act(async () => document.querySelector<HTMLButtonElement>("[data-mascot-generate-keep]")!.click());
     expect(patches).toHaveLength(1);
     expect(patches[0]!.mascotLook).toMatchObject({ character: "shape", avatarDef: { id: "kite", name: "Kite" } });

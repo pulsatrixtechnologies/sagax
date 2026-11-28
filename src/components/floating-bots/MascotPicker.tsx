@@ -311,9 +311,11 @@ const primary = "inline-flex h-8 items-center justify-center gap-1.5 rounded-ful
  * upstream picker's Generate and Import screens, without their tabs.
  * Generate asks a model of the app (through `onGenerate`, the bot's Auto
  * model) and shows an in-panel preview: Keep, Retry or Cancel
- * [D-20261127-005]. Import takes a definition's JSON, pasted, typed or
- * dropped as a file. Either way the engine checks the definition (the same
- * parseEngineAvatar path) before it becomes the bot's shape.
+ * [D-20261127-005]. During a preview the add panel shows only that card;
+ * Cancel or Keep brings Generate and Import back [M-20261127-191]. Import
+ * takes a definition's JSON, pasted, typed or dropped as a file. Either way
+ * the engine checks the definition (the same parseEngineAvatar path) before
+ * it becomes the bot's shape.
  */
 function AddShapePanel({
   onAdd,
@@ -368,20 +370,24 @@ function AddShapePanel({
     setGenerating(true);
     setGenerateFailed(false);
     setGenerateReasons(null);
-    setDraft(null);
+    // keep an existing preview up while Retry runs so Import does not flash back
     try {
       const reply = await onGenerate(description.trim());
       if (seq !== generateSeq.current) return;
       // same check as Import: a reply the engine cannot draw is never offered to Keep
       const parsed = parseEngineAvatar(definitionJson(reply));
       if (!parsed.ok) {
+        setDraft(null);
         setGenerateFailed(true);
         setGenerateReasons(parsed.reasons);
         return;
       }
       setDraft({ text: JSON.stringify(parsed.def), def: parsed.def });
     } catch {
-      if (seq === generateSeq.current) setGenerateFailed(true);
+      if (seq === generateSeq.current) {
+        setDraft(null);
+        setGenerateFailed(true);
+      }
     } finally {
       if (seq === generateSeq.current) setGenerating(false);
     }
@@ -401,51 +407,55 @@ function AddShapePanel({
     void readFile(event.dataTransfer.files[0]);
   };
 
+  // During a preview the add panel shows only Keep / Retry / Cancel: Import
+  // and Generate stay out of the way until Cancel or Keep [M-20261127-191].
+  if (draft) {
+    return (
+      <div className="flex w-[340px] max-w-[calc(100vw-32px)] flex-col gap-3 p-3" data-mascot-add="">
+        <div className="flex flex-col items-center gap-2" data-mascot-generate-preview="">
+          <ShapeMascot
+            shape={preview.shape}
+            skin={preview.skin as never}
+            color={preview.color}
+            size={96}
+            animated
+            detail="full"
+            engineLook={{ material: preview.material, mood: preview.mood, eyeColor: preview.eyeColor, depth: preview.depth, motion: preview.motion }}
+            trackPointer={false}
+            avatarDef={draft.def}
+            label={draft.def.name}
+          />
+          <p className="m-0 text-center text-[13px] font-medium leading-4 text-ink" data-mascot-generate-name="">{draft.def.name}</p>
+          <div className="flex w-full flex-wrap gap-2">
+            <button type="button" className={cn(primary, "flex-1")} disabled={disabled} data-mascot-generate-keep="" onClick={keep}>{t("mascotPicker.add.keep")}</button>
+            <button type="button" className={cn(button, "flex-1")} disabled={disabled || generating} data-mascot-generate-retry="" onClick={() => void generate()}>{t("mascotPicker.add.retry")}</button>
+            <button type="button" className={cn(button, "flex-1 bg-transparent text-ink-secondary")} disabled={disabled} data-mascot-generate-cancel="" onClick={clearDraft}>{t("mascotPicker.add.cancel")}</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex w-[340px] max-w-[calc(100vw-32px)] flex-col gap-3 p-3" data-mascot-add="">
       {onGenerate && (
         <section className="flex flex-col gap-2" data-mascot-add-generate="">
-          {draft ? (
-            <div className="flex flex-col items-center gap-2" data-mascot-generate-preview="">
-              <ShapeMascot
-                shape={preview.shape}
-                skin={preview.skin as never}
-                color={preview.color}
-                size={96}
-                animated
-                detail="full"
-                engineLook={{ material: preview.material, mood: preview.mood, eyeColor: preview.eyeColor, depth: preview.depth, motion: preview.motion }}
-                trackPointer={false}
-                avatarDef={draft.def}
-                label={draft.def.name}
-              />
-              <p className="m-0 text-center text-[13px] font-medium leading-4 text-ink" data-mascot-generate-name="">{draft.def.name}</p>
-              <div className="flex w-full flex-wrap gap-2">
-                <button type="button" className={cn(primary, "flex-1")} disabled={disabled} data-mascot-generate-keep="" onClick={keep}>{t("mascotPicker.add.keep")}</button>
-                <button type="button" className={cn(button, "flex-1")} disabled={disabled || generating} data-mascot-generate-retry="" onClick={() => void generate()}>{t("mascotPicker.add.retry")}</button>
-                <button type="button" className={cn(button, "flex-1 bg-transparent text-ink-secondary")} disabled={disabled} data-mascot-generate-cancel="" onClick={clearDraft}>{t("mascotPicker.add.cancel")}</button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <textarea
-                className={cn(field, "resize-none")}
-                rows={2}
-                maxLength={400}
-                value={description}
-                disabled={disabled || generating}
-                aria-label={t("mascotPicker.add.describe")}
-                placeholder={t("mascotPicker.add.describe")}
-                onChange={(event) => { setDescription(event.target.value); setGenerateFailed(false); setGenerateReasons(null); }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void generate(); }
-                }}
-              />
-              <button type="button" className={cn(primary, "w-full")} disabled={disabled || generating || !description.trim()} aria-busy={generating} data-mascot-generate="" onClick={() => void generate()}>
-                {generating ? t("mascotPicker.add.generating") : t("mascotPicker.add.generate")}
-              </button>
-            </>
-          )}
+          <textarea
+            className={cn(field, "resize-none")}
+            rows={2}
+            maxLength={400}
+            value={description}
+            disabled={disabled || generating}
+            aria-label={t("mascotPicker.add.describe")}
+            placeholder={t("mascotPicker.add.describe")}
+            onChange={(event) => { setDescription(event.target.value); setGenerateFailed(false); setGenerateReasons(null); }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void generate(); }
+            }}
+          />
+          <button type="button" className={cn(primary, "w-full")} disabled={disabled || generating || !description.trim()} aria-busy={generating} data-mascot-generate="" onClick={() => void generate()}>
+            {generating ? t("mascotPicker.add.generating") : t("mascotPicker.add.generate")}
+          </button>
           {generateFailed && <p role="alert" className="m-0 text-[12px] leading-4 text-danger" data-mascot-generate-failed="">{t("mascotPicker.add.generateFailed")}</p>}
           {generateReasons && generateReasons.length > 0 && (
             <ul role="alert" className="m-0 flex list-disc flex-col gap-1 pl-4 text-[12px] leading-4 text-danger" data-mascot-generate-reasons="">

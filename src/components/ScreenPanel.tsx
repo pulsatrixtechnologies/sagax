@@ -1,13 +1,15 @@
 // The screen side panel (#4452): one column beside the chat for what the
 // selected bot is working in. Compact chrome (M-20261127-064): no title
-// header band; page tabs (or place chrome) share a row with Detach / Expand /
-// Close; the live view fills the rest edge to edge. Browser, VM and remote
-// supply the body; artifacts reuse the same chrome via ScreenPanelChrome.
+// header band; the live view fills the rest edge to edge. One top row for
+// every place (M-20261127-181, ScreenPanelBar): the place's own part on the
+// left, then Take control, place selector, Mark up, Detach, Expand and Close,
+// in that order, whether the browser, the VM or the remote computer shows.
 // Every control is the app's own size (M-20261127-179): the chat header's
-// round buttons and glyphs, the app's tabs (PillTabs) for the places.
-// Mark up draws over the picture only, so its pen, Detach, Expand, Close and
-// the bars stay usable while it is on; the pen, Done and Escape end it
-// (M-20261127-180).
+// round buttons and glyphs, the app's tabs (PillTabs) for the places; a
+// narrow bar folds labels (ScreenBar), never the order. Mark up draws over
+// the picture only, so its pen, Detach, Expand, Close and the bars stay
+// usable while it is on; the pen, Done and Escape end it (M-20261127-180).
+// Browser, VM and remote supply the body; artifacts reuse the same row.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Globe, Laptop, Monitor, PenLine, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -18,9 +20,9 @@ import { setScreenPanelOpen, SCREEN_PANEL_DEFAULT_WIDTH, SCREEN_PANEL_MAX_WIDTH,
 import { useStore, type Bot } from "@/state/store";
 import { BrowserPanel, type BrowserDescriber } from "./BrowserPanel";
 import { ScreenMarksBar, ScreenMarksOverlay, useScreenMarks } from "./ScreenMarks";
-import { ControlSwitch, placeControllable, RemotePane, useScreenPlaces, VmPane } from "./ScreenPlaces";
+import { placeControllable, RemotePane, useScreenPlaces, VmPane } from "./ScreenPlaces";
 import { DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
-import { FOLD_TAB_ICON, FOLD_TAB_LABEL, SCREEN_PANEL_TITLE, SCREEN_PANEL_TOOL, SCREEN_PANEL_TOP_ROW, ScreenBar, ScreenPanelChrome } from "./ScreenPanelChrome";
+import { FOLD_TAB_ICON, FOLD_TAB_LABEL, SCREEN_PANEL_TITLE, SCREEN_PANEL_TOOL, ScreenPanelBar, ScreenPanelChrome, type ScreenControlState, type ScreenPanelBarSlots } from "./ScreenPanelChrome";
 import { PillTabs } from "./PillTabs";
 import { openScreenPanelWindow, useScreenPanelWindow, type ScreenPanelWindow } from "@/lib/screen-panel-window";
 
@@ -110,16 +112,12 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
       onDetach={artifact ? artifact.onDetach : windowed ? detach : undefined}
       onExpand={artifact ? artifact.onExpand : windowed ? expand : undefined}
       leading={marksToggle}
-      trailing={place !== "browser" && !artifact && !inWindow && placeControllable(place, found.vm, found.remote)
-        ? <ControlSwitch control={control} onChange={setControl} />
-        : undefined}
     />
   );
 
-  // One tab list for the places, in the browser's address row and in the VM
-  // and remote top row alike: the app's tabs; while their row cannot hold
+  // One tab list for the places: the app's tabs; while their row cannot hold
   // the labels (ScreenBar), each shows its place's icon instead.
-  const placeTabs = !artifact && found.places.length > 1 ? (
+  const placeSelector = !artifact && found.places.length > 1 ? (
     <PillTabs tabs={found.places} tab={place} onTab={pick} ariaLabel={t("screenPanel.tabs")} idPrefix="screen-panel"
       label={(id) => {
         const Icon = PLACE_ICON[id];
@@ -128,6 +126,13 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
       tabAttributes={(id) => ({ "data-screen-tab": id })}
       data-screen-place-select="" className="shrink-0 flex-nowrap" />
   ) : null;
+
+  /** The one top row: each place fills its left part and its control. */
+  const bar = (slots: ScreenPanelBarSlots) => <ScreenPanelBar {...slots} places={placeSelector} tools={chrome} />;
+
+  const placeControl: ScreenControlState | null = place !== "browser" && !artifact && !inWindow && placeControllable(place, found.vm, found.remote)
+    ? { on: control, onChange: setControl, title: control ? t("sandboxDesktop.controlHint") : undefined }
+    : null;
 
   const overlay = marking && !artifact ? <ScreenMarksOverlay marks={marks} /> : null;
 
@@ -154,10 +159,7 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
       <div ref={body} data-screen-panel-body="" className="relative flex min-h-0 flex-1 flex-col">
         {artifact ? (
           <>
-            <div data-screen-panel-tabs="" className={SCREEN_PANEL_TOP_ROW}>
-              <span dir="auto" className={SCREEN_PANEL_TITLE} title={artifact.title}>{artifact.title}</span>
-              {chrome}
-            </div>
+            {bar({ leading: <span dir="auto" className={SCREEN_PANEL_TITLE} title={artifact.title}>{artifact.title}</span> })}
             <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">{artifact.body}</div>
           </>
         ) : place === "browser" && !inWindow ? (
@@ -166,21 +168,17 @@ export function ScreenPanel({ bot, artifact }: { bot: Bot; artifact?: ScreenPane
             bot={bot}
             live
             onDescriber={(describe) => { describer.current = describe; }}
-            docked={{
-              title,
-              chrome,
-              placeSelector: placeTabs,
-              stageOverlay: overlay,
-            }}
+            docked={{ title, bar, stageOverlay: overlay }}
           />
         ) : (
           <>
-            <ScreenBar data-screen-panel-tabs="" min={120} className={SCREEN_PANEL_TOP_ROW}>
-              <PlaceIcon size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-ink-secondary" />
-              <span dir="auto" data-screen-bar-flex="" className={SCREEN_PANEL_TITLE} title={title}>{title}</span>
-              {placeTabs}
-              {chrome}
-            </ScreenBar>
+            {bar({
+              leading: <>
+                <PlaceIcon size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-ink-secondary" />
+                <span dir="auto" data-screen-bar-flex="" className={SCREEN_PANEL_TITLE} title={title}>{title}</span>
+              </>,
+              control: placeControl,
+            })}
             {inWindow ? (
               <div role="status" data-screen-in-window="" className="flex min-h-0 flex-1 items-center justify-center p-4 text-center text-[12px] text-ink-secondary">{t("sandboxDesktop.inWindow")}</div>
             ) : (

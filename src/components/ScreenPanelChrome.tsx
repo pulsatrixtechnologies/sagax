@@ -1,18 +1,23 @@
 // Shared docked-panel chrome for the screen side panel (#4452) and for
-// surfaces that reuse it (artifacts in the same column). One row of icon
-// actions: Detach (own window), Expand (large takeover), Close. Marks and
-// other tools sit in `leading` / `trailing` so callers keep their own buttons
-// without copying this strip.
+// surfaces that reuse it (artifacts in the same column). One top row for
+// every place (M-20261127-181): the place's own part on the left (the
+// browser's page tabs, the VM's name), then always the same buttons in the
+// same order on the right: Take control, place selector, Mark up, Detach
+// (own window), Expand (large takeover), Close. A button never moves when the
+// person switches between Browser and VM: Take control, the one button a
+// place may lack (a Local VM, a browser not connected yet), sits left of the
+// place selector, so the tabs under the pointer and the tools never shift.
 //
 // Sizes are the app's own (M-20261127-179): the chat header's round control
 // (CIRCLE_BUTTON, 36px) and glyph (CIRCLE_ICON, 18px), 8px apart as there,
 // on a top row of the frame's shared header height (--app-topbar-height),
-// so the panel's circles sit on the chat header's centre line.
+// so the panel's circles sit on the chat header's centre line. A narrow bar
+// folds labels (ScreenBar), never the order.
 import { createElement, useLayoutEffect, useRef, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
-import { ExternalLink, Maximize2, X } from "lucide-react";
+import { ExternalLink, Hand, Maximize2, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { CIRCLE_BUTTON, CIRCLE_ICON } from "@/lib/circle-button";
+import { CIRCLE_BUTTON, CIRCLE_ICON, CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
 
 /** The panel's top row: the chat header's height, 12px gutters, a hairline under it. */
 export const SCREEN_PANEL_TOP_ROW = "flex min-h-(--app-topbar-height) shrink-0 items-center gap-2 border-b border-hairline/40 px-3";
@@ -22,10 +27,10 @@ export const SCREEN_PANEL_TITLE = "min-w-0 flex-1 truncate text-[13.5px] font-me
 export const SCREEN_PANEL_TOOL = cn(CIRCLE_BUTTON, "disabled:cursor-not-allowed disabled:opacity-40");
 
 // A row that holds more labelled controls than a narrow panel can (the
-// address row, the VM and remote row) is a ScreenBar: it measures itself and
+// address row, the shared top row) is a ScreenBar: it measures itself and
 // folds labels, never sizes and never a control, only while its controls do
 // not fit: first the place tabs to their icons, then the labelled chips
-// (the holder, Take control) to their 36px circle. Every label stays in the
+// (Take control) to their 36px circle. Every label stays in the
 // accessible name and the tooltip. The fold is the row's `data-fold`; these
 // classes read it (plain literals, so Tailwind's scanner sees them).
 export type ScreenBarFold = "none" | "places" | "all";
@@ -80,7 +85,7 @@ export type ScreenPanelChromeProps = {
   onClose: () => void;
   onDetach?: () => void;
   onExpand?: () => void;
-  /** Extra tools before Detach (Mark up, place switcher, …). */
+  /** Extra tools before Detach (Mark up). */
   leading?: ReactNode;
   /** Extra tools after Expand, before Close. */
   trailing?: ReactNode;
@@ -136,5 +141,74 @@ export function ScreenPanelChrome({
         <X {...CIRCLE_ICON} aria-hidden="true" />
       </button>
     </div>
+  );
+}
+
+/** Who drives the place, and the one switch that changes it. */
+export type ScreenControlState = {
+  /** The person drives the place now. */
+  on: boolean;
+  onChange: (next: boolean) => void;
+  /** A take is under way (the browser waits for the bot's step). */
+  disabled?: boolean;
+  /** The tooltip: who has the place, or what handing it back does. */
+  title?: string | undefined;
+  /** The place's own test and capture hooks. */
+  attributes?: Record<`data-${string}`, string>;
+};
+
+/** Take control | You have control: the one switch of the browser, the VM and
+ * the remote computer, at the same spot of the bar in every place. The top
+ * bar's 36px labelled button (M-20261127-179); a narrow panel folds it to its
+ * circle (ScreenBar), so the page tabs keep room. */
+export function ControlSwitch({ on, onChange, disabled = false, title, attributes }: ScreenControlState) {
+  const label = t(on ? "sandboxDesktop.controlling" : "sandboxDesktop.takeControl");
+  return (
+    <button
+      type="button"
+      {...attributes}
+      data-screen-control={on ? "driving" : "watching"}
+      aria-pressed={on}
+      aria-label={label}
+      title={title ?? label}
+      disabled={disabled}
+      onClick={() => onChange(!on)}
+      className={cn(
+        CIRCLE_LABEL_BUTTON,
+        FOLD_CHIP,
+        "disabled:opacity-50",
+        on
+          ? "border-accent-border bg-accent/15 text-accent-text hover:bg-accent/25"
+          : "border-transparent bg-accent text-accent-ink hover:bg-accent hover:brightness-110",
+      )}
+    >
+      <Hand {...CIRCLE_ICON} className="shrink-0" aria-hidden="true" />
+      <span className={cn("max-w-[8rem] truncate", FOLD_CHIP_LABEL)}>{label}</span>
+    </button>
+  );
+}
+
+/** What a place puts in the shared top row. */
+export type ScreenPanelBarSlots = {
+  /** The place's own part, on the left: the browser's page tabs, the VM's name. */
+  leading: ReactNode;
+  /** Take control, when the person may take this place. */
+  control?: ScreenControlState | null;
+};
+
+/** The screen panel's one top row, the same component in every place. */
+export function ScreenPanelBar({ leading, control, places, tools }: ScreenPanelBarSlots & {
+  /** Browser | VM | Remote computer, when the bot has several places. */
+  places?: ReactNode;
+  /** Mark up, Detach, Expand, Close (ScreenPanelChrome). */
+  tools: ReactNode;
+}) {
+  return (
+    <ScreenBar data-screen-panel-bar="" min={120} className={SCREEN_PANEL_TOP_ROW}>
+      <div data-screen-bar-leading="" className="flex min-w-0 flex-1 items-center gap-2">{leading}</div>
+      {control && <ControlSwitch {...control} />}
+      {places}
+      {tools}
+    </ScreenBar>
   );
 }

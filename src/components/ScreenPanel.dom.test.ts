@@ -2,12 +2,14 @@
 // The screen side panel (#4452): a docked column beside the chat with the
 // bot's live browser (not the Computer tab's preview square), closed by its
 // X or Escape, and resizable from its left edge. Compact chrome
-// (M-20261127-064): no title header; Detach / Expand / Close sit on the
-// browser tab row.
-import { act, createElement, type ReactNode } from "react";
+// (M-20261127-064): no title header. One top row for every place
+// (M-20261127-181): the browser's real chrome (LiveBrowserView) and the VM
+// put the same buttons in the same order in the same row.
+import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot } from "@/state/store";
+import type { LiveBrowserDocked } from "./BrowserPanel.tsx-parts/LiveBrowserView";
 import { isScreenPanelOpen, setScreenPanelOpen } from "@/lib/screen-panel";
 import { openScreenPanelWindow } from "@/lib/screen-panel-window";
 import { CIRCLE_BUTTON, CIRCLE_ICON, CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
@@ -16,17 +18,21 @@ import { chooseFold, SCREEN_PANEL_TOP_ROW, ScreenBar, type ScreenBarFold } from 
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const seen = vi.hoisted(() => ({ live: undefined as boolean | undefined, botId: "", docked: false }));
-vi.mock("./BrowserPanel", () => ({
-  // The live browser's two rows hold the chrome; its stage (the page) holds the overlay.
-  BrowserPanel: ({ bot, live, docked }: { bot: { id: string }; live?: boolean; docked?: { chrome?: ReactNode; placeSelector?: ReactNode; stageOverlay?: ReactNode } }) => {
-    seen.live = live; seen.botId = bot.id; seen.docked = Boolean(docked);
-    return createElement("div", { "data-mock-browser": "", "data-docked": seen.docked ? "1" : "0" },
-      createElement("div", { "data-browser-tabs": "" }, docked?.chrome ?? null),
-      createElement("form", { "data-browser-address-row": "" }, createElement("input", { "aria-label": "Browser address" }), docked?.placeSelector ?? null),
-      createElement("div", { "data-browser-stage": "" }, createElement("img", { "data-browser-frame": "" }), docked?.stageOverlay ?? null),
-    );
-  },
-}));
+// The browser's own chrome, without its stream: a connected page the bot drives.
+vi.mock("./BrowserPanel", async () => {
+  const { LiveBrowserView } = await import("./BrowserPanel.tsx-parts/LiveBrowserView");
+  const { liveBrowserViewProps } = await import("@/testing/live-browser-view-props");
+  return {
+    BrowserPanel: ({ bot, live, docked }: { bot: Bot; live?: boolean; docked?: LiveBrowserDocked }) => {
+      seen.live = live; seen.botId = bot.id; seen.docked = Boolean(docked);
+      return createElement(LiveBrowserView, liveBrowserViewProps(bot, {
+        docked,
+        frame: { seq: 1, data: "AAAA", viewerId: "v1", generation: 1 },
+        tabs: [{ tabId: "t1", title: "Tickets", url: "https://example.com/", active: true }],
+      }));
+    },
+  };
+});
 const opened = vi.hoisted(() => ({ current: null as unknown }));
 vi.mock("@/lib/screen-panel-window", () => ({
   openScreenPanelWindow: vi.fn(),
@@ -37,7 +43,6 @@ const found = vi.hoisted(() => ({ places: ["browser"] as string[], vm: null as s
 vi.mock("./ScreenPlaces", () => ({
   useScreenPlaces: () => found,
   placeControllable: (place: string, vm: string | null, remote: { controllable?: boolean } | null) => place === "vm" ? vm === "server" : remote?.controllable === true,
-  ControlSwitch: ({ control, onChange }: { control: boolean; onChange: (next: boolean) => void }) => createElement("button", { "data-screen-control": control ? "driving" : "watching", onClick: () => onChange(!control) }),
   VmPane: ({ source, control }: { source: string; control: boolean }) => createElement("div", { "data-pane": "vm", "data-source": source, "data-control": String(control) }),
   RemotePane: () => createElement("div", { "data-pane": "remote" }),
 }));
@@ -45,6 +50,30 @@ vi.mock("@/state/store", () => ({ useStore: () => ({ dispatch: vi.fn(), state: {
 import { ScreenPanel } from "./ScreenPanel";
 
 const bot = { id: "ada", name: "Ada" } as unknown as Bot;
+
+/** The buttons every place shares, as the panel shows them, in order. */
+const SHARED = "[data-screen-tab], [data-screen-control], [data-screen-panel-marks], [data-screen-panel-detach], [data-screen-panel-expand], [data-screen-panel-close]";
+function sharedButtons(scope: ParentNode): string[] {
+  return [...scope.querySelectorAll<HTMLElement>(SHARED)].map((button) => button.dataset.screenTab ? `place:${button.dataset.screenTab}`
+    : button.hasAttribute("data-screen-control") ? "control"
+    : button.hasAttribute("data-screen-panel-marks") ? "mark-up"
+    : button.hasAttribute("data-screen-panel-detach") ? "detach"
+    : button.hasAttribute("data-screen-panel-expand") ? "expand" : "close");
+}
+/** The panel's top row, its place of the shared buttons, and where they sit. */
+function topRow() {
+  const body = host.querySelector("[data-screen-panel-body]")!;
+  const bars = body.querySelectorAll("[data-screen-panel-bar]");
+  const bar = bars[0]!;
+  const first = body.querySelector("[data-browser-compact]")?.firstElementChild ?? body.firstElementChild;
+  return {
+    bars: bars.length,
+    first: first === bar,
+    buttons: sharedButtons(bar),
+    everywhere: sharedButtons(body),
+    leftSide: sharedButtons(bar.querySelector("[data-screen-bar-leading]")!),
+  };
+}
 let host: HTMLDivElement;
 let root: Root;
 
@@ -113,7 +142,7 @@ describe("ScreenPanel", () => {
 
   it("shows no place tabs while the bot has one place, and place tabs when it has several", () => {
     expect(host.querySelector("[role=tablist]")).toBeNull();
-    found.places = ["browser", "vm", "remote"]; found.vm = "server"; found.remote = { id: "r1" };
+    found.places = ["browser", "vm", "remote"]; found.vm = "server"; found.remote = { id: "r1", controllable: true };
     act(() => root.render(createElement(ScreenPanel, { bot })));
     const tabs = [...host.querySelectorAll<HTMLElement>("[role=tab]")];
     expect(tabs.map((tab) => tab.textContent)).toEqual(["Browser", "VM", "Remote computer"]);
@@ -121,7 +150,7 @@ describe("ScreenPanel", () => {
   });
 
   it("switches to the VM and the remote computer in the same panel, watching first", () => {
-    found.places = ["browser", "vm", "remote"]; found.vm = "server"; found.remote = { id: "r1" };
+    found.places = ["browser", "vm", "remote"]; found.vm = "server"; found.remote = { id: "r1", controllable: true };
     act(() => root.render(createElement(ScreenPanel, { bot })));
     act(() => { (host.querySelector("[data-screen-tab=vm]") as HTMLElement).click(); });
     expect(host.querySelector("aside")!.getAttribute("data-screen-place")).toBe("vm");
@@ -154,7 +183,7 @@ describe("ScreenPanel", () => {
       expect(tab.querySelector("svg")!.getAttribute("width")).toBe("16");
     }
     act(() => { (host.querySelector("[data-screen-tab=vm]") as HTMLElement).click(); });
-    expect(classes(host.querySelector("[data-screen-panel-tabs]")!)).toEqual(expect.arrayContaining([...SCREEN_PANEL_TOP_ROW.split(/\s+/), "group/screenbar"]));
+    expect(classes(host.querySelector("[data-screen-panel-bar]")!)).toEqual(expect.arrayContaining([...SCREEN_PANEL_TOP_ROW.split(/\s+/), "group/screenbar"]));
   });
 
   it("folds a row's labels only while its controls do not fit, place tabs first (ScreenBar)", () => {
@@ -188,9 +217,9 @@ describe("ScreenPanel", () => {
   });
 
   it("gives the VM's Take control the top bar's 36px labelled button", async () => {
-    const { ControlSwitch } = await vi.importActual<typeof import("./ScreenPlaces")>("./ScreenPlaces");
-    for (const control of [false, true]) {
-      const html = renderToStaticMarkup(createElement(ControlSwitch, { control, onChange: () => {} }));
+    const { ControlSwitch } = await vi.importActual<typeof import("./ScreenPanelChrome")>("./ScreenPanelChrome");
+    for (const on of [false, true]) {
+      const html = renderToStaticMarkup(createElement(ControlSwitch, { on, onChange: () => {} }));
       const list = /class="([^"]+)"/.exec(html)![1]!.split(/\s+/);
       expect(list).toEqual(expect.arrayContaining(["h-9", "rounded-full", "text-[13px]", "leading-[18px]"]));
       expect(CIRCLE_LABEL_BUTTON.split(/\s+/).every((name) => list.includes(name) || /^(bg|text|border|hover:bg)-/.test(name))).toBe(true);
@@ -340,12 +369,69 @@ describe("ScreenPanel windows", () => {
   it("draws no second live view while the place's own window is open", () => {
     opened.current = { botId: "ada", mode: "expand", kind: "browser" };
     act(() => root.render(createElement(ScreenPanel, { bot })));
-    expect(host.querySelector("[data-mock-browser]")).toBeNull();
+    expect(host.querySelector("[data-browser-compact]")).toBeNull();
     expect(host.querySelector("[data-screen-in-window]")).not.toBeNull();
     expect(host.querySelector("[data-screen-panel-marks]")).toBeNull();
     expect(host.querySelector("[data-screen-panel-close]")).not.toBeNull();
     opened.current = { botId: "someone-else", mode: "expand", kind: "browser" };
     act(() => root.render(createElement(ScreenPanel, { bot })));
-    expect(host.querySelector("[data-mock-browser]")).not.toBeNull();
+    expect(host.querySelector("[data-browser-compact]")).not.toBeNull();
+  });
+});
+
+describe("the same buttons at the same place in every mode (M-20261127-181)", () => {
+  const ORDER = ["control", "place:browser", "place:vm", "place:remote", "mark-up", "detach", "expand", "close"];
+
+  it("puts Take control, place selector, Mark up, Detach, Expand and Close in one top row, in one order, for Browser, VM and remote", () => {
+    found.places = ["browser", "vm", "remote"]; found.vm = "server"; found.remote = { id: "r1", controllable: true };
+    act(() => root.render(createElement(ScreenPanel, { bot })));
+    const rows: Record<string, ReturnType<typeof topRow>> = { browser: topRow() };
+    act(() => { (host.querySelector("[data-screen-tab=vm]") as HTMLElement).click(); });
+    expect(host.querySelector("aside")!.getAttribute("data-screen-place")).toBe("vm");
+    rows.vm = topRow();
+    act(() => { (host.querySelector("[data-screen-tab=remote]") as HTMLElement).click(); });
+    rows.remote = topRow();
+    for (const [place, row] of Object.entries(rows)) {
+      expect(row.bars, place).toBe(1);
+      expect(row.first, place).toBe(true);
+      expect(row.buttons, place).toEqual(ORDER);
+      // none outside the top row, none on its left side (page tabs, the VM's name)
+      expect(row.everywhere, place).toEqual(ORDER);
+      expect(row.leftSide, place).toEqual([]);
+    }
+  });
+
+  it("keeps the place tabs and the tools still when a place has no Take control (a Local VM)", () => {
+    found.places = ["browser", "vm"]; found.vm = "local";
+    act(() => root.render(createElement(ScreenPanel, { bot })));
+    expect(topRow().buttons).toEqual(["control", "place:browser", "place:vm", "mark-up", "detach", "expand", "close"]);
+    act(() => { (host.querySelector("[data-screen-tab=vm]") as HTMLElement).click(); });
+    const vm = topRow();
+    // Local VM: no Take control, and no Detach / Expand (main #5491).
+    expect(vm.buttons).toEqual(["place:browser", "place:vm", "mark-up", "close"]);
+    const bar = host.querySelector("[data-screen-panel-bar]")!;
+    expect(bar.querySelector("[data-screen-place-select]")).not.toBeNull();
+    expect(bar.lastElementChild?.hasAttribute("data-screen-panel-chrome")).toBe(true);
+  });
+
+  it("keeps the browser's address row for its own tools only", () => {
+    found.places = ["browser", "vm"]; found.vm = "server";
+    act(() => root.render(createElement(ScreenPanel, { bot })));
+    const address = host.querySelector("[data-browser-address-row]")!;
+    expect(sharedButtons(address)).toEqual([]);
+    expect(host.querySelector("[data-screen-bar-leading] [data-browser-tabs]")?.textContent).toContain("Tickets");
+  });
+
+  it("draws Take control the same in both modes and names it the same while the person drives", () => {
+    found.places = ["browser", "vm"]; found.vm = "server";
+    act(() => root.render(createElement(ScreenPanel, { bot })));
+    const browserTake = host.querySelector<HTMLElement>("[data-screen-control]")!;
+    const browserLook = { text: browserTake.textContent, className: browserTake.className, pressed: browserTake.getAttribute("aria-pressed") };
+    act(() => { (host.querySelector("[data-screen-tab=vm]") as HTMLElement).click(); });
+    const vmTake = host.querySelector<HTMLElement>("[data-screen-control]")!;
+    expect({ text: vmTake.textContent, className: vmTake.className, pressed: vmTake.getAttribute("aria-pressed") }).toEqual(browserLook);
+    act(() => { vmTake.click(); });
+    expect(host.querySelector("[data-screen-control]")!.getAttribute("aria-pressed")).toBe("true");
+    expect(host.querySelector("[data-screen-control]")!.textContent).toBe("You have control");
   });
 });

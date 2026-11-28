@@ -1,0 +1,72 @@
+// The props of a connected, idle LiveBrowserView for tests that draw the
+// browser's chrome without its stream (the compact chrome, the screen
+// panel's shared top row). Each test overrides what it looks at.
+import { vi } from "vitest";
+import type { LiveBrowserViewProps } from "@/components/BrowserPanel.tsx-parts/LiveBrowserView";
+import type { Bot } from "@/state/store";
+
+const ref = <T,>(value: T) => ({ current: value });
+
+export function liveBrowserViewProps(bot: Bot, over: Partial<LiveBrowserViewProps> = {}): LiveBrowserViewProps {
+  return {
+    bot,
+    allowed: true,
+    frame: null,
+    tabs: [],
+    addressBar: { value: "", error: "", readOnly: false, change: vi.fn(), focus: vi.fn(), blur: vi.fn(), revert: vi.fn(() => false), submit: vi.fn() },
+    connected: true,
+    control: { held: false, controlling: false, owned: false },
+    pending: false,
+    error: "",
+    showProfiles: false,
+    setShowProfiles: vi.fn(),
+    showTyping: false,
+    setShowTyping: vi.fn(),
+    masked: false,
+    setMasked: vi.fn(),
+    takeControl: vi.fn(),
+    handBack: vi.fn(),
+    viewport: { width: 800, height: 600 },
+    takeStatus: "",
+    busy: false,
+    reconnecting: false,
+    showNetwork: false,
+    setShowNetwork: vi.fn(),
+    recording: false,
+    recordingStartedAt: null,
+    taught: undefined,
+    setTaught: vi.fn(),
+    teachNote: "",
+    addressInput: ref(null),
+    profilesButton: ref(null),
+    profilesPopover: ref(null),
+    typingPopover: ref(null),
+    typingField: ref(null),
+    menuSummary: ref(null),
+    menu: { root: ref(null), toggled: vi.fn() },
+    profileName: "own",
+    interactive: true,
+    typingReady: false,
+    commandsReady: true,
+    heldElsewhere: false,
+    taking: false,
+    mine: false,
+    pageTitle: "",
+    holder: `${bot.name} is using the browser`,
+    pill: "pill",
+    generation: ref(1),
+    viewer: ref("v1"),
+    browserControl: ref(null),
+    command: vi.fn(),
+    input: vi.fn(),
+    reconnect: vi.fn(),
+    execute: vi.fn(async () => {}),
+    startRecording: vi.fn(async () => {}),
+    stopRecording: vi.fn(async () => {}),
+    discardRecording: vi.fn(async () => {}),
+    action: vi.fn(async () => ({})),
+    confirm: vi.fn(async () => true),
+    setError: vi.fn(),
+    ...over,
+  };
+}

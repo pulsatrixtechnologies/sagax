@@ -77,9 +77,10 @@ extension Chat {
     /// there is a list (a second thread or a folder).
     var desktopHasThreadList: Bool {
         guard case let .bot(bot) = self else { return false }
-        let workThreads = SidebarPrefsModel.shared.prefs.personWorkThreads
-        let botThreads = SidebarPrefsModel.shared.prefs.showBotThreads
-        return bot.visibleTasks(personWorkThreads: workThreads, botThreads: botThreads).count > 1
+        // Count as if Person-work threads were on so the disclosure stays
+        // available when hand-offs exist; the list itself reads the prefs.
+        // (This Chat property is nonisolated; SidebarPrefsModel is MainActor.)
+        return bot.visibleTasks(personWorkThreads: true).count > 1
             || !(bot.projects ?? []).isEmpty
     }
 }

@@ -16287,7 +16287,7 @@
   "recordWindow.tickets.notSeen": "Not seen yet",
   "recordWindow.tickets.dispatchHint": "Dispatch the ticket finds the best person.",
   "recordWindow.tickets.number": "Ticket",
-  "recordWindow.tickets.next": "Next scheduling",
+  "recordWindow.tickets.next": "Next scheduled",
   "recordWindow.tickets.owner": "Owner",
   "recordWindow.tickets.age": "Opened",
   "recordWindow.board.tabs.label": "Board tabs",

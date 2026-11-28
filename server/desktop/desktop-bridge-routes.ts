@@ -125,7 +125,13 @@ export function createDesktopBridgeRoutes(deps: {
     if (!deps.organization() && method === "GET" && path === "/api/me/desktop-bridge" && req.headers["x-sagax-org-probe"] === "1") {
       return json(res, 200, { offered: true });
     }
-    const person = auth.kind === "session" ? personKey(auth.session) : undefined;
+    // Organization: Pulsatrix principal required, same key as before (#4856 review).
+    // Solo paired workspace: personKey (principal or legacy hashed session/email).
+    const person = auth.kind === "session"
+      ? (deps.organization()
+        ? auth.session.principalId?.trim().toLowerCase()
+        : personKey(auth.session))
+      : undefined;
     if (!person || auth.kind !== "session") {
       return json(res, 403, {
         error: deps.organization() ? "Sign in with Pulsatrix to connect your computer." : "Pair this desktop first.",

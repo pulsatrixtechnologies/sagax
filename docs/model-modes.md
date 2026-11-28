@@ -406,14 +406,16 @@ called from `startTurn` before the leader's prompt is built.
   mock-up's (`DIVISION_SPEED`). The drawing is as wide as its cells, so the
   header stays against the pile.
   - Every expert is the conversation's bot, duplicated (owner 2026-11-27,
-    M-20261127-178, M-20261126-119): the same character, shape, skin,
+    M-20261127-178, M-20261126-119, #5487): the same character, shape, skin,
     colours or picture as the chat's header, drawn by the same component
     (`ExpertAvatar` in `HeavyTeamRow.tsx`: `BotAvatar` with the bot
-    unchanged), once per expert, in the row's pile and in the Thoughts
-    panel. Never a colour per expert, an owl or a generic shape. The chat
-    gives the bot to every row of the conversation (the earlier topics' too)
-    and to the panel (`HeavyLeaderContext`); a room gives the bot that ran
-    the run.
+    unchanged; on the phone `ExpertAvatarView` in `HeavyTeamRowView.swift`:
+    `ChatAvatarView` with the conversation unchanged), once per expert, in
+    the row's pile and in the Thoughts panel. Never a colour per expert, an
+    owl or a generic shape. The chat gives the bot to every row of the
+    conversation (the earlier topics' too) and to the panel
+    (`HeavyLeaderContext` on the desktop; the row's `chat` on the phone); a
+    room gives the bot that ran the run.
   - The cell is the bot's own shape for the whole division: its
     open-bot-avatar body (the baked still every other avatar of the bot
     draws, or its own drawing read once per content), its colour, its eyes

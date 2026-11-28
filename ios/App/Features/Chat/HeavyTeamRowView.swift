@@ -1,17 +1,33 @@
 // A Heavy run in the chat (#5091, the desktop's HeavyTeamRow.tsx and
-// HeavyOrbit.tsx, #5089, #5090): while the team works, the experts' owls
-// orbit the bot's avatar, the one speaking pulses, lines link them while
-// they critique, they merge into the bot on agreement; beside it "Experts
-// thinking · round 2 of 5 · 6s" and a live line per expert. After: "Thought
-// for 8s · agreed in round 2" (or the leader decided), which opens the
-// Thoughts sheet with every expert's messages. Auto's choice of Heavy reads
-// in one line above. The state is the server's (CompanionCore HeavyTeamLine).
+// HeavyOrbit.tsx, #5089, #5090; phone lot of #5476 / #5487, M-20261127-178):
+// every expert is the conversation's bot, exactly as the chat header draws
+// it (ChatAvatarView / BotMascotView with the bot unchanged), duplicated once
+// per expert in the row and in Thoughts; never a colour per expert, an owl or
+// a generic shape. While the team works the experts orbit the bot's avatar,
+// the one speaking pulses, lines link them while they critique, they merge
+// into the bot on agreement; beside it "Experts thinking · round 2 of 5 · 6s"
+// and a live line per expert. After: "Thought for 8s · agreed in round 2"
+// (or the leader decided), which opens the Thoughts sheet. Auto's choice of
+// Heavy reads in one line above. The state is the server's (CompanionCore
+// HeavyTeamLine).
 import SwiftUI
 import CompanionCore
 
-/// The owls that stand for the experts, one plumage each (the desktop's AGENT_COLORS): eight,
-/// the most experts a team may have (D-20261126-023, shared/heavy-team.ts HEAVY_MAX_EXPERTS).
-private let expertColors = ["blue", "green", "orange", "purple", "pink", "teal", "yellow", "coral"]
+/// One expert of a Heavy run, in the row's pile, the orbit and the Thoughts
+/// sheet: the conversation's bot exactly as the chat's header draws it
+/// (ChatAvatarView, the bot unchanged), never a colour, an owl or a shape of
+/// its own (M-20261127-178). Only its life is the expert's: at work while it
+/// speaks.
+private struct ExpertAvatarView: View {
+    let chat: Chat
+    let size: CGFloat
+    var working = false
+    var animated = false
+
+    var body: some View {
+        ChatAvatarView(chat: chat, size: size, state: working ? .thinking : .idle, animated: animated)
+    }
+}
 
 /// A leader's step in the person's words (the desktop's leaderStepText).
 private func leaderStepText(_ step: HeavyTeamLine.LeaderStep) -> String {
@@ -43,7 +59,7 @@ struct HeavyTeamRowView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Button { thoughtsOpen = true } label: {
                             HStack(spacing: 6) {
-                                if !orbit, !line.agents.isEmpty { owlStack }
+                                if !orbit, !line.agents.isEmpty { expertStack }
                                 Text(header(now: context.date.timeIntervalSince1970 * 1000, busy: busy, running: running))
                                     .foregroundStyle(Theme.textSecondary)
                                     .accessibilityIdentifier("heavy-header")
@@ -78,14 +94,16 @@ struct HeavyTeamRowView: View {
                 }
             }
         }
-        .sheet(isPresented: $thoughtsOpen) { HeavyThoughtsSheet(line: line) }
+        .sheet(isPresented: $thoughtsOpen) { HeavyThoughtsSheet(line: line, chat: chat) }
         .accessibilityIdentifier("heavy-team")
     }
 
-    private var owlStack: some View {
+    /// The conversation's bot once per expert, overlapping (the desktop's AgentAvatars pile).
+    private var expertStack: some View {
         HStack(spacing: -6) {
-            ForEach(Array(line.agents.enumerated()), id: \.offset) { index, _ in
-                OwlMascotView(color: expertColors[index % expertColors.count], size: 18)
+            ForEach(Array(line.agents.enumerated()), id: \.offset) { _, expert in
+                ExpertAvatarView(chat: chat, size: 18, working: false, animated: false)
+                    .accessibilityIdentifier("heavy-expert-avatar-\(expert.n)")
             }
         }
         .accessibilityLabel(Text("\(line.agents.count) experts"))
@@ -133,7 +151,7 @@ struct HeavyTeamRowView: View {
 
 /// The experts around the bot (the desktop's HeavyOrbit.tsx): a slow turn,
 /// the speaker pulsing, the critique lines, the merge on agreement. Still
-/// under Reduce Motion.
+/// under Reduce Motion. Every expert is the conversation's bot (M-20261127-178).
 private struct HeavyOrbitView: View {
     let line: HeavyTeamLine
     let chat: Chat
@@ -171,7 +189,7 @@ private struct HeavyOrbitView: View {
                 ForEach(Array(line.agents.enumerated()), id: \.element.n) { index, member in
                     let speaking = running && member.speaking == true
                     let pulse = speaking && !reduceMotion ? 1 + 0.14 * (0.5 + 0.5 * sin(t * 2 * Double.pi / 1.1)) : 1
-                    OwlMascotView(color: expertColors[index % expertColors.count], size: expert, state: speaking ? .thinking : .idle, animated: speaking)
+                    ExpertAvatarView(chat: chat, size: expert, working: speaking, animated: speaking)
                         .scaleEffect(line.merged ? 0.3 : pulse)
                         .opacity(line.merged ? 0 : member.status == "failed" ? 0.45 : 1)
                         .position(line.merged ? CGPoint(x: size / 2, y: size / 2) : point(index))
@@ -191,9 +209,11 @@ private struct HeavyOrbitView: View {
 
 /// The Thoughts sheet (the desktop's ThoughtsPanel.tsx): how it ended, the
 /// points still in dispute, then each expert with its persona, seat and one
-/// message per round.
+/// message per round. Each expert's avatar is the conversation's bot
+/// (ExpertAvatarView, M-20261127-178).
 struct HeavyThoughtsSheet: View {
     let line: HeavyTeamLine
+    let chat: Chat
     @Environment(\.dismiss) private var dismiss
 
     private var outcomeLine: String? {
@@ -233,9 +253,10 @@ struct HeavyThoughtsSheet: View {
                         }
                     }
                 }
-                ForEach(Array(line.agents.enumerated()), id: \.element.n) { index, expert in
+                ForEach(Array(line.agents.enumerated()), id: \.element.n) { _, expert in
                     Section(header: HStack(spacing: 6) {
-                        OwlMascotView(color: expertColors[index % expertColors.count], size: 18)
+                        ExpertAvatarView(chat: chat, size: 18)
+                            .accessibilityIdentifier("heavy-thoughts-avatar-\(expert.n)")
                         Text(expert.persona.map { String(localized: "Expert \(expert.n) · \($0)") } ?? String(localized: "Expert \(expert.n)"))
                             .lineLimit(1)
                             .layoutPriority(1)

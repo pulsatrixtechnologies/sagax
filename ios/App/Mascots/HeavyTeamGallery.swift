@@ -1,10 +1,12 @@
 // DEBUG only: `-mascotGallery heavy` (and `heavy-thoughts`). A Heavy run's row (#5091, the
-// desktop's scripts/capture/heavy-team.mjs): the orbit while the experts
-// propose (one pulsing, Auto's one line above), while they critique (the
-// lines), on agreement (merged into the bot while it writes), then the row
-// after ("Thought for 26s", the leader decided). The real HeavyTeamRowView,
-// in the skin of `-paritySkin` (black for dark, pulsatrix-light for light).
-// Synthetic words only.
+// desktop's scripts/capture/heavy-team.mjs; #5487 / M-20261127-178): every
+// expert is the conversation's bot duplicated (same character, shape, skin,
+// colours or picture as the header), never a colour per expert or an owl of
+// its own. The orbit while the experts propose (one pulsing, Auto's one line
+// above), while they critique (the lines), on agreement (merged into the bot
+// while it writes), then the row after ("Thought for 26s", the leader
+// decided). The real HeavyTeamRowView, in the skin of `-paritySkin` (black
+// for dark, pulsatrix-light for light). Synthetic words only.
 import SwiftUI
 #if DEBUG
 import CompanionCore
@@ -14,10 +16,11 @@ struct HeavyTeamGallery: View {
     /// `-mascotGallery heavy-thoughts`: the Thoughts sheet of the decided run.
     var thoughts = false
     private let now = Date().timeIntervalSince1970 * 1000
+    private let chat = Chat.bot(Self.bot(busy: false))
 
     var body: some View {
         if thoughts {
-            HeavyThoughtsSheet(line: cases[3].line)
+            HeavyThoughtsSheet(line: cases[3].line, chat: chat)
                 .preferredColorScheme(themePalette.isDark ? .dark : .light)
         } else {
             rows
@@ -121,10 +124,13 @@ struct HeavyTeamGallery: View {
         return next
     }
 
+    /// A brown cat shape with its own colour and a skin: captures show every
+    /// expert is that bot, not an owl in blue/green/orange (M-20261127-178).
     private static func bot(busy: Bool) -> Bot {
         let json = """
         {"id":"wren","threadId":"wren","name":"Wren","title":"","description":"","notifications":true,
-         "color":"blue","unread":false,"busy":\(busy),"modelSelection":{"instanceId":"e","model":"m"},"createdAt":0}
+         "color":"brown","unread":false,"busy":\(busy),"modelSelection":{"instanceId":"e","model":"m"},"createdAt":0,
+         "mascotLook":{"character":"shape","shape":"cat","bodyColor":"#7a4a2a","skins":{"shape":"glossy"}}}
         """
         return try! JSONDecoder().decode(Bot.self, from: Data(json.utf8))
     }

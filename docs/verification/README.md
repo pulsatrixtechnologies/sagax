@@ -102,6 +102,7 @@ Use only mapped, tested commands:
 - [Owed validation after 0.8.22 (#1895): local automation vs device remainder](owed-0.8.22-validation.md)
 - [Owner device runs: blind pairs, phone, inbound voice (#5536): the calendar and the rows](owner-device-runs.md)
 - [Blind-pair harness (#5533): frozen grid, scripted pair, fixture judge](blind-pair-harness.md)
+- [Fixture phone session: M-1 to M-4 on a simulated phone (#5534)](fixture-phone-session.md)
 
 `control-omb ui` ([Chat UI, driven headlessly](chat-ui.md)) drives the real
 renderer in a headless Chrome by accessible name, so composer sends, transcript

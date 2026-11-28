@@ -12,7 +12,7 @@
 // the original is only read. The built-in SAGAX_SMOKE_TEST hook prints
 // "[smoke] renderer-ready" once the window's renderer reached the server.
 import { spawn, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -87,9 +87,30 @@ function stop() {
   if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"]);
   else { try { process.kill(-child.pid, "SIGTERM"); } catch {} }
 }
+if (!result.ok && process.platform === "win32") {
+  const reporter = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "scripts/verify/release/windows-launch-diagnostics.ps1", String(child.pid)], { encoding: "utf8", timeout: 10000 });
+  for (const line of (reporter.stdout ?? "").split(/\r?\n/)) if (/^QA_DIAG [a-zA-Z0-9 =|@_./:-]+$/.test(line)) console.error(line);
+  console.error("QA_DIAG exitCode=" + (child.exitCode ?? "running"));
+}
 stop();
 await new Promise((r) => setTimeout(r, 3000));
 if (process.platform !== "win32") { try { process.kill(-child.pid, "SIGKILL"); } catch {} }
+if (!result.ok && process.platform === "win32") {
+  const phases = ["reading saved credentials", "preparing the credential store", "starting the local server", "local server ready", "local server failed to start", "opening the workspace", "workspace window created"];
+  const roots = [userData, dataDir, join(process.env.APPDATA ?? "", "openmausbot"), join(process.env.APPDATA ?? "", "Sagax")];
+  const observed = new Set();
+  for (const root of roots) {
+    if (!root || !existsSync(root)) continue;
+    for (const entry of readdirSync(root, { recursive: true })) {
+      if (basename(entry) !== "server.log") continue;
+      const log = readFileSync(join(root, entry), "utf8");
+      for (const phase of phases) if (log.includes("startup: " + phase)) observed.add(phase);
+    }
+  }
+  // Only enumerated markers and counts enter public job output.
+  console.error("QA_DIAG phases=" + [...observed].join("|") + " stdoutBytes=" + output.length);
+  console.error("QA_DIAG " + (output.includes("[smoke] renderer-failed") ? "renderer-failed" : output.includes("[smoke] renderer-ready") ? "renderer-ready" : "no-renderer-marker"));
+}
 rmSync(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
 
 const seconds = ((Date.now() - started) / 1000).toFixed(1);

@@ -334,6 +334,37 @@ describe("CI concurrency", () => {
     expect(commands).toContain("node --test electron/shared-computer-access.node-test.mjs");
     expect(commands).toContain("pnpm exec vitest run server/computer/shared-computers.e2e.test.ts");
   });
+
+  it("keeps a dedicated Windows install smoke on main, without replacing shared-terminal-smoke (#5322)", () => {
+    const shared = parse(readFileSync(new URL("../.github/workflows/shared-terminal-smoke.yml", import.meta.url), "utf8"));
+    expect(shared.name).toBe("Shared terminal smoke");
+    expect(JSON.stringify(shared)).not.toContain("windows-candidate-smoke.ps1");
+    expect(JSON.stringify(shared)).not.toContain("CANDIDATE_READ_URL");
+
+    const install = parse(readFileSync(new URL("../.github/workflows/desktop-install-smoke.yml", import.meta.url), "utf8"));
+    expect(install.name).toBe("Desktop install smoke");
+    expect(install.on).toHaveProperty("workflow_dispatch");
+    expect(install.on).not.toHaveProperty("schedule");
+    expect(install.jobs.windows.environment).toBe("desktop-install-smoke");
+    expect(install.jobs.windows.strategy.matrix.include).toEqual([
+      { runner: "windows-2025", arch: "x64" },
+      { runner: "windows-11-arm", arch: "arm64" },
+    ]);
+    const steps = install.jobs.windows.steps as { name?: string; run?: string; env?: Record<string, string>; if?: string; id?: string; "continue-on-error"?: boolean }[];
+    expect(steps.some((step) => step.name === "Resolve published reference")).toBe(true);
+    expect(steps.some((step) => step.run?.includes("releases/latest/download/latest.yml"))).toBe(true);
+    expect(steps.some((step) => step.run?.includes("windows-install-smoke.mjs"))).toBe(true);
+    const reference = steps.find((step) => step.name === "Verify published reference")!;
+    expect(reference.id).toBe("reference");
+    expect(reference["continue-on-error"]).toBe(true);
+    expect(reference.run).toBe("./scripts/verify/release/windows-candidate-smoke.ps1");
+    expect(reference.env?.EXPECTED_VERSION).toBe("${{ steps.reference_meta.outputs.version }}");
+    expect(steps.some((step) => step.env?.CANDIDATE_READ_URL === "${{ secrets.CANDIDATE_READ_URL }}")).toBe(true);
+    expect(steps.some((step) => step.name === "Verify signature, installation and packaged launch" && step.env?.EXPECTED_VERSION === "${{ inputs.version }}")).toBe(true);
+    expect(steps.some((step) => step.if === "always() && steps.reference.outcome != 'success'")).toBe(true);
+    expect(JSON.stringify(install)).not.toContain("qa/desktop-install-smoke");
+    expect(JSON.stringify(install)).not.toContain("0.8.170");
+  });
 });
 
 describe("known failures after each merge (#3482)", () => {

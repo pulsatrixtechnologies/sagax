@@ -1,0 +1,112 @@
+name: Desktop install smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha512:
+        description: Candidate installer SHA512 in base64 from the updater feed
+        type: string
+        required: true
+      version:
+        description: Candidate installer version
+        type: string
+        required: true
+      publisher_hash:
+        description: SHA256 of the expected certificate common name in UTF-8
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            arch: x64
+          - runner: windows-11-arm
+            arch: arm64
+    environment: desktop-install-smoke
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          architecture: ${{ matrix.arch }}
+      - name: Resolve published reference
+        id: reference_meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/pulsatrixtechnologies/sagax/releases/latest/download/latest.yml" \
+            > "$RUNNER_TEMP/latest.yml"
+          node --input-type=module <<'EOF'
+          import { readFileSync, appendFileSync } from "node:fs";
+          import { parseLatestYml, referenceSetupUrl } from "./scripts/verify/release/windows-install-smoke.mjs";
+          const meta = parseLatestYml(readFileSync(process.env.RUNNER_TEMP + "/latest.yml", "utf8"));
+          const url = referenceSetupUrl(meta);
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${meta.version}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `sha512=${meta.sha512}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `url=${url}\n`);
+          console.log(`Resolved published reference ${meta.version}`);
+          EOF
+      - name: Download published reference
+        shell: pwsh
+        env:
+          REFERENCE_URL: ${{ steps.reference_meta.outputs.url }}
+        run: |
+          Invoke-WebRequest -Uri $env:REFERENCE_URL -OutFile "$env:RUNNER_TEMP/candidate.exe"
+      - name: Verify published reference
+        id: reference
+        continue-on-error: true
+        shell: pwsh
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+          EXPECTED_SHA512: ${{ steps.reference_meta.outputs.sha512 }}
+          EXPECTED_VERSION: ${{ steps.reference_meta.outputs.version }}
+          EXPECTED_PUBLISHER_HASH: ${{ inputs.publisher_hash }}
+        run: ./scripts/verify/release/windows-candidate-smoke.ps1
+      - name: Remove reference before installing candidate
+        shell: pwsh
+        env:
+          REFERENCE_VERSION: ${{ steps.reference_meta.outputs.version }}
+        run: |
+          $entry = Get-ItemProperty 'HKCU:/Software/Microsoft/Windows/CurrentVersion/Uninstall/*' | Where-Object DisplayName -eq "Pulsatrix Sagax $env:REFERENCE_VERSION"
+          if (!$entry) { throw 'Reference registration missing.' }
+          $bin = [regex]::Match($entry.UninstallString, '^"([^"]+)"').Groups[1].Value
+          if ((Split-Path $bin -Leaf) -ne 'Uninstall Sagax.exe') { throw 'Unexpected reference uninstaller.' }
+          Get-Process -Name Sagax -ErrorAction SilentlyContinue | Stop-Process -Force
+          $uninstall = Start-Process -FilePath $bin -ArgumentList '/S' -PassThru -Wait
+          if ($uninstall.ExitCode -ne 0) { throw 'Reference removal failed.' }
+          for ($i = 0; $i -lt 60 -and (Test-Path $bin); $i++) { Start-Sleep -Seconds 1 }
+          if (Test-Path $bin) { throw 'Reference installation still present.' }
+          Write-Output 'Reference removed.'
+      - name: Download private candidate
+        shell: pwsh
+        env:
+          CANDIDATE_READ_URL: ${{ secrets.CANDIDATE_READ_URL }}
+        run: |
+          try {
+            Invoke-WebRequest -Uri $env:CANDIDATE_READ_URL -OutFile "$env:RUNNER_TEMP/candidate.exe" -ErrorAction Stop
+          } catch {
+            throw "Private candidate download failed (HTTP $($_.Exception.Response.StatusCode.value__))."
+          }
+      - name: Verify signature, installation and packaged launch
+        shell: pwsh
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+          EXPECTED_SHA512: ${{ inputs.sha512 }}
+          EXPECTED_VERSION: ${{ inputs.version }}
+          EXPECTED_PUBLISHER_HASH: ${{ inputs.publisher_hash }}
+        run: ./scripts/verify/release/windows-candidate-smoke.ps1
+      - name: Require successful reference
+        if: always() && steps.reference.outcome != 'success'
+        shell: pwsh
+        run: throw 'The published reference did not pass this launch validation.'

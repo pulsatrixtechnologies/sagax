@@ -215,7 +215,7 @@ export function useOpenRef(ref: RecordRef | undefined): ((ref: RecordRef, label:
 
 // A chip's words are in the popover ink over the tone's own tint (4.5:1 in
 // every skin, scripts/check-skin-contrast.mjs); the tone is a dot or a glyph.
-const TONE_CLASS: Record<RecordTone, string> = {
+export const TONE_CLASS: Record<RecordTone, string> = {
   open: "bg-popover-field",
   waiting: "bg-warning/15",
   done: "bg-success/15",

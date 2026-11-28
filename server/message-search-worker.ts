@@ -1,11 +1,19 @@
 import { existsSync } from "node:fs";
 import { Worker } from "node:worker_threads";
-import type { SealedKeyMaterial, SearchHit } from "./messages/message-search-query.ts";
+import type { NewestAtsMode, SealedKeyMaterial, SearchHit } from "./messages/message-search-query.ts";
 import { reportBackgroundError } from "./background-error.ts";
 
 export class SearchUnavailable extends Error {
   readonly status = 503;
 }
+
+type WorkerReply = {
+  hits?: SearchHit[];
+  references?: Array<[string, string[]]>;
+  newestAts?: Array<[string, number]>;
+  threadIds?: string[];
+  warmed?: boolean;
+};
 
 /** One read-only worker, not a worker per keystroke. Bound outstanding scans
  * so a burst of searches cannot build an unbounded queue behind the database. */
@@ -14,7 +22,7 @@ export class MessageSearchWorker {
   private stopping: Promise<void> = Promise.resolve();
   private sequence = 0;
   private readonly pending = new Map<number, {
-    resolve: (reply: { hits?: SearchHit[]; references?: Array<[string, string[]]> }) => void;
+    resolve: (reply: WorkerReply) => void;
     reject: (error: Error) => void;
     timer: ReturnType<typeof setTimeout>;
   }>();
@@ -36,7 +44,22 @@ export class MessageSearchWorker {
     return this.request({ query: "", limit: 0, references: [...fragments] }).then((reply) => new Map(reply.references ?? []));
   }
 
-  private request(message: Record<string, unknown>): Promise<{ hits?: SearchHit[]; references?: Array<[string, string[]]> }> {
+  /** #5343: read messages.db into the OS page cache off the server's thread. */
+  warm(): Promise<void> {
+    return this.request({ warm: true }).then(() => undefined);
+  }
+
+  /** #5343: MAX(at) per thread in the worker (boot repair, askedAt fill). */
+  newestAts(threadIds: readonly string[], mode: NewestAtsMode = "all"): Promise<Map<string, number>> {
+    return this.request({ newestAts: { threadIds: [...threadIds], mode } }).then((reply) => new Map(reply.newestAts ?? []));
+  }
+
+  /** #5343: distinct thread ids in the worker (semantic index backlog). */
+  threadIds(): Promise<string[]> {
+    return this.request({ threadIds: true }).then((reply) => reply.threadIds ?? []);
+  }
+
+  private request(message: Record<string, unknown>): Promise<WorkerReply> {
     if (this.pending.size >= 8) return Promise.reject(new SearchUnavailable("Search is busy. Try again shortly."));
     if (!this.worker) {
       const source = new URL("./message-search.worker.ts", import.meta.url);
@@ -46,7 +69,7 @@ export class MessageSearchWorker {
         execArgv: [],
       });
       this.worker = worker;
-      worker.on("message", (reply: { id: number; hits?: SearchHit[]; references?: Array<[string, string[]]>; failed?: boolean }) => {
+      worker.on("message", (reply: WorkerReply & { id: number; failed?: boolean }) => {
         if (this.worker !== worker) return;
         const request = this.pending.get(reply.id);
         if (!request) return;

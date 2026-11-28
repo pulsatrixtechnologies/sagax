@@ -956,9 +956,10 @@ return async function listen(req: IncomingMessage, res: import("node:http").Serv
         // The provider took the socket, then stopped serving it (1011: its
         // reopens failed). The page reconnects by itself: its next socket
         // starts with the next key or provider, never the one that just
-        // gave up (#5377), with the same line in Events as at the first open.
-        if (code === 1011 && ears.lastError) {
-          const { failure, next } = giveWay(ears.lastError);
+        // gave up (#5377, #5416), with the same line in Events as at the
+        // first open. A bare close (no error frame) is "not reachable".
+        if (code === 1011) {
+          const { failure, next } = giveWay(ears.lastError ?? "not reachable");
           if (next >= 0) {
             (deps.log ?? console.warn)(`[voice-mode] ${VOICE_PROVIDER_LABELS[provider]} listen socket stopped serving the ${describeVoiceKey(candidate)} (${failure}): the next socket starts with the ${describeVoiceKey(ordered[next]!)}`);
             if (candidateProvider(ordered[next]!) !== provider) sayFallback(threadId, "speech to text", [{ ...voiceKeyRef(candidate), failure }], ordered[next]!);

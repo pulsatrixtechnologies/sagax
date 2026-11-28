@@ -1225,6 +1225,26 @@ final class VoiceKeyWordsTests: XCTestCase {
         XCTAssertNil(VoiceFailure.parse(status: 502, data: Data("<html>".utf8)))
     }
 
+    /// #5428: the server's chain sentence passes through; grok-account and
+    /// org-account use the web's words.
+    func testVoiceWordsPassTheServersChainSentenceAndNameGrokAccounts() throws {
+        let english = "No call was placed: your connected Grok account is out of credits. Add credits on the connected Grok account, then call back. Your organization's xAI key is out of credits."
+        let french = "Aucun appel : ton compte Grok connecté n'a plus de crédits. Ajoute du crédit au compte Grok connecté, puis rappelle. La clé xAI de ton organisation n'a plus de crédits."
+        let chainBody = Data(#"{"error":"No call was placed: your connected Grok account is out of credits. Add credits on the connected Grok account, then call back. Your organization's xAI key is out of credits.","code":"out_of_credits","failure":"quota","key":{"source":"grok-account","last4":"4Dd"},"tried":[{"source":"grok-account","last4":"4Dd","failure":"quota"},{"source":"org-key","last4":"t6Yb","failure":"quota"}]}"#.utf8)
+        let chain = try XCTUnwrap(VoiceFailure.parse(status: 502, data: chainBody))
+        XCTAssertEqual(chain.kind, "quota")
+        XCTAssertEqual(chain.key?.source, "grok-account")
+        XCTAssertEqual(VoiceWords.line(chain), english)
+        XCTAssertEqual(VoiceWords.line(VoiceFailure(status: 502, message: french, code: "out_of_credits", failure: "quota", key: VoiceKeyInfo(source: "grok-account", last4: "4Dd"))), french)
+        XCTAssertEqual(VoiceWords.keyLabel(VoiceKeyInfo(source: "grok-account", last4: "4Dd")), "your connected Grok account ···4Dd")
+        XCTAssertEqual(VoiceWords.keyLabel(VoiceKeyInfo(source: "org-account")), "the organization's Grok account")
+        XCTAssertEqual(VoiceWords.keyAction(VoiceKeyInfo(source: "grok-account")), "Add credits on the connected Grok account.")
+        XCTAssertEqual(VoiceWords.keyAction(VoiceKeyInfo(source: "org-account")), "Ask an admin to check the organization's Grok account, or connect your own Grok account in Settings > Providers.")
+        let refusedBody = Data(#"{"error":"No call was placed: your connected Grok account is out of credits. Add credits on the connected Grok account, then call back. Your organization's xAI key is out of credits.","code":"realtime_key_refused","failure":"quota","key":{"source":"grok-account","last4":"4Dd"}}"#.utf8)
+        let refused = try XCTUnwrap(VoiceFailure.parse(status: 502, data: refusedBody))
+        XCTAssertEqual(VoiceWords.line(refused), english)
+    }
+
     func testTheKeyThatServedComesFromTheHeadersAndAFallbackIsSaidOnce() {
         let outcome = VoiceKeyOutcome.from(headers: ["X-Voice-Key": "perspicax-key:c0Je", "x-voice-key-skipped": "voice-key:Wez8:quota"])
         XCTAssertEqual(outcome.used, VoiceKeyInfo(source: "perspicax-key", last4: "c0Je"))

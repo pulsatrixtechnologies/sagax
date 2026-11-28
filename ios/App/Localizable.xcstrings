@@ -9561,6 +9561,22 @@
         }
       }
     },
+    "Add credits on the connected Grok account.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add credits on the connected Grok account."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajoute du crédit au compte Grok connecté."
+          }
+        }
+      }
+    },
     "Add credits to that xAI account, or change the key in Settings > Models and voice > My voice keys on the computer.": {
       "localizations": {
         "en": {
@@ -14039,6 +14055,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pose ta question sur ce passage"
+          }
+        }
+      }
+    },
+    "Ask an admin to check the organization's Grok account, or connect your own Grok account in Settings > Providers.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask an admin to check the organization's Grok account, or connect your own Grok account in Settings > Providers."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demande à un admin de vérifier le compte Grok de l'organisation, ou connecte ton propre compte Grok dans Réglages > Fournisseurs."
           }
         }
       }
@@ -116407,6 +116439,22 @@
         }
       }
     },
+    "the organization's Grok account%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the organization's Grok account%@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "le compte Grok de l'organisation%@"
+          }
+        }
+      }
+    },
     "the organization's xAI key%@": {
       "localizations": {
         "en": {
@@ -117343,6 +117391,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "tes fichiers"
+          }
+        }
+      }
+    },
+    "your connected Grok account%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "your connected Grok account%@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ton compte Grok connecté%@"
           }
         }
       }

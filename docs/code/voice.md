@@ -580,7 +580,11 @@ session closes the page with 1011 after its reopens failed) is now
 remembered like one whose socket never opened (`giveWay` in
 `createListenAction`): the page's next socket starts with the next key or
 provider, with the same line in the Events lens. Before, the next socket
-went back to the provider that had just given up.
+went back to the provider that had just given up. A bare close with no
+error frame still gives way as "not reachable" (#5416). An in-stream
+error frame that names credits (or a refused key, or a rate limit) is
+sorted by `sttErrorMessage` in `server/tts/grok.ts`, so a dry account is
+held 5 minutes and yields to another key of the same provider (#5416).
 
 What the card says when no key can transcribe: the key refused last is named
 by its own provider (`voiceKeyLabel` and `voiceErrorNote` in

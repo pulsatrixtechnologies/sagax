@@ -55,8 +55,13 @@ export interface FakeSttControls {
   /** refuse every speech to text request with this status and JSON body
    * (an account out of credits answers 503 `out_of_credits`) */
   refuse: { status: number; body: Record<string, unknown> } | null;
-  /** take the socket, then answer the first audio with an error and close */
-  failOnAudio: boolean;
+  /** take the socket, then answer the first audio with an error and close.
+   * `true`: a credits error frame (the usual dry-account mid-socket case).
+   * A record: that error frame body. */
+  failOnAudio: boolean | Record<string, unknown>;
+  /** take the socket, then close on the first audio with no error frame
+   * (bare close; giveWay still runs as "not reachable", #5416). */
+  closeOnAudio: boolean;
 }
 
 /** Paths a voice call may use. Anything else (chat, responses, realtime)
@@ -171,7 +176,7 @@ export async function startFakeXaiVoice(options: FakeXaiOptions = {}): Promise<F
   const timings: FakeXaiTiming[] = [];
   const startedAt = Date.now();
   const speech: FakeSpeechControls = { refuse: false, openDelayMs: 0, dropAfter: 0, errorNext: false };
-  const stt: FakeSttControls = { refuse: null, failOnAudio: false };
+  const stt: FakeSttControls = { refuse: null, failOnAudio: false, closeOnAudio: false };
   const transcripts = [...(options.transcripts ?? [])];
   let currentTranscript: string | undefined;
   let boundUtteranceId: string | undefined;
@@ -318,8 +323,15 @@ export async function startFakeXaiVoice(options: FakeXaiOptions = {}): Promise<F
       ws.on("message", (data, binary) => {
         if (binary) {
           record.audioBytes = (record.audioBytes ?? 0) + (data as Buffer).length;
+          if (stt.closeOnAudio) {
+            ws.close();
+            return;
+          }
           if (stt.failOnAudio) {
-            ws.send(JSON.stringify({ type: "error", message: "fake transcription error" }));
+            const body = stt.failOnAudio === true
+              ? { type: "error", code: "out_of_credits", error: "out_of_credits" }
+              : { type: "error", ...stt.failOnAudio };
+            ws.send(JSON.stringify(body));
             ws.close();
             return;
           }

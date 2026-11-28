@@ -25,6 +25,8 @@ enum DesktopIcon: String, CaseIterable {
     case bot
     // Automations header (List, Filters), the grouped list's folders, the bot panel's Suggestions
     case list, slidersHorizontal, folder, sparkles, refresh
+    // the chat bar mode menu (#5529 / ModeMenu.tsx): Fast (Zap), Heavy (Layers)
+    case zap, layers
     // Team map (Monitor, Minus) and About's link rows (ExternalLink)
     case monitor, minus, externalLink, messageCircle
     // lot 6: the multi-select bar (CheckCheck, ListChecks) and the computer window (Minimize2, Hand)
@@ -184,6 +186,12 @@ enum DesktopIcon: String, CaseIterable {
         case .eye:
             ["M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0",
              Self.circle(12, 12, 3)]
+        case .zap:
+            ["M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"]
+        case .layers:
+            ["M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z",
+             "M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12",
+             "M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"]
         }
     }
 
@@ -250,6 +258,8 @@ enum DesktopIcon: String, CaseIterable {
         case .slidersHorizontal: "slider.horizontal.3"
         case .folder: "folder"
         case .sparkles: "sparkles"
+        case .zap: "bolt.fill"
+        case .layers: "square.stack.3d.up"
         case .refresh: "arrow.clockwise"
         case .checkCheck: "checkmark.circle"
         case .listChecks: "checklist"

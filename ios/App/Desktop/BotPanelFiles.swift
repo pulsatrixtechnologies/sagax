@@ -52,9 +52,9 @@ struct BotPanelFiles: View {
             }
             AnyView(content)
         }
+        // LibraryTab.tsx: px-4 pb-6 pt-2 (16 / 24 / 8)
         .padding(.top, 8)
-        .padding(.leading, 17)
-        .padding(.trailing, 16)
+        .padding(.horizontal, 16)
         .padding(.bottom, 24)
         .task(id: threadId) { await load() }
         .sheet(item: $previewing) { item in ProfileQuickLook(url: item.url).ignoresSafeArea() }
@@ -135,6 +135,7 @@ struct BotPanelFiles: View {
                     .font(theme.font(12, .medium))
                     .foregroundStyle(theme.inkSecondary)
                     .padding(.horizontal, 2)
+                // LibraryTab.tsx: rounded-2xl card, rows carry px-2.5 py-1.5
                 VStack(spacing: 0) {
                     ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                         row(entry)
@@ -143,9 +144,9 @@ struct BotPanelFiles: View {
                         }
                     }
                 }
-                .padding(.horizontal, 10)
                 .background(theme.elevated, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(theme.hairlineWeak, lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 if more {
                     Button { olderExpanded = true } label: {
                         Text("Show more")
@@ -191,8 +192,10 @@ struct BotPanelFiles: View {
             // them by a long press (the same items)
             if hoveredRow == ThreadFilesView.name(entry) { actions(entry) }
         }
-        .frame(minHeight: 40)
-        .padding(.horizontal, 8)
+        // LibraryTab.tsx FileLibraryRow: px-2.5 py-1.5, icon 24
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .frame(minHeight: 36)
         .contentShape(Rectangle())
         .onHover { inside in hoveredRow = inside ? ThreadFilesView.name(entry) : (hoveredRow == ThreadFilesView.name(entry) ? nil : hoveredRow) }
         .contextMenu { menuItems(entry) }

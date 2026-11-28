@@ -9,7 +9,10 @@
 // for three asked changes only: the action reads "Open on the web" (no
 // product name, no arrow) on both, and the opened card takes its whole
 // height (its bottom handles always there) and draws a record's text with
-// the chat's Markdown renderer.
+// the chat's Markdown renderer. M-20261127-101 took the opened ones again: the
+// opened card is the record window (its frame moved by its head and resized
+// by its edges, its size kept per type of window, each side scrolling on its
+// own); the hovered ones did not change.
 import { createElement, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

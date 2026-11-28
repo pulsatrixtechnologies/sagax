@@ -62,6 +62,7 @@ Rules only. How the code works (files, routes, tests, history) lives in
 - A bot's title always sits under its name, plain secondary grey, never a tag, pill or outline, on every surface (2026-11-06).
 - On the desktop, a Heavy run's experts are the conversation's bot duplicated, drawn as its header draws it (`ExpertAvatar`, `BotAvatar` with the bot unchanged) in the row and the Thoughts panel: never a colour per expert, an owl or a generic shape; the phone follows in its own lot (2026-11-27, M-20261127-178).
 - A surface that was a window stays a window, and a page stays a page, unless the owner asks (2026-11-02).
+- Every record of every plugin opens in the one record window (`record-window/RecordWindow.tsx`): moved, resized, its size and place kept per person and per type of window, each side scrolling on its own (M-20261127-101, M-20261127-147, #5458).
 - Never hard-code a colour in a component; fix a failing contrast pair in the skin, never in the `.tsx` (2026-10-08).
 - No per-component scrollbar styles; overlay scrollbars are one rule (2026-10-18).
 - A shape, an anchor or a skin finish is written only in the shapes set (2026-10-28).

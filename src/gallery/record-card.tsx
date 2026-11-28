@@ -22,7 +22,7 @@ import { StrictMode, type ReactElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { ChatMarkdown } from "../components/ChatMarkdown";
 import { LinkPreviewCard } from "../components/LinkHoverCard";
-import { RELATED_TABS, type RelatedTab } from "../components/RecordRelatedTabs";
+import { DETAIL_SECTIONS, type DetailSection } from "../lib/record-detail";
 import { RECORD_EDIT_FIELDS } from "../lib/record-detail";
 import { RecordCard } from "../components/RecordCard";
 import { loadLocale } from "../lib/i18n";
@@ -105,7 +105,7 @@ const relatedPages = {
     { name: L("Courriel suspect.eml", "Suspicious email.eml"), size: "499.9 KB", date: L("18 nov.", "Nov 18"), id: "44" },
   ] },
 };
-const relatedCounts = Object.fromEntries(RELATED_TABS.map(key => [key, relatedPages[key].lines.length]));
+const relatedCounts = Object.fromEntries(DETAIL_SECTIONS.filter((key) => key !== "schedule" && key !== "notes").map((key) => [key, relatedPages[key].lines.length]));
 
 const statuses = [{ value: "1", label: lang === "fr" ? "En cours" : "In progress" }, { value: "2", label: lang === "fr" ? "En attente" : "Waiting" }];
 let status = statuses[0]!;
@@ -277,7 +277,7 @@ window.fetch = async (input, init) => {
       }
       // the console before M-20261119-084: its documents read refused, answered as a bare 404
       case "attachments": if (oldConsole) return new Response(JSON.stringify({ state: "unavailable" }), { status: 404, headers: { "content-type": "application/json" } }); return json({ ...relatedPages.attachments, next: null });
-      default: return json({ ...relatedPages[query.get("section") as RelatedTab], next: null });
+      default: return json({ ...relatedPages[query.get("section") as DetailSection], next: null });
     }
   }
   const match = /\/api\/me\/records\/nimbus_desk\/(\w+)\/([^?]+)/.exec(url);

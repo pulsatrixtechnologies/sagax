@@ -1,14 +1,22 @@
+// The detail of one open ticket window (M-20261127-101): its counts, the
+// sections each tab reads (on demand, a section kept for the card's time to
+// live, every page of it joined), the choices of a field or a form, the
+// field writes, the title written in place and the window's actions (a note,
+// a time entry, an expense, a planned entry, a configuration, an attachment,
+// shared/record-actions.ts). Mounted for one record and language: another
+// record starts clean and an answer for the last one is never shown. Absent
+// (`enabled` false), or once the server has no detail route, `detail` and
+// `edits` are undefined and the original card is shown.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "@/lib/i18n";
 import { RECORD_CARD_TTL_MS, recordCardLanguage } from "@/lib/record-cards";
 import {
-  readDetailCounts, readDetailPage, readFieldChoices, readNoteImage, writeField,
-  RECORD_TITLE_FIELD, type RecordEditField,
+  readDetailCounts, readDetailPage, readFieldChoices, readNoteImage, writeAction, writeField,
+  RECORD_TITLE_FIELD, RecordDetailMissing, type DetailPage, type DetailPageOf, type DetailSection, type RecordChoice, type RecordEditField,
 } from "@/lib/record-detail";
 import type { RecordRef } from "../../shared/record-cards";
-import type { RecordChoice, RecordFieldEdit } from "./RecordFieldSelect";
-import type { RelatedPage } from "./RecordRelatedTabs";
-import { useRecordRelatedTabs } from "./useRecordRelatedTabs";
+import type { RecordAction, RecordActionChoice, RecordActionName } from "../../shared/record-actions";
+import type { RecordFieldEdit } from "./RecordFieldSelect";
 
 /** A change of one field makes the choices of these stale. */
 const DEPENDENTS: Partial<Record<RecordEditField, RecordEditField[]>> = {
@@ -17,80 +25,176 @@ const DEPENDENTS: Partial<Record<RecordEditField, RecordEditField[]>> = {
   subtype: ["item"],
 };
 
+/** The sections an action changes: read again once it is written. */
+const CHANGES: Record<string, DetailSection[]> = {
+  note: ["notes"],
+  time: ["time"],
+  expense: ["expenses"],
+  schedule: ["schedule", "activities"],
+  configuration: ["configurations"],
+  attachment: ["attachments"],
+};
+
 /** The title written in place: the console listed it as editable. */
 export interface RecordTitleEdit {
   save: (value: string) => Promise<void>;
 }
 
-/** The detail of one open ticket card: related tabs, the images its notes
- * name, editable fields and its title, read through the record's detail route. Absent (`enabled` false), or once the
- * server has no such route, `related` and `edits` are undefined and the
- * original card is shown. */
+export interface DetailSectionState<K extends DetailSection> {
+  page?: DetailPageOf<K>;
+  loading: boolean;
+  error: string;
+}
+
+export interface RecordDetail {
+  counts: Partial<Record<DetailSection, number>>;
+  countError: string;
+  /** the console takes this action for the record (a console that lists none: any is tried) */
+  can: (action: RecordActionName) => boolean;
+  section: <K extends DetailSection>(tab: K) => DetailSectionState<K>;
+  /** read these sections now (a tab opened) */
+  want: (tabs: readonly DetailSection[]) => void;
+  write: (action: RecordAction) => Promise<void>;
+  choices: (field: RecordActionChoice) => Promise<RecordChoice[]>;
+  /** a note's image, read as the person through the card's detail route (never the product from the browser) */
+  readImage?: (src: string) => Promise<Blob>;
+  /** an attachment that could not be downloaded */
+  notice?: string;
+}
+
+type Entry = { at: number; read: Promise<DetailPage> };
+
 export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () => void) {
   const { product, kind, id } = ref;
   const lang = recordCardLanguage();
   const [fields, setFields] = useState<RecordEditField[]>([]);
   const [titleEditable, setTitleEditable] = useState(false);
+  const [actions, setActions] = useState<ReadonlySet<RecordActionName> | null>(null);
+  const [counts, setCounts] = useState<Partial<Record<DetailSection, number>>>({});
+  const [countError, setCountError] = useState("");
+  const [missing, setMissing] = useState(false);
+  // the sections read, for one record: a page of another record (the one before) is never shown
+  const [pages, setPages] = useState<{ token?: object; map: Partial<Record<DetailSection, DetailSectionState<DetailSection>>> }>({ map: {} });
   const [saved, setSaved] = useState<Partial<Record<RecordEditField, string>>>({});
   const [stamps, setStamps] = useState<Partial<Record<RecordEditField, number>>>({});
   const [downloadError, setDownloadError] = useState(false);
-  const live = useRef<object | undefined>(undefined);
-  const choices = useRef(new Map<RecordEditField, { at: number; read: Promise<RecordChoice[]> }>());
+  const [revision, setRevision] = useState(0);
+  const cache = useRef(new Map<DetailSection, Entry>());
+  const wanted = useRef(new Set<DetailSection>());
+  const choiceCache = useRef(new Map<string, { at: number; read: Promise<RecordChoice[]> }>());
   const source = useMemo(() => {
     if (!enabled) return undefined;
-    const token = {};
-    const record: RecordRef = { product, kind, id };
-    return {
-      token,
-      record,
-      async counts(fresh: boolean) {
-        const read = await readDetailCounts(record, fresh);
-        if (live.current === token) {
-          setFields(read.fields);
-          setTitleEditable(read.title);
-        }
-        return read.counts;
-      },
-      async page(tab: RelatedPage["tab"], fresh: boolean): Promise<RelatedPage> {
-        let page = await readDetailPage(record, tab, 1, fresh, () => setDownloadError(true));
-        let joined = page.page;
-        let next = page.next;
-        while (next !== null) {
-          page = await readDetailPage(record, tab, next, fresh, () => setDownloadError(true));
-          joined = { ...joined, lines: [...joined.lines, ...page.page.lines] } as RelatedPage;
-          if (page.next !== null && page.next <= next) throw new Error("invalid detail page");
-          next = page.next;
-        }
-        return joined;
-      },
-    };
+    return { token: {}, record: { product, kind, id } as RecordRef };
     // the language is part of the key: a language change reads again
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, product, kind, id, lang]);
+  const live = useRef(source?.token);
+  if (live.current !== source?.token) {
+    // another record: nothing kept of the last one (before any child asks for a section)
+    cache.current = new Map();
+    wanted.current = new Set();
+    choiceCache.current = new Map();
+  }
+  live.current = source?.token;
+  const changed = useRef(onChanged);
+  changed.current = onChanged;
+
+  // another record: nothing of the last one stays
   useEffect(() => {
-    live.current = source?.token;
-    choices.current = new Map();
     setFields([]);
     setTitleEditable(false);
+    setActions(null);
+    setCounts({});
+    setCountError("");
+    setMissing(false);
     setSaved({});
     setStamps({});
     setDownloadError(false);
   }, [source]);
-  const tabs = useRecordRelatedTabs(source);
-  const refreshTabs = tabs.refresh;
-  const changed = useRef(onChanged);
-  changed.current = onChanged;
+
+  const load = useCallback((tab: DetailSection, fresh: boolean) => {
+    if (!source) return;
+    let entry = cache.current.get(tab);
+    if (fresh || !entry || Date.now() - entry.at >= RECORD_CARD_TTL_MS) {
+      const read = (async () => {
+        let page = await readDetailPage(source.record, tab, 1, fresh, () => setDownloadError(true));
+        let joined = page.page;
+        let next = page.next;
+        while (next !== null) {
+          page = await readDetailPage(source.record, tab, next, fresh, () => setDownloadError(true));
+          joined = { ...joined, lines: [...joined.lines, ...page.page.lines] } as DetailPage;
+          if (page.next !== null && page.next <= next) throw new Error("invalid detail page");
+          next = page.next;
+        }
+        return joined;
+      })();
+      entry = { at: Date.now(), read };
+      cache.current.set(tab, entry);
+    }
+    const mine = entry;
+    const token = source.token;
+    const put = (next: (before: DetailSectionState<DetailSection> | undefined) => DetailSectionState<DetailSection>) =>
+      setPages((now) => {
+        const map = now.token === token ? now.map : {};
+        return { token, map: { ...map, [tab]: next(map[tab]) } };
+      });
+    put((before) => ({ ...before, loading: true, error: "" }));
+    mine.read.then((page) => {
+      if (live.current !== token || cache.current.get(tab) !== mine) return;
+      put(() => ({ page, loading: false, error: "" }));
+    }, (failure: unknown) => {
+      if (cache.current.get(tab) === mine) cache.current.delete(tab);
+      if (live.current !== token) return;
+      if (failure instanceof RecordDetailMissing) { setMissing(true); return; }
+      put((before) => ({ ...before, loading: false, error: t("recordCard.related.loadFailed") }));
+    });
+  }, [source]);
+
+  // the counts (and with them the editable fields, the title and the actions the console takes)
+  useEffect(() => {
+    if (!source) return;
+    let current = true;
+    setCountError("");
+    readDetailCounts(source.record, revision > 0).then((read) => {
+      if (!current) return;
+      setCounts(read.counts);
+      setFields(read.fields);
+      setTitleEditable(read.title);
+      setActions(read.actions);
+    }, (failure: unknown) => {
+      if (!current) return;
+      if (failure instanceof RecordDetailMissing) setMissing(true);
+      else setCountError(t("recordCard.related.loadFailed"));
+    });
+    return () => { current = false; };
+  }, [source, revision]);
+
+  const want = useCallback((tabs: readonly DetailSection[]) => {
+    for (const tab of tabs) {
+      wanted.current.add(tab);
+      const entry = cache.current.get(tab);
+      if (!entry || Date.now() - entry.at >= RECORD_CARD_TTL_MS) load(tab, false);
+    }
+  }, [load]);
+
+  /** Refresh forgets every kept section and reads again the ones the window showed. */
+  const refresh = useCallback(() => {
+    cache.current.clear();
+    choiceCache.current.clear();
+    setRevision((value) => value + 1);
+    for (const tab of wanted.current) load(tab, true);
+  }, [load]);
 
   const edit = useCallback((field: RecordEditField): RecordFieldEdit => ({
     selected: saved[field],
     stamp: stamps[field] ?? 0,
     load: () => {
       if (!source) return Promise.resolve([]);
-      const known = choices.current.get(field);
+      const known = choiceCache.current.get(field);
       if (known && Date.now() - known.at < RECORD_CARD_TTL_MS) return known.read;
       const read = readFieldChoices(source.record, field, known !== undefined || (stamps[field] ?? 0) > 0);
-      choices.current.set(field, { at: Date.now(), read });
-      read.catch(() => { if (choices.current.get(field)?.read === read) choices.current.delete(field); });
+      choiceCache.current.set(field, { at: Date.now(), read });
+      read.catch(() => { if (choiceCache.current.get(field)?.read === read) choiceCache.current.delete(field); });
       return read;
     },
     save: async (value: string) => {
@@ -98,8 +202,8 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
       await writeField(source.record, field, value);
       // a changed record is not touched by the answer of the one before it
       if (live.current !== source.token) return;
-      for (const stale of [field, ...(DEPENDENTS[field] ?? [])]) choices.current.delete(stale);
       const dependents = DEPENDENTS[field] ?? [];
+      for (const stale of [field, ...dependents]) choiceCache.current.delete(stale);
       setSaved((now) => {
         const next = { ...now, [field]: value };
         for (const stale of dependents) delete next[stale];
@@ -111,13 +215,12 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
         return next;
       });
       changed.current();
-      refreshTabs();
     },
-  }), [source, saved, stamps, refreshTabs]);
+  }), [source, saved, stamps]);
 
   // the title goes through the same write path, as text; the card is read again after
   const title = useMemo<RecordTitleEdit | undefined>(() => {
-    if (!source || tabs.missing || !titleEditable) return undefined;
+    if (!source || missing || !titleEditable) return undefined;
     return {
       save: async (value: string) => {
         await writeField(source.record, RECORD_TITLE_FIELD, value);
@@ -125,14 +228,41 @@ export function useRecordDetail(ref: RecordRef, enabled: boolean, onChanged: () 
         changed.current();
       },
     };
-  }, [source, tabs.missing, titleEditable]);
-  // a note's images, read as the person through the same detail route
-  const readImage = useMemo(() => source ? (src: string) => readNoteImage(source.record, src) : undefined, [source]);
+  }, [source, missing, titleEditable]);
 
   const edits = useMemo(() => {
-    if (!source || tabs.missing || !fields.length) return undefined;
+    if (!source || missing || !fields.length) return undefined;
     return Object.fromEntries(fields.map((field) => [field, edit(field)])) as Partial<Record<RecordEditField, RecordFieldEdit>>;
-  }, [source, tabs.missing, fields, edit]);
-  const related = useMemo(() => tabs.related && { ...tabs.related, readImage, notice: downloadError ? t("recordCard.related.downloadFailed") : undefined }, [tabs.related, readImage, downloadError]);
-  return { related, edits, title, refresh: refreshTabs, missing: tabs.missing };
+  }, [source, missing, fields, edit]);
+
+  const detail = useMemo<RecordDetail | undefined>(() => {
+    if (!source || missing) return undefined;
+    return {
+      counts,
+      countError,
+      can: (action) => actions === null || actions.has(action),
+      section: <K extends DetailSection>(tab: K) => ((pages.token === source.token ? pages.map[tab] : undefined) ?? { loading: true, error: "" }) as unknown as DetailSectionState<K>,
+      want,
+      write: async (action) => {
+        await writeAction(source.record, action);
+        if (live.current !== source.token) return;
+        for (const tab of CHANGES[action.action.split(".")[0]!] ?? []) load(tab, true);
+        // the counts, the card's own facts (its hours) and a note's time follow the write
+        setRevision((value) => value + 1);
+        changed.current();
+      },
+      choices: (field) => {
+        const known = choiceCache.current.get(field);
+        if (known && Date.now() - known.at < RECORD_CARD_TTL_MS) return known.read;
+        const read = readFieldChoices(source.record, field, false);
+        choiceCache.current.set(field, { at: Date.now(), read });
+        read.catch(() => { if (choiceCache.current.get(field)?.read === read) choiceCache.current.delete(field); });
+        return read;
+      },
+      readImage: (src) => readNoteImage(source.record, src),
+      notice: downloadError ? t("recordCard.related.downloadFailed") : undefined,
+    };
+  }, [source, missing, counts, countError, actions, pages, want, load, downloadError]);
+
+  return { detail, edits, title, refresh, missing };
 }

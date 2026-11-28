@@ -3562,11 +3562,66 @@ note.
   counts, the notes' filters, the product's link, Ask, copy, "up to date at"
   and refresh.
 
-Captures: `scripts/capture/record-card-size.mjs` (headless Chrome, DPR 2) of
-`src/gallery/record-card.html`, scene `related`: a rich ticket and a company,
-dark and light, a 1440 by 900 window and a 760 by 520 one, at the default
-size, pulled by the corner, opened again after a reload, and back to the
-default. It also checks the sizes it reads.
+#### The record window (M-20261127-101, #5458)
+
+The owner validated a mockup of the record windows (ticket, company,
+contact, board, invoice and the other plugins' records) and asked that they
+be redone after it; the frame first, then the kinds (D-20261127-009). It
+replaces the sizes and places above: what follows is the owner's, each line
+with its id; the rest is an agent's choice, named as such.
+
+- **One window for every record of every plugin** (M-20261127-101): the head
+  (the plugin's mark, the kind and number, the title renamed in place, the
+  state pills, close), the tabs, the body, and the foot of the opened card.
+- **Moved and resized** (M-20261127-101): moved by its head (a double-click
+  on its empty part puts it back in the middle), resized by its sides, its
+  bottom edge and its bottom corners with the app's one handle look.
+- **Kept per person and per type of window** (M-20261127-147): size, place,
+  the split between the sides and each table's columns, in one preference
+  that follows the person. Agent's choice: a type never sized opens at the
+  mockup's 1240 px by the window's height less 48 px (860 px at most),
+  centred, or at the size the person gave the opened card before.
+- **Never past the app's window** (M-20261127-124): 16 px from each side;
+  each side scrolls on its own, never the window as a whole; under 760 px
+  (agent's choice) the sides are one column that scrolls.
+- **The tabs stay in view** (M-20261127-134): out of what scrolls; in one
+  column they stick at its top.
+- **Blocks are contrasted surfaces with no border** (M-20261127-135): the
+  popover's field fill, 12 px corners, 16 px inside.
+- **Add, edit and remove sit at the right** (M-20261127-122,
+  M-20261127-126); an input zone opens only on a click on + and every entry
+  is edited or removed (M-20261127-110); removing asks once, in place.
+- **One dynamic filter** (M-20261127-139): the Data window's own
+  `DataFilter` (a column or all of them, then the words); no checkbox
+  column, no row of filters. Columns move (drag a head, or Alt and an arrow)
+  and resize (their right edge); the split is dragged (M-20261127-125).
+- **An empty tab or block where nothing can be added is hidden**
+  (M-20261127-143).
+- **A person or a company opens its record in the same window, with a way
+  back** (M-20261127-101): the trail above the head and the Back arrow.
+
+The ticket window: the fields column at the left in every tab
+(M-20261127-105), version A (D-20261127-008, M-20261127-119); the tabs over
+the right side only (M-20261127-106), Notes first, then Schedule, Time &
+expenses, Configurations, Attachments, no Overview (M-20261127-118); status
+and priority as pills in the head, no Mark done there (M-20261127-112).
+Notes: the four filters with their counts on the row of "+ New note"
+(M-20261127-137), no "Customer notified" (M-20261127-136). Schedule:
+meetings, resources and activities in one table, each type in its tone
+(meeting the purple token, resource the accent, activity the warning, agent's
+choice), the open ones newest first, "Show completed", "Mark done" on each
+row, "Schedule me" and "Dispatch the ticket" at the top, + for Meeting,
+Resource, Activity (M-20261127-109, D-20261127-007). Time & expenses: one
+tab (M-20261127-108), the totals with the B, NC and DNB share (success,
+warning, the secondary ink), one list by day, each entry's tag changed in
+place (M-20261127-138). Not built: the Data tab (no recorded instruction).
+
+Captures: `scripts/capture/record-window.mjs` (headless Chrome, DPR 2) of
+`src/gallery/record-window.html`: every tab of the ticket window, the note
+being written, the + menu, the completed entries, a billing menu, the
+company opened from the ticket, the window narrow and the shared blocks,
+dark and light, French and English, each beside the mockup's capture with
+`--mockup`.
 
 ## The bot row menu and a bot's own window (owner, 2026-11-17, #4639)
 

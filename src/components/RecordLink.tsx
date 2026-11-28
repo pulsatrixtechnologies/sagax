@@ -2,8 +2,9 @@
 // the card it opens. The chip is the pill GitHub references wear
 // (ref-pill.ts) with the product's mark; the card is the existing HoverCard
 // (LinkHoverCard.tsx) asking for its pin, its warm switch and its motion, and
-// placed in the window (a card this size sits over the chat, not against its
-// chip: src/lib/record-card-size.ts).
+// placed in the window: the opened card is the record window, which places
+// itself in the app's window (src/lib/record-window-layout.ts), never against
+// its chip.
 // Nothing here navigates, and the chip is a button with no address: the link's
 // own scheme is never handed to the shell, shown in a status bar, copied as a
 // link address or opened by a middle click (a thread reference is the same).
@@ -23,7 +24,8 @@ import { isGuid } from "@/lib/record-card-format";
 import { signInAgainPath } from "@/lib/sign-in-again";
 import { useSharedPersonProducts } from "@/lib/person-products";
 import { findRecordKind, peekRecordCard, prefetchRecordCard, readRecordCard, recordKindName, useRecordCard } from "@/lib/record-cards";
-import { placeRecordCard } from "@/lib/record-card-size";
+import { placeRecordWindow, recordWindowType } from "@/lib/record-window-layout";
+import { TicketWindow } from "@/components/record-window/ticket/TicketWindow";
 import { useStoreOptional } from "@/state/store";
 import { recordMarkdown, type RecordRef } from "../../shared/record-cards";
 
@@ -57,6 +59,11 @@ export function RecordLink({ record, draftId, children }: { record: RecordRef; d
   const text = label && !isGuid(label) ? label : kindName;
   const productInfo = product ? { name: product.name, ...(product.icon?.url ? { iconUrl: product.icon.url } : {}) } : undefined;
   const chipName = t(product ? "recordCard.chipName" : "recordCard.chipNameBare", { kind: kindName, number: text, product: product?.name ?? "" });
+  // Schedule me and Dispatch the ticket go to the conversation the record was named in; in a room, to the
+  // person's Primary Bot; with neither, they are not offered (nothing would take them)
+  const [surface, surfaceBot, surfaceThread] = (draftId ?? "").split(":");
+  const askTo = surface === "bot" && surfaceBot ? surfaceBot : store?.state.bots.find((one) => one.chiefOfStaff && !one.hidden)?.id;
+  const askBot = store && askTo ? (text: string) => store.dispatch({ type: "send", botId: askTo, text, ...(surface === "bot" && surfaceThread ? { threadId: surfaceThread } : {}) }) : undefined;
   // a console that cannot serve cards: the chip reads as plain words. The same
   // button stays mounted, so an open card and the focus are not lost under it.
   const plain = known.miss?.state === "unavailable";
@@ -68,7 +75,7 @@ export function RecordLink({ record, draftId, children }: { record: RecordRef; d
       warm
       motion
       trigger="click"
-      place={placeRecordCard}
+      place={placeRecordWindow}
       label={t("recordCard.dialogName", { kind: kindName, number: text })}
       disabled={plain}
       onIntent={() => prefetchRecordCard(record)}
@@ -82,6 +89,7 @@ export function RecordLink({ record, draftId, children }: { record: RecordRef; d
           onAsk={draftId ? (ref, words) => { close(); appendComposerDraft(draftId, `${recordMarkdown(words, ref)} `); setTimeout(() => focusComposer(), 0); } : undefined}
           onConnect={store ? () => { close(); store.dispatch({ type: "togglePlugins", open: true, surface: "apps" }); } : undefined}
           onSignIn={() => { void signInAgainPath().then((path) => { if (path) window.location.assign(path); }); }}
+          onBotAsk={askBot}
         />
       )}
     >
@@ -122,7 +130,7 @@ export const RECORD_TRAIL_MAX = 8;
  * in this card's place (a card from a card: never two stacked), with a back
  * arrow in the head that returns to the one it replaced. A record of a product
  * the person does not hold stays plain words. */
-function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect, onSignIn }: {
+function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect, onSignIn, onBotAsk }: {
   record: RecordRef;
   label: string;
   pinned: boolean;
@@ -131,6 +139,8 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
   onAsk?: (ref: RecordRef, label: string) => void;
   onConnect?: () => void;
   onSignIn?: () => void;
+  /** a request handed to a bot in the chat (Schedule me, Dispatch the ticket, D-20261127-007) */
+  onBotAsk?: (text: string) => void;
 }) {
   const [trail, setTrail] = useState<Array<{ ref: RecordRef; label: string }>>([]);
   // a card opened by a click stays the opened card while it fades out (never the tooltip's layout for its 120 ms)
@@ -140,12 +150,13 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
   const products = useSharedPersonProducts();
   const { product, kind } = findRecordKind(products, current.ref);
   const read = useRecordCard(current.ref, { enabled: true });
-  // a ticket card gains its tabs and editable fields once the card is read; a
-  // server without the detail route leaves the original card
+  // a ticket card becomes the ticket window once the card is read (its tabs, its
+  // fields column, its writes); a server without the detail route leaves the original card
   const { refresh: refreshCard } = read;
   const detail = useRecordDetail(current.ref, current.ref.kind === "ticket" && Boolean(read.card), refreshCard);
   const { refresh: refreshDetail } = detail;
   const refresh = useCallback(() => { refreshCard(); refreshDetail(); }, [refreshCard, refreshDetail]);
+  const link = recordMarkdown(current.label, current.ref);
   // the way here, from the chip's record to this one (M-20261119-084): a number reads with its kind
   const way = [{ ref: record, label }, ...trail];
   const crumbs = trail.length ? way.map((step, index) => {
@@ -159,8 +170,12 @@ function OpenRecordCard({ record, label, pinned, pin, onClose, onAsk, onConnect,
       label={current.label}
       kindName={recordKindName(kind)}
       product={product ? { name: product.name, ...(product.icon?.url ? { iconUrl: product.icon.url } : {}) } : undefined}
-      read={detail.related ? { ...read, refresh } : read}
-      related={detail.related}
+      read={detail.detail ? { ...read, refresh } : read}
+      window={detail.detail && read.card ? {
+        body: <TicketWindow card={read.card} detail={detail.detail} type={recordWindowType(current.ref)} now={Date.now()}
+          onScheduleMe={onBotAsk ? () => onBotAsk(t("recordWindow.schedule.mePrompt", { record: link })) : undefined}
+          onDispatch={onBotAsk ? () => onBotAsk(t("recordWindow.schedule.dispatchPrompt", { record: link })) : undefined} />,
+      } : undefined}
       edits={detail.edits}
       titleEdit={detail.title}
       trail={crumbs}

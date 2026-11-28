@@ -2,11 +2,9 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PillSelect } from "./SettingsPrimitives";
 import { t } from "@/lib/i18n";
 import { RECORD_CARD_TTL_MS } from "@/lib/record-cards";
+import type { RecordChoice } from "@/lib/record-detail";
 
-export interface RecordChoice {
-  value: string;
-  label: string;
-}
+export type { RecordChoice };
 
 export interface RecordFieldEdit {
   selected?: string;

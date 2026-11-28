@@ -1,6 +1,6 @@
 /** Isolated gallery for headless screenshots of citing a page passage in the
  * main composer (#5464 R4): outline + ask-in-place with Cite, and the cite
- * strip on `[data-surface=composer]`. Not shipped in the app.
+ * strip on `[data-tour=composer]`. Not shipped in the app.
  * ?skin=<id>&lang=<code> */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -74,7 +74,7 @@ function Gallery() {
         </section>
 
         <section data-shot="composer" className="rounded-2xl border border-hairline/40 bg-panel p-4">
-          <div data-surface="composer" className={COMPOSER_PILL}>
+          <div data-tour="composer" className={COMPOSER_PILL}>
             <ComposerPageCiteStrip
               cite={{ pageId: "p1", title, selection: { kind: "text", quote, prefix: "", suffix: "", path: "body > p", tag: "p" } }}
               onClear={() => undefined}

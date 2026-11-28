@@ -178,7 +178,7 @@ export function PageSelectionAsk({
       const target = event.target;
       if (target instanceof Node && boxRef.current?.contains(target)) return;
       if (target === frameElement.current) return;
-      if (target instanceof Element && target.closest('[data-surface="composer"]')) return;
+      if (target instanceof Element && target.closest('[data-tour="composer"]')) return;
       dismiss();
     };
     const onKey = (event: KeyboardEvent) => {

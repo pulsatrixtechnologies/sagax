@@ -201,6 +201,30 @@ describe("ask the bot about a selected passage, in place (#4099)", () => {
     expect(pageCiteDraft("t1")?.selection.quote).toBe(anchor.quote);
   });
 
+  it("a click in the main composer (data-tour=composer) keeps the outline for cite-then-compose (#5464)", async () => {
+    render({ ask: ask({ threadId: "t1" }) });
+    await flush();
+    wireFrame();
+    await post(selected());
+    expect(host.querySelector("[data-page-selection-ask]")).not.toBeNull();
+    const main = document.createElement("div");
+    main.setAttribute("data-tour", "composer");
+    const field = document.createElement("textarea");
+    main.append(field);
+    document.body.append(main);
+    await act(async () => {
+      field.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
+    });
+    expect(host.querySelector("[data-page-selection-ask]")).not.toBeNull();
+    expect(pageCiteDraft("t1")?.selection.quote).toBe(anchor.quote);
+    // a click elsewhere still dismisses the outline; the cite chip stays
+    await act(async () => {
+      document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
+    });
+    expect(host.querySelector("[data-page-selection-ask]")).toBeNull();
+    expect(pageCiteDraft("t1")?.selection.quote).toBe(anchor.quote);
+  });
+
   it("is offered only where it is given (the person's own page over its bot's conversation)", async () => {
     render({});
     await flush();

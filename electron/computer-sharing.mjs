@@ -417,7 +417,7 @@ export function createComputerSharing({ file, fetch: fetchImpl, environments, cu
         if (!validRecord(grant)) continue;
         if (grant.cloud) { if (cloudLendingVerdict(grant.cloud, cloud(), env).allow) run(env, grant); }
         else if (grant.access === "always" || grant.access === "ask" || grant.access === "never") {
-          if (grant.access !== "never") status.set(env.id, { ...(status.get(env.id) ?? {}), connected: false });
+          if (grant.access !== "never") status.set(env.id, { ...status.get(env.id), connected: false });
         }
         else if (maintainer && !maintainerOff) run(env, grant);
       }

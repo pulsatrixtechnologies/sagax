@@ -2618,12 +2618,6 @@ async function refreshSharedComputersAllowed() {
   return sharedComputersAllowed;
 }
 
-/** Refuse a workspace sharing control the server would refuse anyway. */
-async function requireSharedComputers() {
-  if (await refreshSharedComputersAllowed()) return;
-  throw new Error("Computer sharing is turned off on this server.");
-}
-
 // The lent screen's lock on this computer, with the real reason when it
 // is refused (electron/host-screen-lease.mjs).
 const hostScreenLease = createHostScreenLease({

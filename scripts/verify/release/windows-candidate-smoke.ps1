@@ -88,7 +88,7 @@ try {
 $env:ELECTRON_ENABLE_LOGGING = '1'
 $smoke = @(node scripts/smoke-packaged-launch.mjs --app $app 2>&1)
 if ($LASTEXITCODE -ne 0 -or !($smoke -match 'packaged launch ok in .*fresh userData.*http://127\.0\.0\.1:')) {
-  $smoke | ForEach-Object { if ([string]$_ -match '^QA_DIAG [a-zA-Z0-9 =|@_./:\-]+$') { Write-Output ([string]$_) } }
+  $smoke | ForEach-Object { if ([string]$_ -match '^QA_DIAG [a-zA-Z0-9 =|@_./:-]+$') { Write-Output ([string]$_) } }
   throw 'Packaged renderer did not confirm its local server and desktop bridge within 60 seconds.'
 }
 Write-Output 'Packaged renderer reached its local server and exercised the preload bridge and owner-only API.'

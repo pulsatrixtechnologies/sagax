@@ -89,7 +89,7 @@ function stop() {
 }
 if (!result.ok && process.platform === "win32") {
   const reporter = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "scripts/verify/release/windows-launch-diagnostics.ps1", String(child.pid)], { encoding: "utf8", timeout: 10000 });
-  for (const line of (reporter.stdout ?? "").split(/\r?\n/)) if (/^QA_DIAG [a-zA-Z0-9 =|@_./:\-]+$/.test(line)) console.error(line);
+  for (const line of (reporter.stdout ?? "").split(/\r?\n/)) if (/^QA_DIAG [a-zA-Z0-9 =|@_./:-]+$/.test(line)) console.error(line);
   console.error("QA_DIAG exitCode=" + (child.exitCode ?? "running"));
 }
 stop();

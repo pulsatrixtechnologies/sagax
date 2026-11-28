@@ -78,7 +78,7 @@ describe("windows install smoke helpers (#5322)", () => {
   it("prints only allowlisted QA_DIAG lines from the Windows launch diagnostics", () => {
     const launch = readText(new URL("../../smoke-packaged-launch.mjs", import.meta.url));
     expect(launch).toContain("windows-launch-diagnostics.ps1");
-    expect(launch).toContain("/^QA_DIAG [a-zA-Z0-9 =|@_./:\\-]+$/");
+    expect(launch).toContain("/^QA_DIAG [a-zA-Z0-9 =|@_./:-]+$/");
     expect(launch).toContain("QA_DIAG phases=");
     const diag = readText(new URL("./windows-launch-diagnostics.ps1", import.meta.url));
     expect(diag).toContain("QA_DIAG ");

@@ -3,6 +3,7 @@
 import { materializeEngineAccess, turnPayer } from "../engines/engine-credentials.ts";
 import { soloPiTurnAccess } from "../pi-own-model-servers-access.ts";
 import { claudeAccessUsable } from "../engines/claude-subscription-refresh.ts";
+import { renewWithCli } from "../cloud-agents/subscription-access.ts";
 export type Host = Record<string, any>;
 
 /** The account a bot signs in with on an organization server, for a turn
@@ -58,12 +59,14 @@ export function engineAccessDeps(host: Host, slot: LoginSlot = "primary") {
     },
     invalidate: (sub, provider) => host.perspicaxDirectory?.invalidate(sub, provider),
     loginDir: (principalId, driver, instanceId) => host.principalLoginDir(principalId, driver, slot, instanceId),
-    // #4410: pi on the payer's Claude sign-in: its short token, renewed by
-    // the one flight every Claude turn of theirs shares, read in memory only
+    // #4410: pi / OpenCode on the payer's Claude sign-in: its short token,
+    // renewed by the one flight every Claude turn of theirs shares, read in memory only
     claudeSignIn: (principalId) => claudeSignInToken(host, principalId),
     // #4410 / #5525: pi on the payer's Grok sign-in: access token renewed
     // through the Grok CLI's own path, read in memory only
     grokSignIn: (principalId) => grokSignInToken(host, principalId),
+    // #5524: pi / OpenCode on the payer's Codex sign-in: short access only
+    codexSignIn: (principalId) => codexSignInToken(host, principalId),
   };
 }
 
@@ -89,6 +92,20 @@ export async function grokSignInToken(host: Host, principalId: string): Promise<
   const access = await host.grokLiveAccessOf?.(principalId);
   if (!access || access.ok !== true || !access.accessToken) return null;
   return { accessToken: access.accessToken };
+}
+
+/** #5524: the payer's Codex sign-in as pi / OpenCode take it, or null. */
+export async function codexSignInToken(host: Host, principalId: string): Promise<{ accessToken: string; accountId?: string } | null> {
+  const logins = host.engineLogins;
+  if (!logins) return null;
+  const loginDir = logins.loginDir(principalId, "codex", "primary");
+  const cli = host.subscriptionCli("codex");
+  if (cli) {
+    await renewWithCli({ engine: "codex", cli: cli.cli, loginDir, environment: cli.environment }).catch(() => {});
+  }
+  const access = await host.readSubscriptionAccess("codex", loginDir);
+  if (!claudeAccessUsable(access, Date.now())) return null;
+  return { accessToken: access.accessToken, ...(access.accountId ? { accountId: access.accountId } : {}) };
 }
 
 export function createOrgTurnAccess(getHost: () => Host): any {

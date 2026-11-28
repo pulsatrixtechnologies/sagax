@@ -156,8 +156,10 @@ function rowsFor(source: HarnessSource): Row[] {
         case "openai":
           return [
             { harness: "codex", mark: "works" },
-            { harness: "piAgent", mark: "larger", reason: "pi signs in to this plan only inside its own screen; the server has no command to drive it. Hosted use needs the vendor's approval." },
-            { harness: "opencodeGo", mark: "larger", reason: "OpenCode signs in to this plan only interactively. Hosted use needs the vendor's approval." },
+            // #4410 / #5524: pi and OpenCode run the same ChatGPT/Codex sign-in
+            // through auth.json oauth (never a second interactive login)
+            { harness: "piAgent", mark: "works" },
+            { harness: "opencodeGo", mark: "works" },
             { harness: "openai-compat", mark: "no", reason: PLAN_NOT_KEY },
           ];
         case "xai":

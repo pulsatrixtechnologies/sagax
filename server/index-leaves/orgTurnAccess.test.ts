@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { RenewInput, SubscriptionAccess } from "../cloud-agents/subscription-access.ts";
 import { ensureClaudeSubscriptionFresh, resetClaudeSubscriptionRefreshForTests } from "../engines/claude-subscription-refresh.ts";
-import { claudeSignInToken, grokSignInToken } from "./orgTurnAccess.ts";
+import { claudeSignInToken, codexSignInToken, grokSignInToken } from "./orgTurnAccess.ts";
 
 const PRIMARY = "/fake/principals/p1/claude";
 
@@ -117,3 +117,43 @@ describe("grokSignInToken (#4410 / #5525)", () => {
     expect(await grokSignInToken({}, "p1")).toBeNull();
   });
 });
+
+const CODEX_PRIMARY = "/fake/principals/p1/codex";
+
+function fakeCodexHost(options: { stored: SubscriptionAccess | null }) {
+  const calls = { loginDirs: [] as unknown[][] };
+  const host = {
+    engineLogins: {
+      loginDir: (...args: unknown[]) => {
+        calls.loginDirs.push(args);
+        return CODEX_PRIMARY;
+      },
+    },
+    // no CLI: read the stored access as it is (renew is skipped)
+    subscriptionCli: () => null,
+    readSubscriptionAccess: async (engine: string, dir: string) => (engine === "codex" && dir === CODEX_PRIMARY ? options.stored : null),
+  };
+  return { host, calls };
+}
+
+describe("codexSignInToken (#5524)", () => {
+  it("returns a fresh Codex access token and optional account id, never a refresh token", async () => {
+    const stored: SubscriptionAccess = { provider: "openai", accessToken: "codex-access", expiresAt: Date.now() + 3_600_000, accountId: "acct_1" };
+    const { host, calls } = fakeCodexHost({ stored: { ...stored, refreshToken: "never" } as SubscriptionAccess });
+    const signIn = await codexSignInToken(host, "p1");
+    expect(calls.loginDirs).toEqual([["p1", "codex", "primary"]]);
+    expect(signIn).toEqual({ accessToken: "codex-access", accountId: "acct_1" });
+    expect(JSON.stringify(signIn)).not.toContain("never");
+  });
+
+  it("returns null when the access token is missing or ending within 60 s", async () => {
+    expect(await codexSignInToken(fakeCodexHost({ stored: null }).host, "p1")).toBeNull();
+    expect(await codexSignInToken(fakeCodexHost({ stored: { provider: "openai", accessToken: "short", expiresAt: Date.now() + 30_000 } }).host, "p1")).toBeNull();
+  });
+
+  it("returns null when the server keeps no sign-ins", async () => {
+    const { host } = fakeCodexHost({ stored: { provider: "openai", accessToken: "x", expiresAt: Date.now() + 3_600_000 } });
+    expect(await codexSignInToken({ ...host, engineLogins: undefined }, "p1")).toBeNull();
+  });
+});
+

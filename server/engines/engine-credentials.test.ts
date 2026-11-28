@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import type { TurnSpeaker } from "./engine-access.ts";
-import { materializeEngineAccess, openCodeClaudeAuthContent, paidByPerson, piPayerProviders, providerOfDriver, providersOfDriver, resolveEngineAccess, resolveGovernedEngineAccess, subscriptionDriver, turnPayer, type EngineCredentialInput, type PersonFacts } from "./engine-credentials.ts";
+import { materializeEngineAccess, openCodeClaudeAuthContent, openCodeCodexAuthContent, paidByPerson, piCodexAuthContent, piPayerProviders, providerOfDriver, providersOfDriver, resolveEngineAccess, resolveGovernedEngineAccess, subscriptionDriver, turnPayer, type EngineCredentialInput, type PersonFacts } from "./engine-credentials.ts";
 import type { ModelProvider, ProviderKeyResult } from "../perspicax/perspicax-link.ts";
 
 const OWNER = "pr_00000000-0000-4000-8000-000000000001";
@@ -669,6 +669,109 @@ describe("#4410 / #5525: pi runs xAI models on the payer's own Grok sign-in", ()
     expect([...piPayerProviders(input({ instance: PI, speaker: bob, signedIn: [`${BOB}/claudeAgent`, `${BOB}/grokAgent`] }), [])!].sort()).toEqual(["anthropic", "xai"]);
   });
 });
+
+describe("#5524: pi runs OpenAI models on the payer's own Codex sign-in", () => {
+  const BOB_PID = BOB.toLowerCase();
+  const TOKEN = "sk-test-codex-access-token-000000000000000001";
+  const deps = (signIn: (principalId: string) => Promise<{ accessToken: string; accountId?: string } | null>, key: (sub: string, provider: ModelProvider) => ProviderKeyResult = () => ({ ok: false, error: "no_key" })) => ({
+    dataDir: "/data",
+    resolveKey: async (sub: string, provider: ModelProvider) => key(sub, provider),
+    invalidate: () => {},
+    loginDir: (principalId: string) => `/data/principals/${principalId}/codex`,
+    codexSignIn: async (principalId: string) => signIn(principalId),
+  });
+
+  it("a person with a Codex sign-in and no key pays a pi turn with it", () => {
+    expect(resolveEngineAccess(input({ instance: PI, speaker: bob, signedIn: [`${BOB}/codex`] })))
+      .toEqual({ ok: true, via: "subscription", payer: "speaker", payerPrincipalId: BOB, provider: "openai", codexAccount: true });
+    expect(paidByPerson(resolveEngineAccess(input({ instance: PI, speaker: bob, signedIn: [`${BOB}/codex`] })))).toBe(true);
+  });
+
+  it("only the payer's own sign-in: the owner's never pays for the person who speaks", () => {
+    expect(resolveEngineAccess(input({ instance: PI, speaker: bob, signedIn: [`${OWNER}/codex`] })))
+      .toEqual({ ok: false, reason: "no_access", cause: "no_credentials", payer: "speaker", payerPrincipalId: BOB });
+  });
+
+  it("hands the short token as PI_AUTH_CONTENT openai-codex oauth in the payer's own pi home", async () => {
+    const inp = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/codex`] });
+    const out = await materializeEngineAccess(inp, resolveEngineAccess(inp), deps(async () => ({ accessToken: TOKEN, accountId: "acct_test" })));
+    expect(out).toEqual({
+      ok: true,
+      plan: expect.objectContaining({ via: "subscription", codexAccount: true }),
+      access: {
+        via: "subscription",
+        identity: `subscription:${BOB_PID}:codex`,
+        environment: { PI_AUTH_CONTENT: piCodexAuthContent(TOKEN, "acct_test") },
+        engineHome: join("/data", "principals", BOB_PID, "piAgent-key"),
+      },
+    });
+    if (out.ok) {
+      expect(out.access.identity).not.toContain(TOKEN);
+      expect(out.access.environment?.PI_AUTH_CONTENT).toContain('"openai-codex"');
+      expect(out.access.environment?.PI_AUTH_CONTENT).toContain(TOKEN);
+    }
+  });
+
+  it("adds the sign-in beside the payer's keys only when no OpenAI key of theirs pays Codex", async () => {
+    const keyed = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/codex`], keys: ["SUB-BOB/xai"] });
+    const out = await materializeEngineAccess(keyed, resolveEngineAccess(keyed), deps(async () => ({ accessToken: TOKEN }), () => ({ ok: true, key: "xai-test-bob-000000000001", fingerprint: "fx" })));
+    expect(out).toMatchObject({ ok: true, access: { via: "speaker-key", identity: `speaker-key:${BOB_PID}:fx+codex`, environment: { XAI_API_KEY: "xai-test-bob-000000000001", PI_AUTH_CONTENT: piCodexAuthContent(TOKEN) } } });
+    const both = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/codex`], keys: ["SUB-BOB/openai"] });
+    const keyOnly = await materializeEngineAccess(both, resolveEngineAccess(both), deps(async () => ({ accessToken: TOKEN }), () => ({ ok: true, key: "sk-test-openai-bob-000001", fingerprint: "fo" })));
+    expect(keyOnly).toMatchObject({ ok: true, access: { environment: { OPENAI_API_KEY: "sk-test-openai-bob-000001" } } });
+    if (keyOnly.ok) expect(keyOnly.access.environment?.PI_AUTH_CONTENT).toBeUndefined();
+  });
+
+  it("the organization's OpenAI key keeps paying OpenAI models: no sign-in then", async () => {
+    const withOrg = input({ instance: PI, speaker: bob, signedIn: [`${BOB}/codex`], keyBacked: true, orgKeyProviders: ["openai", "xai"] });
+    expect(resolveEngineAccess(withOrg)).toEqual({ ok: true, via: "org-key", payer: "organization" });
+    expect([...piPayerProviders(withOrg, ["openai", "xai"])!].sort()).toEqual(["openai", "xai"]);
+  });
+});
+
+describe("#5524: OpenCode runs OpenAI models on the payer's own Codex sign-in", () => {
+  const BOB_PID = BOB.toLowerCase();
+  const TOKEN = "sk-test-opencode-codex-access-000000000001";
+  const deps = (signIn: (principalId: string) => Promise<{ accessToken: string } | null>) => ({
+    dataDir: "/data",
+    resolveKey: async () => ({ ok: false as const, error: "no_key" as const }),
+    invalidate: () => {},
+    loginDir: (principalId: string) => `/data/principals/${principalId}/codex`,
+    codexSignIn: async (principalId: string) => signIn(principalId),
+  });
+
+  it("a person with a Codex sign-in and no key pays an OpenCode turn with it", () => {
+    expect(resolveEngineAccess(input({ instance: OPENCODE, speaker: bob, signedIn: [`${BOB}/codex`] })))
+      .toEqual({ ok: true, via: "subscription", payer: "speaker", payerPrincipalId: BOB, provider: "openai", codexAccount: true });
+  });
+
+  it("hands the short token as OPENCODE_AUTH_CONTENT openai oauth in the payer's own OpenCode home", async () => {
+    const inp = input({ instance: OPENCODE, speaker: bob, signedIn: [`${BOB}/codex`] });
+    const out = await materializeEngineAccess(inp, resolveEngineAccess(inp), deps(async () => ({ accessToken: TOKEN })));
+    expect(out).toEqual({
+      ok: true,
+      plan: expect.objectContaining({ via: "subscription", codexAccount: true }),
+      access: {
+        via: "subscription",
+        identity: `subscription:${BOB_PID}:codex`,
+        environment: { OPENCODE_AUTH_CONTENT: openCodeCodexAuthContent(TOKEN) },
+        engineHome: join("/data", "principals", BOB_PID, "opencodeGo-key"),
+      },
+    });
+    if (out.ok) {
+      expect(out.access.identity).not.toContain(TOKEN);
+      expect(out.access.environment?.OPENCODE_AUTH_CONTENT).toContain('"openai"');
+      expect(out.access.environment?.OPENCODE_AUTH_CONTENT).toContain('"type":"oauth"');
+      expect(out.access.environment?.OPENCODE_AUTH_CONTENT).toContain(TOKEN);
+    }
+  });
+
+  it("only the payer's own sign-in: the owner's never pays for the person who speaks", () => {
+    expect(resolveEngineAccess(input({ instance: OPENCODE, speaker: bob, signedIn: [`${OWNER}/codex`] })))
+      .toEqual({ ok: false, reason: "no_access", cause: "no_credentials", payer: "speaker", payerPrincipalId: BOB });
+  });
+});
+
 
 describe("resolveGovernedEngineAccess (#5180)", () => {
   const policy = { aspect: "chat" as const };

@@ -75,6 +75,21 @@ describe("#4329 lot 5: the engine a bot runs with, resolved when it is written",
     expect(!result.ok && result.error).toBe("OpenCode does not offer claude-opus-5. Pick a model it offers first, then choose OpenCode.");
   });
 
+  it("#5524: an OpenAI/Codex account runs under pi and OpenCode when they list the model for its payer", () => {
+    for (const place of ["solo", "organization"] as const) {
+      const here = catalogOf([
+        ...instances,
+        instance({ instanceId: "oc", driverKind: "opencodeGo", access: "custom" }, ["openai/gpt-6"]),
+      ], place);
+      expect(resolveHarness({ catalog: here, place, selection: { instanceId: "codex", model: "gpt-6" }, bot: "piAgent", strict: true }))
+        .toEqual({ ok: true, selection: { instanceId: "pi", model: "openai/gpt-6" }, harness: "piAgent", provider: "openai" });
+      expect(resolveHarness({ catalog: here, place, selection: { instanceId: "codex", model: "gpt-6" }, bot: "opencodeGo", strict: true }))
+        .toEqual({ ok: true, selection: { instanceId: "oc", model: "openai/gpt-6" }, harness: "opencodeGo", provider: "openai" });
+      expect(harnessDefaultRefusal(here, place, "openai", "piAgent")).toBeNull();
+      expect(harnessDefaultRefusal(here, place, "openai", "opencodeGo")).toBeNull();
+    }
+  });
+
   it("refuses an engine that does not list the model, never another model", () => {
     const narrow = catalogOf([
       instance({ instanceId: "claudeApi", driverKind: "claudeAgent", access: "api" }, ["claude-opus-5"]),
@@ -100,12 +115,18 @@ describe("#4329 lot 5: the engine a bot runs with, resolved when it is written",
   it("uses the person's default for the provider when the bot has none, and the bot's own value first", () => {
     const viaDefault = resolveHarness({ catalog, place: "solo", selection: { instanceId: "openai", model: "gpt-6" }, defaults: { openai: "piAgent" } });
     expect(viaDefault.ok && viaDefault.selection).toEqual({ instanceId: "pi", model: "openai/gpt-6" });
+    // #5524: pi on an OpenAI model is attributed to the subscription when it
+    // offers pi; openai-compat stays "no" on a plan, so the bot's choice is
+    // skipped and the default (pi) keeps the selection
     const botFirst = resolveHarness({ catalog, place: "solo", selection: { instanceId: "pi", model: "openai/gpt-6" }, bot: "openai-compat", defaults: { openai: "piAgent" } });
-    expect(botFirst.ok && botFirst.selection).toEqual({ instanceId: "openai", model: "gpt-6" });
+    expect(botFirst.ok && botFirst.selection).toEqual({ instanceId: "pi", model: "openai/gpt-6" });
+    // from the key row, the bot can still pick the built-in runtime
+    const fromKey = resolveHarness({ catalog, place: "solo", selection: { instanceId: "openai", model: "gpt-6" }, bot: "openai-compat" });
+    expect(fromKey.ok && fromKey.selection).toEqual({ instanceId: "openai", model: "gpt-6" });
     // the subscription's model moves to pi too, pi listing it (#4384)
     const onSubscription = resolveHarness({ catalog, place: "solo", selection: { instanceId: "codex", model: "gpt-6" }, defaults: { openai: "piAgent" } });
     expect(onSubscription.ok && onSubscription.selection).toEqual({ instanceId: "pi", model: "openai/gpt-6" });
-    // a default the subscription cannot use is skipped, never refused
+    // a default with no engine listing the model is skipped, never refused
     const skipped = resolveHarness({ catalog, place: "solo", selection: { instanceId: "codex", model: "gpt-6" }, defaults: { openai: "opencodeGo" } });
     expect(skipped.ok && skipped.selection).toEqual({ instanceId: "codex", model: "gpt-6" });
   });
@@ -118,9 +139,10 @@ describe("#4329 lot 5: the engine a bot runs with, resolved when it is written",
   });
 
   it("a cleared default puts the bots that followed it back on the recommended engine, and leaves the others", () => {
-    // followed "OpenAI runs with pi": back on the connection's recommended engine
+    // #5524: followed "OpenAI runs with pi" on the subscription connection:
+    // back on Codex (the subscription's recommended own tool)
     const back = resolveHarness({ catalog, place: "solo", selection: { instanceId: "pi", model: "openai/gpt-6" }, cleared: { openai: "piAgent" } });
-    expect(back.ok && back.selection).toEqual({ instanceId: "openai", model: "gpt-6" });
+    expect(back.ok && back.selection).toEqual({ instanceId: "codex", model: "gpt-6" });
     // never followed it (already on its own tool, or another provider's model): stays
     const own = resolveHarness({ catalog, place: "solo", selection: { instanceId: "openai", model: "gpt-6" }, cleared: { openai: "piAgent" } });
     expect(own.ok && own.selection).toEqual({ instanceId: "openai", model: "gpt-6" });
@@ -136,7 +158,7 @@ describe("#4329 lot 5: the engine a bot runs with, resolved when it is written",
       catalog: async () => catalog, place: () => "solo", defaultsFor: () => ({}), effortAccepted: () => true,
     });
     const back = await choice.selectionFor({}, "pr_a", { instanceId: "pi", model: "openai/gpt-6" }, { stored: null, cleared: { openai: "piAgent" } });
-    expect(back).toEqual({ ok: true, selection: { instanceId: "openai", model: "gpt-6" } });
+    expect(back).toEqual({ ok: true, selection: { instanceId: "codex", model: "gpt-6" } });
   });
 
   it("lists the engines the bot may pick for its model, only where the engine lists it", () => {

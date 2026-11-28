@@ -134,6 +134,15 @@ describe("pi", () => {
     expect(piCatalogEnvironment({ HOME: "/data" }, true).ANTHROPIC_OAUTH_TOKEN).toBeUndefined();
   });
 
+  it("#5524: writes the payer's Codex sign-in into auth.json under the turn's pi home, never into the child env", () => {
+    const dir = home();
+    const content = JSON.stringify({ "openai-codex": { type: "oauth", access: "sk-test-codex-access-bob" } });
+    const env = piAccessEnvironment({ HOME: "/data" }, { via: "subscription", identity: "subscription:p:codex", environment: { PI_AUTH_CONTENT: content }, engineHome: dir });
+    expect(env.PI_CODING_AGENT_DIR).toBe(dir);
+    expect(env.PI_AUTH_CONTENT).toBeUndefined();
+    expect(JSON.parse(readFileSync(join(dir, "auth.json"), "utf8"))).toEqual({ "openai-codex": { type: "oauth", access: "sk-test-codex-access-bob" } });
+  });
+
   it("an organization server lists every key provider's models from a home of its own", () => {
     expect(piCatalogEnvironment({ HOME: "/data" }, false)).toEqual({ HOME: "/data" });
     const env = piCatalogEnvironment({ HOME: "/data" }, true);

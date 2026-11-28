@@ -32,13 +32,18 @@ struct BotThreadTree: View {
             let _ = snoozeTick
             let isExpanded = searching || expanded
             let queued = session.state.queuedThreadIds
+            let workThreads = SidebarPrefsModel.shared.prefs.personWorkThreads
+            let botThreads = SidebarPrefsModel.shared.prefs.showBotThreads
             let groups = bot.threadGroups(
                 matching: bot.name.localizedCaseInsensitiveContains(query) ? "" : query,
                 queuedThreadIds: queued,
-                includingEmptyFolders: true
+                includingEmptyFolders: true,
+                personWorkThreads: workThreads,
+                botThreads: botThreads
             )
-            let count = bot.threadGroups(queuedThreadIds: queued).reduce(0) { $0 + $1.tasks.count }
-            let nextSnoozeExpiry = bot.visibleTasks.nextSnoozeExpiry()
+            let count = bot.threadGroups(queuedThreadIds: queued, personWorkThreads: workThreads, botThreads: botThreads)
+                .reduce(0) { $0 + $1.tasks.count }
+            let nextSnoozeExpiry = bot.visibleTasks(personWorkThreads: workThreads, botThreads: botThreads).nextSnoozeExpiry()
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 8) {
                     Button {
@@ -88,7 +93,7 @@ struct BotThreadTree: View {
                                 }
                             )) {
                                 threadLinks(group.tasks, bot: bot).padding(.leading, 8)
-                                if bot.folderThreads(folder.id).isEmpty {
+                                if bot.folderThreads(folder.id, personWorkThreads: workThreads, botThreads: botThreads).isEmpty {
                                     Text("No threads yet")
                                         .font(.footnote)
                                         .foregroundStyle(Theme.parity(Color.secondary, Theme.textSecondary))
@@ -97,7 +102,7 @@ struct BotThreadTree: View {
                                 }
                             } label: {
                                 let open = searching || !collapsedFolders.contains("\(botID):\(folder.id)")
-                                let threads = bot.folderThreads(folder.id)
+                                let threads = bot.folderThreads(folder.id, personWorkThreads: workThreads, botThreads: botThreads)
                                 HStack(spacing: 6) {
                                     if let emoji = folder.emoji, !emoji.isEmpty { Text(emoji) }
                                     else { Image(systemName: "folder") }
@@ -116,7 +121,7 @@ struct BotThreadTree: View {
                             threadLinks(group.tasks, bot: bot)
                         }
                     }
-                    let background = bot.backgroundTasks
+                    let background = bot.backgroundTasks(personWorkThreads: workThreads, botThreads: botThreads)
                     if !searching && !background.isEmpty {
                         Button {
                             Haptics.selection()

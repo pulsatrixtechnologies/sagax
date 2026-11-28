@@ -259,6 +259,19 @@ final class SidebarPrefsTests: XCTestCase {
         }
     }
 
+    func testPersonWorkThreadsPreferenceStoresOnOff() {
+        let key = "sagax.personWorkThreads.v1"
+        XCTAssertTrue(SidebarPrefKey.all.contains(key))
+        var written = SidebarPrefs()
+        XCTAssertFalse(written.personWorkThreads)
+        written.setPersonWorkThreads(true)
+        XCTAssertEqual(written.values[key], "on")
+        XCTAssertTrue(written.personWorkThreads)
+        written.setPersonWorkThreads(false)
+        XCTAssertEqual(written.values[key], "off")
+        XCTAssertFalse(written.personWorkThreads)
+    }
+
     func testAPinnedPrimaryBotJoinsThePinnedSection() throws {
         var state = try layoutState()
         state.bots[2].chiefOfStaff = true

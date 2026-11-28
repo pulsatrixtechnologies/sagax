@@ -105,8 +105,8 @@ extension Bot {
     /// src/lib/folder-read.ts `folderUnreadThreadIds`: a thread's own flag,
     /// or the bot's for its current thread on computers that send no
     /// per-thread flag.
-    public func folderUnreadThreadIds(_ projectId: String) -> [String] {
-        visibleTasks
+    public func folderUnreadThreadIds(_ projectId: String, personWorkThreads: Bool = false, botThreads: Bool = false) -> [String] {
+        visibleTasks(personWorkThreads: personWorkThreads, botThreads: botThreads)
             .filter { task in
                 task.projectId == projectId && (task.unread ?? (task.threadId == threadId && unread))
             }
@@ -115,8 +115,8 @@ extension Bot {
 
     /// A folder's threads, every one of them (closed and archived too), as
     /// the desktop counts them beside the folder's name.
-    public func folderThreads(_ projectId: String) -> [BotTask] {
-        visibleTasks.filter { $0.projectId == projectId }
+    public func folderThreads(_ projectId: String, personWorkThreads: Bool = false, botThreads: Bool = false) -> [BotTask] {
+        visibleTasks(personWorkThreads: personWorkThreads, botThreads: botThreads).filter { $0.projectId == projectId }
     }
 }
 

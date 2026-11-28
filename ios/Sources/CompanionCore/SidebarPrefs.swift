@@ -34,11 +34,13 @@ public enum SidebarPrefKey {
     /// "1" shows thread lists and controls (thread-preferences.ts).
     public static let showThreads = "omb-show-threads"
     public static let showBotThreads = "sagax.sidebarBotThreads.v1"
+    /// Person-work threads as regular rows (person-work-threads.ts, #5289).
+    public static let personWorkThreads = "sagax.personWorkThreads.v1"
     /// The person's own order of each team's bots on the Team map, by
     /// section key (TeamCanvas.tsx on an organization server; `TeamMap.parseOrders`).
     public static let teamBotOrder = "sagax.teamCanvasBotOrder.v1"
 
-    public static let all = [personalSections, hidden, collapsedSections, sectionOrder, showThreads, showBotThreads, teamBotOrder]
+    public static let all = [personalSections, hidden, collapsedSections, sectionOrder, showThreads, showBotThreads, personWorkThreads, teamBotOrder]
 }
 
 /// One value must fit one preference (shared/user-preferences.ts).
@@ -559,6 +561,12 @@ public struct SidebarPrefs: Hashable, Sendable {
 
     public mutating func setShowBotThreads(_ on: Bool) {
         values[SidebarPrefKey.showBotThreads] = on ? "on" : "off"
+    }
+
+    public var personWorkThreads: Bool { values[SidebarPrefKey.personWorkThreads] == "on" }
+
+    public mutating func setPersonWorkThreads(_ on: Bool) {
+        values[SidebarPrefKey.personWorkThreads] = on ? "on" : "off"
     }
 
     public mutating func setShowThreads(_ on: Bool) {

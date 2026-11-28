@@ -92,7 +92,9 @@ final class ThreadActions: ObservableObject {
         let folders: [BotProject]
         switch live {
         case let .bot(bot):
-            threads = bot.visibleTasks
+            let workThreads = SidebarPrefsModel.shared.prefs.personWorkThreads
+            let botThreads = SidebarPrefsModel.shared.prefs.showBotThreads
+            threads = bot.visibleTasks(personWorkThreads: workThreads, botThreads: botThreads)
             folders = bot.folders
         case let .room(room):
             threads = room.tasks ?? []

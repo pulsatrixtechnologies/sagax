@@ -370,6 +370,11 @@ struct DesktopAppearanceSettings: View {
                     prefs.update(session) { $0.setShowBotThreads(!$0.showBotThreads) }
                 }
             }
+            DesktopCompactRow(Text("Person-work threads"), identifier: "personWorkThreads") {
+                DesktopSwitch(isOn: prefs.prefs.personWorkThreads, label: Text("Person-work threads"), identifier: "desktop-settings.person-work-threads") {
+                    prefs.update(session) { $0.setPersonWorkThreads(!$0.personWorkThreads) }
+                }
+            }
             DesktopSidebarHiddenFold()
         }
         DesktopSettingsGroup(Text("Mascots"), identifier: "mascots") {

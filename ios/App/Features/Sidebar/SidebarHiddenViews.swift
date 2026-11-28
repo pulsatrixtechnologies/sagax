@@ -55,6 +55,15 @@ struct SidebarAppearanceSettings: View {
                 )),
                 identifier: "settings.showBotThreads"
             )
+            SettingsRow(
+                title: "Person-work threads",
+                subtitle: "Show threads bots opened for your work as regular threads, even when Show Bot threads is off.",
+                accessory: .toggle(Binding(
+                    get: { prefs.prefs.personWorkThreads },
+                    set: { on in prefs.update(session) { $0.setPersonWorkThreads(on) } }
+                )),
+                identifier: "settings.personWorkThreads"
+            )
         }
         SettingsSectionLabel(text: "Threads")
         SettingsCard {

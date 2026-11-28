@@ -160,6 +160,7 @@ import { PulsatrixMark } from "./PulsatrixMark";
 
 import { SidebarFoot, SidebarRailFoot } from "./SidebarFoot";
 import { useShowThreads, useThreadsMode } from "@/lib/thread-preferences";
+import { usePersonWorkThreads } from "@/lib/person-work-threads";
 import { useSidebarBotThreads } from "@/lib/sidebar-bot-threads";
 import { openBotConversationActions } from "./thread-home";
 import { useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
@@ -1761,9 +1762,11 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
   // The person's own conversations (shared/background-threads.ts): a
   // routine run, a hand-off, a thread a bot opened or an AI client's never
   // shows here; the selected one stays reachable. "Show background" lists them.
-  // With Settings > Appearance > Sidebar "Show Bot threads" on (off by
-  // default), a hand-off and a thread a bot opened are rows here (#5289).
-  const listChoice: ThreadListChoice = { botThreads: useSidebarBotThreads() };
+  // With Settings > Appearance > Sidebar "Person-work threads" or "Show Bot
+  // threads" on (both off by default), a hand-off and a thread a bot opened
+  // are rows here (#5289, D-20261127-040). Person-work alone lists them as
+  // regular rows; Show Bot threads alone keeps them in their own six (apart).
+  const listChoice: ThreadListChoice = { botThreads: useSidebarBotThreads(), personWorkThreads: usePersonWorkThreads() };
   // A row the background sweep archived is drawn open (listedRows); Archive
   // all and Delete all keep to the person's own threads (botListedThreads).
   const tasks = listedRows(personThreads(bot.tasks ?? [{ threadId: bot.threadId, title: t("task.newShort"), createdAt: 0 }], bot.threadId, listChoice), listChoice)

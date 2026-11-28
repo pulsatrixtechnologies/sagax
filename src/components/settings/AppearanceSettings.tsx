@@ -47,6 +47,7 @@ import {
 import { CONVERSATION_HEADERS, parseConversationHeader, setConversationHeader, useConversationHeader, type ConversationHeader } from "@/lib/conversation-header";
 import { parseSendKey, SEND_KEYS, sendKeyLabel, setSendKey, useSendKey } from "@/lib/send-key";
 import { setShowSidebarLogo, useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
+import { personWorkThreads, usePersonWorkThreads } from "@/lib/person-work-threads";
 import { sidebarBotThreads, useSidebarBotThreads } from "@/lib/sidebar-bot-threads";
 import { setSidebarPeopleApart, useSidebarPeopleApart } from "@/lib/sidebar-people-apart-preference";
 import { setShowRoutinesBadge, useShowRoutinesBadge } from "@/lib/routines-badge-preferences";
@@ -656,6 +657,7 @@ export function AppearanceSettings() {
   const allHistory = useShowAllHistory();
   const permissions = useShowPermissions();
   const botThreads = useSidebarBotThreads();
+  const workThreads = usePersonWorkThreads();
   const streamReplies = useStreamReplies();
   const replyBubbles = botReplyBubbles.use() === "on";
   const bubbleAccent = botBubbleAccent.use() === "1";
@@ -687,6 +689,7 @@ export function AppearanceSettings() {
         <SwitchLine label={t("settings.showSuggestions.title")} ariaLabel={t("settings.showSuggestions.show")} checked={suggestions} onChange={setShowSuggestions} rowId="showSuggestions" />
         <SwitchLine label={t("settings.allHistory.title")} ariaLabel={t("settings.allHistory.show")} checked={allHistory} onChange={setShowAllHistory} rowId="allHistory" />
         <SwitchLine label={t("settings.sidebarBotThreads.title")} ariaLabel={t("settings.sidebarBotThreads.show")} checked={botThreads} onChange={(on) => sidebarBotThreads.set(on ? "on" : "off")} rowId="sidebarBotThreads" />
+        <SwitchLine label={t("settings.personWorkThreads.title")} ariaLabel={t("settings.personWorkThreads.show")} checked={workThreads} onChange={(on) => personWorkThreads.set(on ? "on" : "off")} rowId="personWorkThreads" />
         <SwitchLine label={t("settings.showPermissions.title")} ariaLabel={t("settings.showPermissions.show")} checked={permissions} onChange={setShowPermissions} rowId="showPermissions" />
         <SidebarHiddenFold />
       </SettingsGroup>

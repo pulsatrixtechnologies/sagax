@@ -87,18 +87,21 @@ extension Bot {
         matching query: String = "",
         includingClosed: Bool = false,
         queuedThreadIds: Set<String> = [],
-        includingEmptyFolders: Bool = false
+        includingEmptyFolders: Bool = false,
+        personWorkThreads: Bool = false,
+        botThreads: Bool = false
     ) -> [BotThreadGroup] {
         let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let listed = visibleTasks(personWorkThreads: personWorkThreads, botThreads: botThreads)
         let threads: [BotTask]
         if tasks == nil {
             // Older computers have one conversation but no task metadata.
             // An explicitly empty modern list must stay empty.
             threads = [legacyThread]
         } else if includingClosed || !search.isEmpty {
-            threads = visibleTasks
+            threads = listed
         } else {
-            threads = visibleTasks.filter { task in
+            threads = listed.filter { task in
                 task.pinned == true
                     || !(task.isClosed || task.isArchived || task.isSnoozed())
                     || task.demandsAttention(queued: queuedThreadIds.contains(task.threadId))

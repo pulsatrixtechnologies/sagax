@@ -3685,7 +3685,7 @@ dark and light, French and English, each beside the mockup's capture with
 The windows of the other plugins (M-20261127-141, M-20261127-146), in the
 same frame, their tabs across the window under the head:
 
-- **SentinelOne, a threat** (M-20261127-141): the verdict and what the agent
+- **AcmeGuard, a threat** (M-20261127-141): the verdict and what the agent
   already did; Undo the changes, Isolate from the network, True threat, False
   positive, then "Create a ticket" at the right; the execution chain as a
   tree, the file's facts, the endpoint; tabs Overview, Timeline, Device,

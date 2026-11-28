@@ -1,4 +1,4 @@
-// A SentinelOne threat in the record window (M-20261127-141): its verdict and
+// An AcmeGuard threat in the record window (M-20261127-141): its verdict and
 // what the agent already did (quarantine, process killed); Undo the changes,
 // Isolate from the network, True threat, False positive and "Create a ticket"
 // (a bot, in the chat); the execution chain as a tree; the file's facts; the

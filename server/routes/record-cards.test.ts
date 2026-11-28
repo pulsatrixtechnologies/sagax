@@ -324,10 +324,10 @@ describe("the record window's actions", () => {
     expect(actionSends(recordWrite({ action: "post.pin" }) as never)).toBe(false);
     expect(actionVerb(recordWrite({ action: "post.remove" }) as never)).toBe("delete");
     expect(actionVerb(recordWrite({ action: "threat.isolate" }) as never)).toBe("update");
-    const threat = { product: "sentinelone", kind: "threat", id: "1873402291" };
-    const rule: CustomRule = { id: "o2", ownerId: "p-admin", botId: null, when: "modifier SentinelOne", behavior: "deny", riskScope: [], enabled: true, createdAt: 1, updatedAt: 1, org: true, products: ["sentinelone"] };
-    expect(recordReadOrgRule([rule], threat, "SentinelOne", undefined, recordWrite({ action: "threat.isolate" })!).kind).toBe("deny");
-    expect(recordReadOrgRule([{ ...rule, when: "lire SentinelOne" }], threat, "SentinelOne", undefined, recordWrite({ action: "threat.isolate" })!).kind).toBe("none");
+    const threat = { product: "acme_guard", kind: "threat", id: "1873402291" };
+    const rule: CustomRule = { id: "o2", ownerId: "p-admin", botId: null, when: "modifier AcmeGuard", behavior: "deny", riskScope: [], enabled: true, createdAt: 1, updatedAt: 1, org: true, products: ["acme_guard"] };
+    expect(recordReadOrgRule([rule], threat, "AcmeGuard", undefined, recordWrite({ action: "threat.isolate" })!).kind).toBe("deny");
+    expect(recordReadOrgRule([{ ...rule, when: "lire AcmeGuard" }], threat, "AcmeGuard", undefined, recordWrite({ action: "threat.isolate" })!).kind).toBe("none");
   });
 
   it("holds an SMS and a reply on X to the organization's Refuse rules on sending and on writing (M-20261127-146)", () => {

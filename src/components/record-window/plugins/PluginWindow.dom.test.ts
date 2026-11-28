@@ -84,7 +84,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("a SentinelOne threat", () => {
+describe("an AcmeGuard threat", () => {
   it("shows its verdict, chain, file and endpoint; Exclusions is hidden while it has none", async () => {
     await open("threat");
     expect(windowTabs()).toEqual(["overview", "timeline", "device", "notes"]);

@@ -4,7 +4,7 @@
 // an instance's prefix for a second one) and its kind. The window is chosen
 // here and nowhere else, like the ticket's in RecordLink.tsx.
 //
-// A threat of SentinelOne, a protected system of Axcient x360Recover, a page
+// A threat of AcmeGuard, a protected system of Axcient x360Recover, a page
 // of BookStack, a message of Twilio (its conversation), a post of X, and a
 // folder of any plugin that serves files: the Finder's look whatever the
 // plugin. Any other record keeps the card's facts in the frame.
@@ -13,11 +13,11 @@ import type { RecordRef } from "../../../../shared/record-cards";
 export const PLUGIN_WINDOWS = ["threat", "backup", "page", "conversation", "post", "folder"] as const;
 export type PluginWindowKind = (typeof PLUGIN_WINDOWS)[number];
 
-/** A product id is its catalog's, alone or after an instance's prefix (`acme_sentinelone`). */
+/** A product id is its catalog's, alone or after an instance's prefix (`nimbus_acme_guard`). */
 const of = (...catalogs: string[]) => new RegExp(`(?:^|_)(?:${catalogs.join("|")})$`);
 
 const WINDOWS: ReadonlyArray<{ window: PluginWindowKind; kind: string; product?: RegExp }> = [
-  { window: "threat", kind: "threat", product: of("sentinelone") },
+  { window: "threat", kind: "threat", product: of("acme_guard") },
   { window: "backup", kind: "device", product: of("axcient_x360recover") },
   { window: "page", kind: "page", product: of("bookstack") },
   { window: "conversation", kind: "message", product: of("twilio_api") },

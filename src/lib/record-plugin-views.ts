@@ -1,5 +1,5 @@
 // What the record windows of the other plugins read (M-20261127-141,
-// M-20261127-146): a SentinelOne threat, an Axcient x360Recover protected
+// M-20261127-146): an AcmeGuard threat, an Axcient x360Recover protected
 // system, a BookStack page, a Twilio conversation, an X post and a folder of
 // files. Each is read through the record's detail route, like a ticket's tabs
 // (GET /api/me/records/:product/:kind/:id/detail?section=..., src/lib/record-detail.ts):
@@ -110,7 +110,7 @@ export function parseFile(line: Raw): PluginFile | null {
   return id && name ? { ...clean({ size: optionalText(line.size, 40), date: optionalText(line.date, 80), author: optionalText(line.author, 80), type: optionalText(line.type, 40) }), id, name } : null;
 }
 
-// ── SentinelOne: a threat ────────────────────────────────────────────────
+// ── AcmeGuard: a threat ────────────────────────────────────────────────
 
 export interface ThreatNode { depth: number; name: string; detail?: string; tone?: RecordTone }
 export interface ThreatView {

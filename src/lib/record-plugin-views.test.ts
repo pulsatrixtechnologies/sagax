@@ -12,7 +12,7 @@ describe("shared parts", () => {
     expect(parseFacts([
       { label: "Path", value: "C:\\Users\\", code: true, extra: "dropped" },
       { label: "Signature", value: "None", tone: "alert" },
-      { label: "Endpoint", value: "ACME-PC-014", ref: { product: "sentinelone", kind: "agent", id: "77001" } },
+      { label: "Endpoint", value: "ACME-PC-014", ref: { product: "acme_guard", kind: "agent", id: "77001" } },
       { label: "Bad ref", value: "x", ref: { product: "S", kind: "agent", id: "1" } },
       { label: "", value: "no label" },
       { label: "No value" },
@@ -20,7 +20,7 @@ describe("shared parts", () => {
     ])).toEqual([
       { label: "Path", value: "C:\\Users\\", code: true },
       { label: "Signature", value: "None", tone: "alert" },
-      { label: "Endpoint", value: "ACME-PC-014", ref: { product: "sentinelone", kind: "agent", id: "77001" } },
+      { label: "Endpoint", value: "ACME-PC-014", ref: { product: "acme_guard", kind: "agent", id: "77001" } },
       { label: "Bad ref", value: "x" },
       { label: "Unknown tone", value: "y" },
     ]);

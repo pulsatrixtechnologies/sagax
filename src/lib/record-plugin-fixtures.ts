@@ -1,6 +1,6 @@
 // The stand-in console of the record windows of the other plugins, for their
-// gallery (src/gallery/record-window-plugins.tsx) and their tests: what a console would send for a
-// SentinelOne threat, an Axcient x360Recover protected system, a BookStack
+// gallery (src/gallery/record-window-plugins.tsx) and their tests: what a console would send for an
+// AcmeGuard threat, an Axcient x360Recover protected system, a BookStack
 // page, a Twilio conversation, an X post and a folder of files, in the
 // language asked for, and the writes it takes, kept in memory (nothing leaves
 // the page). Invented records: the companies, people, devices and numbers are
@@ -10,7 +10,7 @@ export type Lang = "fr" | "en";
 type Raw = Record<string, unknown>;
 
 export const PLUGIN_PRODUCTS = {
-  threat: { id: "sentinelone", kind: "threat", record: "1873402291", name: "SentinelOne", mark: "https://marks.example/s1.svg" },
+  threat: { id: "acme_guard", kind: "threat", record: "1873402291", name: "AcmeGuard", mark: "https://marks.example/s1.svg" },
   backup: { id: "axcient_x360recover", kind: "device", record: "5512", name: "Axcient x360Recover", mark: "https://marks.example/ax.svg" },
   page: { id: "bookstack", kind: "page", record: "318", name: "BookStack", mark: "https://marks.example/bs.svg" },
   conversation: { id: "twilio_api", kind: "message", record: "AC0001:SM6f3e12d0", name: "Twilio", mark: "https://marks.example/tw.svg" },
@@ -41,7 +41,7 @@ export function pluginConsole(lang: Lang, cardOnly: boolean) {
       ...(scene === "threat" ? [{ kind: "agent", name: { en: "Agent", fr: "Agent" } }] : [])],
   }));
 
-  // ── SentinelOne: a threat ──
+  // ── AcmeGuard: a threat ──
   const threat = {
     isolated: false,
     verdict: { label: L("Malveillant", "Malicious"), tone: "alert" },

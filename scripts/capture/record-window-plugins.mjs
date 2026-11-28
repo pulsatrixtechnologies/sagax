@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Headless screenshots of the record windows of the other plugins
- * (M-20261127-141, M-20261127-146): a SentinelOne threat, an Axcient
+ * (M-20261127-141, M-20261127-146): an AcmeGuard threat, an Axcient
  * x360Recover protected system, a BookStack page, a Twilio conversation, an X
  * post and a folder of files, each in its tabs (and the folder in its three
  * views), then the threat over a console that serves its card only, dark and

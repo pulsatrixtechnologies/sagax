@@ -1,6 +1,6 @@
 /** Isolated gallery of the record windows of the other plugins (M-20261127-141,
  * M-20261127-146): the real chips, the real HoverCard and the real record
- * window with its plugin bodies (a SentinelOne threat, an Axcient x360Recover
+ * window with its plugin bodies (an AcmeGuard threat, an Axcient x360Recover
  * protected system, a BookStack page, a Twilio conversation, an X post, a
  * folder of files), over a stand-in console (src/lib/record-plugin-fixtures.ts)
  * that answers the card and the detail route and takes every write in memory

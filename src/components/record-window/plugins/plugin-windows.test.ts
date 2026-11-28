@@ -6,7 +6,7 @@ import { pluginWindowOf } from "./plugin-windows";
 
 describe("pluginWindowOf", () => {
   it("opens each plugin's record in its own window", () => {
-    expect(pluginWindowOf({ product: "sentinelone", kind: "threat" })).toBe("threat");
+    expect(pluginWindowOf({ product: "acme_guard", kind: "threat" })).toBe("threat");
     expect(pluginWindowOf({ product: "axcient_x360recover", kind: "device" })).toBe("backup");
     expect(pluginWindowOf({ product: "bookstack", kind: "page" })).toBe("page");
     expect(pluginWindowOf({ product: "twilio_api", kind: "message" })).toBe("conversation");
@@ -15,16 +15,16 @@ describe("pluginWindowOf", () => {
   });
 
   it("reads a second instance's product by its catalog", () => {
-    expect(pluginWindowOf({ product: "acme_sentinelone", kind: "threat" })).toBe("threat");
+    expect(pluginWindowOf({ product: "nimbus_acme_guard", kind: "threat" })).toBe("threat");
     expect(pluginWindowOf({ product: "acme_twilio_api", kind: "message" })).toBe("conversation");
   });
 
   it("leaves every other record to the card's facts", () => {
-    expect(pluginWindowOf({ product: "sentinelone", kind: "agent" })).toBeUndefined();
+    expect(pluginWindowOf({ product: "acme_guard", kind: "agent" })).toBeUndefined();
     expect(pluginWindowOf({ product: "cw_rmm", kind: "device" })).toBeUndefined();
     expect(pluginWindowOf({ product: "nimbus_desk", kind: "ticket" })).toBeUndefined();
     expect(pluginWindowOf({ product: "twilio_monitor", kind: "message" })).toBeUndefined();
-    expect(pluginWindowOf({ product: "notsentinelone", kind: "threat" })).toBeUndefined();
+    expect(pluginWindowOf({ product: "notacme_guard", kind: "threat" })).toBeUndefined();
   });
 
   it("opens a folder of any plugin like the Finder", () => {
